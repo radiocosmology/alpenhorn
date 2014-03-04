@@ -1,4 +1,4 @@
-/var/log/alpenhornd.log {
+/var/log/alpenhorn/*.log {
         weekly
         missingok
         rotate 12

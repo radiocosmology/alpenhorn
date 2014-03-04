@@ -11,7 +11,8 @@ log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s", \
 log = logging.getLogger("")
 log.setLevel(logging.INFO)
 if sys.argv[0] == "/usr/sbin/alpenhornd":
-  log_file = logging.FileHandler("/var/log/alpenhornd", mode = 'a')
+  log_file = logging.FileHandler("/var/log/alpenhorn/alpenhornd.log", 
+                                 mode = 'a')
   log_file.setLevel(logging.INFO)
   log_file.setFormatter(log_fmt)
   log.addHandler(log_file)

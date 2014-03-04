@@ -2,8 +2,10 @@ BINDIR=/usr/local/bin
 SBINDIR=/usr/sbin
 INITDIR=/etc/init
 ROTATEDIR=/etc/logrotate.d
+LOGDIR=/var/log/alpenhorn
 
 install: alpenhorn alpenhornd alpenhornd.conf
+	if [ ! -d $(LOGDIR) ]; then mkdir $(LOGDIR); fi
 	install -m 644 alpenhornd.conf $(INITDIR)/alpenhornd.conf
 	install -m 644 logrotate.script $(ROTATEDIR)/alpenhornd
 	install -m 755 alpenhornd $(SBINDIR)/alpenhornd
