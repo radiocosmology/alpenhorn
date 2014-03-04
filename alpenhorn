@@ -112,8 +112,8 @@ def usage():
 
 if __name__ == "__main__":
   parser = optparse.OptionParser()
-  parser.add_option( "-n", "--nice", dest="nice" )
-  parser.add_option( "-f", "--force", dest="force" )
+  parser.add_option("-n", "--nice", dest="nice")
+  parser.add_option("-f", "--force", dest="force", action="store_true")
   parser.set_defaults(nice=0, force=False)
 
   option, arg = parser.parse_args()
