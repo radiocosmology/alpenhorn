@@ -1,0 +1,414 @@
+#!/usr/bin/env python
+# Alpenhorn: announces the products of mountaineering CHIME instruments.
+
+import logging
+import sys
+
+# Set up logger.
+logging.basicConfig(level = logging.INFO)
+log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s", \
+                            "%b %d %H:%M:%S")
+log = logging.getLogger("")
+log.setLevel(logging.INFO)
+if sys.argv[0] == "/usr/sbin/alpenhornd":
+  log_file = logging.FileHandler("/var/log/alpenhornd", mode = 'a')
+  log_file.setLevel(logging.INFO)
+  log_file.setFormatter(log_fmt)
+  log.addHandler(log_file)
+
+from ch_util import data_index as di
+import datetime
+import h5py
+import os
+import peewee as pw
+import psutil
+import socket
+import time
+from watchdog.observers import Observer  
+from watchdog.events import FileSystemEventHandler
+
+
+# Parameters.
+lockfile    = ".writing.lock"
+max_time_per_node_operation = 300   # Don't let node operations hog time.
+min_loop_time               = 60    # Main loop at most every 60 seconds.
+
+
+
+
+# Routines for registering files, acquisitions, copies and info in the DB.
+# ========================================================================
+
+def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
+    """Add an aquisition to the database.
+    """
+    ts, inst, atype = di.parse_acq_name(name)
+
+    # Is the acquisition already in the database?
+    if di.ArchiveAcq.select(di.ArchiveAcq.id).where(
+                     di.ArchiveAcq.name == name).count():
+        raise di.AlreadyExists("Acquisition \"%s\" already exists in DB." %
+                               name)
+
+    # Does the instrument already exist in the database?
+    try:
+        inst_rec = di.ArchiveInst.get(di.ArchiveInst.name == inst)
+    except pw.DoesNotExist:
+        if allow_new_inst:
+            di.ArchiveInst.insert(name=inst).execute()
+            logging.info("Added new acquisition instrument \"%s\" to DB." %
+                         inst)
+        else:
+            raise di.DataBaseError("Acquisition instrument \"%s\" not in DB." %
+                                   inst)
+
+    # Does the archive type already exist in the database?
+    try:
+        atype_rec = di.AcqType.get(di.AcqType.name == atype)
+    except pw.DoesNotExist:
+        if allow_new_atype:
+            di.AcqType.insert(name=atype).execute()
+            logging.info("Added new acquisition type \"%s\" to DB." % atype)
+        else:
+            raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
+
+    # Giddy up!
+    return di.ArchiveAcq.create(name=name, inst=inst_rec, type=atype_rec,
+                                comment=comment)
+
+
+def get_acqcorrinfo_keywords_from_h5(path):
+  f = h5py.File(path, "r")
+  n_freq = f["/"].attrs["n_freq"][0]
+  n_prod = len(f["/"].attrs["chan_indices"])
+  integration = f["/"].attrs["acq.udp.spf"][0] * \
+                f["/"].attrs["fpga.int_period"][0]
+  f.close()
+  return {"integration" : integration,
+          "nfreq"       : n_freq,
+          "nprod"       : n_prod}
+
+
+def get_filecorrinfo_keywords_from_h5(path):
+  f = h5py.File(path, "r")
+  start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
+  finish_time = f["timestamp"][-1][1] + f["timestamp"][-1][2] * 1e-6
+  chunk_number, freq_number = di.parse_corrfile_name(os.path.basename(path))
+  f.close()
+  return {"start_time"   : start_time,
+          "finish_time"  : finish_time,
+          "chunk_number" : chunk_number,
+          "freq_number"  : freq_number}
+
+
+def import_file(node, root, acq_name, file_name):
+  """Import a file into the DB.
+
+  This routine adds the following to the database, if they do not already exist
+  (or might be corrupted).
+  - The acquisition that the file is a part of.
+  - Information on the acquisition, if it is of type "corr".
+  - The file.
+  - Information on the file, if it is of type "corr".
+  - Indicates that the file exists on this node.
+  """
+  fullpath = "%s/%s/%s" % (root, acq_name, file_name)
+
+  # Skip the file if ch_master.py still has a lock on it.
+  if os.path.isfile("%s/%s/.%s.lock" % (root, acq_name, file_name)):
+    log.debug("Skipping \"%s\", which is locked by ch_master.py." % fullpath)
+    return
+
+  # Parse the path
+  try:
+    ts, inst, atype = di.parse_acq_name(acq_name)
+  except di.Validation:
+    log.info("Skipping non-acquisition path %s." % acq_name)
+    return
+
+  # Figure out which acquisition this is; add if necessary.
+  try:
+    acq = di.ArchiveAcq.get(di.ArchiveAcq.name == acq_name)
+    log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
+  except pw.DoesNotExist:
+    acq = add_acq(acq_name)
+    log.info("Acquisition \"%s\" added to DB." % acq_name)
+
+  # If it is a correlator acquisition, see if the info has been added.
+  have_info = True
+  if atype == "corr":
+    if not acq.corrinfos.count():
+      have_info = False
+
+  # What kind of file do we have?
+  ftype = di.detect_file_type(file_name)
+  if ftype == None:
+    log.info("Skipping unrecognised file \"%s/%s\"." % (acq_name, file_name))
+    return
+
+  # Make sure information about the acquisition exists in the DB.
+  if atype == "corr" and ftype.name == "corr":
+    if not acq.corrinfos.count():
+      di.CorrAcqInfo.create(acq=acq,
+                            **get_acqcorrinfo_keywords_from_h5(fullpath))
+      log.info("Added information for correlator acquisition \"%s\" to " \
+               "DB." % acq_name)
+
+  # Add the file, if necessary.
+  try:
+    file = di.ArchiveFile.get(di.ArchiveFile.name == file_name,
+                              di.ArchiveFile.acq == acq)
+    log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
+  except pw.DoesNotExist:
+    md5sum = di.md5sum_file(fullpath)
+    size_b = os.path.getsize(fullpath)
+    file = di.ArchiveFile.create(acq=acq, type=ftype, name=file_name, 
+                                 size_b=size_b, md5sum=md5sum)
+    log.info("File \"%s/%s\" added to DB." % (acq_name, file_name))
+
+  # Register the copy of the file here on the collection server, if (1) it does
+  # not exist, or (2) it does exist but has been labelled as corrupt. If (2),
+  # check again.
+  if not file.copies.where(di.ArchiveFileCopy.node == node).count():
+    copy = di.ArchiveFileCopy.create(file=file, node=node, has_file='Y',
+                                     wants_file = True)
+    log.info("Registered file copy \"%s/%s\" do DB." % (acq_name, file_name))
+
+  # Make sure information about the file exists in the DB.
+  if ftype.name == "corr":
+    # Add if (1) there is no corrinfo or (2) the corrinfo is missing.
+    if not file.corrinfos.count():
+      do_add = True
+    elif not file.corrinfos[0].start_time:
+      do_add = True
+    else:
+      do_add = False
+
+    if do_add:
+      try:
+        di.CorrFileInfo.create(file=file,
+                               **get_filecorrinfo_keywords_from_h5(fullpath))
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+      except ValueError:
+        if not file.corrinfos.count():
+          di.CorrFileInfo.create(file=file)
+        log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
+                      "empty. Leaving fields NULL." % (acq_name, file_name))
+
+
+def update_node(node):
+  # Make sure this node is usable.
+  if not node.mounted:
+    log.debug("Skipping unmounted node \"%s\"." % node.name)
+    return
+  if node.suspect:
+    log.debug("Skipping suspected node \"%s\"." % node.name)
+
+  # Update amount of free space.
+  x = os.statvfs(node.root)
+  avail_gb = float(x.f_bavail) * x.f_bsize * 9.31323e-10
+  di.StorageNode.update(avail_gb=avail_gb,
+                        avail_gb_last_checked=datetime.datetime.now()).where(
+     di.StorageNode.id == node.id).execute()
+  log.info("Node \"%s\" has %.2f GB available." % (node.name, avail_gb))
+
+  # Check for file integrety.
+  for fcopy in di.ArchiveFileCopy.select().where(
+                 di.ArchiveFileCopy.node == node,
+                 di.ArchiveFileCopy.has_file == 'M'):
+    fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
+    log.info("Checking file \"%s\" on node \"%s\"." % (fullpath, node.name))
+    if os.path.exists(fullpath):
+      if di.md5sum_file(fullpath) == fcopy.file.md5sum:
+        log.info("File is A-OK!")
+        di.ArchiveFileCopy.update(has_file = 'Y').where(
+           di.ArchiveFileCopy.id == fcopy.id).execute()
+      else:
+        log.error("File is corrupted!")
+        di.ArchiveFileCopy.update(has_file='X').where(
+           di.ArchiveFileCopy.id == fcopy.id).execute()
+    else:
+      log.error("File does not exist!")
+      fcopy.has_file == 'N'
+      di.ArchiveFileCopy.update(has_file = 'N').where(
+         di.ArchiveFileCopy.id == fcopy.id).execute()
+
+  # Delete files.
+  # To be added.
+
+  # Check for copy requests (only if this node can still grow).
+  if node.growable:
+    start_time = time.time()
+    for req in di.ArchiveFileCopyRequest.select().where(
+                  di.ArchiveFileCopyRequest.completed == False).where(
+                  di.ArchiveFileCopyRequest.group_to == node.group):
+
+      # Only proceed if the source file actually exists (and is not corrupted).
+      try:
+        di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
+                               di.ArchiveFileCopy.node == req.node_from,
+                               di.ArchiveFileCopy.has_file == 'Y')
+      except pw.DoesNotExist:
+        log.error("Skipping request for %s/%s since it is not available on "
+                  "node \"%s\"." % (req.file.acq.name, req.file.name,
+                                    req.node_from.name))
+        continue
+
+      # Only proceed if the destination file does not already exist.
+      try:
+        di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
+                               di.ArchiveFileCopy.node == node,
+                               di.ArchiveFileCopy.has_file == 'Y')
+        log.info("Skipping request for %s/%s since it already exists on " \
+                 "this node (\"%s\"), and updating DB to reflect this." % \
+                 (req.file.acq.name, req.file.name, node.name))
+        di.ArchiveFileCopyRequest.update(completed=True).where(
+                       di.ArchiveFileCopyRequest.file == req.file).where(
+                                    di.ArchiveFileCopyRequest.group_to ==
+                                    node.group).execute()
+        continue
+      except pw.DoesNotExist:
+        pass
+
+      # Check that there is enough space available.
+      if avail_gb * 1e6 < 2.0 * req.file.size_b:
+        log.warning("Node \"%s\" is full: not adding datafile \"%s/%s\"." % \
+                    (node.name, req.file.acq.name, req.file.name))
+        continue
+
+      # Constuct the origin and destination paths.
+      from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name, 
+                                req.file.name)
+      if req.node_from.host != node.host:
+        from_path = "%s:%s" % (req.node_from.address, from_path)
+      to_path = "%s/%s/" % (node.root, req.file.acq.name)
+      if not os.path.isdir(to_path):
+        log.info("Creating directory \"%s\"." % to_path)
+        os.mkdir(to_path)
+
+      # Giddy up!
+      log.info("Rsyncing file \"%s\"." % req.file.name)
+      if os.system("rsync -aqzpt -e \"ssh -q\" %s %s" % (from_path, to_path)):
+        # If the copy didn't work, then the remote file may be corrupted.
+        di.ArchiveFileCopy.update(has_file = 'M').where(
+           di.ArchiveFileCopy.file == req.file).execute()
+        continue
+
+      # Check integrety.
+      md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name))
+      if md5sum == req.file.md5sum:
+        log.info("Successfully compared md5sum.")
+        di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
+                                  wants_file='Y').execute()
+        di.ArchiveFileCopyRequest.update(completed=True).where(
+           di.ArchiveFileCopyRequest.file == req.file).where(
+           di.ArchiveFileCopyRequest.group_to == node.group).execute()
+      else:
+        log.error("Error with md5sum check: %s on node \"%s\", but %s on " \
+                  "this node, \"%s\"." % (req.file.md5sum, req.node_from.name,
+                  md5sum, node.name))
+        log.error("Removing file \"%s/%s\"." % (to_path, req.file.name))
+        try:
+          os.remove("%s/%s" % (to_path, req.file.name))
+        except:
+          log.error("Could not remove file.")
+        continue
+
+        # Since the md5sum failed, the remote file may be corrupted.
+        di.ArchiveFileCopy.update(has_file = 'M').where(
+           di.ArchiveFileCopy.file == req.file).execute()
+
+      if time.time() - start_time > max_time_per_node_operation:
+        break  # Don't hog all the time.
+                               
+
+
+
+# Watchdog stuff
+# ==============
+
+class register(FileSystemEventHandler):
+  def __init__(self, node):
+    self.node = node
+    self.root = node.root
+    if self.root[-1] == "/":
+      self.root = self.root[0:-1]
+    super(register, self).__init__()
+
+  def on_modified(self, event):
+    # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
+    subpath = event.src_path.replace(self.root + "/", "").split("/")
+    if len(subpath) == 2:
+      import_file(node, self.root, subpath[0], subpath[1])
+    return
+
+  def on_deleted(self, event):
+    # For lockfiles: ensure that the file that was locked is added: it is
+    # possible that the watchdog notices that a file has been closed before the
+    # lockfile is deleted.
+    subpath = event.src_path.replace(self.root + "/", "").split("/")
+    if len(subpath) == 2:
+      if subpath[1][0] == "." and subpath[1][-5:] == ".lock":
+        subpath[1] = subpath[1][1:-5]
+        import_file(node, self.root, subpath[0], subpath[1])
+
+
+
+
+
+# Main Street
+# ===========
+
+if __name__ == "__main__":
+  # We need write access to the DB.
+  di.connect_database(read_write=True)
+
+  # Get the nodes mounted on this host.
+  host = socket.gethostname()
+  node_list = []
+  for node in di.StorageNode.select().where(di.StorageNode.host == host).where(
+                                            di.StorageNode.mounted):
+    node_list.append(node)
+  if not len(node_list):
+    raise Exception("No nodes on this host (\"%s\") registered in the DB!" % 
+                    host)
+
+  # If any node has auto_import set, look for new files and add them to the
+  # DB. Then set up a watchdog for it.
+  obs_list = []
+  for node in node_list:
+    if node.auto_import:
+      log.info("Crawling base directory \"%s\" for new files." % node.root)
+      for acq_name, d, f_list in os.walk(node.root):
+        for file_name in sorted(f_list):
+          import_file(node, node.root, os.path.basename(acq_name), file_name)
+      obs_list.append(Observer())
+      obs_list[-1].schedule(register(node), node.root, recursive = True)
+    else:
+      obs_list.append(None)
+
+  # Caveat canem!
+  for obs in obs_list:
+    if obs:
+      obs.start()
+
+  try:
+    while True:
+      loop_start = time.time()
+      for node in di.StorageNode.select().where(di.StorageNode.host == host):
+        update_node(node)
+      loop_end = time.time()
+      loop_time = loop_end - loop_start
+      log.info("Main loop execution was %d sec." % loop_time)
+      remaining = min_loop_time - loop_time
+      if remaining > 1:
+        time.sleep(remaining)
+  except KeyboardInterrupt:
+    for obs in obs_list:
+      if obs:
+        obs.stop()
+
+for obs in obs_list:
+  if obs:
+    obs.join()
