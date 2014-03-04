@@ -206,6 +206,8 @@ def update_node(node):
   if node.suspect:
     log.debug("Skipping suspected node \"%s\"." % node.name)
 
+  log.info("Updating node \"%s\"." % (node.name))
+
   # Update amount of free space.
   x = os.statvfs(node.root)
   avail_gb = float(x.f_bavail) * x.f_bsize * 9.31323e-10
@@ -331,6 +333,7 @@ def update_node(node):
 
 class register(FileSystemEventHandler):
   def __init__(self, node):
+    log.info("Registering node \"%s\" for auto_import watchdog." % (node.name))
     self.node = node
     self.root = node.root
     if self.root[-1] == "/":
@@ -341,7 +344,7 @@ class register(FileSystemEventHandler):
     # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
     subpath = event.src_path.replace(self.root + "/", "").split("/")
     if len(subpath) == 2:
-      import_file(node, self.root, subpath[0], subpath[1])
+      import_file(self.node, self.root, subpath[0], subpath[1])
     return
 
   def on_deleted(self, event):
@@ -352,7 +355,7 @@ class register(FileSystemEventHandler):
     if len(subpath) == 2:
       if subpath[1][0] == "." and subpath[1][-5:] == ".lock":
         subpath[1] = subpath[1][1:-5]
-        import_file(node, self.root, subpath[0], subpath[1])
+        import_file(self.node, self.root, subpath[0], subpath[1])
 
 
 
