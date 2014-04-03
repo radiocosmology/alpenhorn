@@ -53,8 +53,8 @@ def node2group(node_name, group_name, force=False, nice=0):
       di.ArchiveFileCopyRequest.update(nice=nice, completed=False, 
          n_requests=req.n_requests + 1, 
          timestamp=datetime.datetime.now()).where(
-           di.ArchiveFileCopyRequest.file == c.file).where(
-           di.ArchiveFileCopyRequest.group_to == to_group).where(
+           di.ArchiveFileCopyRequest.file == c.file,
+           di.ArchiveFileCopyRequest.group_to == to_group,
            di.ArchiveFileCopyRequest.node_from == from_node).execute()
     except pw.DoesNotExist:
       
