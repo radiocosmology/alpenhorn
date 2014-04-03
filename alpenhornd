@@ -20,12 +20,14 @@ if sys.argv[0] == "/usr/sbin/alpenhornd":
 from ch_util import data_index as di
 import datetime
 import h5py
+import numpy as np
 import os
 import peewee as pw
 import psutil
 import socket
 import time
 from watchdog.observers import Observer  
+from watchdog.observers.polling import PollingObserver  
 from watchdog.events import FileSystemEventHandler
 
 
@@ -82,8 +84,24 @@ def get_acqcorrinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
   n_freq = f["/"].attrs["n_freq"][0]
   n_prod = len(f["/"].attrs["chan_indices"])
-  integration = f["/"].attrs["acq.udp.spf"][0] * \
-                f["/"].attrs["fpga.int_period"][0]
+  try:
+    # This works on the 8-channel correlator.
+    integration = f["/"].attrs["acq.udp.spf"][0] * \
+                  f["/"].attrs["fpga.int_period"][0]
+  except:
+    # For now, at least, on the GPU correlator, we need to find the integration
+    # time by hand. Find the median difference between timestamps.
+    dt = np.array([])
+    t = f["timestamp"]
+    for i in range(1, len(t)):
+      ddt = float(t[i][1]) - float(t[i - 1][1]) + (float(t[i][2]) - \
+            float(t[i - 1][2])) * 1e-6
+      if t[i][2] + 2e-5 < t[i - 1][2]:
+        dt = np.append(dt, ddt + 1.0)
+      else:
+        dt = np.append(dt, ddt)
+      integration = np.median(dt)
+
   f.close()
   return {"integration" : integration,
           "nfreq"       : n_freq,
@@ -122,6 +140,7 @@ def import_file(node, root, acq_name, file_name):
 
   # Parse the path
   try:
+    print acq_name
     ts, inst, atype = di.parse_acq_name(acq_name)
   except di.Validation:
     log.info("Skipping non-acquisition path %s." % acq_name)
@@ -388,7 +407,13 @@ if __name__ == "__main__":
       for acq_name, d, f_list in os.walk(node.root):
         for file_name in sorted(f_list):
           import_file(node, node.root, os.path.basename(acq_name), file_name)
-      obs_list.append(Observer())
+      # If it is an NFS mount, then the default Observer() doesn't work.
+      # Determine this by seeing if the node name is the same as the node host:
+      # not failsafe, but it will do for now.
+      if node.host == node.name:
+        obs_list.append(Observer())
+      else:
+        obs_list.append(PollingObserver(timeout=30))
       obs_list[-1].schedule(register(node), node.root, recursive = True)
     else:
       obs_list.append(None)
