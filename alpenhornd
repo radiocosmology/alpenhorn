@@ -140,7 +140,6 @@ def import_file(node, root, acq_name, file_name):
 
   # Parse the path
   try:
-    print acq_name
     ts, inst, atype = di.parse_acq_name(acq_name)
   except di.Validation:
     log.info("Skipping non-acquisition path %s." % acq_name)
@@ -154,12 +153,6 @@ def import_file(node, root, acq_name, file_name):
     acq = add_acq(acq_name)
     log.info("Acquisition \"%s\" added to DB." % acq_name)
 
-  # If it is a correlator acquisition, see if the info has been added.
-  have_info = True
-  if atype == "corr":
-    if not acq.corrinfos.count():
-      have_info = False
-
   # What kind of file do we have?
   ftype = di.detect_file_type(file_name)
   if ftype == None:
@@ -169,10 +162,16 @@ def import_file(node, root, acq_name, file_name):
   # Make sure information about the acquisition exists in the DB.
   if atype == "corr" and ftype.name == "corr":
     if not acq.corrinfos.count():
-      di.CorrAcqInfo.create(acq=acq,
-                            **get_acqcorrinfo_keywords_from_h5(fullpath))
-      log.info("Added information for correlator acquisition \"%s\" to " \
-               "DB." % acq_name)
+      try:
+        di.CorrAcqInfo.create(acq=acq,
+                              **get_acqcorrinfo_keywords_from_h5(fullpath))
+        log.info("Added information for correlator acquisition \"%s\" to " \
+                 "DB." % acq_name)
+      except:
+        log.warning("Missing info for acquistion \"%s\": HDF5 datasets " \
+                    "empty. Leaving fields NULL." % (acq_name))
+        di.CorrAcqInfo.create(acq=acq)
+
 
   # Add the file, if necessary.
   try:
@@ -180,7 +179,7 @@ def import_file(node, root, acq_name, file_name):
                               di.ArchiveFile.acq == acq)
     log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
   except pw.DoesNotExist:
-    md5sum = di.md5sum_file(fullpath)
+    md5sum = di.md5sum_file(fullpath, cmd_line = True)
     size_b = os.path.getsize(fullpath)
     file = di.ArchiveFile.create(acq=acq, type=ftype, name=file_name, 
                                  size_b=size_b, md5sum=md5sum)
@@ -210,11 +209,12 @@ def import_file(node, root, acq_name, file_name):
                                **get_filecorrinfo_keywords_from_h5(fullpath))
         log.info("Added information for file \"%s/%s\" to DB." %
                  (acq_name, file_name))
-      except ValueError:
+      except:
         if not file.corrinfos.count():
           di.CorrFileInfo.create(file=file)
         log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
-                      "empty. Leaving fields NULL." % (acq_name, file_name))
+                    "empty or unreadable. Leaving fields NULL." %
+                    (acq_name, file_name))
 
 
 def update_node(node):
