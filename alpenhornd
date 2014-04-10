@@ -311,7 +311,8 @@ def update_node(node):
 
       # Giddy up!
       log.info("Rsyncing file \"%s\"." % req.file.name)
-      if os.system("rsync -aqzpt -e \"ssh -q\" %s %s" % (from_path, to_path)):
+      if os.system("rsync -aqzpt --rsync-path=\"ionice -c2 -n2 rsync\" " \
+                   "-e \"ssh -q\" %s %s" % (from_path, to_path)):
         # If the copy didn't work, then the remote file may be corrupted.
         log.error("Rsync failed. Marking source file suspect.")
         di.ArchiveFileCopy.update(has_file = 'M').where(
