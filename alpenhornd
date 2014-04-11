@@ -303,7 +303,9 @@ def update_node(node):
       from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name, 
                                 req.file.name)
       if req.node_from.host != node.host:
-        from_path = "chime@%s:%s" % (req.node_from.address, from_path)
+        from_path = "%s@%s:%s" % (req.node_from.username, 
+                                  req.node_from.address, from_path)
+
       to_path = "%s/%s/" % (node.root, req.file.acq.name)
       if not os.path.isdir(to_path):
         log.info("Creating directory \"%s\"." % to_path)
