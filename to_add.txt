@@ -2,3 +2,4 @@ INSERT INTO `storagenode` VALUES (6,'suzu','/home/ahincks/tmp','suzu','chime','s
 insert into acqtype (name, notes) VALUES ("hk", "Housekeeping data.");
 insert into archiveinst (name) values ("ben");
 insert into filetype (name, notes) values ("hk", "A housekeeping file.");
+insert into filetype (name, notes) VALUES ("atmel_id", "A short file listing the ATMEL ID's and human readable names in an HK acquisition.");

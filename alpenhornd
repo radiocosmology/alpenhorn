@@ -5,7 +5,7 @@ import logging
 import sys
 
 # Set up logger.
-logging.basicConfig(level = logging.INFO)
+logging.basicConfig(level = logging.DEBUG)
 log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s", \
                             "%b %d %H:%M:%S")
 log = logging.getLogger("")
@@ -108,6 +108,29 @@ def get_acqcorrinfo_keywords_from_h5(path):
           "nprod"       : n_prod}
 
 
+def get_acqhkinfo_keywords(path):
+  fullpath = "%s/%s" % (path, di.fname_atmel)
+  fp = open(fullpath, "r")
+  if fp == None:
+    raise Exception("Could not find \"%s\"." % fullpath)
+
+  ret = []
+  while 1:
+    l = fp.readline()
+    if not l:
+      break
+    if l[0] == "#":
+      continue
+    if len(l.split()) < 2:
+      continue
+    name = l.split()[0]
+    iid = " ".join(l.split()[1:])
+    ret.append({"atmel_id" : iid, "atmel_name" : name})
+
+  fp.close()
+  return ret
+
+
 def get_filecorrinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
   start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
@@ -118,6 +141,18 @@ def get_filecorrinfo_keywords_from_h5(path):
           "finish_time"  : finish_time,
           "chunk_number" : chunk_number,
           "freq_number"  : freq_number}
+
+
+def get_filehkinfo_keywords_from_h5(path):
+  f = h5py.File(path, "r")
+  start_time = f["index_map/time"][0]
+  finish_time = f["index_map/time"][-1]
+  chunk_number, atmel_name = di.parse_hkfile_name(os.path.basename(path))
+  f.close()
+  return {"start_time"   : start_time,
+          "finish_time"  : finish_time,
+          "atmel_name"   : atmel_name,
+          "chunk_number" : chunk_number}
 
 
 def import_file(node, root, acq_name, file_name):
@@ -171,7 +206,20 @@ def import_file(node, root, acq_name, file_name):
         log.warning("Missing info for acquistion \"%s\": HDF5 datasets " \
                     "empty. Leaving fields NULL." % (acq_name))
         di.CorrAcqInfo.create(acq=acq)
-
+  elif atype == "hk" and ftype.name == "hk":
+    for kw in get_acqhkinfo_keywords("%s/%s" % (root, acq_name)):
+      if not sum(1 for _ in di.HKAcqInfo.select().\
+                            where(di.HKAcqInfo.acq == acq).\
+                            where(di.HKAcqInfo.atmel_name == kw["atmel_name"])):
+        try:
+          di.HKAcqInfo.create(acq=acq, **kw)
+          log.info("Added information for housekeeping acquisition \"%s\", "
+                   "board %s to DB." % (acq_name, kw["atmel_name"]))
+        except:
+          log.warning("Missing info for acquisition \"%s\": atmel_id.dat " \
+                      "file missing or corrupt. Skipping this acquisition." % \
+                      acq_name)
+          return
 
   # Add the file, if necessary.
   try:
@@ -191,19 +239,12 @@ def import_file(node, root, acq_name, file_name):
   if not file.copies.where(di.ArchiveFileCopy.node == node).count():
     copy = di.ArchiveFileCopy.create(file=file, node=node, has_file='Y',
                                      wants_file = True)
-    log.info("Registered file copy \"%s/%s\" do DB." % (acq_name, file_name))
+    log.info("Registered file copy \"%s/%s\" to DB." % (acq_name, file_name))
 
   # Make sure information about the file exists in the DB.
   if ftype.name == "corr":
     # Add if (1) there is no corrinfo or (2) the corrinfo is missing.
     if not file.corrinfos.count():
-      do_add = True
-    elif not file.corrinfos[0].start_time:
-      do_add = True
-    else:
-      do_add = False
-
-    if do_add:
       try:
         di.CorrFileInfo.create(file=file,
                                **get_filecorrinfo_keywords_from_h5(fullpath))
@@ -215,7 +256,48 @@ def import_file(node, root, acq_name, file_name):
         log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
                     "empty or unreadable. Leaving fields NULL." %
                     (acq_name, file_name))
-
+    elif not file.corrinfos[0].start_time:
+      try:
+        i = file.corrinfos[0]
+        k = get_filecorrinfo_keywords_from_h5(fullpath)
+      except:
+        log.debug("Still missing info for file \"%s/%s\".")
+      else:
+        i.start_time = k["start_time"]
+        i.finish_time = k["finish_time"]
+        i.chunk_number = k["chunk_number"]
+        i.freq_number = k["freq_number"]
+        i.save()
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+  if ftype.name == "hk":
+    # Add if (1) there is no hkinfo or (2) the hkinfo is missing.
+    if not file.hkinfos.count():
+      try:
+        di.HKFileInfo.create(file=file,
+                             **get_filehkinfo_keywords_from_h5(fullpath))
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+      except:
+        if not file.corrinfos.count():
+          di.HKFileInfo.create(file=file)
+        log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
+                    "empty or unreadable. Leaving fields NULL." %
+                    (acq_name, file_name))
+    elif not file.hkinfos[0].start_time:
+      try:
+        i = file.hkinfos[0]
+        k = get_filehkinfo_keywords_from_h5(fullpath)
+      except:
+        log.debug("Still missing info for file \"%s/%s\".")
+      else:
+        i.start_time = k["start_time"]
+        i.finish_time = k["finish_time"]
+        i.atmel_name = k["atmel_name"]
+        i.chunk_number = k["chunk_number"]
+        i.save()
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
 
 def update_node(node):
   # Make sure this node is usable.
@@ -366,6 +448,13 @@ class register(FileSystemEventHandler):
   def on_modified(self, event):
     # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
     subpath = event.src_path.replace(self.root + "/", "").split("/")
+    if len(subpath) == 2:
+      import_file(self.node, self.root, subpath[0], subpath[1])
+    return
+
+  def on_moved(self, event):
+    # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
+    subpath = event.dest_path.replace(self.root + "/", "").split("/")
     if len(subpath) == 2:
       import_file(self.node, self.root, subpath[0], subpath[1])
     return
