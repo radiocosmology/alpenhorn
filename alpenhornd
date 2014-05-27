@@ -5,7 +5,7 @@ import logging
 import sys
 
 # Set up logger.
-logging.basicConfig(level = logging.DEBUG)
+logging.basicConfig(level = logging.INFO)
 log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s", \
                             "%b %d %H:%M:%S")
 log = logging.getLogger("")
