@@ -24,7 +24,7 @@ NODES="valhalla chimeACQ2 niedermayer"
 #$ALPENHORN group2group $MY_GROUP transport --force >> $OUTPUT 2>&1
 
 # Copy files from c-can -> here
-NODES="valhalla chimeACQ2 gamma"
+NODES="valhalla chimeACQ2 gamma suzu"
 for NODE in $NODES; do
     $ALPENHORN node2group $NODE $MY_GROUP --force >> $OUTPUT 2>&1
 done
