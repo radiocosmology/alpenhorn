@@ -238,7 +238,7 @@ def import_file(node, root, acq_name, file_name):
   # check again.
   if not file.copies.where(di.ArchiveFileCopy.node == node).count():
     copy = di.ArchiveFileCopy.create(file=file, node=node, has_file='Y',
-                                     wants_file = True)
+                                     wants_file='Y')
     log.info("Registered file copy \"%s/%s\" to DB." % (acq_name, file_name))
 
   # Make sure information about the file exists in the DB.
