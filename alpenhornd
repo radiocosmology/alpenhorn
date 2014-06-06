@@ -341,8 +341,11 @@ def update_node(node):
   # Delete files.
   # To be added.
 
-  # Check for copy requests (only if this node can still grow).
-  if node.growable:
+  # Check for copy requests (only if this node has not hit the maximum size).
+  current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
+                         # with the actual archive size at somepoint.
+
+  if current_size_gb < node.max_total_gb or node.max_total_gb < 0.0:
     start_time = time.time()
     for req in di.ArchiveFileCopyRequest.select().where(
                   di.ArchiveFileCopyRequest.completed == False).where(
