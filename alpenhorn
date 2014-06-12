@@ -36,7 +36,7 @@ def node2group(node_name, group_name, force=False, nice=0):
                       di.StorageNode.group == to_group))))
 
   if not copy.count():
-    print "No files to copy."
+    print "No files to copy from node %s." % (node_name)
     return
 
   print "Will request that %d files be copied from node %s to group %s." % \
