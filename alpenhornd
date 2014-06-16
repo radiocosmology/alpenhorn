@@ -338,8 +338,42 @@ def update_node(node):
       di.ArchiveFileCopy.update(has_file = 'N').where(
          di.ArchiveFileCopy.id == fcopy.id).execute()
 
-  # Delete files.
-  # To be added.
+  ## Delete files.
+
+  # If we are below the minimum available size, we should consider all files
+  # not explicitly wanted (wants_file != 'Y') as candidates for deletion,
+  # otherwise only those explicitly marked (wants_file == 'N')
+  if avail_gb < node.min_avail_gb:
+    log.info('Hit minimum available space - considering all unwanted files for deletion!')
+    dfclause = di.ArchiveFileCopy.wants_file != 'Y'
+  else:
+    dfclause = di.ArchiveFileCopy.wants_file == 'N'
+
+  # Search db for candidates on this node to delete.
+  del_files = di.ArchiveFileCopy.select().where(dfclause,
+                                                di.ArchiveFileCopy.node == node,
+                                                di.ArchiveFileCopy.has_file == 'Y')
+
+  # Process candidates for deletion
+  for fcopy in del_files:
+
+    # Get number of copies
+    ncopies = fcopy.file.copies.count()
+
+    # If at least two other copies we can delete the file.
+    if ncopies > 2:
+      shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
+      fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
+
+      # Use transaction such that errors thrown in the os.remove do not leave
+      # the database inconsistent.
+      with di.database_proxy.transaction():
+        os.remove(fullpath)      # Remove the file
+        fcopy.delete_instance()  # Remove the FileCopy from the database
+        log.info("Removed file copy: %s" % shortname)
+    else:
+      log.info("Too few backups to delete %s" % shortname)
+
 
   # Check for copy requests (only if this node has not hit the maximum size).
   current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
