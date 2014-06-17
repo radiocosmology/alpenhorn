@@ -8,128 +8,130 @@ import peewee as pw
 from sets import Set
 import sys
 
+
 def ask_yesno(question):
-  answer = raw_input("%s [Y/N] " % question)
-  if answer == "y" or answer == "Y":
-    return True
-  else:
-    return False
+    answer = raw_input("%s [Y/N] " % question)
+    if answer == "y" or answer == "Y":
+        return True
+    else:
+        return False
 
 
 def node2group(node_name, group_name, force=False, nice=0):
-  try:
-    from_node = di.StorageNode.get(name=node_name)
-  except pw.DoesNotExist:
-    raise Exception("Node \"%s\" does not exist in the DB." % node_name)
-  try:
-    to_group = di.StorageGroup.get(name=group_name)
-  except pw.DoesNotExist:
-    raise Exception("Group \"%s\" does not exist in the DB." % group_name)
-
-  copy = di.ArchiveFileCopy.select().where(
-            di.ArchiveFileCopy.node == from_node,
-            di.ArchiveFileCopy.has_file == 'Y',
-            ~(di.ArchiveFileCopy.file <<
-                di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
-                di.ArchiveFileCopy.node <<
-                   di.StorageNode.select().where(
-                      di.StorageNode.group == to_group))))
-
-  if not copy.count():
-    print "No files to copy from node %s." % (node_name)
-    return
-
-  print "Will request that %d files be copied from node %s to group %s." % \
-        (copy.count(), node_name, group_name)
-  if not (force or ask_yesno("Do you want to proceed?")):
-    print "Aborted."
-    return
-
-  sys.stdout.write("Updating DB ")
-  for c in copy:
     try:
-      req = di.ArchiveFileCopyRequest.get(file=c.file, group_to=to_group,
-                                          node_from=from_node)
-      di.ArchiveFileCopyRequest.update(nice=nice, completed=False, 
-         n_requests=req.n_requests + 1, 
-         timestamp=datetime.datetime.now()).where(
-           di.ArchiveFileCopyRequest.file == c.file,
-           di.ArchiveFileCopyRequest.group_to == to_group,
-           di.ArchiveFileCopyRequest.node_from == from_node).execute()
+        from_node = di.StorageNode.get(name=node_name)
     except pw.DoesNotExist:
-      
-      di.ArchiveFileCopyRequest.create(file=c.file, group_to=to_group,
-                                       node_from=from_node, nice=nice,
-                                       completed=False, n_requests = 1,
-                                       timestamp=datetime.datetime.now())
-    sys.stdout.write(".")
-    sys.stdout.flush()
-  sys.stdout.write("\n")
+        raise Exception("Node \"%s\" does not exist in the DB." % node_name)
+    try:
+        to_group = di.StorageGroup.get(name=group_name)
+    except pw.DoesNotExist:
+        raise Exception("Group \"%s\" does not exist in the DB." % group_name)
+
+    copy = di.ArchiveFileCopy.select().where(
+        di.ArchiveFileCopy.node == from_node,
+        di.ArchiveFileCopy.has_file == 'Y',
+        ~(di.ArchiveFileCopy.file <<
+          di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
+              di.ArchiveFileCopy.node <<
+              di.StorageNode.select().where(
+                  di.StorageNode.group == to_group))))
+
+    if not copy.count():
+        print "No files to copy from node %s." % (node_name)
+        return
+
+    print "Will request that %d files be copied from node %s to group %s." % \
+          (copy.count(), node_name, group_name)
+    if not (force or ask_yesno("Do you want to proceed?")):
+        print "Aborted."
+        return
+
+    sys.stdout.write("Updating DB ")
+    for c in copy:
+        try:
+            req = di.ArchiveFileCopyRequest.get(file=c.file, group_to=to_group,
+                                                node_from=from_node)
+            di.ArchiveFileCopyRequest.update(nice=nice, completed=False,
+                                             n_requests=req.n_requests + 1,
+                                             timestamp=datetime.datetime.now()).where(
+                di.ArchiveFileCopyRequest.file == c.file,
+                di.ArchiveFileCopyRequest.group_to == to_group,
+                di.ArchiveFileCopyRequest.node_from == from_node).execute()
+        except pw.DoesNotExist:
+
+            di.ArchiveFileCopyRequest.create(file=c.file, group_to=to_group,
+                                             node_from=from_node, nice=nice,
+                                             completed=False, n_requests=1,
+                                             timestamp=datetime.datetime.now())
+        sys.stdout.write(".")
+        sys.stdout.flush()
+    sys.stdout.write("\n")
 
 
 def summary(width=80):
-  col1 = 15
-  col2 = 6
-  col3 = width - col1 - col2 - 10
+    col1 = 15
+    col2 = 6
+    col3 = width - col1 - col2 - 10
 
-  print
-  print "Summary of Data Index at %s." % datetime.datetime.now()
-  hline = "+-%-*s-+-%*s-+-%-*s-+" % (col1, "-" * col1, col2, "-" * col2, \
-                                     col3, "-" * col3)
-  print hline
-  print "| %-*s | %*s | %-*s |" % (col1, "Node", col2, "N File", col3, \
-                                   "Mount Point")
-  print hline
-  for node in di.StorageNode.select():
-    n_file = di.ArchiveFileCopy.select().where(
-               di.ArchiveFileCopy.node == node).count()
-    if node.mounted:
-      mount_point = "%s:%s" % (node.host, node.root)
-    else:
-      mount_point = "<unmounted>"
-    print "| %-*s | %*d | %-*s |" % (col1, node.name, col2, n_file, col3, \
-                                     mount_point)
-  print hline
-  print
+    print
+    print "Summary of Data Index at %s." % datetime.datetime.now()
+    hline = "+-%-*s-+-%*s-+-%-*s-+" % (col1, "-" * col1, col2, "-" * col2,
+                                       col3, "-" * col3)
+    print hline
+    print "| %-*s | %*s | %-*s |" % (col1, "Node", col2, "N File", col3,
+                                     "Mount Point")
+    print hline
+    for node in di.StorageNode.select():
+        n_file = di.ArchiveFileCopy.select().where(
+            di.ArchiveFileCopy.node == node).count()
+        if node.mounted:
+            mount_point = "%s:%s" % (node.host, node.root)
+        else:
+            mount_point = "<unmounted>"
+        print "| %-*s | %*d | %-*s |" % (col1, node.name, col2, n_file, col3,
+                                         mount_point)
+    print hline
+    print
+
 
 def usage():
-  print "Usage: alpenhorn <command> <args>... [options]..."
-  print "Interact with data index in the CHIME DB."
-  print
-  print "Commands:"
-  print "  node2group <node> <group>"
-  print "    * Request transfer of files on <node> to <group>."
-  print "  summary"
-  print "    * Show the number of files and mount points for all nodes."
-  print
-  print "Options:"
-  print "  -f, --force      do not prompt user before making changes to the DB"
-  print "  -n, --nice       specify a \"nice\" value for the operation (not yet"
-  print "                   implemented)"
-  print
-  print "Copyright CHIME collaboration, 2013."
-  exit(0)
+    print "Usage: alpenhorn <command> <args>... [options]..."
+    print "Interact with data index in the CHIME DB."
+    print
+    print "Commands:"
+    print "  node2group <node> <group>"
+    print "    * Request transfer of files on <node> to <group>."
+    print "  summary"
+    print "    * Show the number of files and mount points for all nodes."
+    print
+    print "Options:"
+    print "  -f, --force      do not prompt user before making changes to the DB"
+    print "  -n, --nice       specify a \"nice\" value for the operation (not yet"
+    print "                   implemented)"
+    print
+    print "Copyright CHIME collaboration, 2013."
+    exit(0)
 
 if __name__ == "__main__":
-  parser = optparse.OptionParser()
-  parser.add_option("-n", "--nice", dest="nice")
-  parser.add_option("-f", "--force", dest="force", action="store_true")
-  parser.set_defaults(nice=0, force=False)
+    parser = optparse.OptionParser()
+    parser.add_option("-n", "--nice", dest="nice")
+    parser.add_option("-f", "--force", dest="force", action="store_true")
+    parser.set_defaults(nice=0, force=False)
 
-  option, arg = parser.parse_args()
+    option, arg = parser.parse_args()
 
-  if not len(arg):
-    usage()
+    if not len(arg):
+        usage()
 
-  cmd = arg[0]
+    cmd = arg[0]
 
-  if cmd == "node2group":
-    if len(arg) != 3:
-      usage()
-    node2group(arg[1], arg[2], force=option.force, nice=option.nice)
-  elif cmd == "summary":
-    if len(arg) != 1:
-      usage()
-    summary()
-  else:
-    usage()
+    if cmd == "node2group":
+        if len(arg) != 3:
+            usage()
+        node2group(arg[1], arg[2], force=option.force, nice=option.nice)
+    elif cmd == "summary":
+        if len(arg) != 1:
+            usage()
+        summary()
+    else:
+        usage()
