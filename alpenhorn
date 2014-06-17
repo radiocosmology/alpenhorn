@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # Alpenhorn: announce datafile information to the database
 
-from ch_util import data_index as di
-import datetime
-import optparse
-import peewee as pw
-from sets import Set
 import sys
+import datetime
+
+from argh import arg, aliases, dispatch_commands
+import peewee as pw
+
+from ch_util import data_index as di
 
 
 def ask_yesno(question):
@@ -17,7 +18,12 @@ def ask_yesno(question):
         return False
 
 
+@arg('node_name', help='node to copy from')
+@arg('group_name', help='group to copy to')
+@arg('--force', '-f', help='proceed without confirmation')
+@arg('--nice', '-n', help='nice level for transfer')
 def node2group(node_name, group_name, force=False, nice=0):
+    """sync files from a node to another group"""
     try:
         from_node = di.StorageNode.get(name=node_name)
     except pw.DoesNotExist:
@@ -68,7 +74,9 @@ def node2group(node_name, group_name, force=False, nice=0):
     sys.stdout.write("\n")
 
 
+@aliases('status')
 def summary(width=80):
+    """give a short summary of the archive status"""
     col1 = 15
     col2 = 6
     col3 = width - col1 - col2 - 10
@@ -94,44 +102,74 @@ def summary(width=80):
     print
 
 
-def usage():
-    print "Usage: alpenhorn <command> <args>... [options]..."
-    print "Interact with data index in the CHIME DB."
+@arg('node_name', help='name of node to verify (must be local)')
+@arg('--md5', help='perform full check against md5sum')
+def verify(node_name, md5=False):
+    """verify the archive against the database.
+    """
+
+    import os
+
+    try:
+        this_node = di.StorageNode.get(di.StorageNode.name == node_name)
+    except pw.DoesNotExist:
+        print "Specified node does not exist."
+        return
+
+    ## Use a complicated query with a tuples construct to fetch everything we need
+    ## in a single query. This massively speeds up the whole process versus
+    ## fetching all the FileCopy's then querying for Files and Acqs.
+    lfiles = di.ArchiveFile.select(di.ArchiveFile.name, di.ArchiveAcq.name, di.ArchiveFile.size_b, di.ArchiveFile.md5sum).join(di.ArchiveAcq).switch(di.ArchiveFile).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == this_node).tuples()
+    nfiles = lfiles.count()
+
+    missing_files = []
+    corrupt_files = []
+
+    # Try to use progress bar if available
+    try:
+        from progress.bar import Bar
+        lfiles = Bar('Checking files', max=nfiles).iter(lfiles)
+    except ImportError:
+        pass
+
+    for filename, acqname, filesize, md5sum in lfiles:
+
+        filepath = this_node.root + '/' + acqname + '/' + filename
+
+        # Check if file is plain missing
+        if not os.path.exists(filepath):
+            missing_files.append(filepath)
+            continue
+
+        if md5:
+            file_md5 = di.md5sum_file(filepath)
+            corrupt = (file_md5 != md5sum)
+        else:
+            corrupt = (os.path.getsize(filepath) != filesize)
+
+        if corrupt:
+            corrupt_files.append(filepath)
+            continue
+
+    if len(missing_files) > 0:
+        print
+        print "=== Missing files ==="
+        for fname in missing_files:
+            print fname
+
+    if len(corrupt_files) > 0:
+        print
+        print "=== Corrupt files ==="
+        for fname in corrupt_files:
+            print fname
+
     print
-    print "Commands:"
-    print "  node2group <node> <group>"
-    print "    * Request transfer of files on <node> to <group>."
-    print "  summary"
-    print "    * Show the number of files and mount points for all nodes."
-    print
-    print "Options:"
-    print "  -f, --force      do not prompt user before making changes to the DB"
-    print "  -n, --nice       specify a \"nice\" value for the operation (not yet"
-    print "                   implemented)"
-    print
-    print "Copyright CHIME collaboration, 2013."
-    exit(0)
+    print "=== Summary ==="
+    print "  %i total files" % nfiles
+    print "  %i missing files" % len(missing_files)
+    print "  %i corrupt files" % len(corrupt_files)
+
+
 
 if __name__ == "__main__":
-    parser = optparse.OptionParser()
-    parser.add_option("-n", "--nice", dest="nice")
-    parser.add_option("-f", "--force", dest="force", action="store_true")
-    parser.set_defaults(nice=0, force=False)
-
-    option, arg = parser.parse_args()
-
-    if not len(arg):
-        usage()
-
-    cmd = arg[0]
-
-    if cmd == "node2group":
-        if len(arg) != 3:
-            usage()
-        node2group(arg[1], arg[2], force=option.force, nice=option.nice)
-    elif cmd == "summary":
-        if len(arg) != 1:
-            usage()
-        summary()
-    else:
-        usage()
+    dispatch_commands([node2group, summary, verify])
