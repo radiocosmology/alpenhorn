@@ -343,7 +343,8 @@ def update_node(node):
   # If we are below the minimum available size, we should consider all files
   # not explicitly wanted (wants_file != 'Y') as candidates for deletion,
   # otherwise only those explicitly marked (wants_file == 'N')
-  if avail_gb < node.min_avail_gb:
+  # Also do not clean on archive type nodes.
+  if avail_gb < node.min_avail_gb and node.storage_type != 'A':
     log.info('Hit minimum available space - considering all unwanted files for deletion!')
     dfclause = di.ArchiveFileCopy.wants_file != 'Y'
   else:
@@ -355,22 +356,34 @@ def update_node(node):
                                                 di.ArchiveFileCopy.has_file == 'Y')
 
   # Process candidates for deletion
-  for fcopy in del_files:
+  del_count = 0  # Counter for number of deletions (used to limit number per node update)
+  for fcopy in del_files.order_by(di.ArchiveFileCopy.id):
 
-    # Get number of copies
-    ncopies = fcopy.file.copies.count()
+    # Get all the *other* copies.
+    other_copies = fcopy.file.copies.where(di.ArchiveFileCopy.id != fcopy.id)
+
+    # Get the number of copies on archive nodes
+    ncopies = other_copies.join(di.StorageNode).where(di.StorageNode.storage_type == 'A').count()
+
+    shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
+    fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
 
     # If at least two other copies we can delete the file.
-    if ncopies > 2:
-      shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
-      fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
+    # Also limit, number of deletions to 100 per main loop iteration.
+    if ncopies >= 2 and del_count < 100:
 
       # Use transaction such that errors thrown in the os.remove do not leave
       # the database inconsistent.
       with di.database_proxy.transaction():
-        os.remove(fullpath)      # Remove the file
-        fcopy.delete_instance()  # Remove the FileCopy from the database
+        os.remove(fullpath)  # Remove the actual file
+
+        fcopy.has_file = 'N'
+        fcopy.save()  # Update the FileCopy in the database
+        
         log.info("Removed file copy: %s" % shortname)
+
+      del_count += 1
+
     else:
       log.info("Too few backups to delete %s" % shortname)
 
@@ -444,8 +457,20 @@ def update_node(node):
       md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name))
       if md5sum == req.file.md5sum:
         log.info("Successfully compared md5sum.")
-        di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
-                                  wants_file='Y').execute()
+
+        # Update the FileCopy (if exists), or insert a new FileCopy
+        try:
+          fcopy = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
+                                                    di.ArchiveFileCopy.node == node).get()
+          fcopy.has_file = 'Y'
+          fcopy.wants_file = 'Y'
+          fcopy.save()
+
+        except pw.DoesNotExist:
+          di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
+                                    wants_file='Y').execute()
+
+        # Mark any FileCopyRequest for this file as completed
         di.ArchiveFileCopyRequest.update(completed=True).where(
            di.ArchiveFileCopyRequest.file == req.file).where(
            di.ArchiveFileCopyRequest.group_to == node.group).execute()
