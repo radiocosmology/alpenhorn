@@ -119,7 +119,7 @@ def verify(node_name, md5=False):
     ## Use a complicated query with a tuples construct to fetch everything we need
     ## in a single query. This massively speeds up the whole process versus
     ## fetching all the FileCopy's then querying for Files and Acqs.
-    lfiles = di.ArchiveFile.select(di.ArchiveFile.name, di.ArchiveAcq.name, di.ArchiveFile.size_b, di.ArchiveFile.md5sum).join(di.ArchiveAcq).switch(di.ArchiveFile).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == this_node).tuples()
+    lfiles = di.ArchiveFile.select(di.ArchiveFile.name, di.ArchiveAcq.name, di.ArchiveFile.size_b, di.ArchiveFile.md5sum).join(di.ArchiveAcq).switch(di.ArchiveFile).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == this_node, di.ArchiveFileCopy.has_file == 'Y').tuples()
     nfiles = lfiles.count()
 
     missing_files = []
