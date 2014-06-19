@@ -359,6 +359,10 @@ def update_node(node):
   del_count = 0  # Counter for number of deletions (used to limit number per node update)
   for fcopy in del_files.order_by(di.ArchiveFileCopy.id):
 
+    # Limit number of deletions to 100 per main loop iteration.
+    if del_count >= 100:
+      break
+
     # Get all the *other* copies.
     other_copies = fcopy.file.copies.where(di.ArchiveFileCopy.id != fcopy.id)
 
@@ -369,8 +373,7 @@ def update_node(node):
     fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
 
     # If at least two other copies we can delete the file.
-    # Also limit, number of deletions to 100 per main loop iteration.
-    if ncopies >= 2 and del_count < 100:
+    if ncopies >= 2:
 
       # Use transaction such that errors thrown in the os.remove do not leave
       # the database inconsistent.
@@ -378,6 +381,7 @@ def update_node(node):
         os.remove(fullpath)  # Remove the actual file
 
         fcopy.has_file = 'N'
+        fcopy.wants_file = 'N'  # Set in case it was 'M' before
         fcopy.save()  # Update the FileCopy in the database
         
         log.info("Removed file copy: %s" % shortname)
