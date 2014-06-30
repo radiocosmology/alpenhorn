@@ -73,7 +73,9 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
             di.AcqType.insert(name=atype).execute()
             logging.info("Added new acquisition type \"%s\" to DB." % atype)
         else:
-            raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
+            log.warning("Acquisition type \"%s\" not in DB." % atype)
+            return None
+            #raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
 
     # Giddy up!
     return di.ArchiveAcq.create(name=name, inst=inst_rec, type=atype_rec,
@@ -186,6 +188,8 @@ def import_file(node, root, acq_name, file_name):
     log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
   except pw.DoesNotExist:
     acq = add_acq(acq_name)
+    if acq == None:
+      return
     log.info("Acquisition \"%s\" added to DB." % acq_name)
 
   # What kind of file do we have?
@@ -320,7 +324,7 @@ def update_node(node):
   # Check for file integrety.
   for fcopy in di.ArchiveFileCopy.select().where(
                  di.ArchiveFileCopy.node == node,
-                 di.ArchiveFileCopy.has_file == 'M'):
+                 di.ArchiveFileCopy.has_file == 'M').limit(25):
     fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
     log.info("Checking file \"%s\" on node \"%s\"." % (fullpath, node.name))
     if os.path.exists(fullpath):
@@ -484,7 +488,7 @@ if __name__ == "__main__":
   di.connect_database(read_write=True)
 
   # Get the nodes mounted on this host.
-  host = socket.gethostname()
+  host = socket.gethostname().split(".")[0]
   node_list = []
   for node in di.StorageNode.select().where(di.StorageNode.host == host).where(
                                             di.StorageNode.mounted):
