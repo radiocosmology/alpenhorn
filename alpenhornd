@@ -400,6 +400,7 @@ def update_node(node):
     start_time = time.time()
     for req in di.ArchiveFileCopyRequest.select().where(
                   di.ArchiveFileCopyRequest.completed == False).where(
+                  di.ArchiveFileCopyRequest.cancelled == False).where(
                   di.ArchiveFileCopyRequest.group_to == node.group):
 
       # Only proceed if the source file actually exists (and is not corrupted).
