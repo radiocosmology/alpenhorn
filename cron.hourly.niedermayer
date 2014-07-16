@@ -10,21 +10,16 @@ MY_GROUP=ubc_storage
 echo "Starting hour $HOUR cron job..." > $OUTPUT
 
 # Free up disc space.
-NODES="valhalla chimeACQ2 niedermayer"
-#for NODE in $NODES; do
-#    $ALPENHORN clean $NODE --force >> $OUTPUT 2>&1
-#done
-
-#NODES="mce1 mce2 mce3"
-#for NODE in $NODES; do
-#    $ALPENHORN remove_old_files $NODE --force >> $OUTPUT 2>&1
-#done
+NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
+for NODE in $NODES; do
+    $ALPENHORN clean $NODE --force >> $OUTPUT 2>&1
+done
 
 # Copy files from here -> transport disks
 #$ALPENHORN group2group $MY_GROUP transport --force >> $OUTPUT 2>&1
 
 # Copy files from c-can -> here
-NODES="valhalla chimeACQ2 gamma gamma2 suzu"
+NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
 for NODE in $NODES; do
     $ALPENHORN node2group $NODE $MY_GROUP --force >> $OUTPUT 2>&1
 done
