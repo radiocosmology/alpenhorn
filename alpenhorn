@@ -5,9 +5,11 @@ import sys
 import datetime
 
 from argh import arg, aliases, dispatch_commands
+from argh.interaction import confirm
 import peewee as pw
 
 from ch_util import data_index as di
+from ch_util import ephemeris
 
 
 def ask_yesno(question):
@@ -24,6 +26,10 @@ def ask_yesno(question):
 @arg('--nice', '-n', help='nice level for transfer')
 def node2group(node_name, group_name, force=False, nice=0):
     """sync files from a node to another group"""
+
+    # Make sure we connect RW
+    di.connect_database(read_write=True)
+
     try:
         from_node = di.StorageNode.get(name=node_name)
     except pw.DoesNotExist:
@@ -170,6 +176,62 @@ def verify(node_name, md5=False):
     print "  %i corrupt files" % len(corrupt_files)
 
 
+@arg('node_name', help='name of node to clean')
+@arg('--days', '-d', help='clean files older than <days>')
+@arg('--force', '-f', help='force cleaning on an archive node')
+def clean(node_name, days=21, force=False):
+    """clean up node by marking older files as potentially removable."""
+
+    import peewee as pw
+    di.connect_database(read_write=True)
+
+    try:
+        this_node = di.StorageNode.get(di.StorageNode.name == node_name)
+    except pw.DoesNotExist:
+        print "Specified node does not exist."
+
+    # Check to see if we are on an archive node
+    if this_node.storage_type == 'A':
+        if force:
+            print "%s is an archive node. Forcing clean." % node_name
+        else:
+            print "Cannot clean archive node %s without forcing." % node_name
+            return
+
+    oldest = datetime.datetime.now() - datetime.timedelta(days)
+    oldest_unix = ephemeris.ensure_unix(oldest)
+
+    ## List of filetypes we want to update, needs a human readable name and a FileInfo table
+    filetypes = [ ['correlation',  di.CorrFileInfo],
+                  ['housekeeping', di.HKFileInfo] ]
+
+    # Iterate over file types for cleaning
+    for name, infotable in filetypes:
+
+        # Select FileCopys on this node.
+        oldfiles = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.node == this_node,
+                                                     di.ArchiveFileCopy.wants_file == 'Y')
+        # Filter to fetch only ones with a start time older than `oldest`
+        oldfiles = oldfiles.join(di.ArchiveFile).join(infotable).where(infotable.start_time < oldest_unix)
+
+        # Get number of correlation files
+        count = oldfiles.count()
+
+        if count > 0:
+            size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / 2**30.0
+
+            print "Cleaning up %i %s files (%1f GB)" % (count, name, size_gb)
+            if force or ask_yesno("  Are you sure?"):
+                print "  Marking files for cleaning."
+                for of in oldfiles:
+                    of.wants_file = 'M'
+                    of.save()
+            else:
+                print "  Cancelled"
+        else:
+            print "No %s files selected for cleaning." % name
+
+
 
 if __name__ == "__main__":
-    dispatch_commands([node2group, summary, verify])
+    dispatch_commands([node2group, summary, verify, clean])
