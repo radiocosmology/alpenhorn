@@ -349,7 +349,8 @@ def update_node(node):
   # otherwise only those explicitly marked (wants_file == 'N')
   # Also do not clean on archive type nodes.
   if avail_gb < node.min_avail_gb and node.storage_type != 'A':
-    log.info('Hit minimum available space - considering all unwanted files for deletion!')
+    log.info("Hit minimum available space on %s -- considering all unwanted " \
+             "files for deletion!" % (node.name))
     dfclause = di.ArchiveFileCopy.wants_file != 'Y'
   else:
     dfclause = di.ArchiveFileCopy.wants_file == 'N'
