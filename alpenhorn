@@ -220,7 +220,8 @@ def clean(node_name, days=21, force=False):
         if count > 0:
             size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / 2**30.0
 
-            print "Cleaning up %i %s files (%1f GB)" % (count, name, size_gb)
+            print "Cleaning up %i %s files (%1f GB) from %s " % \
+                  (count, name, size_gb, node_name)
             if force or ask_yesno("  Are you sure?"):
                 print "  Marking files for cleaning."
                 for of in oldfiles:
@@ -229,7 +230,7 @@ def clean(node_name, days=21, force=False):
             else:
                 print "  Cancelled"
         else:
-            print "No %s files selected for cleaning." % name
+            print "No %s files selected for cleaning on %s." % (name, node_name)
 
 
 
