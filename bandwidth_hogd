@@ -1,0 +1,7 @@
+while [ 1 ]; do
+  rm -rf /chime/data/bandwidth_hog_data/
+  rsync -aqzptr --rsync-path="ionice -c2 -n5 rsync" \
+        -e "ssh -q" chime@gamelan.drao.nrc.ca:/var/chime/bandwidth_hog_data/ \
+        /chime/data/bandwidth_hog_data/
+  sleep 10
+done
