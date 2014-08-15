@@ -38,6 +38,15 @@ min_loop_time               = 60    # Main loop at most every 60 seconds.
 
 
 
+# Register Hook to Log Exception
+# ==============================
+
+def log_exception(args):
+  log.exception("Fatal error!")
+  sys.exit(2)
+
+sys.excepthook = log_exception
+
 
 # Routines for registering files, acquisitions, copies and info in the DB.
 # ========================================================================
@@ -564,6 +573,12 @@ if __name__ == "__main__":
     if node.auto_import:
       log.info("Crawling base directory \"%s\" for new files." % node.root)
       for acq_name, d, f_list in os.walk(node.root):
+
+        # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
+        if re.match('\_raw$', acq_name):
+          "Skipping blacklisted acq: %s" % acq_name
+          continue
+
         for file_name in sorted(f_list):
           import_file(node, node.root, os.path.basename(acq_name), file_name)
       # If it is an NFS mount, then the default Observer() doesn't work.
