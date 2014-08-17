@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 # Alpenhorn: announces the products of mountaineering CHIME instruments.
 
 import logging
 import sys
+import re
 
 # Set up logger.
 logging.basicConfig(level = logging.INFO)
@@ -41,9 +42,9 @@ min_loop_time               = 60    # Main loop at most every 60 seconds.
 # Register Hook to Log Exception
 # ==============================
 
-def log_exception(args):
-  log.exception("Fatal error!")
-  sys.exit(2)
+def log_exception(*args):
+  log.error("Fatal error!", exc_info=args)
+
 
 sys.excepthook = log_exception
 
@@ -557,7 +558,7 @@ if __name__ == "__main__":
   di.connect_database(read_write=True)
 
   # Get the nodes mounted on this host.
-  host = socket.gethostname()
+  host = socket.gethostname().split('.')[0]  # Not sure about this splitting
   node_list = []
   for node in di.StorageNode.select().where(di.StorageNode.host == host).where(
                                             di.StorageNode.mounted):
@@ -575,7 +576,7 @@ if __name__ == "__main__":
       for acq_name, d, f_list in os.walk(node.root):
 
         # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
-        if re.match('\_raw$', acq_name):
+        if re.search('\_raw$', acq_name):
           "Skipping blacklisted acq: %s" % acq_name
           continue
 
