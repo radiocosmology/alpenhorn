@@ -577,7 +577,7 @@ if __name__ == "__main__":
 
         # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
         if re.search('\_raw$', acq_name):
-          "Skipping blacklisted acq: %s" % acq_name
+          log.info("Skipping blacklisted acq: %s" % acq_name)
           continue
 
         for file_name in sorted(f_list):
