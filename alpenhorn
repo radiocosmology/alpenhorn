@@ -46,7 +46,8 @@ def node2group(node_name, group_name, force=False, nice=0):
           di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
               di.ArchiveFileCopy.node <<
               di.StorageNode.select().where(
-                  di.StorageNode.group == to_group))))
+                  di.StorageNode.group == to_group),
+              di.ArchiveFileCopy.has_file != 'N')))
 
     if not copy.count():
         print "No files to copy from node %s." % (node_name)
@@ -110,7 +111,8 @@ def summary(width=80):
 
 @arg('node_name', help='name of node to verify (must be local)')
 @arg('--md5', help='perform full check against md5sum')
-def verify(node_name, md5=False):
+@arg('--fixdb', help='fix up the database to be consistent with reality')
+def verify(node_name, md5=False, fixdb=False):
     """verify the archive against the database.
     """
 
@@ -125,11 +127,14 @@ def verify(node_name, md5=False):
     ## Use a complicated query with a tuples construct to fetch everything we need
     ## in a single query. This massively speeds up the whole process versus
     ## fetching all the FileCopy's then querying for Files and Acqs.
-    lfiles = di.ArchiveFile.select(di.ArchiveFile.name, di.ArchiveAcq.name, di.ArchiveFile.size_b, di.ArchiveFile.md5sum).join(di.ArchiveAcq).switch(di.ArchiveFile).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == this_node, di.ArchiveFileCopy.has_file == 'Y').tuples()
+    lfiles = di.ArchiveFile.select(di.ArchiveFile.name, di.ArchiveAcq.name, di.ArchiveFile.size_b, di.ArchiveFile.md5sum, di.ArchiveFileCopy.id).join(di.ArchiveAcq).switch(di.ArchiveFile).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == this_node, di.ArchiveFileCopy.has_file == 'Y').tuples()
     nfiles = lfiles.count()
 
     missing_files = []
     corrupt_files = []
+
+    missing_ids = []
+    corrupt_ids = []
 
     # Try to use progress bar if available
     try:
@@ -138,13 +143,14 @@ def verify(node_name, md5=False):
     except ImportError:
         pass
 
-    for filename, acqname, filesize, md5sum in lfiles:
+    for filename, acqname, filesize, md5sum, fc_id in lfiles:
 
         filepath = this_node.root + '/' + acqname + '/' + filename
 
         # Check if file is plain missing
         if not os.path.exists(filepath):
             missing_files.append(filepath)
+            missing_ids.append(fc_id)
             continue
 
         if md5:
@@ -155,6 +161,7 @@ def verify(node_name, md5=False):
 
         if corrupt:
             corrupt_files.append(filepath)
+            corrupt_ids.append(fc_id)
             continue
 
     if len(missing_files) > 0:
@@ -174,6 +181,23 @@ def verify(node_name, md5=False):
     print "  %i total files" % nfiles
     print "  %i missing files" % len(missing_files)
     print "  %i corrupt files" % len(corrupt_files)
+    print
+
+    # Fix up the database by marking files as missing, and marking
+    # corrupt files for verification by alpenhornd.
+    if fixdb:
+
+        # Make sure we connect RW
+        di.connect_database(read_write=True)
+
+        if len(missing_files) > 0  and ask_yesno('Fix missing files'):
+            missing_count = di.ArchiveFileCopy.update(has_file='N').where(di.ArchiveFileCopy.id << missing_ids).execute()
+            print "  %i marked as missing" % missing_count
+
+        if len(corrupt_files) > 0  and ask_yesno('Fix corrupt files'):
+            corrupt_count = di.ArchiveFileCopy.update(has_file='M').where(di.ArchiveFileCopy.id << corrupt_ids).execute()
+            print "  %i corrupt files marked for verification" % corrupt_count
+        
 
 
 @arg('node_name', help='name of node to clean')

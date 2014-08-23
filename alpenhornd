@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # Alpenhorn: announces the products of mountaineering CHIME instruments.
 
+import calendar
+import datetime
 import logging
 import sys
 
@@ -18,7 +20,6 @@ if sys.argv[0] == "/usr/sbin/alpenhornd":
   log.addHandler(log_file)
 
 from ch_util import data_index as di
-import datetime
 import h5py
 import numpy as np
 import os
@@ -131,6 +132,13 @@ def get_acqhkinfo_keywords(path):
 
   fp.close()
   return ret
+      
+def get_acqrawadcinfo_keywords_from_h5(acq_name):
+  # We need to use the calendar module because the datetime module can't give us
+  # timegm() for some strange reason.
+  d = datetime.datetime.strptime(acq_name[0:16], "%Y%m%dT%H%M%SZ")
+  t = calendar.timegm(d.utctimetuple())
+  return {"start_time" : t}
 
 
 def get_filecorrinfo_keywords_from_h5(path):
@@ -224,6 +232,12 @@ def import_file(node, root, acq_name, file_name):
                       "file missing or corrupt. Skipping this acquisition." % \
                       acq_name)
           return
+  elif atype == "rawadc":
+    if not acq.rawadcinfos.count():
+      di.RawadcAcqInfo.create(acq=acq,
+                              **get_acqrawadcinfo_keywords_from_h5(acq_name))
+      log.info("Added information for raw ADC acquisition \"%s\" to " \
+               "DB." % acq_name)
 
   # Add the file, if necessary.
   try:
@@ -436,7 +450,7 @@ def update_node(node):
         pass
 
       # Check that there is enough space available.
-      if avail_gb * 1e9 < 2.0 * req.file.size_b:
+      if avail_gb * 2**30.0 < 2.0 * req.file.size_b:
         log.warning("Node \"%s\" is full: not adding datafile \"%s/%s\"." % \
                     (node.name, req.file.acq.name, req.file.name))
         continue
