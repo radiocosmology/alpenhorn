@@ -436,7 +436,7 @@ def update_node(node):
         pass
 
       # Check that there is enough space available.
-      if avail_gb * 1e6 < 2.0 * req.file.size_b:
+      if avail_gb * 1e9 < 2.0 * req.file.size_b:
         log.warning("Node \"%s\" is full: not adding datafile \"%s/%s\"." % \
                     (node.name, req.file.acq.name, req.file.name))
         continue
