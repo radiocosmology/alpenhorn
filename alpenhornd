@@ -5,6 +5,7 @@ import calendar
 import datetime
 import logging
 import sys
+import re
 
 # Set up logger.
 logging.basicConfig(level = logging.INFO)
@@ -38,6 +39,15 @@ max_time_per_node_operation = 300   # Don't let node operations hog time.
 min_loop_time               = 60    # Main loop at most every 60 seconds.
 
 
+
+# Register Hook to Log Exception
+# ==============================
+
+def log_exception(*args):
+  log.error("Fatal error!", exc_info=args)
+
+
+sys.excepthook = log_exception
 
 
 # Routines for registering files, acquisitions, copies and info in the DB.
@@ -568,6 +578,7 @@ if __name__ == "__main__":
 
   # Get the nodes mounted on this host.
   host = socket.gethostname().split(".")[0]
+
   node_list = []
   for node in di.StorageNode.select().where(di.StorageNode.host == host).where(
                                             di.StorageNode.mounted):
@@ -583,6 +594,12 @@ if __name__ == "__main__":
     if node.auto_import:
       log.info("Crawling base directory \"%s\" for new files." % node.root)
       for acq_name, d, f_list in os.walk(node.root):
+
+        # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
+        if re.search('\_raw$', acq_name):
+          log.info("Skipping blacklisted acq: %s" % acq_name)
+          continue
+
         for file_name in sorted(f_list):
           import_file(node, node.root, os.path.basename(acq_name), file_name)
       # If it is an NFS mount, then the default Observer() doesn't work.
