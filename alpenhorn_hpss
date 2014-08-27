@@ -1,0 +1,237 @@
+#!/usr/bin/env python
+
+import string
+import os
+from datetime import datetime
+
+import peewee as pw
+
+from argh import arg, aliases, dispatch_commands
+
+from ch_util import data_index as di
+
+testdb = True
+
+
+if testdb:
+    # Connect to Amazon test database
+    ch_aws = pw.MySQLDatabase("ch_data", host="chtest.cnrmjnyypngd.us-east-1.rds.amazonaws.com",
+                              port=3306, user="chime", passwd="ch1mepenticton")
+
+    
+    # Replace e-mode connection with one to test database
+    ch_aws.register_fields({'enum': 'enum'})
+    di.database_proxy.initialize(ch_aws)
+
+
+def partition_acq(acq, threshold_gb=10.0):
+    """Partition an acquisition into groups of file with a maximum total size.
+
+    Parameters
+    ----------
+    acq : di.ArchiveAcq
+        Acquisition to divide up.
+    threshold_gb : scalar
+        Maximum size of each group in GB.
+
+    Returns
+    -------
+    partitions : list of lists of di.ArchiveFile
+        A list of groups of di.ArchiveFile's.
+    """
+
+    part_list = []
+    file_list = []
+
+    total_size = 0
+    for afile in acq.files:
+
+        if afile.size_b + total_size > threshold_gb * 2**30:
+            # New partition
+            part_list.append(file_list)
+            file_list = [ afile ]
+            total_size = afile.size_b
+        else:
+            file_list.append(afile)
+            total_size += afile.size_b
+
+    if len(file_list) > 0:
+        part_list.append(file_list)
+
+    return part_list
+
+
+def create_hpss_push_script(tarball_name, node_root, filenames):
+    script_base="""#!/bin/bash
+#PBS -l walltime=1:00:00
+#PBS -q archive
+#PBS -N push_%(tarball_name)s
+#PBS -j oe
+#PBS -m e
+ 
+# Transfer files from CHIME archive to HPSS
+
+trap "echo 'Job script not completed'; exit 129" TERM INT
+# Note that your initial directory in HPSS will be /archive/$(id -gn)/$(whoami)/
+ 
+DEST=$ARCHIVE/%(tarball_name)s.tar
+ 
+# htar WILL overwrite an existing file with the same name so check beforehand.
+ 
+hsi ls $DEST &> /dev/null
+status=$?
+ 
+if [ $status == 0 ]; then   
+    echo 'File $DEST already exists. Nothing has been done'
+    python %(script_path)s push_exists %(tarball_name)s
+    exit 1
+fi
+ 
+cd %(node_root)s
+htar -cpf $DEST \\
+%(file_list)s
+
+status=$?
+ 
+trap - TERM INT
+ 
+if [ ! $status == 0 ]; then
+    echo 'HTAR returned non-zero code.'
+    /scinet/gpc/bin/exit2msg $status
+    ssh gpc04 'python %(script_path)s push-failed %(tarball_name)s'
+else
+    echo 'TRANSFER SUCCESSFUL'
+    ssh gpc04 'python %(script_path)s push-finished %(tarball_name)s'
+fi
+"""
+    vars = { 'tarball_name' : tarball_name,
+             'node_root' : node_root,
+             'script_path' : os.path.abspath(__file__),
+             'file_list' : string.join(filenames, sep=' \\\n') }
+
+    script = script_base % vars
+
+    script_name = '/scratch/k/krs/jrs65/hpss_scripts/push_%s.sh' % tarball_name
+
+    with open(script_name, 'w') as f:
+        f.write(script)
+
+    return script_name
+    
+
+def submit_hpss_script(script):
+    os.system('cd %s; qsub %s' % os.path.split(script))
+
+
+@arg('node_name', help="Name of node to copy data from.")
+@arg('acq_name', help="Acquisition to copy onto HPSS.")
+def push(node_name, acq_name):
+    """Push an acquisition into HPSS.
+    """
+    # Fetch the node
+    try:
+        node = di.StorageNode.select().where(di.StorageNode.name == node_name).get()
+    except pw.DoesNotExist:
+        print "Node does not exist."
+        return
+
+    # Fetch the acquisition we want to push
+    try:
+        acq = di.ArchiveAcq.select().where(di.ArchiveAcq.name == acq_name).get()
+    except pw.DoesNotExist:
+        print "Acquisition does not exist."
+        return
+
+    try:
+        hpss_group = di.StorageGroup.select().where(di.StorageGroup.name == 'scinet_hpss').get()
+    except pw.DoesNotExist:
+        raise Exception("HPSS Group does not exist. Check database.")
+
+    # Partition the files in each acq into groups
+    partitions = partition_acq(acq)
+
+    for i, part in enumerate(partitions):
+
+        # A name for the node/tarball
+        tarball_name = "tape_%s_%04i" % (acq.name, i)
+
+        node_root = node.root
+
+        # Create tape node
+        notes = "HPSS tarball for acquistion %s (part %i)" % (acq.name, i)
+
+        if di.StorageNode.select().where(di.StorageNode.name == tarball_name).exists():
+            print "Tape node already exists."
+            return
+
+        hpss_node = di.StorageNode.create(name=tarball_name, root='', host='HPSS',
+                                          username='jrs65', address='', group=hpss_group,
+                                          mounted=False, suspect=True, storage_type='A',
+                                          max_total_gb=100.0, min_avail_gb=0.0, avail_gb=0.0, 
+                                          avail_gb_last_checked=datetime.now(),
+                                          min_delete_age_days=10000, notes=notes)
+
+        # List of filenames to push
+        file_list = []
+
+        for afile in part:
+            fname = os.path.join(acq.name, afile.name)
+            file_list.append(fname)
+
+            # Add FileCopy to tape node
+            di.ArchiveFileCopy.create(file=afile, node=hpss_node, has_file='N', wants_file='Y')
+            
+
+        print "Queueing push of %i files to HPSS:%s ...." % (len(file_list), tarball_name),
+
+        script = create_hpss_push_script(tarball_name, node_root, file_list)
+        #submit_hpss_script(script)
+        print "done."
+
+
+@arg('tarball_name', help='Name of tarball whose transfer failed.')
+def push_failed(tarball_name):
+    """Update the database to reflect that the HPSS transfer failed.
+
+    INTERNAL COMMAND. NOT FOR HUMAN USE!
+    """
+
+    with open(os.path.join(os.path.dirname(__file__), 'fail.log'), 'a') as f:
+        f.write(tarball_name)
+
+    # We don't really need to do anything other than log this (we could reattempt)
+
+
+@arg('tarball_name', help='Name of tarball whose transfer succeeded.')
+def push_finished(tarball_name):
+    """Update the database to reflect that the HPSS transfer succeeded.
+
+    INTERNAL COMMAND. NOT FOR HUMAN USE!
+    """
+
+    with open(os.path.join(os.path.dirname(__file__), 'finished.log'), 'a') as f:
+        f.write(tarball_name)
+
+    try:
+        hpss_node = di.StorageNode.select().where(di.StorageNode.name == tarball_name).get()
+    except pw.DoesNotExist:
+        raise Exception("Node does not exist.")
+
+    # Mark all files as being in the node
+    nfile = di.ArchiveFileCopy().update(has_file='Y').where(di.ArchiveFileCopy.node == hpss_node).execute()
+
+    print "Marked %i files as present in %s" % (nfile, tarball_name)
+
+    # Mark node as non-suspect
+    hpss_node.suspect = False
+    hpss_node.save()
+        
+
+def testdb():
+
+    print di.database_proxy.connect_kwargs
+    print di.database_proxy.get_conn().get_host_info()
+
+
+if __name__ == '__main__':
+    dispatch_commands([push, push_failed, push_finished, testdb])
