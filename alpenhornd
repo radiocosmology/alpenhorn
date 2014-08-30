@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # Alpenhorn: announces the products of mountaineering CHIME instruments.
 
+import bitshuffle.h5
 import calendar
 import datetime
 import logging
@@ -95,25 +96,38 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
 
 def get_acqcorrinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
-  n_freq = f["/"].attrs["n_freq"][0]
-  n_prod = len(f["/"].attrs["chan_indices"])
   try:
     # This works on the 8-channel correlator.
+    n_freq = f["/"].attrs["n_freq"][0]
+    n_prod = len(f["/"].attrs["chan_indices"])
     integration = f["/"].attrs["acq.udp.spf"][0] * \
                   f["/"].attrs["fpga.int_period"][0]
   except:
     # For now, at least, on the GPU correlator, we need to find the integration
     # time by hand. Find the median difference between timestamps.
-    dt = np.array([])
-    t = f["timestamp"]
-    for i in range(1, len(t)):
-      ddt = float(t[i][1]) - float(t[i - 1][1]) + (float(t[i][2]) - \
-            float(t[i - 1][2])) * 1e-6
-      if t[i][2] + 2e-5 < t[i - 1][2]:
-        dt = np.append(dt, ddt + 1.0)
-      else:
-        dt = np.append(dt, ddt)
+    try:
+      # Archive Version 2
+      version = f.attrs["archive_version"][0]
+      dt = np.array([])
+      t = f["/index_map/time"]
+      for i in range(1, len(t)):
+        dt = np.append(dt, float(t[i][1]) - float(t[i - 1][1]))
       integration = np.median(dt)
+      n_freq = len(f["/index_map/freq"])
+      n_prod = len(f["/index_map/prod"])
+    except:
+      dt = np.array([])
+      t = f["timestamp"]
+      for i in range(1, len(t)):
+        ddt = float(t[i][1]) - float(t[i - 1][1]) + (float(t[i][2]) - \
+              float(t[i - 1][2])) * 1e-6
+        if t[i][2] + 2e-5 < t[i - 1][2]:
+          dt = np.append(dt, ddt + 1.0)
+        else:
+          dt = np.append(dt, ddt)
+      integration = np.median(dt)
+      n_freq = f["/"].attrs["n_freq"][0]
+      n_prod = len(f["/"].attrs["chan_indices"])
 
   f.close()
   return {"integration" : integration,
@@ -153,8 +167,12 @@ def get_acqrawadcinfo_keywords_from_h5(acq_name):
 
 def get_filecorrinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
-  start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
-  finish_time = f["timestamp"][-1][1] + f["timestamp"][-1][2] * 1e-6
+  try:
+    start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
+    finish_time = f["timestamp"][-1][1] + f["timestamp"][-1][2] * 1e-6
+  except:
+    start_time = f["/index_map/time"][0][1]
+    finish_time = f["/index_map/time"][-1][1]
   chunk_number, freq_number = di.parse_corrfile_name(os.path.basename(path))
   f.close()
   return {"start_time"   : start_time,
