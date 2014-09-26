@@ -5,8 +5,11 @@ import bitshuffle.h5
 import calendar
 import datetime
 import logging
+import logging.handlers
 import sys
 import re
+import socket
+import os
 
 # Set up logger.
 logging.basicConfig(level = logging.INFO)
@@ -20,14 +23,19 @@ if sys.argv[0] == "/usr/sbin/alpenhornd":
   log_file.setLevel(logging.INFO)
   log_file.setFormatter(log_fmt)
   log.addHandler(log_file)
+elif socket.gethostname()[:3] == 'gpc':
+  # On Scinet
+  log_path = os.path.expanduser('~/log/alpenhornd.log')
+  log_file = logging.handlers.TimedRotatingFileHandler(log_path, when='W0', backupCount=100)
+  log_file.setLevel(logging.INFO)
+  log_file.setFormatter(log_fmt)
+  log.addHandler(log_file)
 
 from ch_util import data_index as di
 import h5py
 import numpy as np
-import os
 import peewee as pw
 import psutil
-import socket
 import time
 from watchdog.observers import Observer  
 from watchdog.observers.polling import PollingObserver  
@@ -457,8 +465,8 @@ def update_node(node):
                                di.ArchiveFileCopy.has_file == 'Y')
       except pw.DoesNotExist:
         log.error("Skipping request for %s/%s since it is not available on "
-                  "node \"%s\"." % (req.file.acq.name, req.file.name,
-                                    req.node_from.name))
+                  "node \"%s\". [file_id=%i]" % (req.file.acq.name, req.file.name,
+                                    req.node_from.name, req.file.id))
         continue
 
       # Only proceed if the destination file does not already exist.
@@ -497,6 +505,7 @@ def update_node(node):
 
       # Giddy up!
       log.info("Rsyncing file \"%s\"." % req.file.name)
+      st = time.time()
       if os.system("rsync -aqzpt --rsync-path=\"ionice -c2 -n2 rsync\" " \
                    "-e \"ssh -q\" %s %s" % (from_path, to_path)):
         # If the copy didn't work, then the remote file may be corrupted.
@@ -504,11 +513,15 @@ def update_node(node):
         di.ArchiveFileCopy.update(has_file = 'M').where(
            di.ArchiveFileCopy.file == req.file).execute()
         continue
+      et = time.time()
 
       # Check integrety.
       md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name))
       if md5sum == req.file.md5sum:
-        log.info("Successfully compared md5sum.")
+        size_mb = req.file.size_b / 2**20
+        trans_time = et - st
+        rate = size_mb / trans_time
+        log.info("Pull complete (md5sum correct). Transferred %.1f MB in %i seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate))
 
         # Update the FileCopy (if exists), or insert a new FileCopy
         try:
