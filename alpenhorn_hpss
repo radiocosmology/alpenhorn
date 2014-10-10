@@ -2,13 +2,35 @@
 
 import string
 import os
+import logging
 from datetime import datetime
 
 import peewee as pw
 
-from argh import arg, aliases, dispatch_commands
+from argh import arg, dispatch_commands, named
 
 from ch_util import data_index as di
+
+
+## Configure logging
+logging.basicConfig(level=logging.INFO)
+log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s",
+                            "%b %d %H:%M:%S")
+log = logging.getLogger("")
+log.setLevel(logging.INFO)
+
+try:
+    from cloghandler import ConcurrentRotatingFileHandler as RFHandler
+except ImportError:
+    # Next 2 lines are optional:  issue a warning to the user
+    from warnings import warn
+    warn("ConcurrentLogHandler package not installed.  Using builtin log handler")
+    from logging.handlers import RotatingFileHandler as RFHandler
+
+log_file = RFHandler("/home/k/krs/jrs65/log/alpenhorn_hpss.log", "a", maxBytes=(2**25), backupCount=25)
+log.addHandler(log_file)
+log_file.setFormatter(log_fmt)
+
 
 testdb = True
 
@@ -16,12 +38,24 @@ testdb = True
 if testdb:
     # Connect to Amazon test database
     ch_aws = pw.MySQLDatabase("ch_data", host="chtest.cnrmjnyypngd.us-east-1.rds.amazonaws.com",
-                              port=3306, user="chime", passwd="ch1mepenticton")
+                              port=3306, user="ch_data", passwd="bao_from_21cm")
 
-    
     # Replace e-mode connection with one to test database
     ch_aws.register_fields({'enum': 'enum'})
     di.database_proxy.initialize(ch_aws)
+
+
+_TARBALL_NAME_PAT = "tape_%s_%04i"
+
+
+def _hpss_group():
+    # Get HPSS group. Only supports SciNet at the moment
+    try:
+        hpss_group = di.StorageGroup.select().where(di.StorageGroup.name == 'scinet_hpss').get()
+    except pw.DoesNotExist:
+        raise Exception("HPSS Group does not exist. Check database.")
+
+    return hpss_group
 
 
 def partition_acq(acq, threshold_gb=10.0):
@@ -46,10 +80,10 @@ def partition_acq(acq, threshold_gb=10.0):
     total_size = 0
     for afile in acq.files:
 
-        if afile.size_b + total_size > threshold_gb * 2**30:
+        if afile.size_b + total_size > threshold_gb * 2 ** 30:
             # New partition
             part_list.append(file_list)
-            file_list = [ afile ]
+            file_list = [afile]
             total_size = afile.size_b
         else:
             file_list.append(afile)
@@ -62,39 +96,39 @@ def partition_acq(acq, threshold_gb=10.0):
 
 
 def create_hpss_push_script(tarball_name, node_root, filenames):
-    script_base="""#!/bin/bash
+    script_base = """#!/bin/bash
 #PBS -l walltime=1:00:00
 #PBS -q archive
 #PBS -N push_%(tarball_name)s
 #PBS -j oe
 #PBS -m e
- 
+
 # Transfer files from CHIME archive to HPSS
 
 trap "echo 'Job script not completed'; exit 129" TERM INT
 # Note that your initial directory in HPSS will be /archive/$(id -gn)/$(whoami)/
- 
+
 DEST=$ARCHIVE/%(tarball_name)s.tar
- 
+
 # htar WILL overwrite an existing file with the same name so check beforehand.
- 
+
 hsi ls $DEST &> /dev/null
 status=$?
- 
-if [ $status == 0 ]; then   
+
+if [ $status == 0 ]; then
     echo 'File $DEST already exists. Nothing has been done'
     python %(script_path)s push_exists %(tarball_name)s
     exit 1
 fi
- 
+
 cd %(node_root)s
 htar -cpf $DEST \\
 %(file_list)s
 
 status=$?
- 
+
 trap - TERM INT
- 
+
 if [ ! $status == 0 ]; then
     echo 'HTAR returned non-zero code.'
     /scinet/gpc/bin/exit2msg $status
@@ -104,10 +138,10 @@ else
     ssh gpc04 'python %(script_path)s push-finished %(tarball_name)s'
 fi
 """
-    vars = { 'tarball_name' : tarball_name,
-             'node_root' : node_root,
-             'script_path' : os.path.abspath(__file__),
-             'file_list' : string.join(filenames, sep=' \\\n') }
+    vars = {'tarball_name': tarball_name,
+            'node_root': node_root,
+            'script_path': os.path.abspath(__file__),
+            'file_list': string.join(filenames, sep=' \\\n')}
 
     script = script_base % vars
 
@@ -117,7 +151,7 @@ fi
         f.write(script)
 
     return script_name
-    
+
 
 def submit_hpss_script(script):
     os.system('cd %s; qsub %s' % os.path.split(script))
@@ -142,10 +176,8 @@ def push(node_name, acq_name):
         print "Acquisition does not exist."
         return
 
-    try:
-        hpss_group = di.StorageGroup.select().where(di.StorageGroup.name == 'scinet_hpss').get()
-    except pw.DoesNotExist:
-        raise Exception("HPSS Group does not exist. Check database.")
+    # Get StorageGroup for this HPSS system
+    hpss_group = _hpss_group()
 
     # Partition the files in each acq into groups
     partitions = partition_acq(acq)
@@ -153,7 +185,7 @@ def push(node_name, acq_name):
     for i, part in enumerate(partitions):
 
         # A name for the node/tarball
-        tarball_name = "tape_%s_%04i" % (acq.name, i)
+        tarball_name = _TARBALL_NAME_PAT % (acq.name, i)
 
         node_root = node.root
 
@@ -167,7 +199,7 @@ def push(node_name, acq_name):
         hpss_node = di.StorageNode.create(name=tarball_name, root='', host='HPSS',
                                           username='jrs65', address='', group=hpss_group,
                                           mounted=False, suspect=True, storage_type='A',
-                                          max_total_gb=100.0, min_avail_gb=0.0, avail_gb=0.0, 
+                                          max_total_gb=100.0, min_avail_gb=0.0, avail_gb=0.0,
                                           avail_gb_last_checked=datetime.now(),
                                           min_delete_age_days=10000, notes=notes)
 
@@ -180,12 +212,11 @@ def push(node_name, acq_name):
 
             # Add FileCopy to tape node
             di.ArchiveFileCopy.create(file=afile, node=hpss_node, has_file='N', wants_file='Y')
-            
 
         print "Queueing push of %i files to HPSS:%s ...." % (len(file_list), tarball_name),
 
         script = create_hpss_push_script(tarball_name, node_root, file_list)
-        #submit_hpss_script(script)
+        submit_hpss_script(script)
         print "done."
 
 
@@ -195,9 +226,7 @@ def push_failed(tarball_name):
 
     INTERNAL COMMAND. NOT FOR HUMAN USE!
     """
-
-    with open(os.path.join(os.path.dirname(__file__), 'fail.log'), 'a') as f:
-        f.write(tarball_name)
+    log.warn('Failed push: %s' % tarball_name)
 
     # We don't really need to do anything other than log this (we could reattempt)
 
@@ -220,12 +249,142 @@ def push_finished(tarball_name):
     # Mark all files as being in the node
     nfile = di.ArchiveFileCopy().update(has_file='Y').where(di.ArchiveFileCopy.node == hpss_node).execute()
 
-    print "Marked %i files as present in %s" % (nfile, tarball_name)
+    log.info('Successful push: %s [%i files]' % (tarball_name, nfile))
 
     # Mark node as non-suspect
     hpss_node.suspect = False
     hpss_node.save()
-        
+
+
+@named('list')
+def list_acq():
+    """List acquisitions available in HPSS.
+    """
+
+    import re
+    from collections import Counter
+
+    hpss_group = _hpss_group()
+
+    acqs = []
+
+    for node in hpss_group.nodes:
+        mo = re.match('tape\_(\w+)\_(\d){4}', node.name)
+
+        if mo is None:
+            raise Exception("Did not understand HPSS node")
+
+        acq = mo.group(1)
+        sec = mo.group(2)
+
+        acqs.append([acq, int(sec)])
+
+    acq_names, acq_secs = zip(*acqs)
+
+    acq_counted = Counter(acq_names)
+
+    for name, count in sorted(acq_counted.items()):
+        print "%s [%i files]" % (name, count)
+
+
+def create_hpss_pull_script(tarball_name, destdir):
+    script_base = """#!/bin/bash
+#PBS -l walltime=1:00:00
+#PBS -q archive
+#PBS -N pull_%(tarball_name)s
+#PBS -j oe
+#PBS -m e
+
+# Transfer files from HPSS back onto disk
+
+trap "echo 'Job script not completed'; exit 129" TERM INT
+
+mkdir -p %(destdir)s
+cd %(destdir)s
+
+htar -xpmf $ARCHIVE/%(tarball_name)s.tar
+status=$?
+
+hsi ls $DEST &> /dev/null
+status=$?
+
+trap - TERM INT
+
+if [ ! $status == 0 ]; then
+    echo 'HTAR returned non-zero code.'
+    /scinet/gpc/bin/exit2msg $status
+    ssh gpc04 'python %(script_path)s pull-failed %(tarball_name)s %(destdir)s'
+else
+    echo 'TRANSFER SUCCESSFUL'
+    ssh gpc04 'python %(script_path)s pull-finished %(tarball_name)s %(destdir)s'
+fi
+"""
+    vars = {'tarball_name': tarball_name,
+            'script_path': os.path.abspath(__file__),
+            'destdir': destdir}
+
+    script = script_base % vars
+
+    script_name = '/scratch/k/krs/jrs65/hpss_scripts/pull_%s.sh' % tarball_name
+
+    with open(script_name, 'w') as f:
+        f.write(script)
+
+    return script_name
+
+
+@arg('acq', help='Acquisition to pull onto disk')
+@arg('dest', help='Destination directory to pull into')
+def pull(acq, dest):
+    import re
+
+    hpss_group = _hpss_group()
+
+    acqs = []
+
+    for node in hpss_group.nodes:
+        mo = re.match('tape\_%s\_(\d){4}' % acq, node.name)
+
+        if mo is None:
+            raise Exception("Did not understand HPSS node")
+
+        sec = mo.group(1)
+
+        acqs.append([node.name, int(sec)])
+
+    if len(acqs) == 0:
+        raise Exception('Acquisition not found.')
+
+    for tarball_name, sec in acqs:
+        script = create_hpss_pull_script(tarball_name, dest)
+
+        print "Queueing pull of tarball HPSS:%s to %s ...." % (tarball_name, dest),
+        submit_hpss_script(script)
+        print "done."
+
+
+@arg('tarball_name', help='Name of tarball whose transfer failed.')
+@arg('dest', help='Dest of failed transfer.')
+def pull_failed(tarball_name, dest):
+    """Update the database to reflect that the HPSS transfer failed.
+
+    INTERNAL COMMAND. NOT FOR HUMAN USE!
+    """
+
+    log.warn("Pull failed: %s to %s" % (tarball_name, dest))
+
+    # We don't really need to do anything other than log this (we could reattempt)
+
+
+@arg('tarball_name', help='Name of tarball whose transfer succeeded.')
+def pull_finished(tarball_name, dest):
+    """Update the database to reflect that the HPSS transfer succeeded.
+
+    INTERNAL COMMAND. NOT FOR HUMAN USE!
+    """
+
+    log.info("Pull success: %s to %s" % (tarball_name, dest))
+
 
 def testdb():
 
@@ -234,4 +393,4 @@ def testdb():
 
 
 if __name__ == '__main__':
-    dispatch_commands([push, push_failed, push_finished, testdb])
+    dispatch_commands([push, push_failed, push_finished, list_acq, testdb, pull, pull_finished, pull_failed])
