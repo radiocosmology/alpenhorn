@@ -43,6 +43,8 @@ if testdb:
     # Replace e-mode connection with one to test database
     ch_aws.register_fields({'enum': 'enum'})
     di.database_proxy.initialize(ch_aws)
+else:
+    di.connect_database(read_write=True)
 
 
 _TARBALL_NAME_PAT = "tape_%s_%04i"
@@ -80,7 +82,7 @@ def partition_acq(acq, threshold_gb=10.0):
     total_size = 0
     for afile in acq.files:
 
-        if afile.size_b + total_size > threshold_gb * 2 ** 30:
+        if afile.size_b + total_size > threshold_gb * 2**30:
             # New partition
             part_list.append(file_list)
             file_list = [afile]
@@ -386,11 +388,12 @@ def pull_finished(tarball_name, dest):
     log.info("Pull success: %s to %s" % (tarball_name, dest))
 
 
-def testdb():
-
+def dbinfo():
+    """Fetch DB info.
+    """
     print di.database_proxy.connect_kwargs
     print di.database_proxy.get_conn().get_host_info()
 
 
 if __name__ == '__main__':
-    dispatch_commands([push, push_failed, push_finished, list_acq, testdb, pull, pull_finished, pull_failed])
+    dispatch_commands([push, push_failed, push_finished, list_acq, dbinfo, pull, pull_finished, pull_failed])
