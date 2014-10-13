@@ -11,6 +11,9 @@ from argh import arg, dispatch_commands, named
 
 from ch_util import data_index as di
 
+# Maximum tarball size in GB, this determines how aquisitions are partitioned
+MAX_TARBALL_SIZE_GB = 100.0
+
 
 ## Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +63,7 @@ def _hpss_group():
     return hpss_group
 
 
-def partition_acq(acq, threshold_gb=10.0):
+def partition_acq(acq, threshold_gb=MAX_TARBALL_SIZE_GB):
     """Partition an acquisition into groups of file with a maximum total size.
 
     Parameters
