@@ -398,12 +398,13 @@ def update_node(node):
     dfclause = di.ArchiveFileCopy.wants_file == 'N'
 
   # Search db for candidates on this node to delete.
-  del_files = di.ArchiveFileCopy.select().where(dfclause,
-                                                di.ArchiveFileCopy.node == node,
-                                                di.ArchiveFileCopy.has_file == 'Y')
+  del_files = di.ArchiveFileCopy.select() \
+                                .where(dfclause,
+                                       di.ArchiveFileCopy.node == node,
+                                       di.ArchiveFileCopy.has_file == 'Y')
 
   # Process candidates for deletion
-  del_count = 0  # Counter for number of deletions (used to limit number per node update)
+  del_count = 0  # Counter for no. of deletions (limits no. per node update)
   for fcopy in del_files.order_by(di.ArchiveFileCopy.id):
 
     # Limit number of deletions to 100 per main loop iteration.
@@ -414,7 +415,8 @@ def update_node(node):
     other_copies = fcopy.file.copies.where(di.ArchiveFileCopy.id != fcopy.id)
 
     # Get the number of copies on archive nodes
-    ncopies = other_copies.join(di.StorageNode).where(di.StorageNode.storage_type == 'A').count()
+    ncopies = other_copies.join(di.StorageNode) \
+                          .where(di.StorageNode.storage_type == 'A').count()
 
     shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
     fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
@@ -512,8 +514,10 @@ def update_node(node):
 
         # Update the FileCopy (if exists), or insert a new FileCopy
         try:
-          fcopy = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
-                                                    di.ArchiveFileCopy.node == node).get()
+          fcopy = di.ArchiveFileCopy.select() \
+                                    .where(di.ArchiveFileCopy.file == req.file,
+                                           di.ArchiveFileCopy.node == node) \
+                                    .get()
           fcopy.has_file = 'Y'
           fcopy.wants_file = 'Y'
           fcopy.save()
