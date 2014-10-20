@@ -9,7 +9,7 @@ install: alpenhorn alpenhornd alpenhornd.conf
 	if [ ! -d $(LOGDIR) ]; then mkdir $(LOGDIR); fi
 	install -m 644 alpenhornd.conf $(INITDIR)/alpenhornd.conf
 	install -m 644 logrotate.script $(ROTATEDIR)/alpenhornd
-	if [ "x`hostname`" = "xniedermayer" ]; then \
-      install -m 755 cron.hourly.niedermayer ${CRON}/alpenhorn; fi
+	if [ "x`hostname`" = "xtubular" ]; then \
+      install -m 755 cron.hourly.tubular ${CRON}/alpenhorn; fi
 	install -m 755 alpenhornd $(SBINDIR)/alpenhornd
 	install -m 755 alpenhorn $(BINDIR)/alpenhorn

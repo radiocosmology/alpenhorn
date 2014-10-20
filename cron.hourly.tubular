@@ -19,10 +19,9 @@ done
 #$ALPENHORN group2group $MY_GROUP transport --force >> $OUTPUT 2>&1
 
 # Copy files from c-can -> here
-NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
-for NODE in $NODES; do
-    $ALPENHORN node2group $NODE $MY_GROUP --force >> $OUTPUT 2>&1
-done
+#NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
+#for NODE in $NODES; do
+#    $ALPENHORN node2group $NODE $MY_GROUP --force >> $OUTPUT 2>&1
+#done
 
 echo "Done!" >> $OUTPUT
-

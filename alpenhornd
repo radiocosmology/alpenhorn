@@ -73,6 +73,7 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
             di.ArchiveInst.insert(name=inst).execute()
             logging.info("Added new acquisition instrument \"%s\" to DB." %
                          inst)
+            inst_rec = di.ArchiveInst.get(di.ArchiveInst.name == inst)
         else:
             raise di.DataBaseError("Acquisition instrument \"%s\" not in DB." %
                                    inst)
