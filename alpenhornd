@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 # Alpenhorn: announces the products of mountaineering CHIME instruments.
 
+import bitshuffle.h5
 import calendar
 import datetime
 import logging
+import logging.handlers
 import sys
+import re
+import socket
+import os
 
 # Set up logger.
 logging.basicConfig(level = logging.INFO)
@@ -18,14 +23,19 @@ if sys.argv[0] == "/usr/sbin/alpenhornd":
   log_file.setLevel(logging.INFO)
   log_file.setFormatter(log_fmt)
   log.addHandler(log_file)
+elif socket.gethostname()[:3] == 'gpc':
+  # On Scinet
+  log_path = os.path.expanduser('~/log/alpenhornd.log')
+  log_file = logging.handlers.TimedRotatingFileHandler(log_path, when='W0', backupCount=100)
+  log_file.setLevel(logging.INFO)
+  log_file.setFormatter(log_fmt)
+  log.addHandler(log_file)
 
 from ch_util import data_index as di
 import h5py
 import numpy as np
-import os
 import peewee as pw
 import psutil
-import socket
 import time
 from watchdog.observers import Observer  
 from watchdog.observers.polling import PollingObserver  
@@ -38,6 +48,15 @@ max_time_per_node_operation = 300   # Don't let node operations hog time.
 min_loop_time               = 60    # Main loop at most every 60 seconds.
 
 
+
+# Register Hook to Log Exception
+# ==============================
+
+def log_exception(*args):
+  log.error("Fatal error!", exc_info=args)
+
+
+sys.excepthook = log_exception
 
 
 # Routines for registering files, acquisitions, copies and info in the DB.
@@ -85,25 +104,38 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
 
 def get_acqcorrinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
-  n_freq = f["/"].attrs["n_freq"][0]
-  n_prod = len(f["/"].attrs["chan_indices"])
   try:
     # This works on the 8-channel correlator.
+    n_freq = f["/"].attrs["n_freq"][0]
+    n_prod = len(f["/"].attrs["chan_indices"])
     integration = f["/"].attrs["acq.udp.spf"][0] * \
                   f["/"].attrs["fpga.int_period"][0]
   except:
     # For now, at least, on the GPU correlator, we need to find the integration
     # time by hand. Find the median difference between timestamps.
-    dt = np.array([])
-    t = f["timestamp"]
-    for i in range(1, len(t)):
-      ddt = float(t[i][1]) - float(t[i - 1][1]) + (float(t[i][2]) - \
-            float(t[i - 1][2])) * 1e-6
-      if t[i][2] + 2e-5 < t[i - 1][2]:
-        dt = np.append(dt, ddt + 1.0)
-      else:
-        dt = np.append(dt, ddt)
+    try:
+      # Archive Version 2
+      version = f.attrs["archive_version"][0]
+      dt = np.array([])
+      t = f["/index_map/time"]
+      for i in range(1, len(t)):
+        dt = np.append(dt, float(t[i][1]) - float(t[i - 1][1]))
       integration = np.median(dt)
+      n_freq = len(f["/index_map/freq"])
+      n_prod = len(f["/index_map/prod"])
+    except:
+      dt = np.array([])
+      t = f["timestamp"]
+      for i in range(1, len(t)):
+        ddt = float(t[i][1]) - float(t[i - 1][1]) + (float(t[i][2]) - \
+              float(t[i - 1][2])) * 1e-6
+        if t[i][2] + 2e-5 < t[i - 1][2]:
+          dt = np.append(dt, ddt + 1.0)
+        else:
+          dt = np.append(dt, ddt)
+      integration = np.median(dt)
+      n_freq = f["/"].attrs["n_freq"][0]
+      n_prod = len(f["/"].attrs["chan_indices"])
 
   f.close()
   return {"integration" : integration,
@@ -143,8 +175,12 @@ def get_acqrawadcinfo_keywords_from_h5(acq_name):
 
 def get_filecorrinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
-  start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
-  finish_time = f["timestamp"][-1][1] + f["timestamp"][-1][2] * 1e-6
+  try:
+    start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
+    finish_time = f["timestamp"][-1][1] + f["timestamp"][-1][2] * 1e-6
+  except:
+    start_time = f["/index_map/time"][0][1]
+    finish_time = f["/index_map/time"][-1][1]
   chunk_number, freq_number = di.parse_corrfile_name(os.path.basename(path))
   f.close()
   return {"start_time"   : start_time,
@@ -429,8 +465,8 @@ def update_node(node):
                                di.ArchiveFileCopy.has_file == 'Y')
       except pw.DoesNotExist:
         log.error("Skipping request for %s/%s since it is not available on "
-                  "node \"%s\"." % (req.file.acq.name, req.file.name,
-                                    req.node_from.name))
+                  "node \"%s\". [file_id=%i]" % (req.file.acq.name, req.file.name,
+                                    req.node_from.name, req.file.id))
         continue
 
       # Only proceed if the destination file does not already exist.
@@ -469,6 +505,7 @@ def update_node(node):
 
       # Giddy up!
       log.info("Rsyncing file \"%s\"." % req.file.name)
+      st = time.time()
       if os.system("rsync -aqzpt --rsync-path=\"ionice -c2 -n2 rsync\" " \
                    "-e \"ssh -q\" %s %s" % (from_path, to_path)):
         # If the copy didn't work, then the remote file may be corrupted.
@@ -476,11 +513,15 @@ def update_node(node):
         di.ArchiveFileCopy.update(has_file = 'M').where(
            di.ArchiveFileCopy.file == req.file).execute()
         continue
+      et = time.time()
 
       # Check integrety.
       md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name))
       if md5sum == req.file.md5sum:
-        log.info("Successfully compared md5sum.")
+        size_mb = req.file.size_b / 2**20
+        trans_time = et - st
+        rate = size_mb / trans_time
+        log.info("Pull complete (md5sum correct). Transferred %.1f MB in %i seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate))
 
         # Update the FileCopy (if exists), or insert a new FileCopy
         try:
@@ -568,6 +609,7 @@ if __name__ == "__main__":
 
   # Get the nodes mounted on this host.
   host = socket.gethostname().split(".")[0]
+
   node_list = []
   for node in di.StorageNode.select().where(di.StorageNode.host == host).where(
                                             di.StorageNode.mounted):
@@ -583,6 +625,12 @@ if __name__ == "__main__":
     if node.auto_import:
       log.info("Crawling base directory \"%s\" for new files." % node.root)
       for acq_name, d, f_list in os.walk(node.root):
+
+        # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
+        if re.search('\_raw$', acq_name):
+          log.info("Skipping blacklisted acq: %s" % acq_name)
+          continue
+
         for file_name in sorted(f_list):
           import_file(node, node.root, os.path.basename(acq_name), file_name)
       # If it is an NFS mount, then the default Observer() doesn't work.
