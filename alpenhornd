@@ -3,6 +3,7 @@
 
 import bitshuffle.h5
 import calendar
+import configobj
 import datetime
 import logging
 import logging.handlers
@@ -95,7 +96,7 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
         else:
             log.warning("Acquisition type \"%s\" not in DB." % atype)
             return None
-            #raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
+           #raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
 
     # Giddy up!
     return di.ArchiveAcq.create(name=name, inst=inst_rec, type=atype_rec,
@@ -164,6 +165,27 @@ def get_acqhkinfo_keywords(path):
 
   fp.close()
   return ret
+
+def get_rawinfo_keywords(path):
+  fname = "%s/%s" % (path, di.fname_raw_settings)
+  conf = configobj.ConfigObj(fname)
+  d = datetime.datetime.strptime(conf.get("start_time"), "%Y%m%dT%H%M%SZ")
+  t = calendar.timegm(d.utctimetuple())
+  return {"start_time" : t,
+          "nfreq" : conf.get("num_freq"),
+          "ninput" : conf.get("num_inputs"),
+          "nframe" : conf.get("num_frames"),
+          "packet_len" : conf.get("packet_len"),
+          "header_len" : conf.get("header_len"),
+          "footer_len" : conf.get("footer_len"),
+          "offset" : conf.get("offset"),
+          "stream_id" : conf.get("stream_id"),
+          "data_bits" : conf.get("data_bits"),
+          "stride" : conf.get("stride"),
+          "note" : conf.get("note")
+         }
+
+
       
 def get_acqrawadcinfo_keywords_from_h5(acq_name):
   # We need to use the calendar module because the datetime module can't give us
@@ -200,6 +222,14 @@ def get_filehkinfo_keywords_from_h5(path):
           "atmel_name"   : atmel_name,
           "chunk_number" : chunk_number}
 
+def get_filerawinfo_keywords(rawinfo, size_b, file_name):
+  chunk_num = int(file_name[:file_name.find(".")])
+  dt = size_b * rawinfo.nframe * 2048 / (rawinfo.packet_len * 8e8)
+  start_time = rawinfo.start_time + chunk_num * dt
+  finish_time = rawinfo.start_time + (chunk_num + 1) * dt
+  return {"start_time"   : start_time,
+          "finish_time"  : finish_time,
+          "chunk_number" : chunk_num}
 
 def import_file(node, root, acq_name, file_name):
   """Import a file into the DB.
@@ -274,11 +304,26 @@ def import_file(node, root, acq_name, file_name):
                               **get_acqrawadcinfo_keywords_from_h5(acq_name))
       log.info("Added information for raw ADC acquisition \"%s\" to " \
                "DB." % acq_name)
+  elif atype == "raw":
+    try:
+      raw_info = acq.rawinfos.get()
+    except pw.DoesNotExist:
+      try:
+        raw_info = di.RawAcqInfo.create(acq=acq,
+                                        **get_rawinfo_keywords("%s/%s" %
+                                                              (root, acq_name)))
+        log.info("Added information for raw acquisition \"%s\" to DB." % \
+                 acq_name)
+      except:
+        log.info("Missing info in settings.dat for acquisition \"%s\". " \
+                 "Skipping this acquisition." % acq_name)
+        return
 
   # Add the file, if necessary.
   try:
     file = di.ArchiveFile.get(di.ArchiveFile.name == file_name,
                               di.ArchiveFile.acq == acq)
+    size_b = file.size_b
     log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
   except pw.DoesNotExist:
     md5sum = di.md5sum_file(fullpath, cmd_line = True)
@@ -352,6 +397,33 @@ def import_file(node, root, acq_name, file_name):
         i.save()
         log.info("Added information for file \"%s/%s\" to DB." %
                  (acq_name, file_name))
+  if ftype.name == "raw":
+    # Add if (1) there is no rawinfo or (2) the rawinfo is missing.
+    if not file.rawinfos.count():
+      try:
+        di.RawFileInfo.create(file=file,
+                              **get_filerawinfo_keywords(raw_info, size_b,
+                                                         file_name))
+        log.info("Added information for file \"%s/%s\" to DB." % \
+                 (acq_name, file_name))
+      except:
+        if not file.corrinfos.count():
+          di.RawFileInfo.create(file=file)
+        log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                    (acq_name, file_name))
+    elif not file.rawinfos[0].start_time:
+      try:
+        i = file.rawinfos[0]
+        k = get_filerawinfo_keywords(raw_info, size_b, file_name)
+      except:
+        log.debug("Still missing info for file \"%s/%s\".")
+      else:
+        i.start_time = k["start_time"]
+        i.chunk_number = k["chunk_number"]
+        i.save()
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+
 
 def update_node(node):
   # Make sure this node is usable.
@@ -625,11 +697,9 @@ if __name__ == "__main__":
     if node.auto_import:
       log.info("Crawling base directory \"%s\" for new files." % node.root)
       for acq_name, d, f_list in os.walk(node.root):
-
-        # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
-        if re.search('\_raw$', acq_name):
-          log.info("Skipping blacklisted acq: %s" % acq_name)
-          continue
+#if re.search('\_raw$', acq_name):
+#          log.info("Skipping blacklisted acq: %s" % acq_name)
+#          continue
 
         for file_name in sorted(f_list):
           import_file(node, node.root, os.path.basename(acq_name), file_name)
