@@ -22,6 +22,73 @@ def ask_yesno(question):
 
 @arg('node_name', help='node to copy from')
 @arg('group_name', help='group to copy to')
+@arg('acq_name', help='acquisition to copy')
+@arg('--force', '-f', help='proceed without confirmation')
+@arg('--nice', '-n', help='nice level for transfer')
+def single(node_name, group_name, acq_name, force=False, nice=0):
+    """sync files of a given acquisition from a node to a group"""
+
+    # Make sure we connect RW
+    di.connect_database(read_write=True)
+
+    try:
+        from_node = di.StorageNode.get(name=node_name)
+    except pw.DoesNotExist:
+        raise Exception("Node \"%s\" does not exist in the DB." % node_name)
+    try:
+        to_group = di.StorageGroup.get(name=group_name)
+    except pw.DoesNotExist:
+        raise Exception("Group \"%s\" does not exist in the DB." % group_name)
+    try:
+        acq = di.ArchiveAcq.get(name=acq_name)
+    except pw.DoesNotExist:
+        raise Exception("Acquisition \"%s\" does not exist in the DB." \
+                        % acq_name)
+
+    copy = di.ArchiveFileCopy.select().where(
+        di.ArchiveFileCopy.node == from_node,
+        di.ArchiveFileCopy.has_file == 'Y',
+        ~(di.ArchiveFileCopy.file <<
+          di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
+              di.ArchiveFileCopy.node <<
+              di.StorageNode.select().where(
+                  di.StorageNode.group == to_group),
+              di.ArchiveFileCopy.has_file != 'N'))
+        ).join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
+
+    if not copy.count():
+        print "No files to copy from node %s." % (node_name)
+        return
+
+    print "Will request that %d files be copied from node %s to group %s." % \
+          (copy.count(), node_name, group_name)
+    if not (force or ask_yesno("Do you want to proceed?")):
+        print "Aborted."
+        return
+
+    sys.stdout.write("Updating DB ")
+    for c in copy:
+        try:
+            req = di.ArchiveFileCopyRequest.get(file=c.file, group_to=to_group,
+                                                node_from=from_node)
+            di.ArchiveFileCopyRequest.update(nice=nice, completed=False,
+                                             n_requests=req.n_requests + 1,
+                                             timestamp=datetime.datetime.now()).where(
+                di.ArchiveFileCopyRequest.file == c.file,
+                di.ArchiveFileCopyRequest.group_to == to_group,
+                di.ArchiveFileCopyRequest.node_from == from_node).execute()
+        except pw.DoesNotExist:
+
+            di.ArchiveFileCopyRequest.create(file=c.file, group_to=to_group,
+                                             node_from=from_node, nice=nice,
+                                             completed=False, n_requests=1,
+                                             timestamp=datetime.datetime.now())
+        sys.stdout.write(".")
+        sys.stdout.flush()
+    sys.stdout.write("\n")
+
+@arg('node_name', help='node to copy from')
+@arg('group_name', help='group to copy to')
 @arg('--force', '-f', help='proceed without confirmation')
 @arg('--nice', '-n', help='nice level for transfer')
 def node2group(node_name, group_name, force=False, nice=0):
@@ -259,4 +326,4 @@ def clean(node_name, days=21, force=False):
 
 
 if __name__ == "__main__":
-    dispatch_commands([node2group, summary, verify, clean])
+    dispatch_commands([node2group, single, summary, verify, clean])
