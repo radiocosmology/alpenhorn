@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # Alpenhorn: announce datafile information to the database
-
 import sys
 import datetime
 
@@ -11,6 +10,7 @@ import peewee as pw
 from ch_util import data_index as di
 from ch_util import ephemeris
 
+MAX_E2LABEL_LEN = 16
 
 def ask_yesno(question):
     answer = raw_input("%s [Y/N] " % question)
@@ -18,6 +18,42 @@ def ask_yesno(question):
         return True
     else:
         return False
+
+def ask_default(question, default):
+    answer = raw_input("%s [%s]: " % (question, default))
+    if not len(answer):
+        return default
+    else:
+        return answer
+
+def get_e2label(dev):
+    import os
+
+    pin, pout, perr = os.popen3("/sbin/e2label %s" % dev, "r")
+    pin.close()
+    res = pout.read().strip()
+    err = perr.read()
+    pout.close()
+    perr.close()
+    if not len(err) and len(res) < MAX_E2LABEL_LEN:
+        return res
+    return None
+
+def get_mount_device(path):
+    import os
+
+    p = os.popen("mount", "r")
+    res = p.read()
+    p.close()
+    dev = None
+    for l in res.split("\n"):
+        if not len(l):
+            continue
+        s = l.split()
+        assert s[1] == "on"
+        if s[2] == os.path.abspath(path):
+            dev = s[0]
+    return dev
 
 
 @arg('node_name', help='node to copy from')
@@ -45,16 +81,20 @@ def single(node_name, group_name, acq_name, force=False, nice=0):
         raise Exception("Acquisition \"%s\" does not exist in the DB." \
                         % acq_name)
 
-    copy = di.ArchiveFileCopy.select().where(
-        di.ArchiveFileCopy.node == from_node,
-        di.ArchiveFileCopy.has_file == 'Y',
-        ~(di.ArchiveFileCopy.file <<
-          di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
-              di.ArchiveFileCopy.node <<
-              di.StorageNode.select().where(
-                  di.StorageNode.group == to_group),
-              di.ArchiveFileCopy.has_file != 'N'))
-        ).join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
+    copy = di.ArchiveFileCopy\
+             .select()\
+             .where(di.ArchiveFileCopy.node == from_node,
+                    di.ArchiveFileCopy.has_file == 'Y',
+                    ~(di.ArchiveFileCopy.file <<
+                      di.ArchiveFile\
+                        .select()\
+                        .join(di.ArchiveFileCopy)\
+                        .where(di.ArchiveFileCopy.node <<
+                               di.StorageNode\
+                                 .select()\
+                                 .where(di.StorageNode.group == to_group),
+                                        di.ArchiveFileCopy.has_file != 'N')))\
+             .join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
 
     if not copy.count():
         print "No files to copy from node %s." % (node_name)
@@ -71,9 +111,9 @@ def single(node_name, group_name, acq_name, force=False, nice=0):
         try:
             req = di.ArchiveFileCopyRequest.get(file=c.file, group_to=to_group,
                                                 node_from=from_node)
-            di.ArchiveFileCopyRequest.update(nice=nice, completed=False,
-                                             n_requests=req.n_requests + 1,
-                                             timestamp=datetime.datetime.now()).where(
+            di.ArchiveFileCopyRequest\
+              .update(nice=nice, completed=False, n_requests=req.n_requests + 1,
+                      timestamp=datetime.datetime.now()).where(
                 di.ArchiveFileCopyRequest.file == c.file,
                 di.ArchiveFileCopyRequest.group_to == to_group,
                 di.ArchiveFileCopyRequest.node_from == from_node).execute()
@@ -131,9 +171,9 @@ def node2group(node_name, group_name, force=False, nice=0):
         try:
             req = di.ArchiveFileCopyRequest.get(file=c.file, group_to=to_group,
                                                 node_from=from_node)
-            di.ArchiveFileCopyRequest.update(nice=nice, completed=False,
-                                             n_requests=req.n_requests + 1,
-                                             timestamp=datetime.datetime.now()).where(
+            di.ArchiveFileCopyRequest\
+              .update(nice=nice, completed=False, n_requests=req.n_requests + 1,
+                      timestamp=datetime.datetime.now()).where(
                 di.ArchiveFileCopyRequest.file == c.file,
                 di.ArchiveFileCopyRequest.group_to == to_group,
                 di.ArchiveFileCopyRequest.node_from == from_node).execute()
@@ -191,10 +231,19 @@ def verify(node_name, md5=False, fixdb=False):
         print "Specified node does not exist."
         return
 
-    ## Use a complicated query with a tuples construct to fetch everything we need
-    ## in a single query. This massively speeds up the whole process versus
+    ## Use a complicated query with a tuples construct to fetch everything we
+    ## need in a single query. This massively speeds up the whole process versus
     ## fetching all the FileCopy's then querying for Files and Acqs.
-    lfiles = di.ArchiveFile.select(di.ArchiveFile.name, di.ArchiveAcq.name, di.ArchiveFile.size_b, di.ArchiveFile.md5sum, di.ArchiveFileCopy.id).join(di.ArchiveAcq).switch(di.ArchiveFile).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == this_node, di.ArchiveFileCopy.has_file == 'Y').tuples()
+    lfiles = di.ArchiveFile\
+               .select(di.ArchiveFile.name, di.ArchiveAcq.name,
+                          di.ArchiveFile.size_b, di.ArchiveFile.md5sum,
+                          di.ArchiveFileCopy.id)\
+               .join(di.ArchiveAcq)\
+               .switch(di.ArchiveFile)\
+               .join(di.ArchiveFileCopy)\
+               .where(di.ArchiveFileCopy.node == this_node,
+                      di.ArchiveFileCopy.has_file == 'Y')\
+               .tuples()
     nfiles = lfiles.count()
 
     missing_files = []
@@ -258,11 +307,17 @@ def verify(node_name, md5=False, fixdb=False):
         di.connect_database(read_write=True)
 
         if len(missing_files) > 0  and ask_yesno('Fix missing files'):
-            missing_count = di.ArchiveFileCopy.update(has_file='N').where(di.ArchiveFileCopy.id << missing_ids).execute()
+            missing_count = di.ArchiveFileCopy\
+                              .update(has_file='N')\
+                              .where(di.ArchiveFileCopy.id << missing_ids)\
+                              .execute()
             print "  %i marked as missing" % missing_count
 
         if len(corrupt_files) > 0  and ask_yesno('Fix corrupt files'):
-            corrupt_count = di.ArchiveFileCopy.update(has_file='M').where(di.ArchiveFileCopy.id << corrupt_ids).execute()
+            corrupt_count = di.ArchiveFileCopy\
+                              .update(has_file='M')\
+                              .where(di.ArchiveFileCopy.id << corrupt_ids)\
+                              .execute()
             print "  %i corrupt files marked for verification" % corrupt_count
         
 
@@ -292,7 +347,8 @@ def clean(node_name, days=21, force=False):
     oldest = datetime.datetime.now() - datetime.timedelta(days)
     oldest_unix = ephemeris.ensure_unix(oldest)
 
-    ## List of filetypes we want to update, needs a human readable name and a FileInfo table
+    ## List of filetypes we want to update, needs a human readable name and a
+    ## FileInfo table.
     filetypes = [ ['correlation',  di.CorrFileInfo],
                   ['housekeeping', di.HKFileInfo] ]
 
@@ -300,16 +356,21 @@ def clean(node_name, days=21, force=False):
     for name, infotable in filetypes:
 
         # Select FileCopys on this node.
-        oldfiles = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.node == this_node,
-                                                     di.ArchiveFileCopy.wants_file == 'Y')
+        oldfiles = di.ArchiveFileCopy\
+                     .select()\
+                     .where(di.ArchiveFileCopy.node == this_node,
+                            di.ArchiveFileCopy.wants_file == 'Y')
         # Filter to fetch only ones with a start time older than `oldest`
-        oldfiles = oldfiles.join(di.ArchiveFile).join(infotable).where(infotable.start_time < oldest_unix)
+        oldfiles = oldfiles.join(di.ArchiveFile)\
+                           .join(infotable)\
+                           .where(infotable.start_time < oldest_unix)
 
         # Get number of correlation files
         count = oldfiles.count()
 
         if count > 0:
-            size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / 2**30.0
+            size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / \
+                      2**30.0
 
             print "Cleaning up %i %s files (%1f GB) from %s " % \
                   (count, name, size_gb, node_name)
@@ -324,6 +385,162 @@ def clean(node_name, days=21, force=False):
             print "No %s files selected for cleaning on %s." % (name, node_name)
 
 
+@arg('root', help='base directory for this node')
+def newtransport(root):
+    """interactive routine for adding a transport disc as a storage node"""
+    import os
+
+    if not os.path.exists(root):
+        if ask_yesno("Hmmm, \"%s\" doesn't exist. Should I create it?"):
+            os.mkdir(root)
+        else:
+            return
+
+    if os.getuid() != 0:
+        print "You must be root to run newtransport. I quit."
+        return
+    if not os.path.ismount(root):
+        print "\"%s\" is not a mount point, and therefore not a " \
+              "transport disc. I quit." % (root)
+        exit()
+
+    dev = get_mount_device(root)
+    e2label = get_e2label(dev)
+    if not e2label:
+        print "Disc is unlabelled."
+        serial = raw_input("Enter disc manufacturer serial " \
+                           "number: ").strip()
+        name = "CH-%s" % (serial)
+        if len(name) > MAX_E2LABEL_LEN:
+            print "Hmmm. That serial number is too long. I quit."
+            exit()
+    elif not e2label.startswith("CH-"):
+            print "Hmmm. Disc label does not start with \"CH-\". I quit."
+            exit()
+    else:
+        print "Using disc label \"%s\" for node name." % (e2label)
+        name = e2label
+
+    try:
+        di.StorageNode.get(name = name)
+        print "A storage node with that name already exists. I quit."
+        exit()
+    except pw.DoesNotExist:
+        pass
+
+    if not ask_yesno("Preparing to add \"%s\" as new node named \"%s\". " \
+                     "Proceed? " % (root, name)):
+        print "I quit."
+        exit()
+
+    if not e2label:
+        print "Labelling the disc as \"%s\" (using e2label) ..." % (name)
+        assert dev is not None
+        assert len(name) <= MAX_E2LABEL_LEN
+        stat = os.system("/sbin/e2label %s %s" % (dev, name))
+        if stat:
+            print "Failed to e2label! Stat = %s. I quit." % (stat)
+            exit()
+
+    try:
+        group = di.StorageGroup.get(name = "transport")
+    except pw.DoesNotExist:
+        print "Hmmm. Storage group \"transport\" does not exist. I quit."
+        exit()
+
+    di.StorageNode.create(name = name,
+                          root = root,
+                          group = group,
+                          storage_type = "T",
+                          min_avail_gb = 1)
+
+    print "Successfully created storage node. Now attempting to mount ..."
+
+
+@arg("root", help="base directory for this node")
+@arg("--name", help="name of this node; only enter if it is not a storage node")
+def mount(root, name=None):
+    """interactive routine for mounting a storage node"""
+    import os
+    import socket
+
+    if root[-1] == "/":
+      root = root[:len(root) - 1]
+
+    if name and os.path.ismount(root):
+        print "You should not enter a name if this is a transport disc." \
+              "I quit."
+        exit()
+    elif not name:
+        transport = True
+        if os.getuid() != 0:
+            print "You must be root to run mount on a transport disc. I quit."
+            return
+        if not os.path.ismount(root):
+            print "You must enter a name if this is not a transport disc. " \
+                  "I quit."
+            exit()
+        dev = get_mount_device(root)
+        name = get_e2label(dev)
+        if not name:
+            print "Could not find disc label. This disc has probably never " \
+                  "been formatted as a transport disc. I quit."
+            exit()
+    else:
+        transport = False
+
+    try:
+        node = di.StorageNode.get(name = name)
+    except pw.DoesNotExist:
+        print "Storage node \"%s\" does not exist. I quit." % (name)
+
+    if node.mounted:
+        print "Node \"%s\" is already mounted." % (name)
+        exit()
+
+    node.host = socket.gethostname()
+    print "I will set the host to \"%s\"." % (node.host)
+    node.address = ask_default("Enter the IP address of this host",
+                               "localhost").strip()
+    node.username = ask_default("Enter the user name for rsyncing",
+                                os.environ.get("USER"))
+    node.mounted = True
+    node.root = root
+    node.save()
+    print "Successfully mounted \"%s\"." % (name)
+
+
+@arg("root_or_name", help="either the name or root path of this node")
+def unmount(root_or_name):
+    """unmount a storage node"""
+    import os
+    import socket
+
+    try:
+        node = di.StorageNode.get(name = root_or_name)
+    except pw.DoesNotExist:
+        if root_or_name[-1] == "/":
+          root_or_name = root_or_name[:len(root_or_name) - 1]
+
+        if not os.path.exists(root_or_name):
+            print "That is neither a node name, nor a path on this host. " \
+                  "I quit."
+            exit()
+        try:
+            node = di.StorageNode.get(root = root_or_name,
+                                      host = socket.gethostname())
+        except pw.DoesNotExist:
+            print "That is neither a node name nor a root name that is " \
+                  "known. I quit."
+            exit()
+
+    if not node.mounted:
+        print "There is no node mounted there any more."
+    else:
+        node.mounted = False
+        node.save()
+        print "Node successfully unmounted."
 
 if __name__ == "__main__":
-    dispatch_commands([node2group, single, summary, verify, clean])
+    dispatch_commands([node2group, single, summary, verify, clean, 
+                       newtransport, mount, unmount])
