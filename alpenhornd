@@ -409,7 +409,7 @@ def import_file(node, root, acq_name, file_name):
                                                          file_name))
         log.info("Added information for file \"%s/%s\" to DB." % \
                  (acq_name, file_name))
-      except KeyError:
+      except:
         if not file.corrinfos.count():
           di.RawFileInfo.create(file=file)
         log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
@@ -418,7 +418,7 @@ def import_file(node, root, acq_name, file_name):
       try:
         i = file.rawinfos[0]
         k = get_filerawinfo_keywords(raw_info, size_b, file_name)
-      except KeyError:
+      except:
         log.debug("Still missing info for file \"%s/%s\".")
       else:
         i.start_time = k["start_time"]
