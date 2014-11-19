@@ -455,6 +455,7 @@ def newtransport(root):
                           min_avail_gb = 1)
 
     print "Successfully created storage node. Now attempting to mount ..."
+    mount(root)
 
 
 @arg("root", help="base directory for this node")
