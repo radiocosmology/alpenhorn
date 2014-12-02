@@ -3,10 +3,16 @@
 
 import bitshuffle.h5
 import calendar
+import configobj
 import datetime
 import logging
+import logging.handlers
 import sys
 import re
+import socket
+import os
+
+RSYNC_FLAG = "qptgoDL"
 
 # Set up logger.
 logging.basicConfig(level = logging.INFO)
@@ -20,14 +26,19 @@ if sys.argv[0] == "/usr/sbin/alpenhornd":
   log_file.setLevel(logging.INFO)
   log_file.setFormatter(log_fmt)
   log.addHandler(log_file)
+elif socket.gethostname()[:3] == 'gpc':
+  # On Scinet
+  log_path = os.path.expanduser('~/log/alpenhornd.log')
+  log_file = logging.handlers.TimedRotatingFileHandler(log_path, when='W0', backupCount=100)
+  log_file.setLevel(logging.INFO)
+  log_file.setFormatter(log_fmt)
+  log.addHandler(log_file)
 
 from ch_util import data_index as di
 import h5py
 import numpy as np
-import os
 import peewee as pw
 import psutil
-import socket
 import time
 from watchdog.observers import Observer  
 from watchdog.observers.polling import PollingObserver  
@@ -87,7 +98,7 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
         else:
             log.warning("Acquisition type \"%s\" not in DB." % atype)
             return None
-            #raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
+           #raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
 
     # Giddy up!
     return di.ArchiveAcq.create(name=name, inst=inst_rec, type=atype_rec,
@@ -156,6 +167,27 @@ def get_acqhkinfo_keywords(path):
 
   fp.close()
   return ret
+
+def get_rawinfo_keywords(path):
+  fname = "%s/%s" % (path, di.fname_raw_settings)
+  conf = configobj.ConfigObj(fname)
+  d = datetime.datetime.strptime(conf.get("start_time"), "%Y%m%dT%H%M%SZ")
+  t = calendar.timegm(d.utctimetuple())
+  return {"start_time" : t,
+          "nfreq" : conf.get("num_freq"),
+          "ninput" : conf.get("num_inputs"),
+          "nframe" : conf.get("num_frames"),
+          "packet_len" : conf.get("packet_len"),
+          "header_len" : conf.get("header_len"),
+          "footer_len" : conf.get("footer_len"),
+          "offset" : conf.get("offset"),
+          "stream_id" : conf.get("stream_id"),
+          "data_bits" : conf.get("data_bits"),
+          "stride" : conf.get("stride"),
+          "note" : conf.get("note")
+         }
+
+
       
 def get_acqrawadcinfo_keywords_from_h5(acq_name):
   # We need to use the calendar module because the datetime module can't give us
@@ -192,6 +224,15 @@ def get_filehkinfo_keywords_from_h5(path):
           "atmel_name"   : atmel_name,
           "chunk_number" : chunk_number}
 
+def get_filerawinfo_keywords(rawinfo, size_b, file_name):
+  chunk_num = int(file_name[:file_name.find(".")])
+  log.debug("Rawinfo: %d %d %d" % (size_b, rawinfo.nframe, rawinfo.packet_len))
+  dt = size_b * rawinfo.nframe * 2048 / (rawinfo.packet_len * 8e8)
+  start_time = rawinfo.start_time + chunk_num * dt
+  finish_time = rawinfo.start_time + (chunk_num + 1) * dt
+  return {"start_time"   : start_time,
+          "finish_time"  : finish_time,
+          "chunk_number" : chunk_num}
 
 def import_file(node, root, acq_name, file_name):
   """Import a file into the DB.
@@ -266,11 +307,26 @@ def import_file(node, root, acq_name, file_name):
                               **get_acqrawadcinfo_keywords_from_h5(acq_name))
       log.info("Added information for raw ADC acquisition \"%s\" to " \
                "DB." % acq_name)
+  elif atype == "raw":
+    try:
+      raw_info = acq.rawinfos.get()
+    except pw.DoesNotExist:
+      try:
+        raw_info = di.RawAcqInfo.create(acq=acq,
+                                        **get_rawinfo_keywords("%s/%s" %
+                                                              (root, acq_name)))
+        log.info("Added information for raw acquisition \"%s\" to DB." % \
+                 acq_name)
+      except:
+        log.info("Missing info in settings.dat for acquisition \"%s\". " \
+                 "Skipping this acquisition." % acq_name)
+        return
 
   # Add the file, if necessary.
   try:
     file = di.ArchiveFile.get(di.ArchiveFile.name == file_name,
                               di.ArchiveFile.acq == acq)
+    size_b = file.size_b
     log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
   except pw.DoesNotExist:
     md5sum = di.md5sum_file(fullpath, cmd_line = True)
@@ -344,6 +400,33 @@ def import_file(node, root, acq_name, file_name):
         i.save()
         log.info("Added information for file \"%s/%s\" to DB." %
                  (acq_name, file_name))
+  if ftype.name == "raw":
+    # Add if (1) there is no rawinfo or (2) the rawinfo is missing.
+    if not file.rawinfos.count():
+      try:
+        di.RawFileInfo.create(file=file,
+                              **get_filerawinfo_keywords(raw_info, size_b,
+                                                         file_name))
+        log.info("Added information for file \"%s/%s\" to DB." % \
+                 (acq_name, file_name))
+      except:
+        if not file.corrinfos.count():
+          di.RawFileInfo.create(file=file)
+        log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                    (acq_name, file_name))
+    elif not file.rawinfos[0].start_time:
+      try:
+        i = file.rawinfos[0]
+        k = get_filerawinfo_keywords(raw_info, size_b, file_name)
+      except:
+        log.debug("Still missing info for file \"%s/%s\".")
+      else:
+        i.start_time = k["start_time"]
+        i.chunk_number = k["chunk_number"]
+        i.save()
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+
 
 def update_node(node):
   # Make sure this node is usable.
@@ -459,8 +542,8 @@ def update_node(node):
                                di.ArchiveFileCopy.has_file == 'Y')
       except pw.DoesNotExist:
         log.error("Skipping request for %s/%s since it is not available on "
-                  "node \"%s\"." % (req.file.acq.name, req.file.name,
-                                    req.node_from.name))
+                  "node \"%s\". [file_id=%i]" % (req.file.acq.name, req.file.name,
+                                    req.node_from.name, req.file.id))
         continue
 
       # Only proceed if the destination file does not already exist.
@@ -499,25 +582,37 @@ def update_node(node):
 
       # Giddy up!
       log.info("Rsyncing file \"%s\"." % req.file.name)
-      if os.system("rsync -aqzpt --rsync-path=\"ionice -c2 -n2 rsync\" " \
-                   "-e \"ssh -q\" %s %s" % (from_path, to_path)):
+      st = time.time()
+      if req.node_from.host != node.host:
+        ret = os.system("rsync -z%s --rsync-path=\"ionice -c2 -n2 rsync\" "\
+                        "rsync -e \"ssh -q\" %s %s" % \
+                        (RSYNC_FLAG, from_path, to_path))
+      else:
+        ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
+      if ret:
         # If the copy didn't work, then the remote file may be corrupted.
         log.error("Rsync failed. Marking source file suspect.")
         di.ArchiveFileCopy.update(has_file = 'M').where(
            di.ArchiveFileCopy.file == req.file).execute()
         continue
+      et = time.time()
 
       # Check integrety.
       md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name))
       if md5sum == req.file.md5sum:
-        log.info("Successfully compared md5sum.")
+        size_mb = req.file.size_b / 2**20
+        trans_time = et - st
+        rate = size_mb / trans_time
+        log.info("Pull complete (md5sum correct). Transferred %.1f MB in %i " \
+                 "seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate))
 
         # Update the FileCopy (if exists), or insert a new FileCopy
         try:
-          fcopy = di.ArchiveFileCopy.select() \
-                                    .where(di.ArchiveFileCopy.file == req.file,
-                                           di.ArchiveFileCopy.node == node) \
-                                    .get()
+          fcopy = di.ArchiveFileCopy\
+                    .select()\
+                    .where(di.ArchiveFileCopy.file == req.file,
+                           di.ArchiveFileCopy.node == node)\
+                    .get()
           fcopy.has_file = 'Y'
           fcopy.wants_file = 'Y'
           fcopy.save()
@@ -616,11 +711,9 @@ if __name__ == "__main__":
     if node.auto_import:
       log.info("Crawling base directory \"%s\" for new files." % node.root)
       for acq_name, d, f_list in os.walk(node.root):
-
-        # SUPER HACK!! Force alpenhornd to ignore raw directories for the moment.
-        if re.search('\_raw$', acq_name):
-          log.info("Skipping blacklisted acq: %s" % acq_name)
-          continue
+#if re.search('\_raw$', acq_name):
+#          log.info("Skipping blacklisted acq: %s" % acq_name)
+#          continue
 
         for file_name in sorted(f_list):
           import_file(node, node.root, os.path.basename(acq_name), file_name)
