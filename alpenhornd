@@ -585,7 +585,7 @@ def update_node(node):
       st = time.time()
       if req.node_from.host != node.host:
         ret = os.system("rsync -z%s --rsync-path=\"ionice -c2 -n2 rsync\" "\
-                        "rsync -e \"ssh -q\" %s %s" % \
+                        "-e \"ssh -q\" %s %s" % \
                         (RSYNC_FLAG, from_path, to_path))
       else:
         ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
