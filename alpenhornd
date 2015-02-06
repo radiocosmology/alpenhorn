@@ -485,12 +485,13 @@ def update_node(node):
     dfclause = di.ArchiveFileCopy.wants_file == 'N'
 
   # Search db for candidates on this node to delete.
-  del_files = di.ArchiveFileCopy.select().where(dfclause,
-                                                di.ArchiveFileCopy.node == node,
-                                                di.ArchiveFileCopy.has_file == 'Y')
+  del_files = di.ArchiveFileCopy.select() \
+                                .where(dfclause,
+                                       di.ArchiveFileCopy.node == node,
+                                       di.ArchiveFileCopy.has_file == 'Y')
 
   # Process candidates for deletion
-  del_count = 0  # Counter for number of deletions (used to limit number per node update)
+  del_count = 0  # Counter for no. of deletions (limits no. per node update)
   for fcopy in del_files.order_by(di.ArchiveFileCopy.id):
 
     # Limit number of deletions to 100 per main loop iteration.
@@ -501,7 +502,8 @@ def update_node(node):
     other_copies = fcopy.file.copies.where(di.ArchiveFileCopy.id != fcopy.id)
 
     # Get the number of copies on archive nodes
-    ncopies = other_copies.join(di.StorageNode).where(di.StorageNode.storage_type == 'A').count()
+    ncopies = other_copies.join(di.StorageNode) \
+                          .where(di.StorageNode.storage_type == 'A').count()
 
     shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
     fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
@@ -587,7 +589,7 @@ def update_node(node):
       st = time.time()
       if req.node_from.host != node.host:
         ret = os.system("rsync -z%s --rsync-path=\"ionice -c2 -n2 rsync\" "\
-                        "rsync -e \"ssh -q\" %s %s" % \
+                        "-e \"ssh -q\" %s %s" % \
                         (RSYNC_FLAG, from_path, to_path))
       else:
         ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
