@@ -4,8 +4,8 @@ HOUR=$(date +%H)
 OUTPUT=/var/log/alpenhorn/cron.hourly.$HOUR
 ALPENHORN=/usr/local/bin/alpenhorn
 
-MY_NODE=niedermayer
-MY_GROUP=ubc_storage
+MY_NODE=gong
+MY_GROUP=drao_storage
 
 echo "Starting hour $HOUR cron job..." > $OUTPUT
 
@@ -14,6 +14,9 @@ NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
 for NODE in $NODES; do
     $ALPENHORN clean $NODE --force >> $OUTPUT 2>&1
 done
+
+# Copy files from suzu -> gong.
+$ALPENHORN node2group suzu $MY_GROUP --force >> $OUTPUT 2>&1
 
 # Copy files from here -> transport disks
 #$ALPENHORN group2group $MY_GROUP transport --force >> $OUTPUT 2>&1
