@@ -384,6 +384,27 @@ def clean(node_name, days=21, force=False):
         else:
             print "No %s files selected for cleaning on %s." % (name, node_name)
 
+@arg('--host', '-H', help='use specified host rather than local machine')
+def mounted(host=None):
+    """list the nodes mounted on this, or another specified, machine"""
+    import socket
+  
+    if not host:
+        host = socket.gethostname().split(".")[0]
+    zero = True
+    for node in di.StorageNode \
+                  .select() \
+                  .where(di.StorageNode.host == host, di.StorageNode.mounted == True):
+        n_file = di.ArchiveFileCopy \
+                   .select() \
+                   .where(di.ArchiveFileCopy.node == node) \
+                   .count()
+        print "%-25s %-30s %5d files" % (node.name, node.root, n_file)
+        zero = False
+    if zero:
+        print "No nodes are mounted on host %s." % host
+
+
 
 @arg("serial_num", help="manufacturer's serial number for the disc")
 def mount_transport(serial_num):
@@ -590,4 +611,4 @@ if __name__ == "__main__":
     di.connect_database(read_write=True)
 
     dispatch_commands([node2group, single, summary, verify, clean, 
-                       mount_transport, mount, unmount])
+                       mount_transport, mount, mounted, unmount])
