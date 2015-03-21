@@ -131,11 +131,19 @@ def single(node_name, group_name, acq_name, force=False, nice=0):
 @arg('group_name', help='group to copy to')
 @arg('--force', '-f', help='proceed without confirmation')
 @arg('--nice', '-n', help='nice level for transfer')
-def node2group(node_name, group_name, force=False, nice=0):
+@arg("--transport", "-t", help="transport mode: only copy if fewer than two " \
+                               "archived copies exist")
+def node2group(node_name, group_name, force=False, nice=0, transport=False):
     """sync files from a node to another group"""
 
     # Make sure we connect RW
     di.connect_database(read_write=True)
+
+    if group_name == "transport" and not transport and not force:
+        print "Normally, one uses the --transport flag for the transport " \
+              "group. To run without"
+        print "this flag on the transport group, you must use --force."
+        exit()
 
     try:
         from_node = di.StorageNode.get(name=node_name)
@@ -155,6 +163,17 @@ def node2group(node_name, group_name, force=False, nice=0):
               di.StorageNode.select().where(
                   di.StorageNode.group == to_group),
               di.ArchiveFileCopy.has_file != 'N')))
+
+    if transport:
+        copy = copy.where(~(di.ArchiveFileCopy.file <<
+                            di.ArchiveFile.select() \
+                              .join(di.ArchiveFileCopy) \
+                              .where(
+                                di.ArchiveFileCopy.node <<
+                                di.StorageNode.select().where(
+                                  di.StorageNode.storage_type == "A",
+                                  di.StorageNode.id != from_node), 
+                                di.ArchiveFileCopy.has_file == "Y")))
 
     if not copy.count():
         print "No files to copy from node %s." % (node_name)

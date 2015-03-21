@@ -52,6 +52,8 @@ lockfile    = ".writing.lock"
 max_time_per_node_operation = 300   # Don't let node operations hog time.
 min_loop_time               = 60    # Main loop at most every 60 seconds.
 
+# Globals.
+done_transport_this_cycle = False
 
 
 # Register Hook to Log Exception
@@ -432,6 +434,8 @@ def import_file(node, root, acq_name, file_name):
 
 
 def update_node(node):
+  global done_transport_this_cycle
+
   # Make sure this node is usable.
   if not node.mounted:
     log.debug("Skipping unmounted node \"%s\"." % node.name)
@@ -531,7 +535,11 @@ def update_node(node):
   current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
                          # with the actual archive size at somepoint.
 
-  if current_size_gb < node.max_total_gb or node.max_total_gb < 0.0:
+  # Note that for transport discs, we only copy to one at a time, so that
+  # archives are not striped across multiple discs.
+  if current_size_gb < node.max_total_gb or node.max_total_gb < 0.0 and \
+     ((node.storage_type == "T" and not done_transport_this_cycle) or \
+      node.storage_type != "T"):
     start_time = time.time()
     for req in di.ArchiveFileCopyRequest.select().where(
                   di.ArchiveFileCopyRequest.completed == False).where(
@@ -545,8 +553,10 @@ def update_node(node):
                                di.ArchiveFileCopy.has_file == 'Y')
       except pw.DoesNotExist:
         log.error("Skipping request for %s/%s since it is not available on "
-                  "node \"%s\". [file_id=%i]" % (req.file.acq.name, req.file.name,
-                                    req.node_from.name, req.file.id))
+                  "node \"%s\". [file_id=%i]" % (req.file.acq.name,
+                                                 req.file.name,
+                                                 req.node_from.name,
+                                                 req.file.id))
         continue
 
       # Only proceed if the destination file does not already exist.
@@ -628,6 +638,10 @@ def update_node(node):
         di.ArchiveFileCopyRequest.update(completed=True).where(
            di.ArchiveFileCopyRequest.file == req.file).where(
            di.ArchiveFileCopyRequest.group_to == node.group).execute()
+
+        if node.storage_type == "T":
+          # This node is getting the transport king.
+          done_transport_this_cycle = True
       else:
         log.error("Error with md5sum check: %s on node \"%s\", but %s on " \
                   "this node, \"%s\"." % (req.file.md5sum, req.node_from.name,
@@ -739,6 +753,7 @@ if __name__ == "__main__":
   try:
     while True:
       loop_start = time.time()
+      done_transport_this_cycle = False
       for node in di.StorageNode.select().where(di.StorageNode.host == host):
         update_node(node)
       loop_end = time.time()
