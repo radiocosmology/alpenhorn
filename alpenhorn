@@ -385,76 +385,116 @@ def clean(node_name, days=21, force=False):
             print "No %s files selected for cleaning on %s." % (name, node_name)
 
 
-@arg('root', help='base directory for this node')
-def newtransport(root):
-    """interactive routine for adding a transport disc as a storage node"""
-    import os
-
-    if not os.path.exists(root):
-        if ask_yesno("Hmmm, \"%s\" doesn't exist. Should I create it?"):
-            os.mkdir(root)
-        else:
-            return
-
+@arg("serial_num", help="manufacturer's serial number for the disc")
+def mount_transport(serial_num):
+    """interactive routine for mounting a transport disc as a storage node;
+    formats, labels and OS mounts the disc as necessary"""
+    import os, glob
+        
     if os.getuid() != 0:
-        print "You must be root to run newtransport. I quit."
+        print "You must be root to run mount on a transport disc. I quit."
         return
-    if not os.path.ismount(root):
-        print "\"%s\" is not a mount point, and therefore not a " \
-              "transport disc. I quit." % (root)
-        exit()
 
-    dev = get_mount_device(root)
-    e2label = get_e2label(dev)
-    if not e2label:
-        print "Disc is unlabelled."
-        serial = raw_input("Enter disc manufacturer serial " \
-                           "number: ").strip()
-        name = "CH-%s" % (serial)
-        if len(name) > MAX_E2LABEL_LEN:
-            print "Hmmm. That serial number is too long. I quit."
-            exit()
-    elif not e2label.startswith("CH-"):
-            print "Hmmm. Disc label does not start with \"CH-\". I quit."
-            exit()
+    # Find the disc.
+    dev = glob.glob("/dev/disk/by-id/*%s" % serial_num)
+    if len(dev) == 0:
+      print "No disc with that serial number is attached."
+      return
+    elif len(dev) > 1:
+      print "Confused: found more than one device matching that serial number:"
+      for d in dev:
+        print "  %s" % dev
+      print "Aborting."
+      return
+    dev = dev[0]
+    dev_part = "%s-part1" % dev
+
+    # Figure out if it is formatted.
+    print "Checking to see if disc is formatted. Please wait."
+    fp = os.popen("parted %s print" % dev)
+    formatted = False
+    while True:
+        l = fp.readline()
+        if not l:
+          break
+        if l.find("Number") == 0 and l.find("Start") > 0 and l.find("File system") > 0:
+          formatted = False
+        elif l.strip() == "" and not formatted:
+          pass
+        else:
+          formatted = True
+    fp.close()
+
+    if not formatted:
+        if not ask_yesno("Disc is not formatted. Should I format it?"):
+            return
+        print "Creating partition. Please wait."
+        os.system("parted -s -a optimal %s mklabel gpt -- " \
+                  "mkpart primary 0%% 100%%" % dev)
+        print "Formatting disc. Please wait."
+        os.system("mkfs.ext4 %s -m 0 -L CH-%s" % (dev_part, serial_num))
     else:
-        print "Using disc label \"%s\" for node name." % (e2label)
-        name = e2label
+        print "Disc is already formatted."
 
-    try:
-        di.StorageNode.get(name = name)
-        print "A storage node with that name already exists. I quit."
-        exit()
-    except pw.DoesNotExist:
-        pass
-
-    if not ask_yesno("Preparing to add \"%s\" as new node named \"%s\". " \
-                     "Proceed? " % (root, name)):
-        print "I quit."
-        exit()
-
-    if not e2label:
+    e2label = get_e2label(dev_part)
+    name = "CH-%s" % serial_num
+    if e2label and e2label != name:
+        print "Disc label %s does not conform to labelling standard, " \
+              "which is CH-<serialnum>."
+        exit
+    elif not e2label:
         print "Labelling the disc as \"%s\" (using e2label) ..." % (name)
-        assert dev is not None
+        assert dev_part is not None
         assert len(name) <= MAX_E2LABEL_LEN
-        stat = os.system("/sbin/e2label %s %s" % (dev, name))
+        stat = os.system("/sbin/e2label %s %s" % (dev_part, name))
         if stat:
             print "Failed to e2label! Stat = %s. I quit." % (stat)
             exit()
 
+    # Ensure the mount path exists.
+    root = "/mnt/%s" % name
+    if not os.path.isdir(root):
+        print "Creating mount point %s." % root
+        os.mkdir(root)
+
+    # Check to see if the disc is mounted.
+    fp = os.popen("df")
+    mounted = False
+    dev_part_abs = os.path.realpath(dev_part)
+    while 1:
+        l = fp.readline()
+        if not l:
+          break
+        if l.find(root) > 0:
+            if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
+                mounted = True
+            else:
+                print "%s is a mount point, but %s is already mounted there." \
+                      (root, l.split()[0])
+    fp.close()
+    if not mounted:
+        print "Mounting disc at %s." % root
+        os.system("mount %s %s" % (dev_part, root))
+
+
     try:
-        group = di.StorageGroup.get(name = "transport")
+        di.StorageNode.get(name = name)
     except pw.DoesNotExist:
-        print "Hmmm. Storage group \"transport\" does not exist. I quit."
-        exit()
+        print "This disc has not been registered yet as a storage node. " \
+              "Registering now."
+        try:
+            group = di.StorageGroup.get(name = "transport")
+        except pw.DoesNotExist:
+            print "Hmmm. Storage group \"transport\" does not exist. I quit."
+            exit()
 
-    di.StorageNode.create(name = name,
-                          root = root,
-                          group = group,
-                          storage_type = "T",
-                          min_avail_gb = 1)
+        di.StorageNode.create(name = name,
+                              root = root,
+                              group = group,
+                              storage_type = "T",
+                              min_avail_gb = 1)
 
-    print "Successfully created storage node. Now attempting to mount ..."
+        print "Successfully created storage node."
     mount(root)
 
 
@@ -501,10 +541,14 @@ def mount(root, name=None):
 
     node.host = socket.gethostname()
     print "I will set the host to \"%s\"." % (node.host)
-    node.address = ask_default("Enter the IP address of this host",
-                               "localhost").strip()
-    node.username = ask_default("Enter the user name for rsyncing",
-                                os.environ.get("USER"))
+    if transport:
+        node.address = None
+        node.username = None
+    else:
+        node.address = ask_default("Enter the IP address of this host",
+                                   "localhost").strip()
+        node.username = ask_default("Enter the user name for rsyncing",
+                                    os.environ.get("USER"))
     node.mounted = True
     node.root = root
     node.save()
@@ -543,5 +587,8 @@ def unmount(root_or_name):
         print "Node successfully unmounted."
 
 if __name__ == "__main__":
+    # We need to write to the database in some cases.
+    di.connect_database(read_write=True)
+
     dispatch_commands([node2group, single, summary, verify, clean, 
-                       newtransport, mount, unmount])
+                       mount_transport, mount, unmount])
