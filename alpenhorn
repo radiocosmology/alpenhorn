@@ -413,15 +413,14 @@ def mount_transport(serial_num):
     print "Checking to see if disc is formatted. Please wait."
     fp = os.popen("parted %s print" % dev)
     formatted = False
+    part_start = False
     while True:
         l = fp.readline()
         if not l:
           break
         if l.find("Number") == 0 and l.find("Start") > 0 and l.find("File system") > 0:
-          formatted = False
-        elif l.strip() == "" and not formatted:
-          pass
-        else:
+          part_start = True
+        elif l.strip() != "" and part_start:
           formatted = True
     fp.close()
 
