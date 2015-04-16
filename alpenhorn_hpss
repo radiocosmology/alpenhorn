@@ -6,10 +6,16 @@ import logging
 from datetime import datetime
 
 import peewee as pw
+import pwd
+import re
 
 from argh import arg, dispatch_commands, named
 
 from ch_util import data_index as di
+
+USERNAME = pwd.getpwuid(os.getuid()).pw_name
+SCRATCH = os.getenv('SCRATCH')
+HPSS_SCRIPTS_DIR = os.path.join(SCRATCH, 'chime', 'hpss_scripts')
 
 # Maximum tarball size in GB, this determines how aquisitions are partitioned
 MAX_TARBALL_SIZE_GB = 100.0
@@ -30,7 +36,7 @@ except ImportError:
     warn("ConcurrentLogHandler package not installed.  Using builtin log handler")
     from logging.handlers import RotatingFileHandler as RFHandler
 
-log_file = RFHandler("/home/k/krs/jrs65/log/alpenhorn_hpss.log", "a", maxBytes=(2**25), backupCount=25)
+log_file = RFHandler("/project/k/krs/alpenhorn/alpenhorn_hpss.log", "a", maxBytes=(2**25), backupCount=25)
 log.addHandler(log_file)
 log_file.setFormatter(log_fmt)
 
@@ -50,8 +56,10 @@ else:
     di.connect_database(read_write=True)
 
 
-_TARBALL_NAME_PAT = "tape_%s_%04i"
-
+def acq_part_to_tarball_name(acq, part):
+    return "tape_%s_%04i" % (acq, part)
+def tarball_name_to_acq_part(tarname):
+    return tarname[5:-5], int(tarname[-4:])
 
 def _hpss_group():
     # Get HPSS group. Only supports SciNet at the moment
@@ -150,7 +158,7 @@ fi
 
     script = script_base % vars
 
-    script_name = '/scratch/k/krs/jrs65/hpss_scripts/push_%s.sh' % tarball_name
+    script_name = HPSS_SCRIPTS_DIR + '/push_%s.sh' % tarball_name
 
     with open(script_name, 'w') as f:
         f.write(script)
@@ -190,7 +198,7 @@ def push(node_name, acq_name):
     for i, part in enumerate(partitions):
 
         # A name for the node/tarball
-        tarball_name = _TARBALL_NAME_PAT % (acq.name, i)
+        tarball_name = acq_part_to_tarball_name(acq.name, i)
 
         node_root = node.root
 
@@ -202,7 +210,7 @@ def push(node_name, acq_name):
             return
 
         hpss_node = di.StorageNode.create(name=tarball_name, root='', host='HPSS',
-                                          username='jrs65', address='', group=hpss_group,
+                                          username=USERNAME, address='', group=hpss_group,
                                           mounted=False, suspect=True, storage_type='A',
                                           max_total_gb=100.0, min_avail_gb=0.0, avail_gb=0.0,
                                           avail_gb_last_checked=datetime.now(),
@@ -266,7 +274,6 @@ def list_acq():
     """List acquisitions available in HPSS.
     """
 
-    import re
     from collections import Counter
 
     hpss_group = _hpss_group()
@@ -292,6 +299,9 @@ def list_acq():
         print "%s [%i files]" % (name, count)
 
 
+# XXX: fixme
+PYTHON = "module load intel/15.0.1 python/2.7.8; . ~nolta/chime/venv/bin/activate ; python"
+
 def create_hpss_pull_script(tarball_name, destdir):
     script_base = """#!/bin/bash
 #PBS -l walltime=1:00:00
@@ -307,7 +317,7 @@ trap "echo 'Job script not completed'; exit 129" TERM INT
 mkdir -p %(destdir)s
 cd %(destdir)s
 
-htar -xpmf $ARCHIVE/%(tarball_name)s.tar
+htar -xpmf %(chime_archive)s/%(tarball_name)s.tar
 status=$?
 
 hsi ls $DEST &> /dev/null
@@ -318,19 +328,21 @@ trap - TERM INT
 if [ ! $status == 0 ]; then
     echo 'HTAR returned non-zero code.'
     /scinet/gpc/bin/exit2msg $status
-    ssh gpc04 'python %(script_path)s pull-failed %(tarball_name)s %(destdir)s'
+    ssh gpc04 '%(python)s %(script_path)s pull-failed %(tarball_name)s %(destdir)s'
 else
     echo 'TRANSFER SUCCESSFUL'
-    ssh gpc04 'python %(script_path)s pull-finished %(tarball_name)s %(destdir)s'
+    ssh gpc04 '%(python)s %(script_path)s pull-finished %(tarball_name)s %(destdir)s'
 fi
 """
     vars = {'tarball_name': tarball_name,
+            'chime_archive': '/archive/k/krs/jrs65/chime_archive',
+            'python' : PYTHON,
             'script_path': os.path.abspath(__file__),
             'destdir': destdir}
 
     script = script_base % vars
 
-    script_name = '/scratch/k/krs/jrs65/hpss_scripts/pull_%s.sh' % tarball_name
+    script_name = HPSS_SCRIPTS_DIR + '/pull_%s.sh' % tarball_name
 
     with open(script_name, 'w') as f:
         f.write(script)
@@ -338,34 +350,87 @@ fi
     return script_name
 
 
+def hpss_pull_job_is_queued(node_name):
+    "check if pull job is already in the queue"
+    import commands
+    import xml.etree.ElementTree
+    stat,output = commands.getstatusoutput('showq --xml')
+    assert stat == 0
+    jobname = "pull_{}".format(node_name)
+    root = xml.etree.ElementTree.fromstring(output)
+    job = root.find(".//job[@JobName='{}']".format(jobname))
+    return job is not None and job.attrib['State'] != 'Canceling'
+
+
 @arg('acq', help='Acquisition to pull onto disk')
 @arg('dest', help='Destination directory to pull into')
 def pull(acq, dest):
-    import re
 
     hpss_group = _hpss_group()
 
-    acqs = []
+    pattern = acq
+    if not pattern.startswith('tape_'):
+        pattern = 'tape_' + pattern
+    if re.search('_[0-9]{4}$', pattern) is None:
+        pattern += '_[0-9]{4}'
 
-    for node in hpss_group.nodes:
-        mo = re.match('tape\_%s\_(\d){4}' % acq, node.name)
+    nodes = di.StorageNode.select().where(
+                di.StorageNode.group == hpss_group,
+                di.StorageNode.name.regexp(pattern))
 
-        if mo is None:
-            raise Exception("Did not understand HPSS node")
-
-        sec = mo.group(1)
-
-        acqs.append([node.name, int(sec)])
-
-    if len(acqs) == 0:
+    if nodes.count() == 0:
         raise Exception('Acquisition not found.')
 
-    for tarball_name, sec in acqs:
+    for node in nodes:
+        # check if tape node is already on disk by looking for special
+        # <root>/.tape_20..._xxxx file
+        if node.mounted:
+            if os.path.isdir(node.root) and \
+               os.path.isfile(os.path.join(node.root,'.'+node.name)):
+                print "{} is mounted at {}".format(node.name, node.root)
+                continue
+            else:
+                # unmount node
+                di.StorageNode.update(mounted=False, root=None).where(
+                    di.StorageNode.id == node.id).execute()
+
+        # check if job already in queue
+        if hpss_pull_job_is_queued(node.name):
+            print "{} is already in the job queue".format(node.name)
+            continue
+        else:
+            # XXX: also check list of jobs in db, because it can take ~1min
+            # for jobs to show up in showq
+            pass
+
+        tarball_name = node.name
         script = create_hpss_pull_script(tarball_name, dest)
 
-        print "Queueing pull of tarball HPSS:%s to %s ...." % (tarball_name, dest),
+        print "Queueing pull of tarball HPSS:%s to %s ...." % (tarball_name, dest)
         submit_hpss_script(script)
         print "done."
+
+
+@arg('root', help='Directory of mounted tape node.')
+def drop(root):
+    """Delete disk copy of tape node.
+    """
+    import shutil
+
+    root = os.path.abspath(root) # normalize pathname
+    assert os.path.isdir(root)
+
+    hpss_group = _hpss_group()
+
+    count = di.StorageNode.update(mounted=False, root=None).where(
+        di.StorageNode.group == hpss_group,
+        di.StorageNode.mounted == True,
+        di.StorageNode.root == root).execute()
+
+    assert count > 0 and count < 20 # can have multiple tape nodes per directory
+    assert os.path.basename(root).startswith('20')
+    print "deleting {} ({} nodes)".format(root,count)
+    shutil.rmtree(root)
 
 
 @arg('tarball_name', help='Name of tarball whose transfer failed.')
@@ -381,13 +446,24 @@ def pull_failed(tarball_name, dest):
     # We don't really need to do anything other than log this (we could reattempt)
 
 
+def touch(filename):
+    with open(filename, 'a'):
+        os.utime(filename, None)
+
+
 @arg('tarball_name', help='Name of tarball whose transfer succeeded.')
 def pull_finished(tarball_name, dest):
     """Update the database to reflect that the HPSS transfer succeeded.
 
     INTERNAL COMMAND. NOT FOR HUMAN USE!
     """
-
+    acq,part = tarball_name_to_acq_part(tarball_name)
+    root = os.path.join(dest, acq)
+    root = os.path.abspath(root) # normalize pathname
+    if os.path.isdir(root):
+        touch(os.path.join(root, '.'+tarball_name))
+        di.StorageNode.update(mounted=True, root=root).where(
+                di.StorageNode.name == tarball_name).execute()
     log.info("Pull success: %s to %s" % (tarball_name, dest))
 
 
@@ -399,4 +475,4 @@ def dbinfo():
 
 
 if __name__ == '__main__':
-    dispatch_commands([push, push_failed, push_finished, list_acq, dbinfo, pull, pull_finished, pull_failed])
+    dispatch_commands([push, push_failed, push_finished, list_acq, dbinfo, pull, pull_finished, pull_failed, drop])
