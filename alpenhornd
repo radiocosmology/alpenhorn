@@ -661,15 +661,23 @@ def update_node(node):
 
         # Update the FileCopy (if exists), or insert a new FileCopy
         try:
-          fcopy = di.ArchiveFileCopy\
-                    .select()\
-                    .where(di.ArchiveFileCopy.file == req.file,
-                           di.ArchiveFileCopy.node == node)\
-                    .get()
-          fcopy.has_file = 'Y'
-          fcopy.wants_file = 'Y'
-          fcopy.save()
-
+          done = False
+          while not done:
+            try:
+              fcopy = di.ArchiveFileCopy\
+                        .select()\
+                        .where(di.ArchiveFileCopy.file == req.file,
+                               di.ArchiveFileCopy.node == node)\
+                        .get()
+              fcopy.has_file = 'Y'
+              fcopy.wants_file = 'Y'
+              fcopy.save()
+              done = True
+            except peewee.OperationalError:
+              log.error("MySQL connexion dropped. Will attempt to reconnect in "
+                        "five seconds.")
+              time.sleep(5)
+              di.connect_database(True)
         except pw.DoesNotExist:
           di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
                                     wants_file='Y').execute()

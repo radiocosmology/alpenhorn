@@ -19,7 +19,7 @@ done
 $ALPENHORN node2group suzu $MY_GROUP --force >> $OUTPUT 2>&1
 
 # Copy files from here -> transport disks
-#$ALPENHORN group2group $MY_GROUP transport --force >> $OUTPUT 2>&1
+$ALPENHORN node2group $MY_NODE transport --force --transport >> $OUTPUT 2>&1
 
 # Copy files from c-can -> here
 #NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
