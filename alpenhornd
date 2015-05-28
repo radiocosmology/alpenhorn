@@ -1,18 +1,21 @@
 #!/usr/bin/env python
 # Alpenhorn: announces the products of mountaineering CHIME instruments.
 
+import bisect
 import bitshuffle.h5
 import calendar
 import configobj
 import datetime
 import logging
 import logging.handlers
+import peewee
 import sys
 import re
 import socket
 import os
 
 RSYNC_FLAG = "qtspgoDL"
+LOCAL_IMPORT_RECORD = "/etc/alpenhornd_import.dat"
 
 # Set up logger.
 logging.basicConfig(level = logging.INFO)
@@ -20,6 +23,7 @@ log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s", \
                             "%b %d %H:%M:%S")
 log = logging.getLogger("")
 log.setLevel(logging.INFO)
+import_done = None
 if sys.argv[0] == "/usr/sbin/alpenhornd":
   log_file = logging.handlers.TimedRotatingFileHandler(
                "/var/log/alpenhorn/alpenhornd.log", 
@@ -240,6 +244,18 @@ def get_filerawinfo_keywords(rawinfo, size_b, file_name):
           "chunk_number" : chunk_num}
 
 def import_file(node, root, acq_name, file_name):
+  done = False
+  while not done:
+    try:
+      _import_file(node, root, acq_name, file_name)
+      done = True
+    except peewee.OperationalError:
+      log.error("MySQL connexion dropped. Will attempt to reconnect in "
+                "five seconds.")
+      time.sleep(5)
+      di.connect_database(True)
+
+def _import_file(node, root, acq_name, file_name):
   """Import a file into the DB.
 
   This routine adds the following to the database, if they do not already exist
@@ -250,7 +266,10 @@ def import_file(node, root, acq_name, file_name):
   - Information on the file, if it is of type "corr".
   - Indicates that the file exists on this node.
   """
+  global import_done
+  curr_done = True
   fullpath = "%s/%s/%s" % (root, acq_name, file_name)
+  log.debug("Considering %s for import." % fullpath)
 
   # Skip the file if ch_master.py still has a lock on it.
   if os.path.isfile("%s/%s/.%s.lock" % (root, acq_name, file_name)):
@@ -263,6 +282,12 @@ def import_file(node, root, acq_name, file_name):
   except di.Validation:
     log.info("Skipping non-acquisition path %s." % acq_name)
     return
+
+  if import_done is not None:
+    i = bisect.bisect_left(import_done, fullpath)
+    if i != len(import_done) and import_done[i] == fullpath:
+      log.debug("Skipping already-registered file %s." % fullpath)
+      return
 
   # Figure out which acquisition this is; add if necessary.
   try:
@@ -334,10 +359,20 @@ def import_file(node, root, acq_name, file_name):
     size_b = file.size_b
     log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
   except pw.DoesNotExist:
+    log.debug("Computing md5sum.")
     md5sum = di.md5sum_file(fullpath, cmd_line = True)
     size_b = os.path.getsize(fullpath)
-    file = di.ArchiveFile.create(acq=acq, type=ftype, name=file_name, 
-                                 size_b=size_b, md5sum=md5sum)
+    done = False
+    while not done:
+      try:
+        file = di.ArchiveFile.create(acq=acq, type=ftype, name=file_name, 
+                                     size_b=size_b, md5sum=md5sum)
+        done = True
+      except peewee.OperationalError:
+        log.error("MySQL connexion dropped. Will attempt to reconnect in "
+                  "five seconds.")
+        time.sleep(5)
+        di.connect_database(True)
     log.info("File \"%s/%s\" added to DB." % (acq_name, file_name))
 
   # Register the copy of the file here on the collection server, if (1) it does
@@ -431,6 +466,11 @@ def import_file(node, root, acq_name, file_name):
         i.save()
         log.info("Added information for file \"%s/%s\" to DB." %
                  (acq_name, file_name))
+
+  if import_done is not None:
+    bisect.insort_left(import_done, fullpath)
+    with open(LOCAL_IMPORT_RECORD, "w") as fp:
+      fp.write("\n".join(import_done))
 
 
 def update_node(node):
@@ -721,6 +761,19 @@ if __name__ == "__main__":
     raise Exception("No nodes on this host (\"%s\") registered in the DB!" % 
                     host)
 
+  # Is there a record of already-imported files? If so, we should use it to
+  # prevent needless DB queries when crawling the directories. If there is no
+  # record, there is no checking. To start checking from scratch, create an
+  # empty LOCAL_IMPORT_RECORD file.
+  try:
+    with open(LOCAL_IMPORT_RECORD, "r") as fp:
+      import_done = fp.read().splitlines()
+    import_done.sort()
+    if import_done is None:
+      import_done = []
+  except IOError:
+    log.info("No local record of imported files: not checking.")
+
   # If any node has auto_import set, look for new files and add them to the
   # DB. Then set up a watchdog for it.
   obs_list = []
@@ -728,12 +781,10 @@ if __name__ == "__main__":
     if node.auto_import:
       log.info("Crawling base directory \"%s\" for new files." % node.root)
       for acq_name, d, f_list in os.walk(node.root):
-#if re.search('\_raw$', acq_name):
-#          log.info("Skipping blacklisted acq: %s" % acq_name)
-#          continue
-
+        log.info("Crawling %s." % acq_name)
         for file_name in sorted(f_list):
-          import_file(node, node.root, os.path.basename(acq_name), file_name)
+          import_file(node, node.root, os.path.basename(acq_name),
+                      file_name)
       # If it is an NFS mount, then the default Observer() doesn't work.
       # Determine this by seeing if the node name is the same as the node host:
       # not failsafe, but it will do for now.
