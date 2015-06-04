@@ -155,7 +155,7 @@ def get_acqcorrinfo_keywords_from_h5(path):
           "nprod"       : n_prod}
 
 
-def get_acqhkinfo_keywords_from_h5(path):
+def get_acqhkinfo_keywords(path):
   fullpath = "%s/%s" % (path, di.fname_atmel)
   fp = open(fullpath, "r")
   if fp == None:
@@ -326,7 +326,7 @@ def _import_file(node, root, acq_name, file_name):
                     "empty. Leaving fields NULL." % (acq_name))
         di.CorrAcqInfo.create(acq=acq)
   elif atype == "hk" and ftype.name == "hk":
-    for kw in get_acqhkinfo_keywords_from_h5("%s/%s" % (root, acq_name)):
+    for kw in get_acqhkinfo_keywords("%s/%s" % (root, acq_name)):
       if not sum(1 for _ in di.HKAcqInfo.select().\
                             where(di.HKAcqInfo.acq == acq).\
                             where(di.HKAcqInfo.atmel_name == kw["atmel_name"])):
