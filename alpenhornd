@@ -155,7 +155,7 @@ def get_acqcorrinfo_keywords_from_h5(path):
           "nprod"       : n_prod}
 
 
-def get_acqhkinfo_keywords(path):
+def get_acqhkinfo_keywords_from_h5(path):
   fullpath = "%s/%s" % (path, di.fname_atmel)
   fp = open(fullpath, "r")
   if fp == None:
@@ -195,9 +195,8 @@ def get_rawinfo_keywords(path):
           "stride" : conf.get("stride"),
           "note" : conf.get("note")
          }
-
-
       
+
 def get_acqrawadcinfo_keywords_from_h5(acq_name):
   # We need to use the calendar module because the datetime module can't give us
   # timegm() for some strange reason.
@@ -221,6 +220,15 @@ def get_filecorrinfo_keywords_from_h5(path):
           "chunk_number" : chunk_number,
           "freq_number"  : freq_number}
 
+def get_fileweatherinfo_keywords_from_h5(path):
+  f = h5py.File(path, "r")
+  start_time = f["/index_map/time"][0]
+  finish_time = f["/index_map/time"][-1]
+  d = di.parse_weatherfile_name(os.path.basename(path))
+  f.close()
+  return { "start_time" : start_time,
+          "finish_time" : finish_time,
+                 "date" : d}
 
 def get_filehkinfo_keywords_from_h5(path):
   f = h5py.File(path, "r")
@@ -318,7 +326,7 @@ def _import_file(node, root, acq_name, file_name):
                     "empty. Leaving fields NULL." % (acq_name))
         di.CorrAcqInfo.create(acq=acq)
   elif atype == "hk" and ftype.name == "hk":
-    for kw in get_acqhkinfo_keywords("%s/%s" % (root, acq_name)):
+    for kw in get_acqhkinfo_keywords_from_h5("%s/%s" % (root, acq_name)):
       if not sum(1 for _ in di.HKAcqInfo.select().\
                             where(di.HKAcqInfo.acq == acq).\
                             where(di.HKAcqInfo.atmel_name == kw["atmel_name"])):
@@ -437,6 +445,33 @@ def _import_file(node, root, acq_name, file_name):
         i.finish_time = k["finish_time"]
         i.atmel_name = k["atmel_name"]
         i.chunk_number = k["chunk_number"]
+        i.save()
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+  if ftype.name == "weather":
+    # Add if (1) there is no weatherinfo or (2) the weatherinfo is missing.
+    if not file.weatherinfos.count():
+#      try:
+        di.WeatherFileInfo.create(file=file,
+                             **get_fileweatherinfo_keywords_from_h5(fullpath))
+        log.info("Added information for file \"%s/%s\" to DB." %
+                 (acq_name, file_name))
+#      except:
+#        if not file.corrinfos.count():
+#          di.WeatherFileInfo.create(file=file)
+#        log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
+#                    "empty or unreadable. Leaving fields NULL." %
+#                    (acq_name, file_name))
+    elif not file.weatherinfos[0].start_time:
+      try:
+        i = file.weatherinfos[0]
+        k = get_fileweatherinfo_keywords_from_h5(fullpath)
+      except:
+        log.debug("Still missing info for file \"%s/%s\".")
+      else:
+        i.start_time = k["start_time"]
+        i.finish_time = k["finish_time"]
+        i.date = k["date"]
         i.save()
         log.info("Added information for file \"%s/%s\" to DB." %
                  (acq_name, file_name))
