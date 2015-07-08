@@ -29,7 +29,7 @@ if sys.argv[0] == "/usr/sbin/alpenhornd":
                "/var/log/alpenhorn/alpenhornd.log", 
                when  = "W0",
                backupCount = 100)
-  log_file.setLevel(logging.INFO)
+  log_file.setLevel(logging.DEBUG)
   log_file.setFormatter(log_fmt)
   log.addHandler(log_file)
 elif socket.gethostname()[:3] == 'gpc':
@@ -155,7 +155,7 @@ def get_acqcorrinfo_keywords_from_h5(path):
           "nprod"       : n_prod}
 
 
-def get_acqhkinfo_keywords(path):
+def get_acqhkinfo_keywords_from_h5(path):
   fullpath = "%s/%s" % (path, di.fname_atmel)
   fp = open(fullpath, "r")
   if fp == None:
@@ -326,7 +326,12 @@ def _import_file(node, root, acq_name, file_name):
                     "empty. Leaving fields NULL." % (acq_name))
         di.CorrAcqInfo.create(acq=acq)
   elif atype == "hk" and ftype.name == "hk":
-    for kw in get_acqhkinfo_keywords("%s/%s" % (root, acq_name)):
+    try:
+      keywords = get_acqhkinfo_keywords_from_h5("%s/%s" % (root, acq_name))
+    except:
+      log.warning("Could no open atmel_id.dat file. Skipping.")
+      keywords = []
+    for kw in keywords:
       if not sum(1 for _ in di.HKAcqInfo.select().\
                             where(di.HKAcqInfo.acq == acq).\
                             where(di.HKAcqInfo.atmel_name == kw["atmel_name"])):
@@ -672,7 +677,7 @@ def update_node(node):
       log.info("Rsyncing file \"%s\"." % req.file.name)
       st = time.time()
       if req.node_from.host != node.host:
-        ret = os.system("rsync -z%s --rsync-path=\"ionice -c2 -n2 rsync\" "\
+        ret = os.system("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" "\
                         "-e \"ssh -q\" %s %s" % \
                         (RSYNC_FLAG, from_path, to_path))
       else:
