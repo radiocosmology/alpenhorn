@@ -626,6 +626,10 @@ def update_node(node):
                   di.ArchiveFileCopyRequest.cancelled == False).where(
                   di.ArchiveFileCopyRequest.group_to == node.group):
 
+      # Only continue if the node is actually mounted
+      if not req.node_from.mounted:
+        continue
+
       # Only proceed if the source file actually exists (and is not corrupted).
       try:
         di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,

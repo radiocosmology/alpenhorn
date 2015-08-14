@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Check to see if alpenhornd is running
-pgrep -fl alpenhornd > /dev/null
+pgrep -fl 'python.*alpenhornd' > /dev/null
 
 if [ $? -eq 0 ]; then
     echo "Still running."
