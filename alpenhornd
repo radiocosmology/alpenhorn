@@ -744,7 +744,6 @@ def update_node(node):
           os.remove("%s/%s" % (to_path, req.file.name))
         except:
           log.error("Could not remove file.")
-        continue
 
         # Since the md5sum failed, the remote file may be corrupted.
         log.error("Marking source file suspect.")
