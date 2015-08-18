@@ -747,8 +747,10 @@ def update_node(node):
         continue
 
         # Since the md5sum failed, the remote file may be corrupted.
+        log.error("Marking source file suspect.")
         di.ArchiveFileCopy.update(has_file = 'M').where(
-           di.ArchiveFileCopy.file == req.file).execute()
+           di.ArchiveFileCopy.file == req.file,
+           di.ArchiveFileCopy.node == req.node_from).execute()
 
       if time.time() - start_time > max_time_per_node_operation:
         break  # Don't hog all the time.
