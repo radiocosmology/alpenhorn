@@ -162,7 +162,7 @@ def node2group(node_name, group_name, force=False, nice=0, transport=False):
               di.ArchiveFileCopy.node <<
               di.StorageNode.select().where(
                   di.StorageNode.group == to_group),
-              di.ArchiveFileCopy.has_file != 'N')))
+              di.ArchiveFileCopy.has_file == 'Y')))
 
     if transport:
         copy = copy.where(~(di.ArchiveFileCopy.file <<
