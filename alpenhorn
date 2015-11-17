@@ -723,4 +723,4 @@ if __name__ == "__main__":
     di.connect_database(read_write=True)
 
     dispatch_commands([node2group, single, summary, verify, clean,
-                       mount_transport, mount, mounted, unmount])
+                       mount_transport, mount, mounted, unmount, import_files])
