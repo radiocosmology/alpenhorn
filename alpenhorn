@@ -474,7 +474,7 @@ def mount_transport(serial_num):
 
     # Figure out if it is formatted.
     print "Checking to see if disc is formatted. Please wait."
-    fp = os.popen("parted %s print" % dev)
+    fp = os.popen("parted -s %s print" % dev)
     formatted = False
     part_start = False
     while True:
