@@ -626,6 +626,15 @@ def update_node(node):
                   di.ArchiveFileCopyRequest.cancelled == False).where(
                   di.ArchiveFileCopyRequest.group_to == node.group):
 
+      # For transport disks we should only copy onto the transport
+      # node if the from_node is local, this should prevent pointlessly
+      # rsyncing across the network
+      if node.storage_type == "T" and node.host != req.node_from.host:
+        log.info("Skipping request for %s/%s from remote node [%s] onto local "
+                 "transport disks" % (req.file.acq.name, req.file.name,
+                                      req.node_from.name))
+        continue
+
       # Only continue if the node is actually mounted
       if not req.node_from.mounted:
         continue
@@ -678,14 +687,19 @@ def update_node(node):
         os.mkdir(to_path)
 
       # Giddy up!
-      log.info("Rsyncing file \"%s\"." % req.file.name)
+      log.info("Rsyncing file \"%s/%s\"." % (req.file.acq.name, req.file.name))
       st = time.time()
       if req.node_from.host != node.host:
-        ret = os.system("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" "\
+        ret = os.system("rsync -z%s --rsync-path=\"ionice -c3 -n3 rsync\" "\
                         "-e \"ssh -q\" %s %s" % \
                         (RSYNC_FLAG, from_path, to_path))
       else:
-        ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
+        try:
+          link_path = "%s/%s/%s" % (node.root, req.file.acq.name, req.file.name)
+          os.link(from_path, link_path)
+          ret = 0
+        except:
+          ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
       if ret:
         # If the copy didn't work, then the remote file may be corrupted.
         log.error("Rsync failed. Marking source file suspect.")

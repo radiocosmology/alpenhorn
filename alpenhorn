@@ -369,7 +369,7 @@ def clean(node_name, days=21, force=False, now=False, ignore=False):
     # Construct list of stick acqs
     if not ignore:
 
-        sticky_file = os.path.join(os.path.dirname(__file__), 'stick_acq.txt')
+        sticky_file = os.path.join(os.path.dirname(__file__), 'sticky_acq.txt')
 
         with open(sticky_file, 'r') as f:
             lines = f.readlines()
@@ -391,10 +391,11 @@ def clean(node_name, days=21, force=False, now=False, ignore=False):
 
     # Iterate over file types for cleaning
     for name, infotable in filetypes:
+#                     .select(di.)\
 
         # Select FileCopys on this node.
         oldfiles = di.ArchiveFileCopy\
-                     .select()\
+                     .select(di.ArchiveFileCopy.id)\
                      .where(di.ArchiveFileCopy.node == this_node,
                             di.ArchiveFileCopy.wants_file == 'Y')
         # Filter to fetch only ones with a start time older than `oldest`
@@ -402,25 +403,48 @@ def clean(node_name, days=21, force=False, now=False, ignore=False):
                            .join(infotable)\
                            .where(infotable.start_time < oldest_unix)
 
+        # Filter to get only files not in a sticky acq
+        oldfiles = oldfiles.switch(di.ArchiveFile)\
+                           .join(di.ArchiveAcq)\
+                           .where(di.ArchiveAcq.name.not_in(sticky_acqs))
+
+        file_ids = list(oldfiles)
+
         # Get number of correlation files
         count = oldfiles.count()
 
         if count > 0:
-            size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / \
+            #size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / \
+            size_gb = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << file_ids).join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / \
                       2**30.0
 
             print "Cleaning up %i %s files (%1f GB) from %s " % \
                   (count, name, size_gb, node_name)
             if force or ask_yesno("  Are you sure?"):
                 print "  Marking files for cleaning."
-                for of in oldfiles:
 
-                    if of.file.acq.name in sticky_acqs:
-                        print "Not cleaning file %s in sticky acq %s" % (of.file.name, of.file.acq.name)
-                        continue
+                state = 'N' if now else 'M'
+                
+                # Go through exact same query as above, but with an update statement.
+                #update = di.ArchiveFileCopy\
+                #           .update(wants_file = 'Y')\
+                #           .where(di.ArchiveFileCopy.node == this_node,
+                #                  di.ArchiveFileCopy.wants_file == 'Y')
 
-                    of.wants_file = 'N' if now else 'M'
-                    of.save()
+                #update = update.join(di.ArchiveFile)\
+                #               .join(infotable)\
+                #               .where(infotable.start_time < oldest_unix)
+
+                #update = update.switch(di.ArchiveFile)\
+                #               .join(di.ArchiveAcq)\
+                #               .where(di.ArchiveAcq.name.not_in(sticky_acqs))
+                update = di.ArchiveFileCopy\
+                           .update(wants_file = state)\
+                           .where(di.ArchiveFileCopy.id << file_ids)
+                n = update.execute()
+
+                print "Marked %i files for cleaning" % n
+
             else:
                 print "  Cancelled"
         else:
