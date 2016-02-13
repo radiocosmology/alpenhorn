@@ -498,7 +498,7 @@ def mount_transport(serial_num):
 
     # Figure out if it is formatted.
     print "Checking to see if disc is formatted. Please wait."
-    fp = os.popen("parted %s print" % dev)
+    fp = os.popen("parted -s %s print" % dev)
     formatted = False
     part_start = False
     while True:
@@ -747,4 +747,4 @@ if __name__ == "__main__":
     di.connect_database(read_write=True)
 
     dispatch_commands([node2group, single, summary, verify, clean,
-                       mount_transport, mount, mounted, unmount])
+                       mount_transport, mount, mounted, unmount, import_files])
