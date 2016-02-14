@@ -843,7 +843,7 @@ def _check_and_bundle_requests(requests, node):
     some maximum size."""
 
     # Size to bundle transfers into (in bytes)
-    max_group_size = 200.0 * 2**30.0
+    max_group_size = 800.0 * 2**30.0
 
     group_size = 0.0
     requests_to_process = []
@@ -972,7 +972,7 @@ def update_node_hpss_outbound(node):
 def _create_hpss_push_script(requests, node):
 
     start = """#!/bin/bash
-#PBS -l walltime=1:00:00
+#PBS -l walltime=4:00:00
 #PBS -q archive
 #PBS -N push_%(jobname)s
 #PBS -j oe
@@ -1058,7 +1058,7 @@ fi
 def _create_hpss_pull_script(requests, node):
 
     start = """#!/bin/bash
-#PBS -l walltime=1:00:00
+#PBS -l walltime=4:00:00
 #PBS -q archive
 #PBS -N pull_%(jobname)s
 #PBS -j oe
