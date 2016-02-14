@@ -628,6 +628,11 @@ def update_node_requests(node):
 
     global done_transport_this_cycle
 
+    # Ensure we are not on an HPSS node
+    if is_hpss_node(node):
+        log.error("Cannot process HPSS node here.")
+        return
+
     # Check for copy requests (only if this node has not hit the maximum size).
     current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
     # with the actual archive size at somepoint.
@@ -647,11 +652,22 @@ def update_node_requests(node):
         di.ArchiveFileCopyRequest.group_to == node.group
     )
 
+    # Add in constraint that node_from cannot be an HPSS node
+    requests = requests.join(di.StorageNode).where(di.StorageNode.address != 'HPSS')
+
     for req in requests:
 
         # Only continue if the node is actually mounted
         if not req.node_from.mounted:
             continue
+
+        # For transport disks we should only copy onto the transport
+        # node if the from_node is local, this should prevent pointlessly
+        # rsyncing across the network
+        if node.storage_type == "T" and node.host != req.node_from.host:
+            log.info("Skipping request for %s/%s from remote node [%s] onto local "
+                     "transport disks" % (req.file.acq.name, req.file.name,
+                                          req.node_from.name))
 
         # Only proceed if the source file actually exists (and is not corrupted).
         try:
@@ -701,14 +717,19 @@ def update_node_requests(node):
             os.mkdir(to_path)
 
         # Giddy up!
-        log.info("Rsyncing file \"%s\"." % req.file.name)
+        log.info("Rsyncing file \"%s/%s\"." % (req.file.acq.name, req.file.name))
         st = time.time()
         if req.node_from.host != node.host:
             ret = os.system("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" "
                             "-e \"ssh -q\" %s %s" %
                             (RSYNC_FLAG, from_path, to_path))
         else:
-            ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
+            try:
+                link_path = "%s/%s/%s" % (node.root, req.file.acq.name, req.file.name)
+                os.link(from_path, link_path)
+                ret = 0
+            except:
+                ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
         if ret:
             # If the copy didn't work, then the remote file may be corrupted.
             log.error("Rsync failed. Marking source file suspect.")
@@ -779,10 +800,12 @@ def update_node_requests(node):
 
 
 def update_node(node):
+    """Update the status of the node, and process eligible transfers onto it.
+    """
 
     # Check if this is an HPSS node, and if so call the special handler
-    if node.group.name in ['hpss_online', 'hpss_offline']:
-        update_node_hpss(node)
+    if is_hpss_node(node):
+        update_node_hpss_inbound(node)
         return
 
     # Make sure this node is usable.
@@ -794,27 +817,30 @@ def update_node(node):
 
     log.info("Updating node \"%s\"." % (node.name))
 
+    # Check and update the amount of free space
     update_node_free_space(node)
 
+    # Check the integrity of any questionable files (has_file=M)
     update_node_integrity(node)
 
+    # Delete any upwanted files to cleanup space
     update_node_delete(node)
 
+    # Process any regular transfers requests onto this node
     update_node_requests(node)
 
+    # Process any tranfers out of HPSS onto this node
+    update_node_hpss_outbound(node)
 
-def update_node_hpss(node):
-    """Update an HPSS node (either an online or offline node).
-    """
 
-    log.info('HPSS node (%s)' % node.name)
+def is_hpss_node(node):
+    """Test if a node is an HPSS tape node or not."""
+    return (node.address == 'HPSS')
 
-    # Fetch requests for transfer onto this node
-    requests = di.ArchiveFileCopyRequest.select().where(
-        ~di.ArchiveFileCopyRequest.completed,
-        ~di.ArchiveFileCopyRequest.cancelled,
-        di.ArchiveFileCopyRequest.group_to == node.group
-    )
+
+def _check_and_bundle_requests(requests, node):
+    """Find eligible HPSS transfer requests, and return a bundle of them up to
+    some maximum size."""
 
     # Size to bundle transfers into (in bytes)
     max_group_size = 200.0 * 2**30.0
@@ -871,44 +897,76 @@ def update_node_hpss(node):
         else:
             break
 
-    # If its an offline node, process pushes into HPSS
-    if node.group.name == 'hpss_offline':
+    return requests_to_process
 
-        # Construct final list of requests to process
-        for req in requests_to_process:
-            log.info('Pushing file %s/%s into HPSS' % (req.file.acq.name, req.file.name))
 
-            # Mark any FileCopyRequest for this file as completed
-            di.ArchiveFileCopyRequest.update(completed=True).where(
-                di.ArchiveFileCopyRequest.file == req.file).where(
-                di.ArchiveFileCopyRequest.group_to == node.group).execute()
+def update_node_hpss_inbound(node):
+    """Process transfers into an HPSS node.
+    """
 
-        script_name = _create_hpss_push_script(requests_to_process, node)
-        log.info('Submitting HPSS job %s' % script_name)
-        _submit_hpss_script(script_name)
-
-    # If its an online node, process recalls from HPSS
-    elif node.group.name == 'hpss_online':
-
-        # Construct final list of requests to process
-        for req in requests_to_process:
-
-            if req.node_from.group.name != 'hpss_offline':
-                raise RuntimeError('Can only copy into hpss_online from hpss_offline.')
-
-            log.info('Pulling file %s/%s from HPSS' % (req.file.acq.name, req.file.name))
-
-            # Mark any FileCopyRequest for this file as completed
-            di.ArchiveFileCopyRequest.update(completed=True).where(
-                di.ArchiveFileCopyRequest.file == req.file).where(
-                di.ArchiveFileCopyRequest.group_to == node.group).execute()
-
-        script_name = _create_hpss_pull_script(requests_to_process, node)
-        log.info('Submitting HPSS job %s' % script_name)
-        _submit_hpss_script(script_name)
-
-    else:
+    if not is_hpss_node(node):
         log.error('This is not an HPSS node.')
+
+    log.info('Processing HPSS inbound transfers (%s)' % node.name)
+
+    # Fetch requests for transfer onto this node
+    requests = di.ArchiveFileCopyRequest.select().where(
+        ~di.ArchiveFileCopyRequest.completed,
+        ~di.ArchiveFileCopyRequest.cancelled,
+        di.ArchiveFileCopyRequest.group_to == node.group
+    )
+
+    requests_to_process = _check_and_bundle_requests(requests, node)
+
+    # Construct final list of requests to process
+    for req in requests_to_process:
+        log.info('Pushing file %s/%s into HPSS' % (req.file.acq.name, req.file.name))
+
+        # Mark any FileCopyRequest for this file as completed
+        di.ArchiveFileCopyRequest.update(completed=True).where(
+            di.ArchiveFileCopyRequest.file == req.file).where(
+            di.ArchiveFileCopyRequest.group_to == node.group).execute()
+
+    script_name = _create_hpss_push_script(requests_to_process, node)
+    log.info('Submitting HPSS job %s' % script_name)
+    _submit_hpss_script(script_name)
+
+
+def update_node_hpss_outbound(node):
+    """Process transfers out of an HPSS tape node.
+    """
+
+    log.info('Processing HPSS outbound transfers (%s)' % node.name)
+
+    # Fetch requests for transfer onto this node
+    requests = di.ArchiveFileCopyRequest.select().where(
+        ~di.ArchiveFileCopyRequest.completed,
+        ~di.ArchiveFileCopyRequest.cancelled,
+        di.ArchiveFileCopyRequest.group_to == node.group
+    )
+
+    # Add constraint that transfers must be from an HPSS node
+    requests = requests.join(di.StorageNode).where(di.StorageNode.address == 'HPSS')
+
+    requests_to_process = _check_and_bundle_requests(requests, node)
+
+    # Exit if there are no requests to process
+    if len(requests_to_process) == 0:
+        return
+
+    # Construct final list of requests to process
+    for req in requests_to_process:
+
+        log.info('Pulling file %s/%s from HPSS' % (req.file.acq.name, req.file.name))
+
+        # Mark any FileCopyRequest for this file as completed
+        di.ArchiveFileCopyRequest.update(completed=True).where(
+            di.ArchiveFileCopyRequest.file == req.file).where(
+            di.ArchiveFileCopyRequest.group_to == node.group).execute()
+
+    script_name = _create_hpss_pull_script(requests_to_process, node)
+    log.info('Submitting HPSS job %s' % script_name)
+    _submit_hpss_script(script_name)
 
 
 def _create_hpss_push_script(requests, node):
