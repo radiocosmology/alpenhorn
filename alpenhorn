@@ -680,6 +680,7 @@ def import_files(node_name):
     This command is useful for manually maintaining an archive where we can run
     alpenhornd in the usual manner.
     """
+    import glob
     from ch_util import data_index as di
     di.connect_database(read_write=True)
     import peewee as pw

@@ -916,7 +916,12 @@ def update_node_hpss_inbound(node):
         di.ArchiveFileCopyRequest.group_to == node.group
     )
 
+    # Get the requests we should actually process
     requests_to_process = _check_and_bundle_requests(requests, node)
+
+    # Exit if there are no requests to process
+    if len(requests_to_process) == 0:
+        return
 
     # Construct final list of requests to process
     for req in requests_to_process:
@@ -948,6 +953,7 @@ def update_node_hpss_outbound(node):
     # Add constraint that transfers must be from an HPSS node
     requests = requests.join(di.StorageNode).where(di.StorageNode.address == 'HPSS')
 
+    # Get the requests we should actually process
     requests_to_process = _check_and_bundle_requests(requests, node)
 
     # Exit if there are no requests to process
