@@ -2,9 +2,13 @@
 """
 import logging
 import logging.handlers
-import sys
 import os
-import socket
+
+# Find path to use for logging output (get from environment if possible)
+log_path = "/var/log/alpenhorn/alpenhornd.log"  # default path
+
+if 'ALPENHORN_LOG_PATH' in os.environ:
+    log_path = os.environ['ALPENHORN_LOG_PATH']
 
 
 # Use the concurrent logging file handler if we can
@@ -16,7 +20,6 @@ except ImportError:
     warn("ConcurrentLogHandler package not installed.  Using builtin log handler")
     from logging.handlers import RotatingFileHandler as RFHandler
 
-
 # Set up logger.
 logging.basicConfig(level=logging.INFO)
 log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s",
@@ -26,16 +29,9 @@ log.setLevel(logging.INFO)
 
 log_path = None
 
-# If run as system service
-if sys.argv[0] == "/usr/sbin/alpenhornd":
-    log_path = "/var/log/alpenhorn/alpenhornd.log"
-elif socket.gethostname()[:3] == 'gpc':
-    # On Scinet
-    log_path = os.path.expanduser('/project/k/krs/alpenhorn/alpenhornd.log')
-
-# If file exists, set up as log handler
-if log_path is not None:
-    log_file = RFHandler("/var/log/alpenhorn/alpenhornd.log",
+# If log_path is set, set up as log handler
+if log_path != "":
+    log_file = RFHandler(log_path,
                          maxBytes=(2**22), backupCount=100)
     log_file.setLevel(logging.DEBUG)
     log_file.setFormatter(log_fmt)

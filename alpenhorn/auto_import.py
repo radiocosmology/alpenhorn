@@ -22,8 +22,11 @@ from ch_util import data_index as di
 from . import logger
 log = logger.get_log()
 
+# File to use for caching files already imported
+LOCAL_IMPORT_RECORD = "/etc/alpenhornd_import.dat"  # default path
 
-LOCAL_IMPORT_RECORD = "/etc/alpenhornd_import.dat"
+if 'ALPENHORN_IMPORT_RECORD' in os.environ:
+    LOCAL_IMPORT_RECORD = os.environ['ALPENHORN_IMPORT_RECORD']
 
 import_done = None
 

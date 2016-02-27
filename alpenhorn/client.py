@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Alpenhorn: announce datafile information to the database
+"""Alpenhorn client interface."""
+
 import sys
 import os
 import datetime
@@ -13,6 +13,8 @@ from ch_util import ephemeris
 
 @click.group()
 def cli():
+    """Client interface for alpenhorn. Use to request transfers, mount drives,
+    check status etc."""
     pass
 
 

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# A script to keep alpenhorn running in a screen on SciNet.
+
 # Check to see if alpenhornd is running
 pgrep -fl 'python.*alpenhornd' > /dev/null
 
@@ -22,4 +24,3 @@ screen -S alpenhorn_session -X screen -t alpenhornd -L alpenhornd
 
 # Kill other screen
 #screen -S alpenhorn_session -p 0 -X kill
-

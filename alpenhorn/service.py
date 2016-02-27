@@ -1,3 +1,5 @@
+"""Alpenhorn service."""
+
 import sys
 import socket
 
