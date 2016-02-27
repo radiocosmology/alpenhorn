@@ -7,13 +7,16 @@ setup(
     packages=find_packages(),
 
     install_requires=['ch_util', 'h5py', 'MySQL_python', 'peewee >= 2.7.0',
-                      'bitshuffle', 'netifaces', 'PyYAML',
+                      'bitshuffle', 'netifaces', 'PyYAML', 'configobj', 'watchdog',
                       'ConcurrentLogHandler', 'Click'],
     entry_points="""
         [console_scripts]
         alpenhorn=alpenhorn.client:cli
-        alpenhornd=alpenhorn.service.cli
+        alpenhornd=alpenhorn.service:cli
+        alpenhorn_hpss=alpenhorn.hpss_callback:cli
     """,
+
+    scripts=['scripts/alpenhorn_ensure_running.sh'],
 
     # metadata for upload to PyPI
     author="CHIME collaboration",

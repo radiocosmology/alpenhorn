@@ -11,10 +11,6 @@ from ch_util import data_index as di
 from ch_util import ephemeris
 
 
-# We need to write to the database in some cases.
-di.connect_database(read_write=True)
-
-
 @click.group()
 def cli():
     pass
@@ -23,82 +19,12 @@ def cli():
 @cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.argument('group_name', metavar='GROUP')
-@click.argument('acq_name', metavar='ACQ')
+@click.option('--acq', help='Sync only this acquisition.', metavar='ACQ', type=str, default=None)
 @click.option('--force', '-f', help='proceed without confirmation', is_flag=True)
 @click.option('--nice', '-n', help='nice level for transfer', default=0)
-def single(node_name, group_name, acq_name, force, nice):
-    """Copy files in acquisition ACQ from NODE to GROUP."""
-
-    # Make sure we connect RW
-    di.connect_database(read_write=True)
-
-    try:
-        from_node = di.StorageNode.get(name=node_name)
-    except pw.DoesNotExist:
-        raise Exception("Node \"%s\" does not exist in the DB." % node_name)
-    try:
-        to_group = di.StorageGroup.get(name=group_name)
-    except pw.DoesNotExist:
-        raise Exception("Group \"%s\" does not exist in the DB." % group_name)
-    try:
-        acq = di.ArchiveAcq.get(name=acq_name)
-    except pw.DoesNotExist:
-        raise Exception("Acquisition \"%s\" does not exist in the DB." % acq_name)
-
-    copy = di.ArchiveFileCopy\
-             .select()\
-             .where(di.ArchiveFileCopy.node == from_node,
-                    di.ArchiveFileCopy.has_file == 'Y',
-                    ~(di.ArchiveFileCopy.file <<
-                      di.ArchiveFile\
-                        .select()\
-                        .join(di.ArchiveFileCopy)\
-                        .where(di.ArchiveFileCopy.node <<
-                               di.StorageNode\
-                                 .select()\
-                                 .where(di.StorageNode.group == to_group),
-                                        di.ArchiveFileCopy.has_file != 'N')))\
-             .join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
-
-    if not copy.count():
-        print "No files to copy from node %s." % (node_name)
-        return
-
-    print "Will request that %d files be copied from node %s to group %s." % \
-          (copy.count(), node_name, group_name)
-    if not (force or click.confirm("Do you want to proceed?")):
-        print "Aborted."
-        return
-
-    sys.stdout.write("Updating DB ")
-    for c in copy:
-        try:
-            req = di.ArchiveFileCopyRequest.get(file=c.file, group_to=to_group,
-                                                node_from=from_node)
-            di.ArchiveFileCopyRequest\
-              .update(nice=nice, completed=False, n_requests=req.n_requests + 1,
-                      timestamp=datetime.datetime.now()).where(
-                di.ArchiveFileCopyRequest.file == c.file,
-                di.ArchiveFileCopyRequest.group_to == to_group,
-                di.ArchiveFileCopyRequest.node_from == from_node).execute()
-        except pw.DoesNotExist:
-
-            di.ArchiveFileCopyRequest.create(file=c.file, group_to=to_group,
-                                             node_from=from_node, nice=nice,
-                                             completed=False, n_requests=1,
-                                             timestamp=datetime.datetime.now())
-        sys.stdout.write(".")
-        sys.stdout.flush()
-    sys.stdout.write("\n")
-
-@cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.argument('group_name', metavar='GROUP')
-@click.option('--force', '-f', help='proceed without confirmation', is_flag=True)
-@click.option('--nice', '-n', help='nice level for transfer', default=0)
-@click.option("--transport", "-t", help="transport mode: only copy if fewer than two " \
-                               "archived copies exist", is_flag=True)
-def node2group(node_name, group_name, force, nice, transport):
+@click.option("--transport", "-t", is_flag=True,
+              help="transport mode: only copy if fewer than two archived copies exist", )
+def sync(node_name, group_name, acq, force, nice, transport):
     """Copy all files from NODE to GROUP that are not already present."""
 
     # Make sure we connect RW
@@ -118,6 +44,13 @@ def node2group(node_name, group_name, force, nice, transport):
         to_group = di.StorageGroup.get(name=group_name)
     except pw.DoesNotExist:
         raise Exception("Group \"%s\" does not exist in the DB." % group_name)
+
+    # Fetch acq if specified
+    if acq is not None:
+        try:
+            acq = di.ArchiveAcq.get(name=acq)
+        except pw.DoesNotExist:
+            raise Exception("Acquisition \"%s\" does not exist in the DB." % acq)
 
     copy = di.ArchiveFileCopy.select().where(
         di.ArchiveFileCopy.node == from_node,
@@ -139,6 +72,10 @@ def node2group(node_name, group_name, force, nice, transport):
                                   di.StorageNode.storage_type == "A",
                                   di.StorageNode.id != from_node),
                                 di.ArchiveFileCopy.has_file == "Y")))
+
+    # Limit query to acq
+    if acq is not None:
+        copy = copy.join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
 
     if not copy.count():
         print "No files to copy from node %s." % (node_name)
@@ -411,19 +348,6 @@ def clean(node_name, days, force, now, ignore):
 
                 state = 'N' if now else 'M'
 
-                # Go through exact same query as above, but with an update statement.
-                #update = di.ArchiveFileCopy\
-                #           .update(wants_file = 'Y')\
-                #           .where(di.ArchiveFileCopy.node == this_node,
-                #                  di.ArchiveFileCopy.wants_file == 'Y')
-
-                #update = update.join(di.ArchiveFile)\
-                #               .join(infotable)\
-                #               .where(infotable.start_time < oldest_unix)
-
-                #update = update.switch(di.ArchiveFile)\
-                #               .join(di.ArchiveAcq)\
-                #               .where(di.ArchiveAcq.name.not_in(sticky_acqs))
                 update = di.ArchiveFileCopy\
                            .update(wants_file = state)\
                            .where(di.ArchiveFileCopy.id << file_ids)
@@ -562,6 +486,8 @@ def mount_transport(serial_num):
             print "Hmmm. Storage group \"transport\" does not exist. I quit."
             exit()
 
+        # We need to write to the database.
+        di.connect_database(read_write=True)
         di.StorageNode.create(name=name, root=root, group=group,
                               storage_type="T", min_avail_gb=1)
 
@@ -576,6 +502,9 @@ def mount(root, name):
     """Interactive routine for mounting a storage node located at ROOT."""
     import os
     import socket
+
+    # We need to write to the database.
+    di.connect_database(read_write=True)
 
     if root[-1] == "/":
         root = root[:len(root) - 1]
@@ -633,6 +562,9 @@ def unmount(root_or_name):
     """Unmount a storage node with location or named ROOT_OR_NAME."""
     import os
     import socket
+
+    # We need to write to the database.
+    di.connect_database(read_write=True)
 
     try:
         node = di.StorageNode.get(name=root_or_name)

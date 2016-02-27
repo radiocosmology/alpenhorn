@@ -1,40 +1,28 @@
-#!/usr/bin/env python
+"""Call backs for the HPSS interface.
+"""
 
-# WARNING: This script is not intended for direct use. It contains call backs to
-# be called after completion (successful or not) of transfers to/from HPSS.
-
-import logging
+from . import logger
 
 import peewee as pw
-
-from argh import arg, dispatch_commands
+import click
 
 from ch_util import data_index as di
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s",
-                            "%b %d %H:%M:%S")
-log = logging.getLogger("")
-log.setLevel(logging.INFO)
+# Get a reference to the log
+log = logger.get_log()
 
-try:
-    from cloghandler import ConcurrentRotatingFileHandler as RFHandler
-except ImportError:
-    # Next 2 lines are optional:  issue a warning to the user
-    from warnings import warn
-    warn("ConcurrentLogHandler package not installed.  Using builtin log handler")
-    from logging.handlers import RotatingFileHandler as RFHandler
-
-log_file = RFHandler("/project/k/krs/alpenhorn/alpenhorn_hpss.log", "a", maxBytes=(2**25), backupCount=25)
-log.addHandler(log_file)
-log_file.setFormatter(log_fmt)
-
+# Reconnect to the database read/write
 di.connect_database(read_write=True)
 
 
-@arg('file_id', type=int)
-@arg('node_id', type=int)
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.argument('file_id', type=int)
+@click.argument('node_id', type=int)
 def push_failed(file_id, node_id):
     """Update the database to reflect that the HPSS transfer failed.
 
@@ -48,8 +36,9 @@ def push_failed(file_id, node_id):
     # We don't really need to do anything other than log this (we could reattempt)
 
 
-@arg('file_id', type=int)
-@arg('node_id', type=int)
+@cli.command()
+@click.argument('file_id', type=int)
+@click.argument('node_id', type=int)
 def pull_failed(file_id, node_id):
     """Update the database to reflect that the HPSS transfer failed.
 
@@ -60,12 +49,12 @@ def pull_failed(file_id, node_id):
 
     log.warn('Failed pull: %s/%s onto node %s' % (afile.acq.name, afile.name, node.name))
 
-
     # We don't really need to do anything other than log this (we could reattempt)
 
 
-@arg('file_id', type=int)
-@arg('node_id', type=int)
+@cli.command()
+@click.argument('file_id', type=int)
+@click.argument('node_id', type=int)
 def push_success(file_id, node_id):
     """Update the database to reflect that the HPSS transfer succeeded.
 
@@ -93,8 +82,9 @@ def push_success(file_id, node_id):
     log.info('Successful push: %s/%s onto node %s' % (afile.acq.name, afile.name, node.name))
 
 
-@arg('file_id', type=int)
-@arg('node_id', type=int)
+@cli.command()
+@click.argument('file_id', type=int)
+@click.argument('node_id', type=int)
 def pull_success(file_id, node_id):
     """Update the database to reflect that the HPSS transfer succeeded.
 
@@ -120,7 +110,3 @@ def pull_success(file_id, node_id):
                                   wants_file='Y').execute()
 
     log.info('Successful pull: %s/%s into node %s' % (afile.acq.name, afile.name, node.name))
-
-
-if __name__ == '__main__':
-    dispatch_commands([push_failed, pull_failed, push_success, pull_success])
