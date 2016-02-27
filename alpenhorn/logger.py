@@ -7,8 +7,8 @@ import os
 # Find path to use for logging output (get from environment if possible)
 log_path = "/var/log/alpenhorn/alpenhornd.log"  # default path
 
-if 'ALPENHORN_LOG_PATH' in os.environ:
-    log_path = os.environ['ALPENHORN_LOG_PATH']
+if 'ALPENHORN_LOG_FILE' in os.environ:
+    log_path = os.environ['ALPENHORN_LOG_FILE']
 
 
 # Use the concurrent logging file handler if we can
@@ -26,8 +26,6 @@ log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s",
                             "%b %d %H:%M:%S")
 log = logging.getLogger("")
 log.setLevel(logging.INFO)
-
-log_path = None
 
 # If log_path is set, set up as log handler
 if log_path != "":

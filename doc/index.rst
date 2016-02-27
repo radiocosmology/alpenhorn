@@ -25,7 +25,7 @@ will be a description of how to do that here at somepoint.
 There are currently two configuration parameters that can be set for any running
 instance of ``alpenhornd``. They are both set by use of environment variables.
 
-``ALPENHORN_LOG_PATH``
+``ALPENHORN_LOG_FILE``
     The path to write out the log file to. If not set, use
     ``/var/log/alpenhorn/alpenhornd.log``. If set to ``""`` (empty string), then
     no log file is written.
