@@ -21,7 +21,7 @@ RSYNC_FLAG = "qtspgoDL"
 # Globals.
 done_transport_this_cycle = False
 
-def update_loop(node_list):
+def update_loop(node_list, host):
     """Loop over nodes performing any updates needed.
     """
     while True:
@@ -31,7 +31,7 @@ def update_loop(node_list):
         # Iterate over nodes and perform each update (perform a new query
         # each time in case we get a new node, e.g. transport disk)
         for node in di.StorageNode.select().where(di.StorageNode.host == host):
-            update.update_node(node)
+            update_node(node)
 
         # Check the time spent so far, and wait if needed
         loop_time = time.time() - loop_start

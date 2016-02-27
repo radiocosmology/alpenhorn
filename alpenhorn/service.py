@@ -47,7 +47,7 @@ def cli():
 
     # Enter main loop performing node updates
     try:
-        update.update_loop(node_list)
+        update.update_loop(node_list, host)
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:
