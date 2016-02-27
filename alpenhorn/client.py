@@ -4,66 +4,30 @@ import sys
 import os
 import datetime
 
-from argh import arg, aliases, dispatch_commands
-from argh.interaction import confirm
+import click
 import peewee as pw
 
 from ch_util import data_index as di
 from ch_util import ephemeris
 
-MAX_E2LABEL_LEN = 16
 
-def ask_yesno(question):
-    answer = raw_input("%s [Y/N] " % question)
-    if answer == "y" or answer == "Y":
-        return True
-    else:
-        return False
-
-def ask_default(question, default):
-    answer = raw_input("%s [%s]: " % (question, default))
-    if not len(answer):
-        return default
-    else:
-        return answer
-
-def get_e2label(dev):
-    import os
-
-    pin, pout, perr = os.popen3("/sbin/e2label %s" % dev, "r")
-    pin.close()
-    res = pout.read().strip()
-    err = perr.read()
-    pout.close()
-    perr.close()
-    if not len(err) and len(res) < MAX_E2LABEL_LEN:
-        return res
-    return None
-
-def get_mount_device(path):
-    import os
-
-    p = os.popen("mount", "r")
-    res = p.read()
-    p.close()
-    dev = None
-    for l in res.split("\n"):
-        if not len(l):
-            continue
-        s = l.split()
-        assert s[1] == "on"
-        if s[2] == os.path.abspath(path):
-            dev = s[0]
-    return dev
+# We need to write to the database in some cases.
+di.connect_database(read_write=True)
 
 
-@arg('node_name', help='node to copy from')
-@arg('group_name', help='group to copy to')
-@arg('acq_name', help='acquisition to copy')
-@arg('--force', '-f', help='proceed without confirmation')
-@arg('--nice', '-n', help='nice level for transfer')
-def single(node_name, group_name, acq_name, force=False, nice=0):
-    """sync files of a given acquisition from a node to a group"""
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.argument('group_name', metavar='GROUP')
+@click.argument('acq_name', metavar='ACQ')
+@click.option('--force', '-f', help='proceed without confirmation', is_flag=True)
+@click.option('--nice', '-n', help='nice level for transfer', default=0)
+def single(node_name, group_name, acq_name, force, nice):
+    """Copy files in acquisition ACQ from NODE to GROUP."""
 
     # Make sure we connect RW
     di.connect_database(read_write=True)
@@ -79,8 +43,7 @@ def single(node_name, group_name, acq_name, force=False, nice=0):
     try:
         acq = di.ArchiveAcq.get(name=acq_name)
     except pw.DoesNotExist:
-        raise Exception("Acquisition \"%s\" does not exist in the DB." \
-                        % acq_name)
+        raise Exception("Acquisition \"%s\" does not exist in the DB." % acq_name)
 
     copy = di.ArchiveFileCopy\
              .select()\
@@ -103,7 +66,7 @@ def single(node_name, group_name, acq_name, force=False, nice=0):
 
     print "Will request that %d files be copied from node %s to group %s." % \
           (copy.count(), node_name, group_name)
-    if not (force or ask_yesno("Do you want to proceed?")):
+    if not (force or click.confirm("Do you want to proceed?")):
         print "Aborted."
         return
 
@@ -128,14 +91,15 @@ def single(node_name, group_name, acq_name, force=False, nice=0):
         sys.stdout.flush()
     sys.stdout.write("\n")
 
-@arg('node_name', help='node to copy from')
-@arg('group_name', help='group to copy to')
-@arg('--force', '-f', help='proceed without confirmation')
-@arg('--nice', '-n', help='nice level for transfer')
-@arg("--transport", "-t", help="transport mode: only copy if fewer than two " \
-                               "archived copies exist")
-def node2group(node_name, group_name, force=False, nice=0, transport=False):
-    """sync files from a node to another group"""
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.argument('group_name', metavar='GROUP')
+@click.option('--force', '-f', help='proceed without confirmation', is_flag=True)
+@click.option('--nice', '-n', help='nice level for transfer', default=0)
+@click.option("--transport", "-t", help="transport mode: only copy if fewer than two " \
+                               "archived copies exist", is_flag=True)
+def node2group(node_name, group_name, force, nice, transport):
+    """Copy all files from NODE to GROUP that are not already present."""
 
     # Make sure we connect RW
     di.connect_database(read_write=True)
@@ -182,7 +146,7 @@ def node2group(node_name, group_name, force=False, nice=0, transport=False):
 
     print "Will request that %d files be copied from node %s to group %s." % \
           (copy.count(), node_name, group_name)
-    if not (force or ask_yesno("Do you want to proceed?")):
+    if not (force or click.confirm("Do you want to proceed?")):
         print "Aborted."
         return
 
@@ -229,8 +193,8 @@ def node2group(node_name, group_name, force=False, nice=0, transport=False):
             di.ArchiveFileCopyRequest.insert_many(insert).execute()
 
 
-@aliases('status')
-def summary(width=80):
+@cli.command()
+def status(width=80):
     """give a short summary of the archive status"""
     col1 = 15
     col2 = 6
@@ -257,11 +221,12 @@ def summary(width=80):
     print
 
 
-@arg('node_name', help='name of node to verify (must be local)')
-@arg('--md5', help='perform full check against md5sum')
-@arg('--fixdb', help='fix up the database to be consistent with reality')
-def verify(node_name, md5=False, fixdb=False):
-    """verify the archive against the database.
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.option('--md5', help='perform full check against md5sum', is_flag=True)
+@click.option('--fixdb', help='fix up the database to be consistent with reality', is_flag=True)
+def verify(node_name, md5, fixdb):
+    """Verify the archive on NODE against the database.
     """
 
     import os
@@ -347,14 +312,14 @@ def verify(node_name, md5=False, fixdb=False):
         # Make sure we connect RW
         di.connect_database(read_write=True)
 
-        if len(missing_files) > 0  and ask_yesno('Fix missing files'):
+        if len(missing_files) > 0  and click.confirm('Fix missing files'):
             missing_count = di.ArchiveFileCopy\
                               .update(has_file='N')\
                               .where(di.ArchiveFileCopy.id << missing_ids)\
                               .execute()
             print "  %i marked as missing" % missing_count
 
-        if len(corrupt_files) > 0  and ask_yesno('Fix corrupt files'):
+        if len(corrupt_files) > 0  and click.confirm('Fix corrupt files'):
             corrupt_count = di.ArchiveFileCopy\
                               .update(has_file='M')\
                               .where(di.ArchiveFileCopy.id << corrupt_ids)\
@@ -362,14 +327,14 @@ def verify(node_name, md5=False, fixdb=False):
             print "  %i corrupt files marked for verification" % corrupt_count
 
 
-
-@arg('node_name', help='name of node to clean')
-@arg('--days', '-d', help='clean files older than <days>')
-@arg('--force', '-f', help='force cleaning on an archive node')
-@arg('--now', '-n', help='force immediate removal')
-@arg('--ignore', '-i', help='ignore list of sticky acquisitions')
-def clean(node_name, days=21, force=False, now=False, ignore=False):
-    """clean up node by marking older files as potentially removable."""
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.option('--days', '-d', help='clean files older than <days>', default=21)
+@click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
+@click.option('--now', '-n', help='force immediate removal', is_flag=True)
+@click.option('--ignore', '-i', help='ignore list of sticky acquisitions', is_flag=True)
+def clean(node_name, days, force, now, ignore):
+    """Clean up NODE by marking older files as potentially removable."""
 
     import peewee as pw
     di.connect_database(read_write=True)
@@ -441,7 +406,7 @@ def clean(node_name, days=21, force=False, now=False, ignore=False):
 
             print "Cleaning up %i %s files (%1f GB) from %s " % \
                   (count, name, size_gb, node_name)
-            if force or ask_yesno("  Are you sure?"):
+            if force or click.confirm("  Are you sure?"):
                 print "  Marking files for cleaning."
 
                 state = 'N' if now else 'M'
@@ -471,12 +436,14 @@ def clean(node_name, days=21, force=False, now=False, ignore=False):
         else:
             print "No %s files selected for cleaning on %s." % (name, node_name)
 
-@arg('--host', '-H', help='use specified host rather than local machine')
-def mounted(host=None):
+
+@cli.command()
+@click.option('--host', '-H', help='use specified host rather than local machine', type=str, default=None)
+def mounted(host):
     """list the nodes mounted on this, or another specified, machine"""
     import socket
 
-    if not host:
+    if host is None:
         host = socket.gethostname().split(".")[0]
     zero = True
     for node in di.StorageNode \
@@ -492,12 +459,14 @@ def mounted(host=None):
         print "No nodes are mounted on host %s." % host
 
 
-
-@arg("serial_num", help="manufacturer's serial number for the disc")
+@cli.command()
+@click.argument("serial_num")
 def mount_transport(serial_num):
-    """interactive routine for mounting a transport disc as a storage node;
-    formats, labels and OS mounts the disc as necessary"""
-    import os, glob
+    """Interactive routine for mounting a transport disc as a storage node;
+    formats, labels and OS mounts the disc as necessary. The disk is specified
+    using the manufacturers SERIAL_NUM, which is printed on the disk."""
+    import os
+    import glob
 
     if os.getuid() != 0:
         print "You must be root to run mount on a transport disc. I quit."
@@ -506,14 +475,14 @@ def mount_transport(serial_num):
     # Find the disc.
     dev = glob.glob("/dev/disk/by-id/*%s" % serial_num)
     if len(dev) == 0:
-      print "No disc with that serial number is attached."
-      return
+        print "No disc with that serial number is attached."
+        return
     elif len(dev) > 1:
-      print "Confused: found more than one device matching that serial number:"
-      for d in dev:
-        print "  %s" % dev
-      print "Aborting."
-      return
+        print "Confused: found more than one device matching that serial number:"
+        for d in dev:
+            print "  %s" % dev
+        print "Aborting."
+        return
     dev = dev[0]
     dev_part = "%s-part1" % dev
 
@@ -525,19 +494,18 @@ def mount_transport(serial_num):
     while True:
         l = fp.readline()
         if not l:
-          break
+            break
         if l.find("Number") == 0 and l.find("Start") > 0 and l.find("File system") > 0:
-          part_start = True
+            part_start = True
         elif l.strip() != "" and part_start:
-          formatted = True
+            formatted = True
     fp.close()
 
     if not formatted:
-        if not ask_yesno("Disc is not formatted. Should I format it?"):
+        if not click.confirm("Disc is not formatted. Should I format it?"):
             return
         print "Creating partition. Please wait."
-        os.system("parted -s -a optimal %s mklabel gpt -- " \
-                  "mkpart primary 0%% 100%%" % dev)
+        os.system("parted -s -a optimal %s mklabel gpt -- mkpart primary 0%% 100%%" % dev)
         print "Formatting disc. Please wait."
         os.system("mkfs.ext4 %s -m 0 -L CH-%s" % (dev_part, serial_num))
     else:
@@ -571,7 +539,7 @@ def mount_transport(serial_num):
     while 1:
         l = fp.readline()
         if not l:
-          break
+            break
         if l.find(root) > 0:
             if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
                 mounted = True
@@ -583,37 +551,34 @@ def mount_transport(serial_num):
         print "Mounting disc at %s." % root
         os.system("mount %s %s" % (dev_part, root))
 
-
     try:
-        di.StorageNode.get(name = name)
+        di.StorageNode.get(name=name)
     except pw.DoesNotExist:
         print "This disc has not been registered yet as a storage node. " \
               "Registering now."
         try:
-            group = di.StorageGroup.get(name = "transport")
+            group = di.StorageGroup.get(name="transport")
         except pw.DoesNotExist:
             print "Hmmm. Storage group \"transport\" does not exist. I quit."
             exit()
 
-        di.StorageNode.create(name = name,
-                              root = root,
-                              group = group,
-                              storage_type = "T",
-                              min_avail_gb = 1)
+        di.StorageNode.create(name=name, root=root, group=group,
+                              storage_type="T", min_avail_gb=1)
 
         print "Successfully created storage node."
     mount(root)
 
 
-@arg("root", help="base directory for this node")
-@arg("--name", help="name of this node; only enter if it is not a storage node")
-def mount(root, name=None):
-    """interactive routine for mounting a storage node"""
+@cli.command()
+@click.argument("root")
+@click.option("--name", help="name of this node; only enter if it is not a storage node", type=str, default=None)
+def mount(root, name):
+    """Interactive routine for mounting a storage node located at ROOT."""
     import os
     import socket
 
     if root[-1] == "/":
-      root = root[:len(root) - 1]
+        root = root[:len(root) - 1]
 
     if name and os.path.ismount(root):
         print "You should not enter a name if this is a transport disc." \
@@ -638,7 +603,7 @@ def mount(root, name=None):
         transport = False
 
     try:
-        node = di.StorageNode.get(name = name)
+        node = di.StorageNode.get(name=name)
     except pw.DoesNotExist:
         print "Storage node \"%s\" does not exist. I quit." % (name)
 
@@ -652,35 +617,36 @@ def mount(root, name=None):
         node.address = None
         node.username = None
     else:
-        node.address = ask_default("Enter the IP address of this host",
-                                   "localhost").strip()
-        node.username = ask_default("Enter the user name for rsyncing",
-                                    os.environ.get("USER"))
+        node.address = click.prompt("Enter the address of this host",
+                                    default="localhost").strip()
+        node.username = click.prompt("Enter the user name for rsyncing",
+                                     default=os.environ.get("USER"))
     node.mounted = True
     node.root = root
     node.save()
     print "Successfully mounted \"%s\"." % (name)
 
 
-@arg("root_or_name", help="either the name or root path of this node")
+@cli.command()
+@click.argument("root_or_name")
 def unmount(root_or_name):
-    """unmount a storage node"""
+    """Unmount a storage node with location or named ROOT_OR_NAME."""
     import os
     import socket
 
     try:
-        node = di.StorageNode.get(name = root_or_name)
+        node = di.StorageNode.get(name=root_or_name)
     except pw.DoesNotExist:
         if root_or_name[-1] == "/":
-          root_or_name = root_or_name[:len(root_or_name) - 1]
+            root_or_name = root_or_name[:len(root_or_name) - 1]
 
         if not os.path.exists(root_or_name):
             print "That is neither a node name, nor a path on this host. " \
                   "I quit."
             exit()
         try:
-            node = di.StorageNode.get(root = root_or_name,
-                                      host = socket.gethostname())
+            node = di.StorageNode.get(root=root_or_name,
+                                      host=socket.gethostname())
         except pw.DoesNotExist:
             print "That is neither a node name nor a root name that is " \
                   "known. I quit."
@@ -694,9 +660,10 @@ def unmount(root_or_name):
         print "Node successfully unmounted."
 
 
-@arg('node_name', help='Name of node to add files to.')
+@cli.command()
+@click.argument('node_name', metavar='NODE')
 def import_files(node_name):
-    """Scan the current directory for known acquisition files and add them into the database.
+    """Scan the current directory for known acquisition files and add them into the database for NODE.
 
     This command is useful for manually maintaining an archive where we can run
     alpenhornd in the usual manner.
@@ -764,9 +731,36 @@ def import_files(node_name):
                 print "already in database"
 
 
-if __name__ == "__main__":
-    # We need to write to the database in some cases.
-    di.connect_database(read_write=True)
+# A few utitly routines for dealing with filesystems
+MAX_E2LABEL_LEN = 16
 
-    dispatch_commands([node2group, single, summary, verify, clean,
-                       mount_transport, mount, mounted, unmount, import_files])
+
+def get_e2label(dev):
+    import os
+
+    pin, pout, perr = os.popen3("/sbin/e2label %s" % dev, "r")
+    pin.close()
+    res = pout.read().strip()
+    err = perr.read()
+    pout.close()
+    perr.close()
+    if not len(err) and len(res) < MAX_E2LABEL_LEN:
+        return res
+    return None
+
+
+def get_mount_device(path):
+    import os
+
+    p = os.popen("mount", "r")
+    res = p.read()
+    p.close()
+    dev = None
+    for l in res.split("\n"):
+        if not len(l):
+            continue
+        s = l.split()
+        assert s[1] == "on"
+        if s[2] == os.path.abspath(path):
+            dev = s[0]
+    return dev
