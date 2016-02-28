@@ -292,7 +292,7 @@ def import_file(node, root, acq_name, file_name):
         try:
             _import_file(node, root, acq_name, file_name)
             done = True
-        except peewee.OperationalError:
+        except pw.OperationalError:
             log.error("MySQL connexion dropped. Will attempt to reconnect in "
                       "five seconds.")
             time.sleep(5)
@@ -417,7 +417,7 @@ def _import_file(node, root, acq_name, file_name):
                 file = di.ArchiveFile.create(acq=acq, type=ftype, name=file_name,
                                              size_b=size_b, md5sum=md5sum)
                 done = True
-            except peewee.OperationalError:
+            except pw.OperationalError:
                 log.error("MySQL connexion dropped. Will attempt to reconnect in "
                           "five seconds.")
                 time.sleep(5)

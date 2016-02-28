@@ -245,9 +245,16 @@ def update_node_requests(node):
         log.info("Rsyncing file \"%s/%s\"." % (req.file.acq.name, req.file.name))
         st = time.time()
         if req.node_from.host != node.host:
-            ret = os.system("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" "
-                            "-e \"ssh -q\" %s %s" %
-                            (RSYNC_FLAG, from_path, to_path))
+
+            # Use bbcp if available
+            from distutils import spawn
+            if spawn.find_executable("bbcp") is not None:
+                ret = os.system("bbcp -z --port 1500 -W 4M -s 8 %s %s" % (from_path, to_path))
+            # Otherwise fall back to rsync over ssh
+            else:
+                ret = os.system("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" "
+                                "-e \"ssh -q\" %s %s" %
+                                (RSYNC_FLAG, from_path, to_path))
         else:
             try:
                 link_path = "%s/%s/%s" % (node.root, req.file.acq.name, req.file.name)
@@ -287,7 +294,7 @@ def update_node_requests(node):
                         fcopy.wants_file = 'Y'
                         fcopy.save()
                         done = True
-                    except peewee.OperationalError:
+                    except pw.OperationalError:
                         log.error("MySQL connexion dropped. Will attempt to reconnect in "
                                   "five seconds.")
                         time.sleep(5)
