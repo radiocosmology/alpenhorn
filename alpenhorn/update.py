@@ -21,9 +21,12 @@ RSYNC_FLAG = "qtspgoDL"
 # Globals.
 done_transport_this_cycle = False
 
+
 def update_loop(node_list):
     """Loop over nodes performing any updates needed.
     """
+    global done_transport_this_cycle
+
     while True:
         loop_start = time.time()
         done_transport_this_cycle = False
