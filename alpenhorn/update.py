@@ -22,6 +22,48 @@ RSYNC_FLAG = "qtspgoDL"
 done_transport_this_cycle = False
 
 
+def run_command(cmd, **kwargs):
+    """Run a command.
+
+    Parameters
+    ----------
+    cmd : string or list
+        A command as a string or list, to be understood by `subprocess.Popen`.
+    kwargs : dict
+        Passed directly onto `subprocess.Popen.`
+
+    Returns
+    -------
+    retval : int
+        Return code.
+    stdout_val : string
+        Value of stdout.
+    stderr_val : string
+        Value of stderr.
+    """
+
+    import subprocess
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+    stdout_val, stderr_val = proc.communicate()
+    retval = proc.returncode
+
+    return retval, stdout_val, stderr_val
+
+
+def is_md5_hash(h):
+    """Is this the correct format to be an md5 hash."""
+    import re
+    return re.match('[a-f0-9]{32}', h) is not None
+
+
+def command_available(cmd):
+    """Is this command available on the system.
+    """
+    from distutils import spawn
+    return spawn.find_executable(cmd) is not None
+
+
 def update_loop(node_list, host):
     """Loop over nodes performing any updates needed.
     """
@@ -242,26 +284,64 @@ def update_node_requests(node):
             os.mkdir(to_path)
 
         # Giddy up!
-        log.info("Rsyncing file \"%s/%s\"." % (req.file.acq.name, req.file.name))
+        log.info("Transferring file \"%s/%s\"." % (req.file.acq.name, req.file.name))
         st = time.time()
+
+        # Attempt to transfer the file. Each of the methods below needs to set a
+        # return code `ret` and give an `md5sum` of the transferred file.
+
+        # First we need to check if we are copying over the network
         if req.node_from.host != node.host:
 
-            # Use bbcp if available
-            from distutils import spawn
-            if spawn.find_executable("bbcp") is not None:
-                ret = os.system("bbcp -z --port 1500 -W 4M -s 8 %s %s" % (from_path, to_path))
-            # Otherwise fall back to rsync over ssh
+            # First try bbcp which is a fast multistream transfer tool. bbcp can
+            # calculate the md5 hash as it goes, so we'll do that to save doing
+            # it at the end.
+            if command_available('bbcp'):
+                cmd = 'bbcp -f -z --port 1500 -W 4M -s 8 -o -E md5= %s %s' % (from_path, to_path)
+                ret, stdout, stderr = run_command(cmd.split())
+
+                md5sum = stderr.split()[2] if ret == 0 else None
+
+            # Next try rsync over ssh. We need to explicitly calculate the md5
+            # hash after the fact
+            elif command_available('rsync'):
+                cmd = ("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" -e \"ssh -q\" %s %s" %
+                       (RSYNC_FLAG, from_path, to_path))
+                ret, stdout, stderr = run_command(cmd.split())
+
+                md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name)) if ret == 0 else None
+
+            # If we get here then we have no idea how to transfer the file...
             else:
-                ret = os.system("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" "
-                                "-e \"ssh -q\" %s %s" %
-                                (RSYNC_FLAG, from_path, to_path))
+                log.warn("No commands available to complete this transfer.")
+                ret = -1
+
+        # Okay, great we're just doing a local transfer.
         else:
+
+            # First try to just hard link the file. This will only work if we
+            # are on the same filesystem. As there's no actual copying it's
+            # probably unecessary to calculate the md5 check sum, so we'll just
+            # fake it.
             try:
                 link_path = "%s/%s/%s" % (node.root, req.file.acq.name, req.file.name)
                 os.link(from_path, link_path)
+
                 ret = 0
+                md5sum = req.file.md5sum  # As we're linking the md5sum can't change. Skip the check here...
+
+            # If we couldn't just link the file, try copying it with rsync.
             except:
-                ret = os.system("rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path))
+                if command_available('rsync'):
+                    cmd = "rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path)
+                    ret, stdout, stderr = run_command(cmd.split())
+
+                    md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name)) if ret == 0 else None
+                else:
+                    log.warn("No commands available to complete this transfer.")
+                    ret = -1
+
+        # Check the return code...
         if ret:
             # If the copy didn't work, then the remote file may be corrupted.
             log.error("Rsync failed. Marking source file suspect.")
@@ -272,7 +352,6 @@ def update_node_requests(node):
         et = time.time()
 
         # Check integrity.
-        md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name))
         if md5sum == req.file.md5sum:
             size_mb = req.file.size_b / 2 ** 20
             trans_time = et - st
