@@ -90,7 +90,7 @@ def stop_observers():
     """Stop watchidog threads."""
     for obs in obs_list:
         if obs:
-            obs.join()
+            obs.stop()
 
 
 def join_observers():

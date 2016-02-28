@@ -51,6 +51,7 @@ def cli():
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:
+        log.info('Exiting...')
         auto_import.stop_observers()
 
     # Wait for watchdog threads to terminate

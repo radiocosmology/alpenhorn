@@ -325,13 +325,20 @@ def update_node_requests(node):
             # fake it.
             try:
                 link_path = "%s/%s/%s" % (node.root, req.file.acq.name, req.file.name)
-                os.link(from_path, link_path)
 
-                ret = 0
-                md5sum = req.file.md5sum  # As we're linking the md5sum can't change. Skip the check here...
+                # Check explicitly if link already exists as this and
+                # being unable to link will both raise OSError and get
+                # confused.
+                if os.path.exists(link_path):
+                    log.error('File %s already exists. Clean up manually.' % link_path)
+                    ret = -1
+                else:
+                    os.link(from_path, link_path)
+                    ret = 0
+                    md5sum = req.file.md5sum  # As we're linking the md5sum can't change. Skip the check here...
 
             # If we couldn't just link the file, try copying it with rsync.
-            except:
+            except OSError:
                 if command_available('rsync'):
                     cmd = "rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path)
                     ret, stdout, stderr = run_command(cmd.split())
