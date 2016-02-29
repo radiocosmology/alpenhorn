@@ -320,9 +320,16 @@ def verify(node_name, md5, fixdb):
 @click.option('--days', '-d', help='clean files older than <days>', default=21)
 @click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
+@click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
+              help='Only clean files already available in this group.')
 @click.option('--ignore', '-i', help='ignore list of sticky acquisitions', is_flag=True)
-def clean(node_name, days, force, now, ignore):
-    """Clean up NODE by marking older files as potentially removable."""
+def clean(node_name, days, force, now, target, ignore):
+    """Clean up NODE by marking older files as potentially removable.
+
+    If --target is specified we will only remove files already available in the
+    TARGET_GROUP. This is useful for cleaning out intermediate locations such as
+    transport disks.
+    """
 
     import peewee as pw
     di.connect_database(read_write=True)
@@ -340,47 +347,47 @@ def clean(node_name, days, force, now, ignore):
             print "Cannot clean archive node %s without forcing." % node_name
             return
 
-    # Construct list of stick acqs
-    if not ignore:
-
-        sticky_file = os.path.join(os.path.dirname(__file__), 'sticky_acq.txt')
-
-        with open(sticky_file, 'r') as f:
-            lines = f.readlines()
-
-            # Read in sticky acqs, skipping blank lines and comments
-            sticky_acqs = filter(lambda x: len(x) > 0 and x[0] != '#', map(lambda x: x.rstrip(), lines))
-
-    else:
-        sticky_acqs = []
-
-
     oldest = datetime.datetime.now() - datetime.timedelta(days)
     oldest_unix = ephemeris.ensure_unix(oldest)
 
-    ## List of filetypes we want to update, needs a human readable name and a
-    ## FileInfo table.
-    filetypes = [ ['correlation',  di.CorrFileInfo],
+    # List of filetypes we want to update, needs a human readable name and a
+    # FileInfo table.
+    filetypes = [ ['correlation', di.CorrFileInfo],
                   ['housekeeping', di.HKFileInfo] ]
+
+    # Select FileCopys on this node.
+    files = di.ArchiveFileCopy.select(di.ArchiveFileCopy.id).where(
+        di.ArchiveFileCopy.node == this_node,
+        di.ArchiveFileCopy.wants_file == 'Y'
+    )
+
+    # If the target option has been specified, only clean files also available there...
+    if target is not None:
+
+        # Fetch a reference to the target group
+        try:
+            target_group = di.StorageGroup.get(name=target)
+        except pw.DoesNotExist:
+            raise RuntimeError("Target group \"%s\" does not exist in the DB." % target)
+
+        # First get the nodes at the destination...
+        nodes_at_target = di.StorageNode.select().where(di.StorageNode.group == target_group)
+
+        # Then use this to get a list of all files at the destination...
+        files_at_target = di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
+            di.ArchiveFileCopy.node << nodes_at_target,
+            di.ArchiveFileCopy.has_file == 'Y'
+        )
+
+        # Only match files that are also available at the target
+        files = files.where(di.ArchiveFileCopy.file << files_at_target)
 
     # Iterate over file types for cleaning
     for name, infotable in filetypes:
-#                     .select(di.)\
 
-        # Select FileCopys on this node.
-        oldfiles = di.ArchiveFileCopy\
-                     .select(di.ArchiveFileCopy.id)\
-                     .where(di.ArchiveFileCopy.node == this_node,
-                            di.ArchiveFileCopy.wants_file == 'Y')
         # Filter to fetch only ones with a start time older than `oldest`
-        oldfiles = oldfiles.join(di.ArchiveFile)\
-                           .join(infotable)\
-                           .where(infotable.start_time < oldest_unix)
-
-        # Filter to get only files not in a sticky acq
-        oldfiles = oldfiles.switch(di.ArchiveFile)\
-                           .join(di.ArchiveAcq)\
-                           .where(di.ArchiveAcq.name.not_in(sticky_acqs))
+        oldfiles = files.join(di.ArchiveFile).join(infotable)\
+            .where(infotable.start_time < oldest_unix)
 
         file_ids = list(oldfiles)
 
@@ -388,9 +395,10 @@ def clean(node_name, days, force, now, ignore):
         count = oldfiles.count()
 
         if count > 0:
-            #size_gb = oldfiles.aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / \
-            size_gb = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << file_ids).join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b)) / \
-                      2**30.0
+            size_bytes = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << file_ids)\
+                .join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+
+            size_gb = int(size_bytes) / 2**30.0
 
             print "Cleaning up %i %s files (%1f GB) from %s " % \
                   (count, name, size_gb, node_name)
@@ -399,9 +407,9 @@ def clean(node_name, days, force, now, ignore):
 
                 state = 'N' if now else 'M'
 
-                update = di.ArchiveFileCopy\
-                           .update(wants_file = state)\
-                           .where(di.ArchiveFileCopy.id << file_ids)
+                update = di.ArchiveFileCopy.update(wants_file=state)\
+                    .where(di.ArchiveFileCopy.id << file_ids)
+
                 n = update.execute()
 
                 print "Marked %i files for cleaning" % n
