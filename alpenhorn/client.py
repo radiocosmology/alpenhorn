@@ -24,10 +24,18 @@ def cli():
 @click.option('--acq', help='Sync only this acquisition.', metavar='ACQ', type=str, default=None)
 @click.option('--force', '-f', help='proceed without confirmation', is_flag=True)
 @click.option('--nice', '-n', help='nice level for transfer', default=0)
+@click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
+              help='Only transfer files not available on this group.')
 @click.option("--transport", "-t", is_flag=True,
-              help="transport mode: only copy if fewer than two archived copies exist", )
-def sync(node_name, group_name, acq, force, nice, transport):
-    """Copy all files from NODE to GROUP that are not already present."""
+              help="[DEPRECATED] transport mode: only copy if fewer than two archived copies exist.")
+def sync(node_name, group_name, acq, force, nice, target, transport):
+    """Copy all files from NODE to GROUP that are not already present.
+
+    We can also use the --target option to only transfer files that are not
+    available on both the destination group, and the TARGET_GROUP. This is
+    useful for transferring data to a staging location before going to a final
+    archive (e.g. HPSS, transport disks).
+    """
 
     # Make sure we connect RW
     di.connect_database(read_write=True)
@@ -47,36 +55,77 @@ def sync(node_name, group_name, acq, force, nice, transport):
     except pw.DoesNotExist:
         raise Exception("Group \"%s\" does not exist in the DB." % group_name)
 
-    # Fetch acq if specified
+    # Construct list of file copies that are available on the source node, and
+    # not available on any nodes at the destination. This query is quite complex
+    # so I've broken it up...
+
+    # First get the nodes at the destination...
+    nodes_at_dest = di.StorageNode.select().where(di.StorageNode.group == to_group)
+
+    # Then use this to get a list of all files at the destination...
+    files_at_dest = di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
+        di.ArchiveFileCopy.node << nodes_at_dest,
+        di.ArchiveFileCopy.has_file == 'Y'
+    )
+
+    # Then combine to get all file(copies) that are available at the source but
+    # not at the destination...
+    copy = di.ArchiveFileCopy.select().where(
+        di.ArchiveFileCopy.node == from_node,
+        di.ArchiveFileCopy.has_file == 'Y',
+        ~(di.ArchiveFileCopy.file << files_at_dest))
+
+    # If the target option has been specified, only copy nodes also not
+    # available there...
+    if target is not None:
+
+        # Fetch a reference to the target group
+        try:
+            target_group = di.StorageGroup.get(name=target)
+        except pw.DoesNotExist:
+            raise RuntimeError("Target group \"%s\" does not exist in the DB." % target)
+
+        # First get the nodes at the destination...
+        nodes_at_target = di.StorageNode.select().where(di.StorageNode.group == target_group)
+
+        # Then use this to get a list of all files at the destination...
+        files_at_target = di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
+            di.ArchiveFileCopy.node << nodes_at_target,
+            di.ArchiveFileCopy.has_file == 'Y'
+        )
+
+        # Only match files that are also not available at the target
+        copy = copy.where(~(di.ArchiveFileCopy.file << files_at_target))
+
+    # In transport mode (DEPRECATED) we only move files that don't have an
+    # archive copy elsewhere...
+    if transport:
+        import warnings
+        warnings.warn('Transport mode is deprecated. Try to use --target instead.')
+
+        # Get list of other archive nodes
+        other_archive_nodes = di.StorageNode.select().where(
+            di.StorageNode.storage_type == "A",
+            di.StorageNode.id != from_node
+        )
+
+        files_in_archive = di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
+            di.ArchiveFileCopy.node << other_archive_nodes,
+            di.ArchiveFileCopy.has_file == "Y"
+        )
+
+        copy = copy.where(~(di.ArchiveFileCopy.file << files_in_archive))
+
+    # If requested, limit query to a specific acquisition...
     if acq is not None:
+
+        # Fetch acq if specified
         try:
             acq = di.ArchiveAcq.get(name=acq)
         except pw.DoesNotExist:
             raise Exception("Acquisition \"%s\" does not exist in the DB." % acq)
 
-    copy = di.ArchiveFileCopy.select().where(
-        di.ArchiveFileCopy.node == from_node,
-        di.ArchiveFileCopy.has_file == 'Y',
-        ~(di.ArchiveFileCopy.file <<
-          di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
-              di.ArchiveFileCopy.node <<
-              di.StorageNode.select().where(
-                  di.StorageNode.group == to_group),
-              di.ArchiveFileCopy.has_file == 'Y')))
-
-    if transport:
-        copy = copy.where(~(di.ArchiveFileCopy.file <<
-                            di.ArchiveFile.select() \
-                              .join(di.ArchiveFileCopy) \
-                              .where(
-                                di.ArchiveFileCopy.node <<
-                                di.StorageNode.select().where(
-                                  di.StorageNode.storage_type == "A",
-                                  di.StorageNode.id != from_node),
-                                di.ArchiveFileCopy.has_file == "Y")))
-
-    # Limit query to acq
-    if acq is not None:
+        # Restrict files to be in the acquisition
         copy = copy.join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
 
     if not copy.count():
