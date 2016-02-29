@@ -3,6 +3,7 @@
 import os
 import time
 import datetime
+import re
 
 import peewee as pw
 
@@ -53,7 +54,6 @@ def run_command(cmd, **kwargs):
 
 def is_md5_hash(h):
     """Is this the correct format to be an md5 hash."""
-    import re
     return re.match('[a-f0-9]{32}', h) is not None
 
 
@@ -300,7 +300,15 @@ def update_node_requests(node):
                 cmd = 'bbcp -f -z --port 1500 -W 4M -s 8 -o -E md5= %s %s' % (from_path, to_path)
                 ret, stdout, stderr = run_command(cmd.split())
 
-                md5sum = stderr.split()[2] if ret == 0 else None
+                # Attempt to parse STDERR for the md5 hash
+                if ret == 0:
+                    mo = re.search('md5 ([a-f0-9]{32})', stderr)
+                    if mo is None:
+                        log.error('BBCP transfer has gone awry. STDOUT: %s\n STDERR: %s' % (stdout, stderr))
+                        ret = -1
+                    md5sum = mo.group(1)
+                else:
+                    md5sum = None
 
             # Next try rsync over ssh. We need to explicitly calculate the md5
             # hash after the fact
@@ -403,7 +411,8 @@ def update_node_requests(node):
                                               md5sum, node.name))
             log.error("Removing file \"%s/%s\"." % (to_path, req.file.name))
             try:
-                os.remove("%s/%s" % (to_path, req.file.name))
+                pass
+                #os.remove("%s/%s" % (to_path, req.file.name))
             except:
                 log.error("Could not remove file.")
 
