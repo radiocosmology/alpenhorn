@@ -26,6 +26,7 @@ sys.excepthook = log_exception
 def cli():
     """Alpenhorn data management service.
     """
+
     # We need write access to the DB.
     di.connect_database(read_write=True)
 

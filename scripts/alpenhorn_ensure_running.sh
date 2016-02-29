@@ -20,7 +20,7 @@ screen -d -m -S alpenhorn_session
 screen -S alpenhorn_session -p 0 -X exec bash
 
 # Set up alpenhornd session.
-screen -S alpenhorn_session -X screen -t alpenhornd -L alpenhornd
+screen -S alpenhorn_session -X screen -t alpenhornd bash -c alpenhornd
 
 # Kill other screen
 #screen -S alpenhorn_session -p 0 -X kill
