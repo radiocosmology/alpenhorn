@@ -368,7 +368,7 @@ def update_node_requests(node):
 
         # Check integrity.
         if md5sum == req.file.md5sum:
-            size_mb = req.file.size_b / 2 ** 20
+            size_mb = req.file.size_b / 2**20.0
             trans_time = et - st
             rate = size_mb / trans_time
             log.info("Pull complete (md5sum correct). Transferred %.1f MB in %i "
