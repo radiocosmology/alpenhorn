@@ -322,8 +322,7 @@ def verify(node_name, md5, fixdb):
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
               help='Only clean files already available in this group.')
-@click.option('--ignore', '-i', help='ignore list of sticky acquisitions', is_flag=True)
-def clean(node_name, days, force, now, target, ignore):
+def clean(node_name, days, force, now, target):
     """Clean up NODE by marking older files as potentially removable.
 
     If --target is specified we will only remove files already available in the
@@ -341,7 +340,7 @@ def clean(node_name, days, force, now, target, ignore):
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
-        if force:
+        if force or click.confirm('DANGER: run clean on archive node?'):
             print "%s is an archive node. Forcing clean." % node_name
         else:
             print "Cannot clean archive node %s without forcing." % node_name
