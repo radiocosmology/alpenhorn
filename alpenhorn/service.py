@@ -36,9 +36,11 @@ def cli():
     # Get the list of nodes currently mounted
     node_list = list(di.StorageNode.select().where(di.StorageNode.host == host, di.StorageNode.mounted))
 
-    # Exit if there are no mounted nodes
-    if not len(node_list):
-        raise Exception("No nodes on this host (\"%s\") registered in the DB!" % host)
+    # Warn if there are no mounted nodes. We used to exit here, but actually
+    # it's useful to keep alpenhornd running for nodes where we exclusively use
+    # transport disks (e.g. jingle)
+    if len(node_list) == 0:
+        log.warn("No nodes on this host (\"%s\") registered in the DB!" % host)
 
     # Load the cache of already imported files
     auto_import.load_import_cache()
@@ -48,7 +50,7 @@ def cli():
 
     # Enter main loop performing node updates
     try:
-        update.update_loop(node_list, host)
+        update.update_loop(host)
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:

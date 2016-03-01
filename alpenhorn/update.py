@@ -64,7 +64,7 @@ def command_available(cmd):
     return spawn.find_executable(cmd) is not None
 
 
-def update_loop(node_list, host):
+def update_loop(host):
     """Loop over nodes performing any updates needed.
     """
     global done_transport_this_cycle
@@ -93,10 +93,13 @@ def update_node_free_space(node):
     x = os.statvfs(node.root)
     avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
 
-    # Update the DB with the free space
-    node.avail_gb = avail_gb
-    node.avail_gb_last_checked = datetime.datetime.now()
-    node.save()
+    # Update the DB with the free space. Perform with an update query (rather
+    # than save) to ensure we don't clobber changes made manually to the
+    # database
+    di.StorageNode.update(
+        avail_gb=avail_gb,
+        avail_gb_last_checked=datetime.datetime.now()
+    ).where(di.StorageNode.id == node.id).execute()
 
     log.info("Node \"%s\" has %.2f GB available." % (node.name, avail_gb))
 

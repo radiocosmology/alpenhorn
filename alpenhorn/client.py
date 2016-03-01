@@ -300,14 +300,14 @@ def verify(node_name, md5, fixdb):
         # Make sure we connect RW
         di.connect_database(read_write=True)
 
-        if len(missing_files) > 0  and click.confirm('Fix missing files'):
+        if (len(missing_files) > 0) and click.confirm('Fix missing files'):
             missing_count = di.ArchiveFileCopy\
                               .update(has_file='N')\
                               .where(di.ArchiveFileCopy.id << missing_ids)\
                               .execute()
             print "  %i marked as missing" % missing_count
 
-        if len(corrupt_files) > 0  and click.confirm('Fix corrupt files'):
+        if (len(corrupt_files) > 0) and click.confirm('Fix corrupt files'):
             corrupt_count = di.ArchiveFileCopy\
                               .update(has_file='M')\
                               .where(di.ArchiveFileCopy.id << corrupt_ids)\
