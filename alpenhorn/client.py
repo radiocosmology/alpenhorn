@@ -534,7 +534,7 @@ def mount_transport(serial_num):
         os.system("mount %s %s" % (dev_part, root))
 
     try:
-        di.StorageNode.get(name=name)
+        node = di.StorageNode.get(name=name)
     except pw.DoesNotExist:
         print "This disc has not been registered yet as a storage node. " \
               "Registering now."
@@ -546,11 +546,12 @@ def mount_transport(serial_num):
 
         # We need to write to the database.
         di.connect_database(read_write=True)
-        di.StorageNode.create(name=name, root=root, group=group,
-                              storage_type="T", min_avail_gb=1)
+        node = di.StorageNode.create(name=name, root=root, group=group,
+                                     storage_type="T", min_avail_gb=1)
 
         print "Successfully created storage node."
-    mount(root)
+
+    _mount_work(root, None)
 
 
 @cli.command()
@@ -558,6 +559,12 @@ def mount_transport(serial_num):
 @click.option("--name", help="name of this node; only enter if it is not a storage node", type=str, default=None)
 def mount(root, name):
     """Interactive routine for mounting a storage node located at ROOT."""
+    _mount_work(root, name)
+
+
+def _mount_work(root, name):
+    # The implementation of the mount command. Factored out so it can also be called by mount_transport.
+
     import os
     import socket
 
