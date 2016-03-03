@@ -112,6 +112,9 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
         copy = copy.where(~(di.ArchiveFileCopy.file << files_in_archive))
 
+    # Join onto ArchiveFile for later query parts
+    copy = copy.join(di.ArchiveFile)
+
     # If requested, limit query to a specific acquisition...
     if acq is not None:
 
@@ -122,7 +125,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
             raise Exception("Acquisition \"%s\" does not exist in the DB." % acq)
 
         # Restrict files to be in the acquisition
-        copy = copy.join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
+        copy = copy.where(di.ArchiveFile.acq == acq)
 
     if not copy.count():
         print "No files to copy from node %s." % (node_name)
@@ -131,18 +134,26 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
     # Show acquisitions based summary of files to be copied
     if show_acq:
         acqs = [c.file.acq.name for c in copy]
-        
+
         import collections
         for acq, count in collections.Counter(acqs).items():
-            print "%s [%i files]" % (acq, count) 
+            print "%s [%i files]" % (acq, count)
 
     # Show all files to be copied
     if show_files:
         for c in copy:
             print "%s/%s" % (c.file.acq.name, c.file.name)
 
-    print "Will request that %d files be copied from node %s to group %s." % \
-          (copy.count(), node_name, group_name)
+    if show_files:
+        for c in copy:
+            print '%s/%s' % (c.file.acq.name, c.file.name)
+
+    size_bytes = copy.aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+    size_gb = int(size_bytes) / 1073741824.0
+
+    print ('Will request that %d files (%.1f GB) be copied from node %s to group %s.' %
+           (copy.count(), size_gb, node_name, group_name))
+
     if not (force or click.confirm("Do you want to proceed?")):
         print "Aborted."
         return
@@ -326,7 +337,7 @@ def verify(node_name, md5, fixdb):
 
 @cli.command()
 @click.argument('node_name', metavar='NODE')
-@click.option('--days', '-d', help='clean files older than <days>', default=21)
+@click.option('--days', '-d', help='clean files older than <days>', default=None)
 @click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
@@ -337,6 +348,9 @@ def clean(node_name, days, force, now, target):
     If --target is specified we will only remove files already available in the
     TARGET_GROUP. This is useful for cleaning out intermediate locations such as
     transport disks.
+
+    Using the --days flag will only clean correlator and housekeeping files
+    which have a timestamp associated with them. It will not touch other types.
     """
 
     import peewee as pw
@@ -354,14 +368,6 @@ def clean(node_name, days, force, now, target):
         else:
             print "Cannot clean archive node %s without forcing." % node_name
             return
-
-    oldest = datetime.datetime.now() - datetime.timedelta(days)
-    oldest_unix = ephemeris.ensure_unix(oldest)
-
-    # List of filetypes we want to update, needs a human readable name and a
-    # FileInfo table.
-    filetypes = [ ['correlation', di.CorrFileInfo],
-                  ['housekeeping', di.HKFileInfo] ]
 
     # Select FileCopys on this node.
     files = di.ArchiveFileCopy.select(di.ArchiveFileCopy.id).where(
@@ -390,42 +396,78 @@ def clean(node_name, days, force, now, target):
         # Only match files that are also available at the target
         files = files.where(di.ArchiveFileCopy.file << files_at_target)
 
-    # Iterate over file types for cleaning
-    for name, infotable in filetypes:
 
-        # Filter to fetch only ones with a start time older than `oldest`
-        oldfiles = files.join(di.ArchiveFile).join(infotable)\
-            .where(infotable.start_time < oldest_unix)
+    # If --days has been set we need to restrict to files older than the given
+    # time. This only works for a few particular file types
+    if days is not None and days > 0:
 
-        file_ids = list(oldfiles)
+        # Get the time for the oldest files to keep
+        oldest = datetime.datetime.now() - datetime.timedelta(days)
+        oldest_unix = ephemeris.ensure_unix(oldest)
 
-        # Get number of correlation files
-        count = oldfiles.count()
+        # List of filetypes we want to update, needs a human readable name and a
+        # FileInfo table.
+        filetypes = [ ['correlation', di.CorrFileInfo],
+                      ['housekeeping', di.HKFileInfo] ]
+
+        file_ids = []
+
+        # Iterate over file types for cleaning
+        for name, infotable in filetypes:
+
+            # Filter to fetch only ones with a start time older than `oldest`
+            oldfiles = files.join(di.ArchiveFile).join(infotable)\
+                .where(infotable.start_time < oldest_unix)
+
+            local_file_ids = list(oldfiles)
+
+            # Get number of correlation files
+            count = oldfiles.count()
+
+            if count > 0:
+                size_bytes = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << local_file_ids)\
+                    .join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+
+                size_gb = int(size_bytes) / 2**30.0
+
+                print "Cleaning up %i %s files (%1f GB) from %s " % (count, name, size_gb, node_name)
+
+                file_ids += local_file_ids
+
+    # If days is not set, then just select all files that meet the requirements so far
+    else:
+
+        file_ids = list(files)
+        count = files.count()
 
         if count > 0:
-            size_bytes = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << file_ids)\
-                .join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+            size_bytes = di.ArchiveFileCopy.select().where(
+                di.ArchiveFileCopy.id << file_ids
+            ).join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
 
-            size_gb = int(size_bytes) / 2**30.0
+            size_gb = int(size_bytes) / 1073741824.0
 
-            print "Cleaning up %i %s files (%1f GB) from %s " % \
-                  (count, name, size_gb, node_name)
-            if force or click.confirm("  Are you sure?"):
-                print "  Marking files for cleaning."
+            print 'Cleaning up %i files (%.1f GB) from %s ' % (count, size_gb, node_name)
 
-                state = 'N' if now else 'M'
+    # If there are any files to clean, ask for confirmation and the mark them in
+    # the database for removal
+    if len(file_ids) > 0:
+        if force or click.confirm("  Are you sure?"):
+            print "  Marking files for cleaning."
 
-                update = di.ArchiveFileCopy.update(wants_file=state)\
-                    .where(di.ArchiveFileCopy.id << file_ids)
+            state = 'N' if now else 'M'
 
-                n = update.execute()
+            update = di.ArchiveFileCopy.update(wants_file=state)\
+                .where(di.ArchiveFileCopy.id << file_ids)
 
-                print "Marked %i files for cleaning" % n
+            n = update.execute()
 
-            else:
-                print "  Cancelled"
+            print "Marked %i files for cleaning" % n
+
         else:
-            print "No %s files selected for cleaning on %s." % (name, node_name)
+            print "  Cancelled"
+    else:
+        print "No %s files selected for cleaning on %s." % (name, node_name)
 
 
 @cli.command()
