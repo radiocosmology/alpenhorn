@@ -144,10 +144,6 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         for c in copy:
             print "%s/%s" % (c.file.acq.name, c.file.name)
 
-    if show_files:
-        for c in copy:
-            print '%s/%s' % (c.file.acq.name, c.file.name)
-
     size_bytes = copy.aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
     size_gb = int(size_bytes) / 1073741824.0
 
@@ -430,7 +426,7 @@ def clean(node_name, days, force, now, target):
 
                 size_gb = int(size_bytes) / 2**30.0
 
-                print "Cleaning up %i %s files (%1f GB) from %s " % (count, name, size_gb, node_name)
+                print "Cleaning up %i %s files (%.1f GB) from %s " % (count, name, size_gb, node_name)
 
                 file_ids += local_file_ids
 
@@ -467,7 +463,7 @@ def clean(node_name, days, force, now, target):
         else:
             print "  Cancelled"
     else:
-        print "No %s files selected for cleaning on %s." % (name, node_name)
+        print "No files selected for cleaning on %s." % node_name
 
 
 @cli.command()

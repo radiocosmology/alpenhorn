@@ -677,7 +677,7 @@ fi
 
     script = start % {'offline_node_root': node.root, 'jobname': dtstring}
 
-    
+
 
     # Loop over files to construct push script
     for req in requests:
@@ -732,6 +732,9 @@ mkdir -p $DESTDIR/%(acq)s  # This always succeeds
 
 # Copy the file into a temorary location from HPSS offline
 hsi -q get $DESTDIR/%(acq)s/tmp.%(file)s : %(node_root)s/%(acq)s/%(file)s
+
+# Set group read permissions
+chmod g+r $DESTDIR/%(acq)s/tmp.%(file)s
 
 # Calculate the MD5 hash of the file
 HPSSHASH=$(md5sum $DESTDIR/%(acq)s/tmp.%(file)s | awk '{print $1}')
