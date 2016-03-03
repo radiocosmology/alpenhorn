@@ -204,14 +204,24 @@ def update_node_requests(node):
         log.error("Cannot process HPSS node here.")
         return
 
+    avail_gb = node.avail_gb
+
+    # Skip if node is too full
+    if avail_gb < (node.min_avail_gb + 10):
+        log.info("Node %s is nearly full. Skip transfers." % node.name)
+        return
+
     # Check for copy requests (only if this node has not hit the maximum size).
     current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
     # with the actual archive size at somepoint.
 
-    # Note that for transport discs, we only copy to one at a time, so that
-    # archives are not striped across multiple discs. This clause enforces that.
-    if ((current_size_gb > node.max_total_gb and node.max_total_gb < 0.0) or
+    # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
+    # ... OR if this is a transport node quit if the transport cycle is done.
+    # NOTE: the logic here has changed slightly from Adam's original, but that didn't
+    # make a huge amount of sense to me
+    if ((current_size_gb > node.max_total_gb and node.max_total_gb > 0.0) or
        (node.storage_type == "T" and done_transport_this_cycle)):
+        log.info('Ignoring transport node %s' % node.name)
         return
 
     start_time = time.time()
@@ -409,6 +419,10 @@ def update_node_requests(node):
             if node.storage_type == "T":
                 # This node is getting the transport king.
                 done_transport_this_cycle = True
+
+            # Update local estimate of available space
+            avail_gb = avail_gb - req.file.size_b / 2**30.0
+
         else:
             log.error("Error with md5sum check: %s on node \"%s\", but %s on "
                       "this node, \"%s\"." % (req.file.md5sum, req.node_from.name,

@@ -28,7 +28,9 @@ def cli():
               help='Only transfer files not available on this group.')
 @click.option("--transport", "-t", is_flag=True,
               help="[DEPRECATED] transport mode: only copy if fewer than two archived copies exist.")
-def sync(node_name, group_name, acq, force, nice, target, transport):
+@click.option('--show_acq', help='Summarise acquisitions to be copied.', is_flag=True)
+@click.option('--show_files', help='Show files to be copied.', is_flag=True)
+def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, show_files):
     """Copy all files from NODE to GROUP that are not already present.
 
     We can also use the --target option to only transfer files that are not
@@ -39,12 +41,6 @@ def sync(node_name, group_name, acq, force, nice, target, transport):
 
     # Make sure we connect RW
     di.connect_database(read_write=True)
-
-    if group_name == "transport" and not transport and not force:
-        print "Normally, one uses the --transport flag for the transport " \
-              "group. To run without"
-        print "this flag on the transport group, you must use --force."
-        exit()
 
     try:
         from_node = di.StorageNode.get(name=node_name)
@@ -131,6 +127,19 @@ def sync(node_name, group_name, acq, force, nice, target, transport):
     if not copy.count():
         print "No files to copy from node %s." % (node_name)
         return
+
+    # Show acquisitions based summary of files to be copied
+    if show_acq:
+        acqs = [c.file.acq.name for c in copy]
+        
+        import collections
+        for acq, count in collections.Counter(acqs).items():
+            print "%s [%i files]" % (acq, count) 
+
+    # Show all files to be copied
+    if show_files:
+        for c in copy:
+            print "%s/%s" % (c.file.acq.name, c.file.name)
 
     print "Will request that %d files be copied from node %s to group %s." % \
           (copy.count(), node_name, group_name)
