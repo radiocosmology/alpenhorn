@@ -333,7 +333,7 @@ def verify(node_name, md5, fixdb):
 
 @cli.command()
 @click.argument('node_name', metavar='NODE')
-@click.option('--days', '-d', help='clean files older than <days>', default=None)
+@click.option('--days', '-d', help='clean files older than <days>', type=int, default=None)
 @click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
