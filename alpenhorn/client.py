@@ -772,7 +772,17 @@ def import_files(node_name):
                 di.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
 
             else:
-                print "already in database"
+                copy = copies[0]
+                if copy.has_file == 'Y':
+                    print "already in database"
+                else:
+                    if (os.path.getsize(fn) != archive_file.size_b):
+                        pass
+                    else:
+                        print "fixing copy entry."
+                        copy.has_file = 'Y'
+                        copy.wants_file = 'Y'
+                        copy.save()
 
 
 # A few utitly routines for dealing with filesystems

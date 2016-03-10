@@ -182,6 +182,14 @@ def update_node_delete(node):
                 if os.path.exists(fullpath):
                     os.remove(fullpath)  # Remove the actual file
 
+                    # Check if the acquisition directory is now empty,
+                    # and remove if it is.
+                    dirname = os.path.dirname(fullpath)
+                    if not os.listdir(dirname):
+                        log.info("Removing acquisition directory %s on %s" %
+                                 (fcopy.file.acq.name, fcopy.node.name))
+                        os.rmdir(dirname)
+                        
                 fcopy.has_file = 'N'
                 fcopy.wants_file = 'N'  # Set in case it was 'M' before
                 fcopy.save()  # Update the FileCopy in the database
