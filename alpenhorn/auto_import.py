@@ -35,6 +35,8 @@ obs_list = None
 
 def load_import_cache():
 
+    global import_done
+
     # Is there a record of already-imported files? If so, we should use it to
     # prevent needless DB queries when crawling the directories. If there is no
     # record, there is no checking. To start checking from scratch, create an

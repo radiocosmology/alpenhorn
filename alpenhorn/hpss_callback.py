@@ -1,12 +1,13 @@
 """Call backs for the HPSS interface.
 """
 
-from . import logger
-
 import peewee as pw
 import click
 
 from ch_util import data_index as di
+
+from . import logger  # Import logger here to avoid connection
+                      # messages for transfer
 
 # Get a reference to the log
 log = logger.get_log()

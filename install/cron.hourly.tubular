@@ -10,16 +10,16 @@ MY_GROUP=drao_storage
 echo "Starting hour $HOUR cron job..." > $OUTPUT
 
 # Free up disc space.
-NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
-for NODE in $NODES; do
-    $ALPENHORN clean $NODE --force >> $OUTPUT 2>&1
-done
+#NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
+#for NODE in $NODES; do
+#    $ALPENHORN clean $NODE --force >> $OUTPUT 2>&1
+#done
 
 # Copy files from suzu -> gong.
-$ALPENHORN node2group suzu $MY_GROUP --force >> $OUTPUT 2>&1
+$ALPENHORN sync suzu $MY_GROUP --force >> $OUTPUT 2>&1
 
 # Copy files from here -> transport disks
-$ALPENHORN node2group $MY_NODE transport --force --transport >> $OUTPUT 2>&1
+$ALPENHORN sync $MY_NODE transport --target bugaboo >> $OUTPUT 2>&1
 
 # Copy files from c-can -> here
 #NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"

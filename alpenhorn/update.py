@@ -4,6 +4,7 @@ import os
 import time
 import datetime
 import re
+import socket
 
 import peewee as pw
 
@@ -158,8 +159,8 @@ def update_node_delete(node):
     del_count = 0  # Counter for no. of deletions (limits no. per node update)
     for fcopy in del_files.order_by(di.ArchiveFileCopy.id):
 
-        # Limit number of deletions to 100 per main loop iteration.
-        if del_count >= 100:
+        # Limit number of deletions to 500 per main loop iteration.
+        if del_count >= 500:
             break
 
         # Get all the *other* copies.
@@ -181,6 +182,14 @@ def update_node_delete(node):
                 if os.path.exists(fullpath):
                     os.remove(fullpath)  # Remove the actual file
 
+                    # Check if the acquisition directory is now empty,
+                    # and remove if it is.
+                    dirname = os.path.dirname(fullpath)
+                    if not os.listdir(dirname):
+                        log.info("Removing acquisition directory %s on %s" %
+                                 (fcopy.file.acq.name, fcopy.node.name))
+                        os.rmdir(dirname)
+                        
                 fcopy.has_file = 'N'
                 fcopy.wants_file = 'N'  # Set in case it was 'M' before
                 fcopy.save()  # Update the FileCopy in the database
@@ -203,14 +212,24 @@ def update_node_requests(node):
         log.error("Cannot process HPSS node here.")
         return
 
+    avail_gb = node.avail_gb
+
+    # Skip if node is too full
+    if avail_gb < (node.min_avail_gb + 10):
+        log.info("Node %s is nearly full. Skip transfers." % node.name)
+        return
+
     # Check for copy requests (only if this node has not hit the maximum size).
     current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
     # with the actual archive size at somepoint.
 
-    # Note that for transport discs, we only copy to one at a time, so that
-    # archives are not striped across multiple discs. This clause enforces that.
-    if ((current_size_gb > node.max_total_gb and node.max_total_gb < 0.0) or
+    # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
+    # ... OR if this is a transport node quit if the transport cycle is done.
+    # NOTE: the logic here has changed slightly from Adam's original, but that didn't
+    # make a huge amount of sense to me
+    if ((current_size_gb > node.max_total_gb and node.max_total_gb > 0.0) or
        (node.storage_type == "T" and done_transport_this_cycle)):
+        log.info('Ignoring transport node %s' % node.name)
         return
 
     start_time = time.time()
@@ -300,7 +319,7 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if command_available('bbcp'):
-                cmd = 'bbcp -f -z --port 1500 -W 4M -s 8 -o -E md5= %s %s' % (from_path, to_path)
+                cmd = 'bbcp -f -z --port 1500 -W 4M -s 16 -o -E md5= %s %s' % (from_path, to_path)
                 ret, stdout, stderr = run_command(cmd.split())
 
                 # Attempt to parse STDERR for the md5 hash
@@ -408,14 +427,17 @@ def update_node_requests(node):
             if node.storage_type == "T":
                 # This node is getting the transport king.
                 done_transport_this_cycle = True
+
+            # Update local estimate of available space
+            avail_gb = avail_gb - req.file.size_b / 2**30.0
+
         else:
             log.error("Error with md5sum check: %s on node \"%s\", but %s on "
                       "this node, \"%s\"." % (req.file.md5sum, req.node_from.name,
                                               md5sum, node.name))
             log.error("Removing file \"%s/%s\"." % (to_path, req.file.name))
             try:
-                pass
-                #os.remove("%s/%s" % (to_path, req.file.name))
+                os.remove("%s/%s" % (to_path, req.file.name))
             except:
                 log.error("Could not remove file.")
 
@@ -473,14 +495,14 @@ def _check_and_bundle_requests(requests, node):
     some maximum size."""
 
     # Size to bundle transfers into (in bytes)
-    max_group_size = 800.0 * 2**30.0
+    max_bundle_size = 800.0 * 2**30.0
 
-    group_size = 0.0
+    bundle_size = 0.0
     requests_to_process = []
 
     # Construct list of requests to process by finding eligible requests up to
     # the maximum single transfer size
-    for req in requests:
+    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(500):
 
         # Check to ensure both source and dest nodes are on the same host
         if req.node_from.host != node.host:
@@ -521,9 +543,9 @@ def _check_and_bundle_requests(requests, node):
             continue
 
         # Add the request into the list to process (provided we haven't hit the maximum transfer size)
-        if group_size + req.file.size_b < max_group_size:
+        if bundle_size + req.file.size_b < max_bundle_size:
             requests_to_process.append(req)
-            group_size += req.file.size_b
+            bundle_size += req.file.size_b
         else:
             break
 
@@ -644,8 +666,7 @@ then
     hsi -q mv $DESTDIR/%(acq)s/tmp.%(file)s $DESTDIR/%(acq)s/%(file)s
 
     # Signal success
-    ssh gpc04 'python %(script_path)s push-success %(file_id)i %(node_id)i'
-    # ssh gpc04 'echo $(date) \"python %(script_path)s push-success %(file_id)i %(node_id)i\" >> /home/k/krs/jrs65/hpsstest'
+    ssh %(host)s 'alpenhorn_hpss push_success %(file_id)i %(node_id)i'
 
     echo 'Finished push.'
 else
@@ -653,8 +674,7 @@ else
     hsi -q rm $DESTDIR/%(acq)s/tmp.%(file)s
 
     # Signal failure
-    ssh gpc04 'python %(script_path)s push-failed %(file_id)i %(node_id)i'
-    # ssh gpc04 'echo $(date) \"python %(script_path)s push-failed %(file_id)i %(node_id)i\" >> /home/k/krs/jrs65/hpsstest'
+    ssh %(host)s 'alpenhorn_hpss push_failed %(file_id)i %(node_id)i'
 
     echo "Push failed."
 fi
@@ -665,6 +685,8 @@ fi
 
     script = start % {'offline_node_root': node.root, 'jobname': dtstring}
 
+
+
     # Loop over files to construct push script
     for req in requests:
 
@@ -673,17 +695,16 @@ fi
             'acq': req.file.acq.name,
             'node_root': req.node_from.root,
             'file_hash': req.file.md5sum,
-            'script_path': os.path.join(os.path.abspath(os.path.dirname(__file__)), 'alpenhorn_hpss'),
+            'host': socket.gethostname(),
             'file_id': req.file.id,
             'node_id': node.id
         }
 
         script += loop % req_dict
 
-    SCRATCH = os.getenv('SCRATCH')
-    HPSS_SCRIPTS_DIR = os.path.join(SCRATCH, 'chime', 'hpss_scripts')
+    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
 
-    script_name = HPSS_SCRIPTS_DIR + '/push_%s.sh' % dtstring
+    script_name = HPSS_SCRIPT_DIR + '/push_%s.sh' % dtstring
 
     with open(script_name, 'w') as f:
         f.write(script)
@@ -720,6 +741,9 @@ mkdir -p $DESTDIR/%(acq)s  # This always succeeds
 # Copy the file into a temorary location from HPSS offline
 hsi -q get $DESTDIR/%(acq)s/tmp.%(file)s : %(node_root)s/%(acq)s/%(file)s
 
+# Set group read permissions
+chmod g+r $DESTDIR/%(acq)s/tmp.%(file)s
+
 # Calculate the MD5 hash of the file
 HPSSHASH=$(md5sum $DESTDIR/%(acq)s/tmp.%(file)s | awk '{print $1}')
 
@@ -729,8 +753,7 @@ then
     mv $DESTDIR/%(acq)s/tmp.%(file)s $DESTDIR/%(acq)s/%(file)s
 
     # Signal success
-    ssh gpc04 'python %(script_path)s pull-success %(file_id)i %(node_id)i'
-    # ssh gpc04 'echo $(date) \"python %(script_path)s pull-success %(file_id)i %(node_id)i\" >> /home/k/krs/jrs65/hpsstest'
+    ssh %(host)s 'alpenhorn_hpss pull_success %(file_id)i %(node_id)i'
 
     echo 'Finished pull.'
 else
@@ -738,8 +761,7 @@ else
     rm $DESTDIR/%(acq)s/tmp.%(file)s
 
     # Signal failure
-    ssh gpc04 'python %(script_path)s pull-failed %(file_id)i %(node_id)i'
-    # ssh gpc04 'echo $(date) \"python %(script_path)s pull-failed %(file_id)i %(node_id)i\" >> /home/k/krs/jrs65/hpsstest'
+    ssh %(host)s 'alpenhorn_hpss pull_failed %(file_id)i %(node_id)i'
 
     echo "Pull failed."
 fi
@@ -758,17 +780,16 @@ fi
             'acq': req.file.acq.name,
             'node_root': req.node_from.root,
             'file_hash': req.file.md5sum,
-            'script_path': os.path.join(os.path.abspath(os.path.dirname(__file__)), 'alpenhorn_hpss'),
+            'host': socket.gethostname(),
             'file_id': req.file.id,
             'node_id': node.id
         }
 
         script += loop % req_dict
 
-    SCRATCH = os.getenv('SCRATCH')
-    HPSS_SCRIPTS_DIR = os.path.join(SCRATCH, 'chime', 'hpss_scripts')
+    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
 
-    script_name = HPSS_SCRIPTS_DIR + '/pull_%s.sh' % dtstring
+    script_name = HPSS_SCRIPT_DIR + '/pull_%s.sh' % dtstring
 
     with open(script_name, 'w') as f:
         f.write(script)

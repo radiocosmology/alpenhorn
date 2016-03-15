@@ -28,7 +28,9 @@ def cli():
               help='Only transfer files not available on this group.')
 @click.option("--transport", "-t", is_flag=True,
               help="[DEPRECATED] transport mode: only copy if fewer than two archived copies exist.")
-def sync(node_name, group_name, acq, force, nice, target, transport):
+@click.option('--show_acq', help='Summarise acquisitions to be copied.', is_flag=True)
+@click.option('--show_files', help='Show files to be copied.', is_flag=True)
+def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, show_files):
     """Copy all files from NODE to GROUP that are not already present.
 
     We can also use the --target option to only transfer files that are not
@@ -39,12 +41,6 @@ def sync(node_name, group_name, acq, force, nice, target, transport):
 
     # Make sure we connect RW
     di.connect_database(read_write=True)
-
-    if group_name == "transport" and not transport and not force:
-        print "Normally, one uses the --transport flag for the transport " \
-              "group. To run without"
-        print "this flag on the transport group, you must use --force."
-        exit()
 
     try:
         from_node = di.StorageNode.get(name=node_name)
@@ -116,6 +112,9 @@ def sync(node_name, group_name, acq, force, nice, target, transport):
 
         copy = copy.where(~(di.ArchiveFileCopy.file << files_in_archive))
 
+    # Join onto ArchiveFile for later query parts
+    copy = copy.join(di.ArchiveFile)
+
     # If requested, limit query to a specific acquisition...
     if acq is not None:
 
@@ -126,14 +125,31 @@ def sync(node_name, group_name, acq, force, nice, target, transport):
             raise Exception("Acquisition \"%s\" does not exist in the DB." % acq)
 
         # Restrict files to be in the acquisition
-        copy = copy.join(di.ArchiveFile).where(di.ArchiveFile.acq == acq)
+        copy = copy.where(di.ArchiveFile.acq == acq)
 
     if not copy.count():
         print "No files to copy from node %s." % (node_name)
         return
 
-    print "Will request that %d files be copied from node %s to group %s." % \
-          (copy.count(), node_name, group_name)
+    # Show acquisitions based summary of files to be copied
+    if show_acq:
+        acqs = [c.file.acq.name for c in copy]
+
+        import collections
+        for acq, count in collections.Counter(acqs).items():
+            print "%s [%i files]" % (acq, count)
+
+    # Show all files to be copied
+    if show_files:
+        for c in copy:
+            print "%s/%s" % (c.file.acq.name, c.file.name)
+
+    size_bytes = copy.aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+    size_gb = int(size_bytes) / 1073741824.0
+
+    print ('Will request that %d files (%.1f GB) be copied from node %s to group %s.' %
+           (copy.count(), size_gb, node_name, group_name))
+
     if not (force or click.confirm("Do you want to proceed?")):
         print "Aborted."
         return
@@ -317,18 +333,20 @@ def verify(node_name, md5, fixdb):
 
 @cli.command()
 @click.argument('node_name', metavar='NODE')
-@click.option('--days', '-d', help='clean files older than <days>', default=21)
+@click.option('--days', '-d', help='clean files older than <days>', type=int, default=None)
 @click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
               help='Only clean files already available in this group.')
-@click.option('--ignore', '-i', help='ignore list of sticky acquisitions', is_flag=True)
-def clean(node_name, days, force, now, target, ignore):
+def clean(node_name, days, force, now, target):
     """Clean up NODE by marking older files as potentially removable.
 
     If --target is specified we will only remove files already available in the
     TARGET_GROUP. This is useful for cleaning out intermediate locations such as
     transport disks.
+
+    Using the --days flag will only clean correlator and housekeeping files
+    which have a timestamp associated with them. It will not touch other types.
     """
 
     import peewee as pw
@@ -341,19 +359,11 @@ def clean(node_name, days, force, now, target, ignore):
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
-        if force:
+        if force or click.confirm('DANGER: run clean on archive node?'):
             print "%s is an archive node. Forcing clean." % node_name
         else:
             print "Cannot clean archive node %s without forcing." % node_name
             return
-
-    oldest = datetime.datetime.now() - datetime.timedelta(days)
-    oldest_unix = ephemeris.ensure_unix(oldest)
-
-    # List of filetypes we want to update, needs a human readable name and a
-    # FileInfo table.
-    filetypes = [ ['correlation', di.CorrFileInfo],
-                  ['housekeeping', di.HKFileInfo] ]
 
     # Select FileCopys on this node.
     files = di.ArchiveFileCopy.select(di.ArchiveFileCopy.id).where(
@@ -382,42 +392,78 @@ def clean(node_name, days, force, now, target, ignore):
         # Only match files that are also available at the target
         files = files.where(di.ArchiveFileCopy.file << files_at_target)
 
-    # Iterate over file types for cleaning
-    for name, infotable in filetypes:
 
-        # Filter to fetch only ones with a start time older than `oldest`
-        oldfiles = files.join(di.ArchiveFile).join(infotable)\
-            .where(infotable.start_time < oldest_unix)
+    # If --days has been set we need to restrict to files older than the given
+    # time. This only works for a few particular file types
+    if days is not None and days > 0:
 
-        file_ids = list(oldfiles)
+        # Get the time for the oldest files to keep
+        oldest = datetime.datetime.now() - datetime.timedelta(days)
+        oldest_unix = ephemeris.ensure_unix(oldest)
 
-        # Get number of correlation files
-        count = oldfiles.count()
+        # List of filetypes we want to update, needs a human readable name and a
+        # FileInfo table.
+        filetypes = [ ['correlation', di.CorrFileInfo],
+                      ['housekeeping', di.HKFileInfo] ]
+
+        file_ids = []
+
+        # Iterate over file types for cleaning
+        for name, infotable in filetypes:
+
+            # Filter to fetch only ones with a start time older than `oldest`
+            oldfiles = files.join(di.ArchiveFile).join(infotable)\
+                .where(infotable.start_time < oldest_unix)
+
+            local_file_ids = list(oldfiles)
+
+            # Get number of correlation files
+            count = oldfiles.count()
+
+            if count > 0:
+                size_bytes = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << local_file_ids)\
+                    .join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+
+                size_gb = int(size_bytes) / 2**30.0
+
+                print "Cleaning up %i %s files (%.1f GB) from %s " % (count, name, size_gb, node_name)
+
+                file_ids += local_file_ids
+
+    # If days is not set, then just select all files that meet the requirements so far
+    else:
+
+        file_ids = list(files)
+        count = files.count()
 
         if count > 0:
-            size_bytes = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << file_ids)\
-                .join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+            size_bytes = di.ArchiveFileCopy.select().where(
+                di.ArchiveFileCopy.id << file_ids
+            ).join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
 
-            size_gb = int(size_bytes) / 2**30.0
+            size_gb = int(size_bytes) / 1073741824.0
 
-            print "Cleaning up %i %s files (%1f GB) from %s " % \
-                  (count, name, size_gb, node_name)
-            if force or click.confirm("  Are you sure?"):
-                print "  Marking files for cleaning."
+            print 'Cleaning up %i files (%.1f GB) from %s ' % (count, size_gb, node_name)
 
-                state = 'N' if now else 'M'
+    # If there are any files to clean, ask for confirmation and the mark them in
+    # the database for removal
+    if len(file_ids) > 0:
+        if force or click.confirm("  Are you sure?"):
+            print "  Marking files for cleaning."
 
-                update = di.ArchiveFileCopy.update(wants_file=state)\
-                    .where(di.ArchiveFileCopy.id << file_ids)
+            state = 'N' if now else 'M'
 
-                n = update.execute()
+            update = di.ArchiveFileCopy.update(wants_file=state)\
+                .where(di.ArchiveFileCopy.id << file_ids)
 
-                print "Marked %i files for cleaning" % n
+            n = update.execute()
 
-            else:
-                print "  Cancelled"
+            print "Marked %i files for cleaning" % n
+
         else:
-            print "No %s files selected for cleaning on %s." % (name, node_name)
+            print "  Cancelled"
+    else:
+        print "No files selected for cleaning on %s." % node_name
 
 
 @cli.command()
@@ -535,7 +581,7 @@ def mount_transport(serial_num):
         os.system("mount %s %s" % (dev_part, root))
 
     try:
-        di.StorageNode.get(name=name)
+        node = di.StorageNode.get(name=name)
     except pw.DoesNotExist:
         print "This disc has not been registered yet as a storage node. " \
               "Registering now."
@@ -547,11 +593,12 @@ def mount_transport(serial_num):
 
         # We need to write to the database.
         di.connect_database(read_write=True)
-        di.StorageNode.create(name=name, root=root, group=group,
-                              storage_type="T", min_avail_gb=1)
+        node = di.StorageNode.create(name=name, root=root, group=group,
+                                     storage_type="T", min_avail_gb=1)
 
         print "Successfully created storage node."
-    mount(root)
+
+    _mount_work(root, None)
 
 
 @cli.command()
@@ -559,6 +606,12 @@ def mount_transport(serial_num):
 @click.option("--name", help="name of this node; only enter if it is not a storage node", type=str, default=None)
 def mount(root, name):
     """Interactive routine for mounting a storage node located at ROOT."""
+    _mount_work(root, name)
+
+
+def _mount_work(root, name):
+    # The implementation of the mount command. Factored out so it can also be called by mount_transport.
+
     import os
     import socket
 
@@ -698,9 +751,10 @@ def import_files(node_name, verbose):
                 continue
 
             files = glob.glob(acq_name + '/*')
-            
+
+            # Fetch lists of all files in this acquisition, and all
+            # files in this acq with local copies
             file_names = [f.name for f in acq.files]
-            #local_file_names = [f.name for f in di.ArchiveFile.select().where(di.ArchiveFile.id << acq.files).join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.id << node.copies)]
             local_file_names = [f.name for f in acq.files.join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == node)]
 
             for fn in files:
