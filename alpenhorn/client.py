@@ -333,7 +333,7 @@ def verify(node_name, md5, fixdb):
 
 @cli.command()
 @click.argument('node_name', metavar='NODE')
-@click.option('--days', '-d', help='clean files older than <days>', default=None)
+@click.option('--days', '-d', help='clean files older than <days>', type=int, default=None)
 @click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
@@ -706,7 +706,8 @@ def unmount(root_or_name):
 
 @cli.command()
 @click.argument('node_name', metavar='NODE')
-def import_files(node_name):
+@click.option('-v', '--verbose', count=True)
+def import_files(node_name, verbose):
     """Scan the current directory for known acquisition files and add them into the database for NODE.
 
     This command is useful for manually maintaining an archive where we can run
@@ -717,63 +718,101 @@ def import_files(node_name):
     di.connect_database(read_write=True)
     import peewee as pw
 
-    print "Scanning directory...",
     acqs = glob.glob('*')
-    print "done."
+
+    # Keep track of state as we process the files
+    added_files = []  # Files we have added to the database
+    corrupt_files = []  # Known files which are corrupt
+    registered_files = []  # Files already registered in the database
+    unknown_files = []  # Files not known in the database
+    not_acqs = []  # Directories which were not known acquisitions
 
     # Fetch a reference to the node
     try:
-        node = di.StorageNode.select().where(di.StorageNode.name == node_name)
+        node = di.StorageNode.select().where(di.StorageNode.name == node_name).get()
     except pw.DoesNotExist:
         print "Unknown node."
         return
 
-    for acq_name in acqs:
+    with click.progressbar(acqs, label='Scanning acquisitions') as acq_iter:
 
-        print "Processing acq %s ..." % acq_name,
-
-        try:
-            di.parse_acq_name(acq_name)
-        except di.Validation:
-            print 'not acquisition'
-            continue
-
-        try:
-            acq = di.ArchiveAcq.select().where(di.ArchiveAcq.name == acq_name).get()
-        except pw.DoesNotExist:
-            print 'not found'
-            continue
-
-        print 'scanning'
-
-        files = glob.glob(acq_name + '/*')
-
-        for fn in files:
-
-            f_name = os.path.split(fn)[1]
-
-            print f_name,
+        for acq_name in acq_iter:
 
             try:
-                archive_file = di.ArchiveFile.select().where(di.ArchiveFile.name == f_name, di.ArchiveFile.acq == acq).get()
-            except pw.DoesNotExist:
-                print "cannot find"
+                di.parse_acq_name(acq_name)
+            except di.Validation:
+                not_acqs.append(acq_name)
                 continue
 
-            copies = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == archive_file, di.ArchiveFileCopy.node == node)
+            try:
+                acq = di.ArchiveAcq.select().where(di.ArchiveAcq.name == acq_name).get()
+            except pw.DoesNotExist:
+                not_acqs.append(acq_name)
+                continue
 
-            if copies.count() == 0:
+            files = glob.glob(acq_name + '/*')
 
-                if (os.path.getsize(fn) != archive_file.size_b):
-                    print "is corrupt"
+            # Fetch lists of all files in this acquisition, and all
+            # files in this acq with local copies
+            file_names = [f.name for f in acq.files]
+            local_file_names = [f.name for f in acq.files.join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == node)]
+
+            for fn in files:
+
+                f_name = os.path.split(fn)[1]
+
+                # Check if file exists in database
+                if f_name not in file_names:
+                    unknown_files.append(fn)
                     continue
 
-                print "adding to database"
-                di.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
+                # Check if file is already registered on this node
+                if f_name in local_file_names:
+                    registered_files.append(fn)
+                else:
+                    archive_file = di.ArchiveFile.select().where(di.ArchiveFile.name == f_name, di.ArchiveFile.acq == acq).get()
 
-            else:
-                print "already in database"
+                    if (os.path.getsize(fn) != archive_file.size_b):
+                        corrupt_files.append(fn)
+                        continue
 
+                    added_files.append(fn)
+                    di.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
+
+    print "\n==== Summary ===="
+    print
+    print "Added %i files" % len(added_files)
+    print
+    print "%i corrupt files." % len(corrupt_files)
+    print "%i files already registered." % len(registered_files)
+    print "%i files not known" % len(unknown_files)
+    print "%i directories were not acquisitions." % len(not_acqs)
+
+    if verbose > 0:
+        print
+        print "Added files:"
+        print
+
+        for fn in added_files:
+            print fn
+
+    if verbose > 1:
+
+        print "Corrupt:"
+        for fn in corrupt_files:
+            print fn
+        print
+
+        print "Unknown files:"
+        for fn in unknown_files:
+            print fn
+        print
+
+        print "Unknown acquisitions:"
+        for fn in not_acqs:
+            print fn
+        print
+            
 
 # A few utitly routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
