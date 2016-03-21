@@ -19,7 +19,7 @@ echo "Starting hour $HOUR cron job..." > $OUTPUT
 $ALPENHORN sync suzu $MY_GROUP --force >> $OUTPUT 2>&1
 
 # Copy files from here -> transport disks
-$ALPENHORN sync $MY_NODE transport --target bugaboo >> $OUTPUT 2>&1
+$ALPENHORN sync $MY_NODE transport --target bugaboo --force >> $OUTPUT 2>&1
 
 # Copy files from c-can -> here
 #NODES="valhalla chimeACQ2 gamma gamma2 gamma3 suzu gamelan"
