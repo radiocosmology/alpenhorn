@@ -254,9 +254,10 @@ def update_node_requests(node):
         # node if the from_node is local, this should prevent pointlessly
         # rsyncing across the network
         if node.storage_type == "T" and node.host != req.node_from.host:
-            log.info("Skipping request for %s/%s from remote node [%s] onto local "
-                     "transport disks" % (req.file.acq.name, req.file.name,
-                                          req.node_from.name))
+            log.debug("Skipping request for %s/%s from remote node [%s] onto local "
+                      "transport disks" % (req.file.acq.name, req.file.name,
+                                           req.node_from.name))
+            continue
 
         # Only proceed if the source file actually exists (and is not corrupted).
         try:
