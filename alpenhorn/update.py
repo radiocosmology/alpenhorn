@@ -122,17 +122,17 @@ def update_node_integrity(node):
         if os.path.exists(fullpath):
             if di.md5sum_file(fullpath) == fcopy.file.md5sum:
                 log.info("File is A-OK!")
-                di.ArchiveFileCopy.update(has_file='Y').where(
-                    di.ArchiveFileCopy.id == fcopy.id).execute()
+                fcopy.has_file = 'Y'
             else:
                 log.error("File is corrupted!")
-                di.ArchiveFileCopy.update(has_file='X').where(
-                    di.ArchiveFileCopy.id == fcopy.id).execute()
+                fcopy.has_file = 'X'
         else:
             log.error("File does not exist!")
-            fcopy.has_file == 'N'
-            di.ArchiveFileCopy.update(has_file='N').where(
-                di.ArchiveFileCopy.id == fcopy.id).execute()
+            fcopy.has_file = 'N'
+
+        # Update the copy status
+        log.info("Updating file copy status [id=%i]." % fcopy.id)
+        fcopy.save()
 
 
 def update_node_delete(node):
