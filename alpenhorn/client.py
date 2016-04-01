@@ -198,31 +198,37 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
 
 @cli.command()
-def status(width=80):
-    """give a short summary of the archive status"""
-    col1 = 15
-    col2 = 6
-    col3 = width - col1 - col2 - 10
+@click.option('--all', help='Show the status of all nodes, not just mounted ones.', is_flag=True)
+def status(all):
+    """Summarise the status of alpenhorn storage nodes.
+    """
 
-    print
-    print "Summary of Data Index at %s." % datetime.datetime.now()
-    hline = "+-%-*s-+-%*s-+-%-*s-+" % (col1, "-" * col1, col2, "-" * col2,
-                                       col3, "-" * col3)
-    print hline
-    print "| %-*s | %*s | %-*s |" % (col1, "Node", col2, "N File", col3,
-                                     "Mount Point")
-    print hline
-    for node in di.StorageNode.select():
-        n_file = di.ArchiveFileCopy.select().where(
-            di.ArchiveFileCopy.node == node).count()
-        if node.mounted:
-            mount_point = "%s:%s" % (node.host, node.root)
-        else:
-            mount_point = "<unmounted>"
-        print "| %-*s | %*d | %-*s |" % (col1, node.name, col2, n_file, col3,
-                                         mount_point)
-    print hline
-    print
+    import tabulate
+
+    # Data to fetch from the database (node name, total files, total size)
+    query_info = (di.StorageNode.name, pw.fn.Count(di.ArchiveFileCopy.id).alias('count'),
+        pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size'), di.StorageNode.host, di.StorageNode.root
+    )
+
+    # Per node totals
+    nodes = di.StorageNode.select(*query_info)\
+    .join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.has_file=='Y')\
+    .join(di.ArchiveFile).group_by(di.StorageNode).order_by(di.StorageNode.name)
+
+    if not all:
+        nodes = nodes.where(di.StorageNode.mounted)
+
+    # Totals for the whole archive
+    tot = di.ArchiveFile.select(pw.fn.Count(di.ArchiveFile.id).alias('count'),
+                                pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size')).scalar(as_tuple=True)
+
+    data = [[node[0], int(node[1]), int(node[2]) / 2**40.0,
+             100.0 * int(node[1]) / int(tot[0]), 100.0 * int(node[2]) / int(tot[1]),
+             '%s:%s' % (node[3], node[4])] for node in nodes.tuples()]
+
+    headers = ['Node', 'Files', 'Size [TB]', 'Files [%]', 'Size [%]', 'Path']
+
+    print tabulate.tabulate(data, headers=headers, floatfmt=".1f")
 
 
 @cli.command()
