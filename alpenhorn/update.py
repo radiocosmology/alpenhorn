@@ -53,6 +53,42 @@ def run_command(cmd, **kwargs):
     return retval, stdout_val, stderr_val
 
 
+def pbs_jobs():
+    """Fetch the jobs in the PBS queue on this host.
+
+    Returns
+    -------
+    jobs : dict
+    """
+
+    def _parse_job(node):
+        return { cn.nodeName : cn.firstChild.data for cn in node.childNodes if hasattr(cn.firstChild, 'data')}
+
+    from xml.dom import minidom
+
+    ret, out, err = run_command('qstat -x'.split())
+
+    if len(out) == 0:
+        return []
+
+    qstat_xml = minidom.parseString(out)
+
+    return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
+
+
+def queued_archive_jobs():
+    """Fetch the info about jobs waiting in the archive queue.
+
+    Returns
+    -------
+    jobs: dict
+    """
+
+    jobs = pbs_jobs()
+
+    return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+
+
 def is_md5_hash(h):
     """Is this the correct format to be an md5 hash."""
     return re.match('[a-f0-9]{32}', h) is not None
@@ -189,7 +225,7 @@ def update_node_delete(node):
                         log.info("Removing acquisition directory %s on %s" %
                                  (fcopy.file.acq.name, fcopy.node.name))
                         os.rmdir(dirname)
-                        
+
                 fcopy.has_file = 'N'
                 fcopy.wants_file = 'N'  # Set in case it was 'M' before
                 fcopy.save()  # Update the FileCopy in the database
@@ -576,6 +612,10 @@ def update_node_hpss_inbound(node):
     if len(requests_to_process) == 0:
         return
 
+    if len(queued_archive_jobs()) > 1:
+        log.info('Skipping HPSS inbound as queue full.')
+        return
+
     # Construct final list of requests to process
     for req in requests_to_process:
         log.info('Pushing file %s/%s into HPSS' % (req.file.acq.name, req.file.name))
@@ -611,6 +651,10 @@ def update_node_hpss_outbound(node):
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
+        return
+
+    if len(queued_archive_jobs()) > 1:
+        log.info('Skipping HPSS outbound as queue full.')
         return
 
     # Construct final list of requests to process
