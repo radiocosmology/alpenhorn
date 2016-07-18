@@ -53,6 +53,42 @@ def run_command(cmd, **kwargs):
     return retval, stdout_val, stderr_val
 
 
+def pbs_jobs():
+    """Fetch the jobs in the PBS queue on this host.
+
+    Returns
+    -------
+    jobs : dict
+    """
+
+    def _parse_job(node):
+        return { cn.nodeName : cn.firstChild.data for cn in node.childNodes if hasattr(cn.firstChild, 'data')}
+
+    from xml.dom import minidom
+
+    ret, out, err = run_command('qstat -x'.split())
+
+    if len(out) == 0:
+        return []
+
+    qstat_xml = minidom.parseString(out)
+
+    return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
+
+
+def queued_archive_jobs():
+    """Fetch the info about jobs waiting in the archive queue.
+
+    Returns
+    -------
+    jobs: dict
+    """
+
+    jobs = pbs_jobs()
+
+    return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+
+
 def is_md5_hash(h):
     """Is this the correct format to be an md5 hash."""
     return re.match('[a-f0-9]{32}', h) is not None
@@ -122,17 +158,17 @@ def update_node_integrity(node):
         if os.path.exists(fullpath):
             if di.md5sum_file(fullpath) == fcopy.file.md5sum:
                 log.info("File is A-OK!")
-                di.ArchiveFileCopy.update(has_file='Y').where(
-                    di.ArchiveFileCopy.id == fcopy.id).execute()
+                fcopy.has_file = 'Y'
             else:
                 log.error("File is corrupted!")
-                di.ArchiveFileCopy.update(has_file='X').where(
-                    di.ArchiveFileCopy.id == fcopy.id).execute()
+                fcopy.has_file = 'X'
         else:
             log.error("File does not exist!")
-            fcopy.has_file == 'N'
-            di.ArchiveFileCopy.update(has_file='N').where(
-                di.ArchiveFileCopy.id == fcopy.id).execute()
+            fcopy.has_file = 'N'
+
+        # Update the copy status
+        log.info("Updating file copy status [id=%i]." % fcopy.id)
+        fcopy.save()
 
 
 def update_node_delete(node):
@@ -189,7 +225,7 @@ def update_node_delete(node):
                         log.info("Removing acquisition directory %s on %s" %
                                  (fcopy.file.acq.name, fcopy.node.name))
                         os.rmdir(dirname)
-                        
+
                 fcopy.has_file = 'N'
                 fcopy.wants_file = 'N'  # Set in case it was 'M' before
                 fcopy.save()  # Update the FileCopy in the database
@@ -254,9 +290,10 @@ def update_node_requests(node):
         # node if the from_node is local, this should prevent pointlessly
         # rsyncing across the network
         if node.storage_type == "T" and node.host != req.node_from.host:
-            log.info("Skipping request for %s/%s from remote node [%s] onto local "
-                     "transport disks" % (req.file.acq.name, req.file.name,
-                                          req.node_from.name))
+            log.debug("Skipping request for %s/%s from remote node [%s] onto local "
+                      "transport disks" % (req.file.acq.name, req.file.name,
+                                           req.node_from.name))
+            continue
 
         # Only proceed if the source file actually exists (and is not corrupted).
         try:
@@ -575,6 +612,10 @@ def update_node_hpss_inbound(node):
     if len(requests_to_process) == 0:
         return
 
+    if len(queued_archive_jobs()) > 1:
+        log.info('Skipping HPSS inbound as queue full.')
+        return
+
     # Construct final list of requests to process
     for req in requests_to_process:
         log.info('Pushing file %s/%s into HPSS' % (req.file.acq.name, req.file.name))
@@ -610,6 +651,10 @@ def update_node_hpss_outbound(node):
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
+        return
+
+    if len(queued_archive_jobs()) > 1:
+        log.info('Skipping HPSS outbound as queue full.')
         return
 
     # Construct final list of requests to process

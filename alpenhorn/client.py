@@ -198,38 +198,46 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
 
 @cli.command()
-def status(width=80):
-    """give a short summary of the archive status"""
-    col1 = 15
-    col2 = 6
-    col3 = width - col1 - col2 - 10
+@click.option('--all', help='Show the status of all nodes, not just mounted ones.', is_flag=True)
+def status(all):
+    """Summarise the status of alpenhorn storage nodes.
+    """
 
-    print
-    print "Summary of Data Index at %s." % datetime.datetime.now()
-    hline = "+-%-*s-+-%*s-+-%-*s-+" % (col1, "-" * col1, col2, "-" * col2,
-                                       col3, "-" * col3)
-    print hline
-    print "| %-*s | %*s | %-*s |" % (col1, "Node", col2, "N File", col3,
-                                     "Mount Point")
-    print hline
-    for node in di.StorageNode.select():
-        n_file = di.ArchiveFileCopy.select().where(
-            di.ArchiveFileCopy.node == node).count()
-        if node.mounted:
-            mount_point = "%s:%s" % (node.host, node.root)
-        else:
-            mount_point = "<unmounted>"
-        print "| %-*s | %*d | %-*s |" % (col1, node.name, col2, n_file, col3,
-                                         mount_point)
-    print hline
-    print
+    import tabulate
+
+    # Data to fetch from the database (node name, total files, total size)
+    query_info = (di.StorageNode.name, pw.fn.Count(di.ArchiveFileCopy.id).alias('count'),
+        pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size'), di.StorageNode.host, di.StorageNode.root
+    )
+
+    # Per node totals
+    nodes = di.StorageNode.select(*query_info)\
+    .join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.has_file=='Y')\
+    .join(di.ArchiveFile).group_by(di.StorageNode).order_by(di.StorageNode.name)
+
+    if not all:
+        nodes = nodes.where(di.StorageNode.mounted)
+
+    # Totals for the whole archive
+    tot = di.ArchiveFile.select(pw.fn.Count(di.ArchiveFile.id).alias('count'),
+                                pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size')).scalar(as_tuple=True)
+
+    data = [[node[0], int(node[1]), int(node[2]) / 2**40.0,
+             100.0 * int(node[1]) / int(tot[0]), 100.0 * int(node[2]) / int(tot[1]),
+             '%s:%s' % (node[3], node[4])] for node in nodes.tuples()]
+
+    headers = ['Node', 'Files', 'Size [TB]', 'Files [%]', 'Size [%]', 'Path']
+
+    print tabulate.tabulate(data, headers=headers, floatfmt=".1f")
 
 
 @cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('--md5', help='perform full check against md5sum', is_flag=True)
 @click.option('--fixdb', help='fix up the database to be consistent with reality', is_flag=True)
-def verify(node_name, md5, fixdb):
+@click.option('--acq', metavar='ACQ', multiple=True,
+    help='Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.')
+def verify(node_name, md5, fixdb, acq):
     """Verify the archive on NODE against the database.
     """
 
@@ -254,7 +262,6 @@ def verify(node_name, md5, fixdb):
                .where(di.ArchiveFileCopy.node == this_node,
                       di.ArchiveFileCopy.has_file == 'Y')\
                .tuples()
-    nfiles = lfiles.count()
 
     missing_files = []
     corrupt_files = []
@@ -262,33 +269,36 @@ def verify(node_name, md5, fixdb):
     missing_ids = []
     corrupt_ids = []
 
-    # Try to use progress bar if available
-    try:
-        from progress.bar import Bar
-        lfiles = Bar('Checking files', max=nfiles).iter(lfiles)
-    except ImportError:
-        pass
+    nfiles = 0
 
-    for filename, acqname, filesize, md5sum, fc_id in lfiles:
+    with click.progressbar(lfiles, label='Scanning files') as lfiles_iter:
+        for filename, acqname, filesize, md5sum, fc_id in lfiles_iter:
 
-        filepath = this_node.root + '/' + acqname + '/' + filename
+            # Skip if not in specified acquisitions
+            if len(acq) > 0 and acqname not in acq:
+                continue
 
-        # Check if file is plain missing
-        if not os.path.exists(filepath):
-            missing_files.append(filepath)
-            missing_ids.append(fc_id)
-            continue
+            nfiles += 1
 
-        if md5:
-            file_md5 = di.md5sum_file(filepath)
-            corrupt = (file_md5 != md5sum)
-        else:
-            corrupt = (os.path.getsize(filepath) != filesize)
+            filepath = this_node.root + '/' + acqname + '/' + filename
 
-        if corrupt:
-            corrupt_files.append(filepath)
-            corrupt_ids.append(fc_id)
-            continue
+            # Check if file is plain missing
+            if not os.path.exists(filepath):
+                missing_files.append(filepath)
+                missing_ids.append(fc_id)
+                continue
+
+            if md5:
+                file_md5 = di.md5sum_file(filepath)
+                corrupt = (file_md5 != md5sum)
+            else:
+                corrupt = (os.path.getsize(filepath) != filesize)
+
+            if corrupt:
+                corrupt_files.append(filepath)
+                corrupt_ids.append(fc_id)
+                continue
+
 
     if len(missing_files) > 0:
         print
@@ -707,7 +717,9 @@ def unmount(root_or_name):
 @cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('-v', '--verbose', count=True)
-def import_files(node_name, verbose):
+@click.option('--acq', help='Limit import to specified acquisition directories', multiple=True, default=None)
+@click.option('--dry', '-d', help='Dry run. Do not modify database.', is_flag=True)
+def import_files(node_name, verbose, acq, dry):
     """Scan the current directory for known acquisition files and add them into the database for NODE.
 
     This command is useful for manually maintaining an archive where we can run
@@ -718,7 +730,11 @@ def import_files(node_name, verbose):
     di.connect_database(read_write=True)
     import peewee as pw
 
-    acqs = glob.glob('*')
+    # Construct list of acqs to scan
+    if acq is None:
+        acqs = glob.glob('*')
+    else:
+        acqs = acq
 
     # Keep track of state as we process the files
     added_files = []  # Files we have added to the database
@@ -777,7 +793,8 @@ def import_files(node_name, verbose):
                         continue
 
                     added_files.append(fn)
-                    di.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
+                    if not dry:
+                        di.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
 
     print "\n==== Summary ===="
     print
@@ -812,7 +829,7 @@ def import_files(node_name, verbose):
         for fn in not_acqs:
             print fn
         print
-            
+
 
 # A few utitly routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
