@@ -7,6 +7,7 @@ import re
 import socket
 
 import peewee as pw
+from peewee import fn
 
 from ch_util import data_index as di
 
@@ -255,16 +256,20 @@ def update_node_requests(node):
         log.info("Node %s is nearly full. Skip transfers." % node.name)
         return
 
-    # Check for copy requests (only if this node has not hit the maximum size).
-    current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
-    # with the actual archive size at somepoint.
+    # Calculate the total archive size from the database
+    size_query = di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b)).join(di.ArchiveFileCopy).where(
+        di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file=='Y')
+
+    current_size_gb = float(size_query.scalar(as_tuple=True)[0]) / 2**30.0
 
     # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
+    if (current_size_gb > node.max_total_gb and node.max_total_gb > 0.0):
+        log.info('Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)' %
+                 (node.name, current_size_gb, node.max_total_gb))
+        return
+
     # ... OR if this is a transport node quit if the transport cycle is done.
-    # NOTE: the logic here has changed slightly from Adam's original, but that didn't
-    # make a huge amount of sense to me
-    if ((current_size_gb > node.max_total_gb and node.max_total_gb > 0.0) or
-       (node.storage_type == "T" and done_transport_this_cycle)):
+    if (node.storage_type == "T" and done_transport_this_cycle):
         log.info('Ignoring transport node %s' % node.name)
         return
 
