@@ -355,8 +355,10 @@ def clean(node_name, days, force, now, target):
     TARGET_GROUP. This is useful for cleaning out intermediate locations such as
     transport disks.
 
-    Using the --days flag will only clean correlator and housekeeping files
-    which have a timestamp associated with them. It will not touch other types.
+    Using the --days flag will only clean correlator and housekeeping
+    files which have a timestamp associated with them. It will not
+    touch other types. If no --days flag is given, all files will be
+    considered for removal.
     """
 
     import peewee as pw
@@ -500,10 +502,12 @@ def mounted(host):
 
 @cli.command()
 @click.argument("serial_num")
-def mount_transport(serial_num):
-    """Interactive routine for mounting a transport disc as a storage node;
-    formats, labels and OS mounts the disc as necessary. The disk is specified
-    using the manufacturers SERIAL_NUM, which is printed on the disk."""
+def format_transport(serial_num):
+    """Interactive routine for formatting a transport disc as a storage
+    node; formats and labels the disc as necessary, the adds to the
+    database. The disk is specified using the manufacturers
+    SERIAL_NUM, which is printed on the disk.
+    """
     import os
     import glob
 
@@ -586,9 +590,6 @@ def mount_transport(serial_num):
                 print "%s is a mount point, but %s is already mounted there." \
                       (root, l.split()[0])
     fp.close()
-    if not mounted:
-        print "Mounting disc at %s." % root
-        os.system("mount %s %s" % (dev_part, root))
 
     try:
         node = di.StorageNode.get(name=name)
@@ -608,74 +609,81 @@ def mount_transport(serial_num):
 
         print "Successfully created storage node."
 
-    _mount_work(root, None)
+    print "Node created but not mounted. Run alpenhorn mount_transport for that."
 
 
 @cli.command()
-@click.argument("root")
-@click.option("--name", help="name of this node; only enter if it is not a storage node", type=str, default=None)
-def mount(root, name):
+@click.pass_context
+@click.argument("node")
+@click.option("--user", help="username to access this node.", type=str, default=None)
+@click.option("--address", help="address for remote access to this node.", type=str, default=None)
+def mount_transport(ctx, node, user, address):
+    """Mount a transport disk into the system and then make it available to alpenhorn.
+    """
+
+    mnt_point = "/mnt/%s" % node
+
+    print "Mounting disc at %s" % mnt_point
+    os.system("mount %s" % mnt_point)
+
+    ctx.invoke(mount, name=node, path=mnt_point, user=user, address=address)
+
+
+@cli.command()
+@click.pass_context
+@click.argument("node")
+def unmount_transport(ctx, node):
+    """Mount a transport disk into the system and then make it available to alpenhorn.
+    """
+
+    mnt_point = "/mnt/%s" % node
+
+    print "Unmounting disc at %s" % mnt_point
+    os.system("umount %s" % mnt_point)
+
+    ctx.invoke(unmount, root_or_name=node)
+
+
+@cli.command()
+@click.argument("name")
+@click.option("--path", help="Root path for this node", type=str, default=None)
+@click.option("--user", help="username to access this node.", type=str, default=None)
+@click.option("--address", help="address for remote access to this node.", type=str, default=None)
+@click.option("--hostname", help="hostname running the alpenhornd instance for this node (set to this hostname by default).", type=str, default=None)
+def mount(name, path, user, address, hostname):
     """Interactive routine for mounting a storage node located at ROOT."""
-    _mount_work(root, name)
 
-
-def _mount_work(root, name):
-    # The implementation of the mount command. Factored out so it can also be called by mount_transport.
-
-    import os
     import socket
 
     # We need to write to the database.
     di.connect_database(read_write=True)
 
-    if root[-1] == "/":
-        root = root[:len(root) - 1]
-
-    if name and os.path.ismount(root):
-        print "You should not enter a name if this is a transport disc." \
-              "I quit."
-        exit()
-    elif not name:
-        transport = True
-        if os.getuid() != 0:
-            print "You must be root to run mount on a transport disc. I quit."
-            return
-        if not os.path.ismount(root):
-            print "You must enter a name if this is not a transport disc. " \
-                  "I quit."
-            exit()
-        dev = get_mount_device(root)
-        name = get_e2label(dev)
-        if not name:
-            print "Could not find disc label. This disc has probably never " \
-                  "been formatted as a transport disc. I quit."
-            exit()
-    else:
-        transport = False
-
     try:
         node = di.StorageNode.get(name=name)
     except pw.DoesNotExist:
-        print "Storage node \"%s\" does not exist. I quit." % (name)
+        print "Storage node \"%s\" does not exist. I quit." % name
 
     if node.mounted:
-        print "Node \"%s\" is already mounted." % (name)
-        exit()
+        print "Node \"%s\" is already mounted." % name
+        return
 
-    node.host = socket.gethostname()
-    print "I will set the host to \"%s\"." % (node.host)
-    if transport:
-        node.address = None
-        node.username = None
-    else:
-        node.address = click.prompt("Enter the address of this host",
-                                    default="localhost").strip()
-        node.username = click.prompt("Enter the user name for rsyncing",
-                                     default=os.environ.get("USER"))
+    # Set the default hostname if required
+    if hostname is None:
+        hostname = socket.gethostname()
+        print "I will set the host to \"%s\"." % hostname
+
+    # Set the parameters of this node
+    node.username = user
+    node.address = address
     node.mounted = True
-    node.root = root
+    node.host = hostname
+
+    if path is not None:
+        node.root = path
+
     node.save()
-    print "Successfully mounted \"%s\"." % (name)
+
+    print "Successfully mounted \"%s\"." % name
 
 
 @cli.command()
