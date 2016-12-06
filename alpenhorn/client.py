@@ -348,7 +348,9 @@ def verify(node_name, md5, fixdb, acq):
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
               help='Only clean files already available in this group.')
-def clean(node_name, days, force, now, target):
+@click.option('--acq', metavar='ACQ', default=None, type=str,
+              help='Limit removal to acquisition')
+def clean(node_name, days, force, now, target, acq):
     """Clean up NODE by marking older files as potentially removable.
 
     If --target is specified we will only remove files already available in the
@@ -382,6 +384,17 @@ def clean(node_name, days, force, now, target):
         di.ArchiveFileCopy.node == this_node,
         di.ArchiveFileCopy.wants_file == 'Y'
     )
+
+    # Limit to acquisition
+    if acq is not None:
+        try:
+            acq = di.ArchiveAcq.get(name=acq)
+        except pw.DoesNotExit:
+            raise RuntimeError("Specified acquisition %s does not exist" % acq)
+
+        files_in_acq = di.ArchiveFile.select().where(di.ArchiveFile.acq == acq)
+
+        files = files.where(di.ArchiveFileCopy.file << files_in_acq)
 
     # If the target option has been specified, only clean files also available there...
     if target is not None:

@@ -7,6 +7,7 @@ import re
 import socket
 
 import peewee as pw
+from peewee import fn
 
 from ch_util import data_index as di
 
@@ -51,6 +52,42 @@ def run_command(cmd, **kwargs):
     retval = proc.returncode
 
     return retval, stdout_val, stderr_val
+
+
+def pbs_jobs():
+    """Fetch the jobs in the PBS queue on this host.
+
+    Returns
+    -------
+    jobs : dict
+    """
+
+    def _parse_job(node):
+        return { cn.nodeName : cn.firstChild.data for cn in node.childNodes if hasattr(cn.firstChild, 'data')}
+
+    from xml.dom import minidom
+
+    ret, out, err = run_command('qstat -x'.split())
+
+    if len(out) == 0:
+        return []
+
+    qstat_xml = minidom.parseString(out)
+
+    return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
+
+
+def queued_archive_jobs():
+    """Fetch the info about jobs waiting in the archive queue.
+
+    Returns
+    -------
+    jobs: dict
+    """
+
+    jobs = pbs_jobs()
+
+    return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
 
 
 def is_md5_hash(h):
@@ -189,7 +226,7 @@ def update_node_delete(node):
                         log.info("Removing acquisition directory %s on %s" %
                                  (fcopy.file.acq.name, fcopy.node.name))
                         os.rmdir(dirname)
-                        
+
                 fcopy.has_file = 'N'
                 fcopy.wants_file = 'N'  # Set in case it was 'M' before
                 fcopy.save()  # Update the FileCopy in the database
@@ -219,16 +256,20 @@ def update_node_requests(node):
         log.info("Node %s is nearly full. Skip transfers." % node.name)
         return
 
-    # Check for copy requests (only if this node has not hit the maximum size).
-    current_size_gb = 0.0  # Set to zero for the moment. This should be replaced
-    # with the actual archive size at somepoint.
+    # Calculate the total archive size from the database
+    size_query = di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b)).join(di.ArchiveFileCopy).where(
+        di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file=='Y')
+
+    current_size_gb = float(size_query.scalar(as_tuple=True)[0]) / 2**30.0
 
     # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
+    if (current_size_gb > node.max_total_gb and node.max_total_gb > 0.0):
+        log.info('Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)' %
+                 (node.name, current_size_gb, node.max_total_gb))
+        return
+
     # ... OR if this is a transport node quit if the transport cycle is done.
-    # NOTE: the logic here has changed slightly from Adam's original, but that didn't
-    # make a huge amount of sense to me
-    if ((current_size_gb > node.max_total_gb and node.max_total_gb > 0.0) or
-       (node.storage_type == "T" and done_transport_this_cycle)):
+    if (node.storage_type == "T" and done_transport_this_cycle):
         log.info('Ignoring transport node %s' % node.name)
         return
 
@@ -320,7 +361,7 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if command_available('bbcp'):
-                cmd = 'bbcp -f -z --port 1500 -W 4M -s 16 -o -E md5= %s %s' % (from_path, to_path)
+                cmd = 'bbcp -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s' % (from_path, to_path)
                 ret, stdout, stderr = run_command(cmd.split())
 
                 # Attempt to parse STDERR for the md5 hash
@@ -576,6 +617,10 @@ def update_node_hpss_inbound(node):
     if len(requests_to_process) == 0:
         return
 
+    if len(queued_archive_jobs()) > 1:
+        log.info('Skipping HPSS inbound as queue full.')
+        return
+
     # Construct final list of requests to process
     for req in requests_to_process:
         log.info('Pushing file %s/%s into HPSS' % (req.file.acq.name, req.file.name))
@@ -611,6 +656,10 @@ def update_node_hpss_outbound(node):
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
+        return
+
+    if len(queued_archive_jobs()) > 1:
+        log.info('Skipping HPSS outbound as queue full.')
         return
 
     # Construct final list of requests to process
