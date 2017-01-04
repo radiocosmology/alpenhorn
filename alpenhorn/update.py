@@ -259,8 +259,8 @@ def update_node_requests(node):
     # Calculate the total archive size from the database
     size_query = di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b)).join(di.ArchiveFileCopy).where(
         di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file=='Y')
-
-    current_size_gb = float(size_query.scalar(as_tuple=True)[0]) / 2**30.0
+    size = size_query.scalar(as_tuple=True)[0]
+    current_size_gb = float(0.0 if size is None else size) / 2**30.0
 
     # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
     if (current_size_gb > node.max_total_gb and node.max_total_gb > 0.0):
