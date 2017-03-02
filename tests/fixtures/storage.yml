@@ -1,0 +1,13 @@
+groups:
+  - name: foo
+    notes: null
+  - name: bar
+    notes: Some bar!
+
+nodes:
+  - name: x
+    host: foo.example.com
+    group: foo
+    mounted: True
+    max_total_gb: 10
+    min_avail_gb: 1
