@@ -1,0 +1,14 @@
+instruments:
+  - name: foo
+    notes: null
+  - name: bar
+    notes: Some bar!
+
+types:
+  - name: quux
+  - name: zab
+
+acquisitions:
+  - name: x
+    type: quux
+    inst: foo
