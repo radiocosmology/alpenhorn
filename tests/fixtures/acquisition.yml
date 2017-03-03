@@ -12,3 +12,18 @@ acquisitions:
   - name: x
     type: quux
     inst: foo
+
+file_types:
+  - name: zxc
+  - name: spqr
+
+files:
+  - name: fred
+    acq: x
+    type: zxc
+  - name: jim
+    acq: x
+    type: zxc
+  - name: sheila
+    acq: x
+    type: spqr

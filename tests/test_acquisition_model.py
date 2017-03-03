@@ -18,7 +18,7 @@ tests_path = path.abspath(path.dirname(__file__))
 def fixtures():
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
     db.connect()
-    db.database_proxy.create_tables([ArchiveAcq, ArchiveInst, AcqType])
+    db.database_proxy.create_tables([ArchiveAcq, ArchiveInst, AcqType, FileType, ArchiveFile])
 
     # Check we're starting from a clean slate
     assert ArchiveAcq.select().count() == 0
@@ -43,8 +43,21 @@ def fixtures():
         ack['inst']= instruments[ack['inst']]
         ack['type']= types[ack['type']]
 
-    # bulk load the acquisitions
     ArchiveAcq.insert_many(fixtures['acquisitions']).execute()
+    acqs = {}
+    for acq in ArchiveAcq.select(ArchiveAcq.name, ArchiveAcq.id).dicts():
+        acqs[acq['name']] = acq['id']
+
+    FileType.insert_many(fixtures['file_types']).execute()
+    file_types = {}
+    for type in FileType.select(FileType.name, FileType.id).dicts():
+        file_types[type['name']] = type['id']
+
+    # fixup foreign keys for the files
+    for file in fixtures['files']:
+        file['acq']= acqs[file['acq']]
+        file['type']= file_types[file['type']]
+    ArchiveFile.insert_many(fixtures['files']).execute()
 
     yield
 
@@ -53,12 +66,25 @@ def fixtures():
 
 
 def test_schema(fixtures):
-    assert set(db.database_proxy.get_tables()) == { u'acqtype', u'archiveinst', u'archiveacq' }
+    assert set(db.database_proxy.get_tables()) == {
+        u'acqtype', u'archiveinst', u'archiveacq',
+        u'filetype', u'archivefile',
+    }
 
 
 def test_model(fixtures):
-    instruments = ArchiveInst.select(ArchiveInst.name)
-    assert instruments == ['foo', 'bar']
+    instruments = set(ArchiveInst.select(ArchiveInst.name).tuples())
+    assert instruments == { ( 'foo', ), ( 'bar', ) }
     assert ArchiveInst.get(ArchiveInst.name == 'foo').notes is None
-    
-    assert [ ArchiveAcq.select() ] == [ ArchiveAcq.get(ArchiveAcq.name ==  'x')]
+
+    assert list(ArchiveAcq.select()) == [
+        ArchiveAcq.get(ArchiveAcq.name ==  'x')
+    ]
+
+    files = set(ArchiveFile.select(ArchiveFile.name).tuples())
+    assert files == { ( 'fred', ), ( 'jim', ), ( 'sheila', ) }
+
+    freds = list(ArchiveFile.select().where(ArchiveFile.name == 'fred').dicts())
+    assert freds == [
+        { 'id': 1, 'name': 'fred', 'acq': 1, 'type': 1, 'md5sum': None, 'size_b': None}
+    ]

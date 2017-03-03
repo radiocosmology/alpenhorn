@@ -50,3 +50,39 @@ class ArchiveAcq(base_model):
     comment = pw.TextField(null=True)
 
 
+class FileType(base_model):
+    """A file type.
+
+    Attributes
+    ----------
+    name : string
+        The name of this file type.
+    notes: string
+        Any notes or comments about this file type.
+    """
+    name = pw.CharField(max_length=64)
+    notes = pw.TextField(null=True)
+
+
+class ArchiveFile(base_model):
+    """A file in an acquisition.
+
+    Attributes
+    ----------
+    acq : foreign key
+        Reference to the acquisition this file is part of.
+    type : foreign key
+        Reference to the type of file that this is.
+    name : string
+        Name of the file.
+    size_b : integer
+        Size of file in bytes.
+    md5sum : string
+        md5 checksum of file. Used for verifying integrity.
+    """
+    acq = pw.ForeignKeyField(ArchiveAcq, related_name='files')
+    type = pw.ForeignKeyField(FileType, related_name='files')
+    name = pw.CharField(max_length=64)
+    size_b = pw.BigIntegerField(null=True)
+    md5sum = pw.CharField(null=True, max_length=32)
+
