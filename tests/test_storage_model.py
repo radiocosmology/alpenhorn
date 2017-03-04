@@ -15,10 +15,11 @@ from alpenhorn.storage import *
 tests_path = path.abspath(path.dirname(__file__))
 
 @pytest.fixture
-def fixtures():
+def fixtures(clear_db=True):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db.connect()
-    db.database_proxy.create_tables([StorageGroup, StorageNode])
+    if clear_db:
+        db.connect()
+    db.database_proxy.create_tables([StorageGroup, StorageNode], safe=not clear_db)
 
     # Check we're starting from a clean slate
     assert StorageGroup.select().count() == 0
@@ -28,9 +29,7 @@ def fixtures():
         fixtures = yaml.load(f)
 
     StorageGroup.insert_many(fixtures['groups']).execute()
-    groups = {}
-    for group in StorageGroup.select(StorageGroup.name, StorageGroup.id).dicts():
-        groups[group['name']] = group['id']
+    groups = dict(StorageGroup.select(StorageGroup.name, StorageGroup.id).tuples())
 
     # fixup foreign keys for the nodes
     for node in fixtures['nodes']:
@@ -38,11 +37,13 @@ def fixtures():
 
     # bulk load the nodes
     StorageNode.insert_many(fixtures['nodes']).execute()
+    nodes = dict(StorageNode.select(StorageNode.name, StorageNode.id).tuples())
 
-    yield
+    yield {'groups': groups, 'nodes': nodes}
 
     # cleanup
-    db.database_proxy.close()
+    if clear_db:
+        db.database_proxy.close()
 
 
 def test_schema(fixtures):

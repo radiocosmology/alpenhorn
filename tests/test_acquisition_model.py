@@ -15,10 +15,11 @@ from alpenhorn.acquisition import *
 tests_path = path.abspath(path.dirname(__file__))
 
 @pytest.fixture
-def fixtures():
+def fixtures(clear_db=True):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db.connect()
-    db.database_proxy.create_tables([ArchiveAcq, ArchiveInst, AcqType, FileType, ArchiveFile])
+    if (clear_db):
+        db.connect()
+    db.database_proxy.create_tables([ArchiveAcq, ArchiveInst, AcqType, FileType, ArchiveFile], safe=not clear_db)
 
     # Check we're starting from a clean slate
     assert ArchiveAcq.select().count() == 0
@@ -29,14 +30,10 @@ def fixtures():
         fixtures = yaml.load(f)
 
     ArchiveInst.insert_many(fixtures['instruments']).execute()
-    instruments = {}
-    for inst in ArchiveInst.select(ArchiveInst.name, ArchiveInst.id).dicts():
-        instruments[inst['name']] = inst['id']
+    instruments = dict(ArchiveInst.select(ArchiveInst.name, ArchiveInst.id).tuples())
 
     AcqType.insert_many(fixtures['types']).execute()
-    types = {}
-    for type in AcqType.select(AcqType.name, AcqType.id).dicts():
-        types[type['name']] = type['id']
+    types = dict(AcqType.select(AcqType.name, AcqType.id).tuples())
 
     # fixup foreign keys for the acquisitions
     for ack in fixtures['acquisitions']:
@@ -44,25 +41,27 @@ def fixtures():
         ack['type']= types[ack['type']]
 
     ArchiveAcq.insert_many(fixtures['acquisitions']).execute()
-    acqs = {}
-    for acq in ArchiveAcq.select(ArchiveAcq.name, ArchiveAcq.id).dicts():
-        acqs[acq['name']] = acq['id']
+    acqs = dict(ArchiveAcq.select(ArchiveAcq.name, ArchiveAcq.id).tuples())
 
     FileType.insert_many(fixtures['file_types']).execute()
-    file_types = {}
-    for type in FileType.select(FileType.name, FileType.id).dicts():
-        file_types[type['name']] = type['id']
+    file_types = dict(FileType.select(FileType.name, FileType.id).tuples())
 
     # fixup foreign keys for the files
     for file in fixtures['files']:
         file['acq']= acqs[file['acq']]
         file['type']= file_types[file['type']]
-    ArchiveFile.insert_many(fixtures['files']).execute()
 
-    yield
+    ArchiveFile.insert_many(fixtures['files']).execute()
+    files = dict(ArchiveFile.select(ArchiveFile.name, ArchiveFile.id).tuples())
+
+    yield {
+        'instruments': instruments, 'types': types,
+        'file_types': file_types, 'files': files,
+    }
 
     # cleanup
-    db.database_proxy.close()
+    if clear_db:
+        db.database_proxy.close()
 
 
 def test_schema(fixtures):
