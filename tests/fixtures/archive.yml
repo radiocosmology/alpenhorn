@@ -1,0 +1,15 @@
+file_copies:
+  - file: fred
+    node: x
+  - file: sheila
+    node: x
+    wants_file: M
+
+copy_requests:
+  - file: jim
+    node_from: x
+    group_to: bar
+    nice: 3
+    completed: False
+    n_requests: 0
+    timestamp: '2017-03-03T15:02:43'
