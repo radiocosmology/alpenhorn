@@ -72,33 +72,28 @@ class ClosestDraw(Exception):
 # Helper classes for the peewee ORM
 # =================================
 
-class EnumField(pw.CharField):
+class EnumField(pw.Field):
     """Implements an enum field for the ORM.
 
     Why doesn't peewee support enums? That's dumb. We should make one."""
-    # db_field = 'text'
+    db_field = 'enum'
 
-    def __init__(self, choices, *args, **kwargs):
-        # self.value = []
-        # for e in choices:
-        #     self.value.append("'" + str(e) + "'")
+    def __init__(self, enum_list, *args, **kwargs):
+        self.enum_list = enum_list
+        self.value = []
+        for e in enum_list:
+            self.value.append("'" + str(e) + "'")
         super(EnumField, self).__init__(*args, **kwargs)
-        self.choices = choices
-        # self.constraints = [pw.Check('%s IN (%s)' % ('group', ', '.join(["'%s'"] * len(choices)) % tuple(choices)))]
 
-    # def clone_base(self, **kwargs):
-    #     return super(EnumField, self).clone_base(
-    #         enum_list=self.enum_list, **kwargs)
+    def clone_base(self, **kwargs):
+        return super(EnumField, self).clone_base(
+            enum_list=self.enum_list, **kwargs)
 
-    # def get_modifiers(self):
-    #     return self.value or None
+    def get_modifiers(self):
+        return self.value or None
 
     def coerce(self, val):
-        if val is None:
-            return str(self.default)
-        if val not in self.choices:
-            raise ValueError("Invalid enum value '%s'" % val)
-        return str(val)
+        return str(val or '')
 
 
 class base_model(pw.Model):

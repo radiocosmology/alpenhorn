@@ -12,13 +12,37 @@ from os import path
 import alpenhorn.db as db
 from alpenhorn.storage import *
 
+
+class SqliteEnumField(pw.CharField):
+    """Implements an enum field for the ORM.
+
+    Why doesn't peewee support enums? That's dumb. We should make one."""
+
+    def __init__(self, choices, *args, **kwargs):
+        super(SqliteEnumField, self).__init__(*args, **kwargs)
+        self.choices = choices
+
+    def coerce(self, val):
+        if val is None:
+            return str(self.default)
+        if val not in self.choices:
+            raise ValueError("Invalid enum value '%s'" % val)
+        return str(val)
+
+
+# Use Sqlite-compatible EnumField
+SqliteEnumField(['A', 'T', 'F'], default='A').add_to_class(StorageNode, 'storage_type')
+
 tests_path = path.abspath(path.dirname(__file__))
+
 
 @pytest.fixture
 def fixtures(clear_db=True):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
+
     if clear_db:
         db.connect()
+
     db.database_proxy.create_tables([StorageGroup, StorageNode], safe=not clear_db)
 
     # Check we're starting from a clean slate
