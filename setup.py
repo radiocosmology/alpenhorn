@@ -1,27 +1,52 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from setuptools import setup, find_packages
+from codecs import open
+from os import path
+
+import alpenhorn
+
+here = path.abspath(path.dirname(__file__))
+
+# Get the long description from the README file
+with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
+    long_description = f.read()
+
+requirements = [
+    'Click>=6.0',
+    # TODO: put package requirements here
+]
+
+test_requirements = [
+    'pytest'
+]
+
+setup_requirements = [
+    'pytest-runner',
+]
 
 setup(
     name='alpenhorn',
-    version=0.1,
+    version=alpenhorn.__version__,
+    description="Data archive management software.",
+    long_description=long_description,
 
-    packages=find_packages(),
-
-    install_requires=['ch_util', 'h5py', 'MySQL_python', 'peewee >= 2.7.0',
-                      'bitshuffle', 'netifaces', 'PyYAML', 'configobj', 'watchdog',
-                      'ConcurrentLogHandler', 'Click'],
-    entry_points="""
-        [console_scripts]
-        alpenhorn=alpenhorn.client:cli
-        alpenhornd=alpenhorn.service:cli
-        alpenhorn_hpss=alpenhorn.hpss_callback:cli
-    """,
-
-    scripts=['scripts/alpenhorn_ensure_running.sh'],
-
-    # metadata for upload to PyPI
     author="CHIME collaboration",
     author_email="richard@phas.ubc.ca",
-    description="Data archive management software.",
-    license="GPL v3.0",
-    url="https://bitbucket.org/chime/alpenhorn"
+    url="https://github.com/radiocosmology/alpenhorn",
+    license="MIT",
+
+    packages=find_packages(exclude=['docs', 'tests']),
+    scripts=[],
+    entry_points={
+        'console_scripts': [
+
+        ]
+    },
+
+    install_requires=requirements,
+    tests_require=test_requirements,
+    test_suite='tests',
+    setup_requires=setup_requirements,
 )
