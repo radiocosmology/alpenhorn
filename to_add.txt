@@ -1,5 +1,0 @@
-INSERT INTO `storagenode` VALUES (6,'suzu','/data/hk_data','suzu','chime','valhalla.drao.nrc.ca',1,1,1,0,1,1,50,232.531,'2014-04-18 05:13:25',90,NULL);
-insert into acqtype (name, notes) VALUES ("hk", "Housekeeping data.");
-insert into archiveinst (name) values ("ben");
-insert into filetype (name, notes) values ("hk", "A housekeeping file.");
-insert into filetype (name, notes) VALUES ("atmel_id", "A short file listing the ATMEL ID's and human readable names in an HK acquisition.");
