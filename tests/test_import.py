@@ -67,6 +67,15 @@ def test_import(fixtures):
     assert len(tmpdir.listdir()) == 1
     assert len(acq_dir.listdir()) == 2
 
+    # Register a generic
+    ac.register_acq_type(ac.GenericAcqInfo)
+    ac.GenericAcqInfo.patterns = ['.*']
+
+    ac.register_file_type(ac.GenericFileInfo)
+    ac.GenericFileInfo.patterns = ['.*\.txt']
+
+    db.database_proxy.create_tables([ac.GenericFileInfo, ac.GenericAcqInfo])
+
     print "hello.txt: %s"
     for arf in ac.ArchiveFile.select().where(ac.ArchiveFile.name == f.basename):
         print "  - id: %s" % arf.id
@@ -82,12 +91,12 @@ def test_import(fixtures):
     assert acq is not None
     assert acq.name == '12345678T000000Z_inst_zab'
     assert acq.inst.name == 'inst'
-    assert acq.type.name == 'zab'
+    assert acq.type.name == 'generic'
 
     assert (ac.ArchiveFile
             .select()
             .where(ac.ArchiveFile.name == f.basename)
-            .count()) == 0
+            .count()) == 1
 
     # now import 'ch_master.log', which should succeed
     auto_import.import_file(node, node.root, acq_dir.basename, g.basename)
