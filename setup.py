@@ -13,14 +13,11 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-requirements = [
-    'Click>=6.0',
-    # TODO: put package requirements here
-]
+with open(path.join(here, 'requirements.txt')) as f:
+    requirements = f.readlines()
 
-test_requirements = [
-    'pytest'
-]
+with open(path.join(here, 'test-requirements.txt')) as f:
+    test_requirements = f.readlines()
 
 setup_requirements = [
     'pytest-runner',
