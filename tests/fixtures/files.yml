@@ -1,0 +1,8 @@
+12345678T000000Z_inst_zab:
+  hello.txt:
+    contents: Hello world!
+    md5: 86fb269d190d2c85f6e0468ceca42a20
+  ch_master.log:
+    contents: "I'm the master of the world!"
+    md5: 48cee328d02686f97a8382a00d7d848d
+  
