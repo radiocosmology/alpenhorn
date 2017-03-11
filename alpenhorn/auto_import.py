@@ -30,6 +30,7 @@ def import_file(node, root, acq_name, file_name):
             # TODO: reconnection
             db.database_proxy.connect()
 
+
 def _import_file(node, root, acq_name, file_name):
     """Import a file into the DB.
 
@@ -52,7 +53,7 @@ def _import_file(node, root, acq_name, file_name):
         return
 
     # Check if we can handle this acquisition, and skip if we can't
-    if ac.dispatch_acq_type(acq_name, node) is None:
+    if ac.AcqType.detect(acq_name, node) is None:
         log.info("Skipping non-acquisition path %s." % acq_name)
         return
 
@@ -68,13 +69,13 @@ def _import_file(node, root, acq_name, file_name):
         acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
         log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
     except pw.DoesNotExist:
-        acq, acqinfo = add_acq(acq_name, node)
+        acq = add_acq(acq_name, node)
         if acq is None:
             return
         log.info("Acquisition \"%s\" added to DB." % acq_name)
 
     # What kind of file do we have?
-    ftype = ac.dispatch_file_type(file_name, acqinfo, node)
+    ftype = ac.FileType.detect(file_name, acq, node)
 
     if ftype is None:
         log.info("Skipping unrecognised file \"%s/%s\"." % (acq_name, file_name))
@@ -95,10 +96,10 @@ def _import_file(node, root, acq_name, file_name):
         while not done:
             try:
                 with db.database_proxy.atomic():
-                    file_ = ac.ArchiveFile.create(acq=acq, type=ftype.get_filetype(), name=file_name,
+                    file_ = ac.ArchiveFile.create(acq=acq, type=ftype, name=file_name,
                                                   size_b=size_b, md5sum=md5sum)
 
-                    file_info = ftype.new(file_, node)
+                    ftype.file_info.new(file_, node)
 
                 done = True
             except pw.OperationalError as e:
@@ -158,7 +159,7 @@ def add_acq(name, node, comment=""):
                             name)
 
     # Find an acquisition type that can handle this acq
-    acq_type = ac.dispatch_acq_type(name, node)
+    acq_type = ac.AcqType.detect(name, node)
 
     if acq_type is None:
         log.debug("No handler available to process \"%s\"" % name)
@@ -174,14 +175,15 @@ def add_acq(name, node, comment=""):
     # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition. Run
     # in a transaction so we don't end up with inconsistency.
     with db.database_proxy.atomic():
-        # Giddy up!
+        # Insert the archive record
         acq = ac.ArchiveAcq.create(name=name, inst=inst_rec,
-                                   type=acq_type.get_acqtype(),
+                                   type=acq_type,
                                    comment=comment)
 
-        acqinfo = acq_type.new(acq, node)
+        # Generate the metadata table
+        acq_type.acq_info.new(acq, node)
 
-    return acq, acqinfo
+    return acq
 
 # Helper routines for adding files
 # ================================

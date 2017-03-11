@@ -13,6 +13,7 @@ import alpenhorn.db as db
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
+import alpenhorn.generic as ge
 
 import test_archive_model as ta
 
@@ -23,6 +24,28 @@ import alpenhorn.auto_import as auto_import
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
 
+
+# Create handlers for the acquisition and file types
+class ZabInfo(ge.GenericAcqInfo):
+    _acq_type = 'zab'
+    _file_types = ['zxc', 'log']
+    patterns = ['*zab']
+
+class QuuxInfo(ge.GenericAcqInfo):
+    _acq_type = 'quux'
+    patterns = ['*quux']
+
+class ZxcInfo(ge.GenericFileInfo):
+    _file_type = 'zxc'
+    patterns = ['*.txt']
+
+class SpqrInfo(ge.GenericFileInfo):
+    _file_type = 'spqr'
+    patterns = ['*spqr*']
+
+class LogInfo(ge.GenericFileInfo):
+    _file_type = 'log'
+    patterns = ['*.log']
 
 @pytest.fixture
 def fixtures(tmpdir):
@@ -38,6 +61,15 @@ def fixtures(tmpdir):
     # TODO: we need to either handle some built-in types; or maybe move to the YAML fixtures
     ac.FileType.create(name='log')
 
+    # Register new handlers
+    ac.AcqType.register_type(ZabInfo)
+    ac.AcqType.register_type(QuuxInfo)
+    ac.FileType.register_type(ZxcInfo)
+    ac.FileType.register_type(SpqrInfo)
+    ac.FileType.register_type(LogInfo)
+
+    db.database_proxy.create_tables([ZabInfo, QuuxInfo, ZxcInfo, SpqrInfo, LogInfo])
+
     return {'root': p}
 
 
@@ -47,7 +79,8 @@ def test_schema(fixtures):
         u'storagegroup', u'storagenode',
         u'acqtype', u'archiveinst', u'archiveacq',
         u'filetype', u'archivefile',
-        u'archivefilecopyrequest', u'archivefilecopy'
+        u'archivefilecopyrequest', u'archivefilecopy',
+        u'zabinfo', u'quuxinfo', u'zxcinfo', u'spqrinfo', u'loginfo'
     }
     assert fixtures['root'].basename == 'ROOT'
     assert st.StorageNode.get(st.StorageNode.name == 'x').root == fixtures['root']
@@ -67,15 +100,6 @@ def test_import(fixtures):
     assert len(tmpdir.listdir()) == 1
     assert len(acq_dir.listdir()) == 2
 
-    # Register a generic
-    ac.register_acq_type(ac.GenericAcqInfo)
-    ac.GenericAcqInfo.patterns = ['.*']
-
-    ac.register_file_type(ac.GenericFileInfo)
-    ac.GenericFileInfo.patterns = ['.*\.txt']
-
-    db.database_proxy.create_tables([ac.GenericFileInfo, ac.GenericAcqInfo])
-
     print "hello.txt: %s"
     for arf in ac.ArchiveFile.select().where(ac.ArchiveFile.name == f.basename):
         print "  - id: %s" % arf.id
@@ -91,7 +115,7 @@ def test_import(fixtures):
     assert acq is not None
     assert acq.name == '12345678T000000Z_inst_zab'
     assert acq.inst.name == 'inst'
-    assert acq.type.name == 'generic'
+    assert acq.type.name == 'zab'
 
     assert (ac.ArchiveFile
             .select()
