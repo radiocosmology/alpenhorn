@@ -10,10 +10,9 @@ Example config:
         file:   alpenhorn.log
         level:  debug
 
-    use_generic: Yes
-
     extensions:
-        alpenhorn_chime
+        - alpenhorn.generic
+        - alpenhorn_chime
 
     acq_types:
         generic:

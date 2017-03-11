@@ -9,18 +9,18 @@ import pytest
 import yaml
 import os
 
+# TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
+os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
+
 import alpenhorn.db as db
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
+import alpenhorn.auto_import as auto_import
 import alpenhorn.generic as ge
 
 import test_archive_model as ta
 
-
-# TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
-os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
-import alpenhorn.auto_import as auto_import
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
 
