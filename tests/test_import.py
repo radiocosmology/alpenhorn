@@ -138,3 +138,17 @@ def test_import(fixtures):
     assert file_copy.file == file
     assert file_copy.has_file == 'Y'
     assert file_copy.wants_file == 'Y'
+
+    # re-importing ch_master.log should be a no-op
+    auto_import.import_file(node, node.root, acq_dir.basename, 'ch_master.log')
+
+    assert list(ac.ArchiveFile
+                .select()
+                .where(ac.ArchiveFile.name == 'ch_master.log')
+               ) == [ file ]
+
+    assert list(ar.ArchiveFileCopy
+                .select()
+                .where(ar.ArchiveFileCopy.file == file,
+                       ar.ArchiveFileCopy.node == node)
+               ) == [ file_copy ]

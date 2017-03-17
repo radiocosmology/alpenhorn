@@ -121,14 +121,14 @@ def _import_file(node, root, acq_name, file_name):
     else:
         # Mark any previous copies as not being present...
         query = (ar.ArchiveFileCopy.update(has_file='N')
-                 .where(ar.ArchiveFileCopy.file == file,
+                 .where(ar.ArchiveFileCopy.file == file_,
                         ar.ArchiveFileCopy.node == node))
         query.execute()
 
         # ... then take the latest and mark it with has_file=M to force it to be
         # checked.
         copy = (ar.ArchiveFileCopy.select()
-                .where(ar.ArchiveFileCopy.file == file,
+                .where(ar.ArchiveFileCopy.file == file_,
                        ar.ArchiveFileCopy.node == node)
                 .order_by(ar.ArchiveFileCopy.id).get())
 
