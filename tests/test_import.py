@@ -193,7 +193,7 @@ def test_import_existing(fixtures):
     ) == 1
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_import_corrupted(fixtures):
     """Checks for importing from an acquisition that is already in the archive"""
     tmpdir = fixtures['root']
