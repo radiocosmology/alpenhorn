@@ -37,7 +37,7 @@ class QuuxInfo(ge.GenericAcqInfo):
 
 class ZxcInfo(ge.GenericFileInfo):
     _file_type = 'zxc'
-    patterns = ['*.txt']
+    patterns = ['*.zxc']
 
 class SpqrInfo(ge.GenericFileInfo):
     _file_type = 'spqr'
@@ -57,9 +57,6 @@ def fixtures(tmpdir):
      .update(root=str(p))
      .where(st.StorageNode.name == 'x')
      .execute())
-
-    # TODO: we need to either handle some built-in types; or maybe move to the YAML fixtures
-    ac.FileType.create(name='log')
 
     # Register new handlers
     ac.AcqType.register_type(ZabInfo)
@@ -108,22 +105,23 @@ def test_import(fixtures):
     node = st.StorageNode.get(st.StorageNode.name == 'x')
 
     # import for hello.txt should be ignored while creating the acquisition
-    # RS: Why is that?
+    # because 'zab' acq type only tracks *.zxc and *.log files
     auto_import.import_file(node, node.root, acq_dir.basename, 'hello.txt')
     assert ac.ArchiveInst.get(ac.ArchiveInst.name == 'inst') is not None
     assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
 
+    # the acquisition is still created
     acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_dir.basename)
     assert acq is not None
     assert acq.name == acq_dir.basename
     assert acq.inst.name == 'inst'
     assert acq.type.name == 'zab'
 
-    # RS: I'm not sure what this test is meant to do?
-    # assert (ac.ArchiveFile
-    #         .select()
-    #         .where(ac.ArchiveFile.acq == acq)
-    #         .count()) == 0
+    # while no file has been imported yet
+    assert (ac.ArchiveFile
+            .select()
+            .where(ac.ArchiveFile.acq == acq)
+            .count()) == 0
 
     # now import 'ch_master.log', which should succeed
     auto_import.import_file(node, node.root, acq_dir.basename, 'ch_master.log')
