@@ -133,6 +133,7 @@ def _import_file(node, root, acq_name, file_name):
                 .order_by(ar.ArchiveFileCopy.id).get())
 
         copy.has_file = 'M'
+        copy.wants_file = 'Y'
         copy.save()
 
     # TODO: imported files caching

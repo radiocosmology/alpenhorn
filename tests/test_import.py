@@ -38,7 +38,7 @@ class QuuxInfo(ge.GenericAcqInfo):
 
 class ZxcInfo(ge.GenericFileInfo):
     _file_type = 'zxc'
-    patterns = ['*.zxc', 'jim*']
+    patterns = ['*.zxc', 'jim*', 'sheila']
 
 class SpqrInfo(ge.GenericFileInfo):
     _file_type = 'spqr'
@@ -193,7 +193,6 @@ def test_import_existing(fixtures):
     ) == 1
 
 
-@pytest.mark.xfail(strict=True)
 def test_import_corrupted(fixtures):
     """Checks for importing from an acquisition that is already in the archive"""
     tmpdir = fixtures['root']
@@ -210,12 +209,12 @@ def test_import_corrupted(fixtures):
                 .dicts()) == [
                     {'has_file': 'X', 'wants_file': 'M'}
     ]
-    auto_import.import_file(node, node.root, acq_dir.basename, 'jim')
+    auto_import.import_file(node, node.root, acq_dir.basename, 'sheila')
     assert list(ar.ArchiveFileCopy
                 .select(ar.ArchiveFileCopy.has_file,
                         ar.ArchiveFileCopy.wants_file)
                 .join(ac.ArchiveFile)
                 .where(ac.ArchiveFile.name == 'sheila')
                 .dicts()) == [
-                    {'has_file': 'Y', 'wants_file': 'M'}
+                    {'has_file': 'M', 'wants_file': 'Y'}
     ]
