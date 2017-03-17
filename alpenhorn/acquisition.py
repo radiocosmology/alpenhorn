@@ -32,7 +32,7 @@ class AcqType(base_model):
     name = pw.CharField(max_length=64)
     notes = pw.TextField(null=True)
 
-    # This dict is an atribute on thr class, used to hold the set of registered
+    # This dict is an atribute on the class, used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
     _registered_acq_types = {}
 
@@ -77,7 +77,7 @@ class AcqType(base_model):
                                repr(missing_acq_types))
 
     def is_type(self, acqname, node):
-        """Does this acqisition type understand this directory?
+        """Does this acquisition type understand this directory?
 
         Parameters
         ----------
@@ -95,7 +95,7 @@ class AcqType(base_model):
 
     @classmethod
     def detect(cls, acqname, node):
-        """Try and find an acquisition type that understands this directory.
+        """Try to find an acquisition type that understands this directory.
 
         Parameters
         ----------
@@ -190,14 +190,14 @@ class FileType(base_model):
 
         Parameters
         ----------
-        file_info : AcqInfoBase
-            AcqInfoBase describing the type of acquisition.
+        file_info : FileInfoBase
+            FileInfoBase describing the type of acquisition.
         """
 
         try:
             cls.get(name=file_info._file_type)
         except pw.DoesNotExist:
-            log.info("Create AcqType entry for \"%s\"" % file_info._file_type)
+            log.info("Create FileType entry for \"%s\"" % file_info._file_type)
             cls.create(name=file_info._file_type)
 
         # Add to registry
@@ -267,7 +267,7 @@ class FileType(base_model):
 
     @property
     def file_info(self):
-        """The AcqInfo table for this AcqType.
+        """The FileInfo table for this FileType.
         """
         return self.__class__._registered_file_types[self.name]
 
@@ -395,15 +395,15 @@ class FileInfoBase(base_model, ConfigClass):
         Parameters
         ----------
         file : ArchiveFile
-            The acquisition we are adding metadata for.
+            The file we are adding metadata for.
         node : StorageNode
             The node we are currently on. Used so we can inspect the actual
             archive file.
 
         Returns
         -------
-        file_info : AcqInfoBase
-            The AcqInfo instance.
+        file_info : FileInfoBase
+            The FileInfo instance.
         """
 
         # Create an instance of the metadata class and point it at the
@@ -415,13 +415,13 @@ class FileInfoBase(base_model, ConfigClass):
         acqpath = path.join(node.root, file.acq.name)
         file_info.set_info(file.name, acqpath)
 
-        # Save the changes and return the AcqInfo object
+        # Save the changes and return the FileInfo object
         file_info.save()
         return file_info
 
     @classmethod
     def get_file_type(cls):
-        """Get an instance of the AcqType row corresponding to this AcqInfo.
+        """Get an instance of the FileType row corresponding to this FileInfo.
         """
         return FileType.get(name=cls._file_type)
 
@@ -439,13 +439,15 @@ class FileInfoBase(base_model, ConfigClass):
         return NotImplementedError()
 
     def set_info(self, filename, acq_root):
-        """Set any metadata from the acquisition directory.
+        """Set any metadata from the file.
 
-        Abstract method, must be implemented in a derived AcqInfo table.
+        Abstract method, must be implemented in a derived FileInfo table.
 
         Parameters
         ----------
-        acqdir : string
-            Path to the acquisition directory.
+        filename : string
+            Name of the file.
+        acq_root : string
+            Path to the root of the the acquisition on the node.
         """
         return NotImplementedError()
