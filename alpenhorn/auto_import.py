@@ -83,8 +83,8 @@ def _import_file(node, root, acq_name, file_name):
 
     # Add the file, if necessary.
     try:
-        file = ac.ArchiveFile.get(ac.ArchiveFile.name == file_name,
-                                  ac.ArchiveFile.acq == acq)
+        file_ = ac.ArchiveFile.get(ac.ArchiveFile.name == file_name,
+                                   ac.ArchiveFile.acq == acq)
         log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
 
     except pw.DoesNotExist:
@@ -111,13 +111,29 @@ def _import_file(node, root, acq_name, file_name):
                 # di.connect_database(True)
         log.info("File \"%s/%s\" added to DB." % (acq_name, file_name))
 
-    # Register the copy of the file here on the collection server, if (1) it does
-    # not exist, or (2) it does exist but has been labelled as corrupt. If (2),
-    # check again.
+    # Register the copy of the file here on the collection server, if (1) it
+    # does not exist, or (2) if there has previously been a copy here ensure it
+    # is checksummed to ensure the archives integrity.
     if not file_.copies.where(ar.ArchiveFileCopy.node == node).count():
         copy = ar.ArchiveFileCopy.create(file=file_, node=node, has_file='Y',
                                          wants_file='Y')
         log.info("Registered file copy \"%s/%s\" to DB." % (acq_name, file_name))
+    else:
+        # Mark any previous copies as not being present...
+        query = (ar.ArchiveFileCopy.update(has_file='N')
+                 .where(ar.ArchiveFileCopy.file == file,
+                        ar.ArchiveFileCopy.node == node))
+        query.execute()
+
+        # ... then take the latest and mark it with has_file=M to force it to be
+        # checked.
+        copy = (ar.ArchiveFileCopy.select()
+                .where(ar.ArchiveFileCopy.file == file,
+                       ar.ArchiveFileCopy.node == node)
+                .order_by(ar.ArchiveFileCopy.id).get())
+
+        copy.has_file = 'M'
+        copy.save()
 
     # TODO: imported files caching
     # if import_done is not None:
