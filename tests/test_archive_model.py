@@ -121,4 +121,18 @@ def test_model(fixtures):
                .tuples())
     assert reqs == { ('jim', 'x', 'bar') }
 
-    assert ArchiveFileCopy.select().join(ArchiveFile).where(ArchiveFile.name == 'sheila').get().wants_file == 'M'
+    assert list(ArchiveFileCopy
+                .select(ArchiveFile.name,
+                        ArchiveFileCopy.has_file,
+                        ArchiveFileCopy.wants_file)
+                .join(ArchiveFile)
+                .where(ArchiveFile.name == 'fred')
+                .dicts()) == [
+                    {'name': 'fred', 'has_file': 'N', 'wants_file': 'Y'}
+                ]
+    assert (ArchiveFileCopy
+            .select()
+            .join(ArchiveFile)
+            .where(ArchiveFile.name == 'sheila')
+            .get()
+            .wants_file) == 'M'
