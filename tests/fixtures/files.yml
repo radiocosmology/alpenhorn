@@ -6,3 +6,10 @@
     contents: "I'm the master of the world!"
     md5: 48cee328d02686f97a8382a00d7d848d
   
+x:
+  foo.log:
+    contents: This is foo.log
+    md5: c42511b393512982c4cf2fef4c42cca8
+  jim:
+    contents: ''
+    md5: d41d8cd98f00b204e9800998ecf8427e

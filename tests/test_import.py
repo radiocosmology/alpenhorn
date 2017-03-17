@@ -33,11 +33,12 @@ class ZabInfo(ge.GenericAcqInfo):
 
 class QuuxInfo(ge.GenericAcqInfo):
     _acq_type = 'quux'
-    patterns = ['*quux']
+    _file_types = ['zxc', 'log']
+    patterns = ['*quux', 'x']
 
 class ZxcInfo(ge.GenericFileInfo):
     _file_type = 'zxc'
-    patterns = ['*.zxc']
+    patterns = ['*.zxc', 'jim*']
 
 class SpqrInfo(ge.GenericFileInfo):
     _file_type = 'spqr'
@@ -92,8 +93,8 @@ def test_schema(fixtures):
     assert st.StorageNode.get(st.StorageNode.name == 'x').root == fixtures['root']
 
     tmpdir = fixtures['root']
-    assert len(tmpdir.listdir()) == 1
-    acq_dir = tmpdir.join(fixtures['files'].keys()[0])
+    assert len(tmpdir.listdir()) == 2
+    acq_dir = tmpdir.join("12345678T000000Z_inst_zab")
     assert len(acq_dir.listdir()) == 2
 
 
@@ -152,3 +153,69 @@ def test_import(fixtures):
                 .where(ar.ArchiveFileCopy.file == file,
                        ar.ArchiveFileCopy.node == node)
                ) == [ file_copy ]
+
+
+def test_import_existing(fixtures):
+    """Checks for importing from an acquisition that is already in the archive"""
+    tmpdir = fixtures['root']
+
+    acq_dir = tmpdir.join('x')
+
+    node = st.StorageNode.get(st.StorageNode.name == 'x')
+
+    assert (ac.ArchiveAcq
+            .select()
+            .where(ac.ArchiveAcq.name == 'x')
+            .count()) == 1
+
+    ## import an unknown file
+    auto_import.import_file(node, node.root, acq_dir.basename, 'foo.log')
+    assert (ar.ArchiveFileCopy
+            .select()
+            .join(ac.ArchiveFile)
+            .where(ac.ArchiveFile.name == 'foo.log')
+            .count()
+    ) == 1
+
+    ## import file for which ArchiveFile entry exists but not ArchiveFileCopy
+    assert (ar.ArchiveFileCopy  # no ArchiveFileCopy for 'jim'
+            .select()
+            .join(ac.ArchiveFile)
+            .where(ac.ArchiveFile.name == 'jim')
+            .count()
+    ) == 0
+    auto_import.import_file(node, node.root, acq_dir.basename, 'jim')
+    assert (ar.ArchiveFileCopy  # now we have an ArchiveFileCopy for 'jim'
+            .select()
+            .join(ac.ArchiveFile)
+            .where(ac.ArchiveFile.name == 'jim')
+            .count()
+    ) == 1
+
+
+@pytest.mark.xfail
+def test_import_corrupted(fixtures):
+    """Checks for importing from an acquisition that is already in the archive"""
+    tmpdir = fixtures['root']
+
+    acq_dir = tmpdir.join('x')
+
+    node = st.StorageNode.get(st.StorageNode.name == 'x')
+    ## reimport a file for which we have a copy that is corrupted
+    assert list(ar.ArchiveFileCopy
+                .select(ar.ArchiveFileCopy.has_file,
+                        ar.ArchiveFileCopy.wants_file)
+                .join(ac.ArchiveFile)
+                .where(ac.ArchiveFile.name == 'sheila')
+                .dicts()) == [
+                    {'has_file': 'X', 'wants_file': 'M'}
+    ]
+    auto_import.import_file(node, node.root, acq_dir.basename, 'jim')
+    assert list(ar.ArchiveFileCopy
+                .select(ar.ArchiveFileCopy.has_file,
+                        ar.ArchiveFileCopy.wants_file)
+                .join(ac.ArchiveFile)
+                .where(ac.ArchiveFile.name == 'sheila')
+                .dicts()) == [
+                    {'has_file': 'Y', 'wants_file': 'M'}
+    ]
