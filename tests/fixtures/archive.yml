@@ -4,6 +4,7 @@ file_copies:
   - file: sheila
     node: x
     wants_file: M
+    has_file: X
 
 copy_requests:
   - file: jim

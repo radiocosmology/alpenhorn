@@ -7,7 +7,11 @@ Tests for `alpenhorn.acquisition` module.
 
 import pytest
 import yaml
+import os
 from os import path
+
+# TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
+os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
 
 import alpenhorn.db as db
 from alpenhorn.acquisition import *
