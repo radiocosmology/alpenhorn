@@ -5,6 +5,12 @@
   ch_master.log:
     contents: "I'm the master of the world!"
     md5: 48cee328d02686f97a8382a00d7d848d
+  foo.zxc:
+    contents: Check for the lock
+    md5: faa18a5f9896692bd3940f24c21c2bfd
+  .foo.zxc.lock:
+    contents: ''
+    md5: d41d8cd98f00b204e9800998ecf8427e
   
 x:
   foo.log:

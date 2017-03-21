@@ -95,7 +95,7 @@ def test_schema(fixtures):
     tmpdir = fixtures['root']
     assert len(tmpdir.listdir()) == 2
     acq_dir = tmpdir.join("12345678T000000Z_inst_zab")
-    assert len(acq_dir.listdir()) == 2
+    assert len(acq_dir.listdir()) == 4
 
 
 def test_import(fixtures):
@@ -191,6 +191,37 @@ def test_import_existing(fixtures):
             .where(ac.ArchiveFile.name == 'jim')
             .count()
     ) == 1
+
+
+def test_import_locked(fixtures):
+    tmpdir = fixtures['root']
+
+    acq_dir = tmpdir.join('12345678T000000Z_inst_zab')
+
+    node = st.StorageNode.get(st.StorageNode.name == 'x')
+
+    # import for foo.zxc should be ignored because there is also the
+    # foo.zxc.lock file
+    auto_import.import_file(node, node.root, acq_dir.basename, 'foo.zxc')
+    assert (ac.ArchiveFile
+            .select()
+            .where(ac.ArchiveFile.name == 'foo.zxc')
+            .count()) == 0
+
+    # now delete the lock and try reimport, which should succeed
+    acq_dir.join('.foo.zxc.lock').remove()
+    auto_import.import_file(node, node.root, acq_dir.basename, 'foo.zxc')
+    file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'foo.zxc')
+    assert file.acq.name == acq_dir.basename
+    assert file.type.name == 'zxc'
+    assert file.size_b == len(fixtures['files'][acq_dir.basename][file.name]['contents'])
+    assert file.md5sum == fixtures['files'][acq_dir.basename][file.name]['md5']
+
+    file_copy = ar.ArchiveFileCopy.get(ar.ArchiveFileCopy.file == file,
+                                       ar.ArchiveFileCopy.node == node)
+    assert file_copy.file == file
+    assert file_copy.has_file == 'Y'
+    assert file_copy.wants_file == 'Y'
 
 
 def test_import_corrupted(fixtures):
