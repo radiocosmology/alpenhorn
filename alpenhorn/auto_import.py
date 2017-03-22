@@ -18,11 +18,11 @@ log = logger.get_log()
 
 log.setLevel(logger.logging.DEBUG)
 
-def import_file(node, root, acq_name, file_name):
+def import_file(node, root, file_path):
     done = False
     while not done:
         try:
-            _import_file(node, root, acq_name, file_name)
+            _import_file(node, root, file_path)
             done = True
         except pw.OperationalError as e:
             log.exception(e)
@@ -33,7 +33,7 @@ def import_file(node, root, acq_name, file_name):
             db.database_proxy.connect()
 
 
-def _import_file(node, root, acq_name, file_name):
+def _import_file(node, root, file_path):
     """Import a file into the DB.
 
     This routine adds the following to the database, if they do not already exist
@@ -46,17 +46,21 @@ def _import_file(node, root, acq_name, file_name):
     """
     # global import_done
     curr_done = True
-    fullpath = "%s/%s/%s" % (root, acq_name, file_name)
+    fullpath = os.path.join(root, file_path)
     log.debug("Considering %s for import." % fullpath)
 
     # Skip the file if ch_master.py still has a lock on it.
-    if os.path.isfile("%s/%s/.%s.lock" % (root, acq_name, file_name)):
+    dir_name = os.path.dirname(file_path)
+    base_name = os.path.basename(file_path)
+    if os.path.isfile(os.path.join(root, dir_name, ".%s.lock" % base_name)):
         log.debug("Skipping \"%s\", which is locked by ch_master.py." % fullpath)
         return
 
     # Check if we can handle this acquisition, and skip if we can't
-    if ac.AcqType.detect(acq_name, node) is None:
-        log.info("Skipping non-acquisition path %s." % acq_name)
+    # TODO: detect on the full file_path or just dir_name?
+    acq_type_name = ac.AcqType.detect(file_path, node)
+    if acq_type_name is None:
+        log.info("Skipping non-acquisition path %s." % file_path)
         return
 
     # TODO: imported files caching
@@ -67,16 +71,19 @@ def _import_file(node, root, acq_name, file_name):
     #         return
 
     # Figure out which acquisition this is; add if necessary.
+    acq_type, acq_name = acq_type_name
     try:
         acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
         log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
     except pw.DoesNotExist:
-        acq = add_acq(acq_name, node)
+        acq = add_acq(acq_type, acq_name, node)
         if acq is None:
+            # TODO: raise error? is a check even necessary?
             return
         log.info("Acquisition \"%s\" added to DB." % acq_name)
 
     # What kind of file do we have?
+    file_name = os.path.relpath(file_path, acq_name)
     ftype = ac.FileType.detect(file_name, acq, node)
 
     if ftype is None:
@@ -148,7 +155,7 @@ def _import_file(node, root, acq_name, file_name):
 # Routines for registering files, acquisitions, copies and info in the DB.
 # ========================================================================
 
-def add_acq(name, node, comment=""):
+def add_acq(acq_type, name, node, comment=""):
     """Add an aquisition to the database.
 
     This looks for an appropriate acquisition type, and if successful creates
@@ -156,6 +163,8 @@ def add_acq(name, node, comment=""):
 
     Parameters
     ----------
+    acq_type : AcqType
+        Type of the acquisition
     name : string
         Name of the acquisition directory.
     node : StorageNode
@@ -177,12 +186,10 @@ def add_acq(name, node, comment=""):
         raise AlreadyExists("Acquisition \"%s\" already exists in DB." %
                             name)
 
-    # Find an acquisition type that can handle this acq
-    acq_type = ac.AcqType.detect(name, node)
-
-    if acq_type is None:
-        log.debug("No handler available to process \"%s\"" % name)
-        return
+    # TODO: should we still check?
+    # if acq_type is None:
+    #     log.debug("No handler available to process \"%s\"" % name)
+    #     return
 
     # At the moment we need an instrument, so just create one.
     try:

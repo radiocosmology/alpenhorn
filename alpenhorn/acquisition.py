@@ -105,14 +105,17 @@ class AcqType(base_model):
             The node we are importing from. Needed so we can inspect the actual
             acquisition.
         """
+        # TODO: document return type
 
-        # Iterate over all known acquisition types to try and find one that matches
-        # the directory being processed
-        for acq_type in cls.select():
-
-            if acq_type.is_type(acqname, node):
-                return acq_type
-
+        # Iterate over all known acquisition types to try and find one that
+        # matches the directory being processed. If nothing is found, repeat
+        # the process with the parent directory of acqname, until we run out of
+        # directory segments
+        while acqname != '':
+            for acq_type in cls.select():
+                if acq_type.is_type(acqname, node):
+                    return acq_type, acqname
+            acqname = path.dirname(acqname)
         return None
 
     @property
