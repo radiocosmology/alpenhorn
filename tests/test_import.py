@@ -249,3 +249,45 @@ def test_import_corrupted(fixtures):
                 .dicts()) == [
                     {'has_file': 'M', 'wants_file': 'Y'}
     ]
+
+
+def test_watchdog(fixtures):
+    """Checks that the file system observer triggers imports on new/changed files"""
+    tmpdir = fixtures['root']
+
+    acq_dir = tmpdir.join('12345678T000000Z_inst_zab')
+
+    node = st.StorageNode.get(st.StorageNode.name == 'x')
+
+    import watchdog.events as ev
+    watchdog_handler = auto_import.RegisterFile(node)
+
+    # new acquisition file
+    f = acq_dir.join('new_file.log')
+    f.write('')
+    assert file_copy_count('new_file.log') == 0
+    watchdog_handler.on_created(ev.FileCreatedEvent(str(f)))
+    assert file_copy_count('new_file.log') == 1
+
+    # this file is outside any acqs and should be ignored
+    g = tmpdir.join('some_file.log')
+    g.write('Where is my acq?!')
+    assert file_copy_count('some_file.log') == 0
+    watchdog_handler.on_created(ev.FileCreatedEvent(str(g)))
+    assert file_copy_count('some_file.log') == 0
+
+    # now delete the lock and try reimport, which should succeed
+    lock = acq_dir.join('.foo.zxc.lock')
+    lock.remove()
+    assert file_copy_count('foo.zxc') == 0
+    watchdog_handler.on_deleted(ev.FileDeletedEvent(str(lock)))
+    assert file_copy_count('foo.zxc') == 1
+
+
+def file_copy_count(file_name):
+    return (ar.ArchiveFileCopy
+        .select()
+        .join(ac.ArchiveFile)
+        .where(ac.ArchiveFile.name == file_name)
+        .count()
+    )
