@@ -90,5 +90,15 @@ def test_model(fixtures):
             'max_total_gb': 10, 'min_avail_gb': 1,
             'avail_gb': None, 'avail_gb_last_checked': None,
             'min_delete_age_days': 30,
+        },
+        {
+            'id': 2, 'name': 'z', 'group': 2,
+            'host': 'bar.example.com', 'address': None,
+            'auto_import': False, 'storage_type': 'A',
+            'mounted': False, 'root': None, 'suspect': False,
+            'username': None, 'notes': None,
+            'max_total_gb': 10, 'min_avail_gb': 1,
+            'avail_gb': None, 'avail_gb_last_checked': None,
+            'min_delete_age_days': 30,
         }
     ]
