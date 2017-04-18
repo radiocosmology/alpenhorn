@@ -281,32 +281,27 @@ class RegisterFile(FileSystemEventHandler):
         super(RegisterFile, self).__init__()
 
     def on_created(self, event):
-        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
-        subpath = event.src_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.src_path.replace(self.root + "/", "")
+        import_file(self.node, self.root, subpath)
         return
 
     def on_modified(self, event):
-        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
-        subpath = event.src_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.src_path.replace(self.root + "/", "")
+        import_file(self.node, self.root, subpath)
         return
 
     def on_moved(self, event):
-        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
-        subpath = event.dest_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.dest_path.replace(self.root + "/", "")
+        import_file(self.node, self.root, subpath)
         return
 
     def on_deleted(self, event):
         # For lockfiles: ensure that the file that was locked is added: it is
         # possible that the watchdog notices that a file has been closed before the
         # lockfile is deleted.
-        subpath = event.src_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            if subpath[1][0] == "." and subpath[1][-5:] == ".lock":
-                subpath[1] = subpath[1][1:-5]
-                import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.src_path.replace(self.root + "/", "")
+        basename = os.path.basename(subpath)
+        dirname = os.path.dirname(subpath)
+        if basename[0] == "." and basename[-5:] == ".lock":
+            basename = basename[1:-5]
+            import_file(self.node, self.root, os.path.join(dirname, basename))
