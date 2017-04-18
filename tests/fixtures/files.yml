@@ -19,3 +19,45 @@ x:
   jim:
     contents: ''
     md5: d41d8cd98f00b204e9800998ecf8427e
+
+alp_root:
+  '2017':
+    '03':
+      '21':
+        acq_xy1_45678901T000000Z_inst_zab:
+          summary.txt:
+            contents: ''
+            md5: d41d8cd98f00b204e9800998ecf8427e
+          acq_data:
+            x_123_1_data:
+              raw:
+                acq_123_1.zxc:
+                  contents: "I'm a ZXC FRB."
+                  md5: cc85416c60621811dc93e591f4e787be
+              proc:
+                acq_123_1_proc.zxc:
+                  contents: "Still processing, come back later!"
+                  md5: 66f708a80f5eeb47076aa7e0035ae064
+                .acq_123_proc.zxc.lock:
+                  contents: ''
+                  md5: d41d8cd98f00b204e9800998ecf8427e
+            x_123_2_data:
+              raw:
+                acq_123_2.zxc:
+                  contents: "I'm a ZXC FRB."
+                  md5: cc85416c60621811dc93e591f4e787be
+              proc:
+                acq_123_2_proc.zxc:
+                  contents: "Still processing, come back later!"
+                  md5: 66f708a80f5eeb47076aa7e0035ae064
+                .acq_123_2_proc.zxc.lock:
+                  contents: ''
+                  md5: d41d8cd98f00b204e9800998ecf8427e
+          housekeeping_data:
+            hk_123.zxc:
+              contents: "Still processing, come back later!"
+              md5: 66f708a80f5eeb47076aa7e0035ae064
+            .hk_123.zxc.lock:
+              contents: ''
+              md5: d41d8cd98f00b204e9800998ecf8427e
+

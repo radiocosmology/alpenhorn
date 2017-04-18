@@ -18,22 +18,22 @@ log = logger.get_log()
 
 log.setLevel(logger.logging.DEBUG)
 
-def import_file(node, root, acq_name, file_name):
+def import_file(node, root, file_path):
     done = False
     while not done:
         try:
-            _import_file(node, root, acq_name, file_name)
+            _import_file(node, root, file_path)
             done = True
         except pw.OperationalError as e:
             log.exception(e)
             log.error("MySQL connexion dropped. Will attempt to reconnect in "
                       "five seconds.")
             time.sleep(5)
-            # TODO: reconnection
+            # TODO: handle reconnection
             db.database_proxy.connect()
 
 
-def _import_file(node, root, acq_name, file_name):
+def _import_file(node, root, file_path):
     """Import a file into the DB.
 
     This routine adds the following to the database, if they do not already exist
@@ -46,17 +46,20 @@ def _import_file(node, root, acq_name, file_name):
     """
     # global import_done
     curr_done = True
-    fullpath = "%s/%s/%s" % (root, acq_name, file_name)
+    fullpath = os.path.join(root, file_path)
     log.debug("Considering %s for import." % fullpath)
 
     # Skip the file if ch_master.py still has a lock on it.
-    if os.path.isfile("%s/%s/.%s.lock" % (root, acq_name, file_name)):
+    dir_name = os.path.dirname(file_path)
+    base_name = os.path.basename(file_path)
+    if os.path.isfile(os.path.join(root, dir_name, ".%s.lock" % base_name)):
         log.debug("Skipping \"%s\", which is locked by ch_master.py." % fullpath)
         return
 
     # Check if we can handle this acquisition, and skip if we can't
-    if ac.AcqType.detect(acq_name, node) is None:
-        log.info("Skipping non-acquisition path %s." % acq_name)
+    acq_type_name = ac.AcqType.detect(file_path, node)
+    if acq_type_name is None:
+        log.info("Skipping non-acquisition path %s." % file_path)
         return
 
     # TODO: imported files caching
@@ -67,16 +70,16 @@ def _import_file(node, root, acq_name, file_name):
     #         return
 
     # Figure out which acquisition this is; add if necessary.
+    acq_type, acq_name = acq_type_name
     try:
         acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
         log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
     except pw.DoesNotExist:
-        acq = add_acq(acq_name, node)
-        if acq is None:
-            return
+        acq = add_acq(acq_type, acq_name, node)
         log.info("Acquisition \"%s\" added to DB." % acq_name)
 
     # What kind of file do we have?
+    file_name = os.path.relpath(file_path, acq_name)
     ftype = ac.FileType.detect(file_name, acq, node)
 
     if ftype is None:
@@ -110,6 +113,7 @@ def _import_file(node, root, acq_name, file_name):
                           "five seconds.")
                 time.sleep(5)
 
+                # TODO: re-implement
                 # di.connect_database(True)
         log.info("File \"%s/%s\" added to DB." % (acq_name, file_name))
 
@@ -148,7 +152,7 @@ def _import_file(node, root, acq_name, file_name):
 # Routines for registering files, acquisitions, copies and info in the DB.
 # ========================================================================
 
-def add_acq(name, node, comment=""):
+def add_acq(acq_type, name, node, comment=""):
     """Add an aquisition to the database.
 
     This looks for an appropriate acquisition type, and if successful creates
@@ -156,6 +160,8 @@ def add_acq(name, node, comment=""):
 
     Parameters
     ----------
+    acq_type : AcqType
+        Type of the acquisition
     name : string
         Name of the acquisition directory.
     node : StorageNode
@@ -177,14 +183,8 @@ def add_acq(name, node, comment=""):
         raise AlreadyExists("Acquisition \"%s\" already exists in DB." %
                             name)
 
-    # Find an acquisition type that can handle this acq
-    acq_type = ac.AcqType.detect(name, node)
-
-    if acq_type is None:
-        log.debug("No handler available to process \"%s\"" % name)
-        return
-
     # At the moment we need an instrument, so just create one.
+    # TODO: this should probably go away
     try:
         inst_rec = ac.ArchiveInst.get(name='inst')
     except pw.DoesNotExist:
@@ -281,32 +281,27 @@ class RegisterFile(FileSystemEventHandler):
         super(RegisterFile, self).__init__()
 
     def on_created(self, event):
-        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
-        subpath = event.src_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.src_path.replace(self.root + "/", "")
+        import_file(self.node, self.root, subpath)
         return
 
     def on_modified(self, event):
-        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
-        subpath = event.src_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.src_path.replace(self.root + "/", "")
+        import_file(self.node, self.root, subpath)
         return
 
     def on_moved(self, event):
-        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
-        subpath = event.dest_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.dest_path.replace(self.root + "/", "")
+        import_file(self.node, self.root, subpath)
         return
 
     def on_deleted(self, event):
         # For lockfiles: ensure that the file that was locked is added: it is
         # possible that the watchdog notices that a file has been closed before the
         # lockfile is deleted.
-        subpath = event.src_path.replace(self.root + "/", "").split("/")
-        if len(subpath) == 2:
-            if subpath[1][0] == "." and subpath[1][-5:] == ".lock":
-                subpath[1] = subpath[1][1:-5]
-                import_file(self.node, self.root, subpath[0], subpath[1])
+        subpath = event.src_path.replace(self.root + "/", "")
+        basename = os.path.basename(subpath)
+        dirname = os.path.dirname(subpath)
+        if basename[0] == "." and basename[-5:] == ".lock":
+            basename = basename[1:-5]
+            import_file(self.node, self.root, os.path.join(dirname, basename))

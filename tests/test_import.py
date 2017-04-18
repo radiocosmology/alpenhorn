@@ -29,7 +29,7 @@ tests_path = os.path.abspath(os.path.dirname(__file__))
 class ZabInfo(ge.GenericAcqInfo):
     _acq_type = 'zab'
     _file_types = ['zxc', 'log']
-    patterns = ['*zab']
+    patterns = ['**zab']
 
 class QuuxInfo(ge.GenericAcqInfo):
     _acq_type = 'quux'
@@ -38,7 +38,7 @@ class QuuxInfo(ge.GenericAcqInfo):
 
 class ZxcInfo(ge.GenericFileInfo):
     _file_type = 'zxc'
-    patterns = ['*.zxc', 'jim*', 'sheila']
+    patterns = ['**.zxc', 'jim*', 'sheila']
 
 class SpqrInfo(ge.GenericFileInfo):
     _file_type = 'spqr'
@@ -52,7 +52,7 @@ class LogInfo(ge.GenericFileInfo):
 def fixtures(tmpdir):
     fs = ta.fixtures().next()
 
-    p = tmpdir.mkdir("ROOT")
+    p = tmpdir.join("ROOT")
 
     (st.StorageNode
      .update(root=str(p))
@@ -71,11 +71,17 @@ def fixtures(tmpdir):
     with open(os.path.join(tests_path, 'fixtures/files.yml')) as f:
         fixtures = yaml.load(f)
 
-    for dir_name, files in fixtures.iteritems():
-        d = p.mkdir(dir_name)
+
+    def make_files(dir_name, files, root):
+        d = root.mkdir(dir_name)
         for file_name, file_data in files.iteritems():
-            f = d.join(file_name)
-            f.write(file_data['contents'])
+            if file_data.has_key('md5'):
+                f = d.join(file_name)
+                f.write(file_data['contents'])
+            else:               # it's really a directory, recurse!
+                make_files(file_name, file_data, d)
+
+    make_files(p.basename, fixtures, tmpdir)
 
     return {'root': p, 'files': fixtures}
 
@@ -93,7 +99,7 @@ def test_schema(fixtures):
     assert st.StorageNode.get(st.StorageNode.name == 'x').root == fixtures['root']
 
     tmpdir = fixtures['root']
-    assert len(tmpdir.listdir()) == 2
+    assert len(tmpdir.listdir()) == 3
     acq_dir = tmpdir.join("12345678T000000Z_inst_zab")
     assert len(acq_dir.listdir()) == 4
 
@@ -107,7 +113,7 @@ def test_import(fixtures):
 
     # import for hello.txt should be ignored while creating the acquisition
     # because 'zab' acq type only tracks *.zxc and *.log files
-    auto_import.import_file(node, node.root, acq_dir.basename, 'hello.txt')
+    auto_import.import_file(node, node.root, acq_dir.join('hello.txt').relto(tmpdir))
     assert ac.ArchiveInst.get(ac.ArchiveInst.name == 'inst') is not None
     assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
 
@@ -125,7 +131,7 @@ def test_import(fixtures):
             .count()) == 0
 
     # now import 'ch_master.log', which should succeed
-    auto_import.import_file(node, node.root, acq_dir.basename, 'ch_master.log')
+    auto_import.import_file(node, node.root, acq_dir.join('ch_master.log').relto(tmpdir))
     file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'ch_master.log')
     assert file is not None
     assert file.acq == acq
@@ -141,7 +147,7 @@ def test_import(fixtures):
     assert file_copy.wants_file == 'Y'
 
     # re-importing ch_master.log should be a no-op
-    auto_import.import_file(node, node.root, acq_dir.basename, 'ch_master.log')
+    auto_import.import_file(node, node.root, acq_dir.join('ch_master.log').relto(tmpdir))
 
     assert list(ac.ArchiveFile
                 .select()
@@ -169,7 +175,7 @@ def test_import_existing(fixtures):
             .count()) == 1
 
     ## import an unknown file
-    auto_import.import_file(node, node.root, acq_dir.basename, 'foo.log')
+    auto_import.import_file(node, node.root, acq_dir.join('foo.log').relto(tmpdir))
     assert (ar.ArchiveFileCopy
             .select()
             .join(ac.ArchiveFile)
@@ -184,7 +190,7 @@ def test_import_existing(fixtures):
             .where(ac.ArchiveFile.name == 'jim')
             .count()
     ) == 0
-    auto_import.import_file(node, node.root, acq_dir.basename, 'jim')
+    auto_import.import_file(node, node.root, acq_dir.join('jim').relto(tmpdir))
     assert (ar.ArchiveFileCopy  # now we have an ArchiveFileCopy for 'jim'
             .select()
             .join(ac.ArchiveFile)
@@ -202,7 +208,7 @@ def test_import_locked(fixtures):
 
     # import for foo.zxc should be ignored because there is also the
     # foo.zxc.lock file
-    auto_import.import_file(node, node.root, acq_dir.basename, 'foo.zxc')
+    auto_import.import_file(node, node.root, acq_dir.join('foo.zxc').relto(tmpdir))
     assert (ac.ArchiveFile
             .select()
             .where(ac.ArchiveFile.name == 'foo.zxc')
@@ -210,7 +216,7 @@ def test_import_locked(fixtures):
 
     # now delete the lock and try reimport, which should succeed
     acq_dir.join('.foo.zxc.lock').remove()
-    auto_import.import_file(node, node.root, acq_dir.basename, 'foo.zxc')
+    auto_import.import_file(node, node.root, acq_dir.join('foo.zxc').relto(tmpdir))
     file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'foo.zxc')
     assert file.acq.name == acq_dir.basename
     assert file.type.name == 'zxc'
@@ -240,7 +246,7 @@ def test_import_corrupted(fixtures):
                 .dicts()) == [
                     {'has_file': 'X', 'wants_file': 'M'}
     ]
-    auto_import.import_file(node, node.root, acq_dir.basename, 'sheila')
+    auto_import.import_file(node, node.root, acq_dir.join('sheila').relto(tmpdir))
     assert list(ar.ArchiveFileCopy
                 .select(ar.ArchiveFileCopy.has_file,
                         ar.ArchiveFileCopy.wants_file)
@@ -282,6 +288,47 @@ def test_watchdog(fixtures):
     assert file_copy_count('foo.zxc') == 0
     watchdog_handler.on_deleted(ev.FileDeletedEvent(str(lock)))
     assert file_copy_count('foo.zxc') == 1
+
+
+def test_import_nested(fixtures):
+    tmpdir = fixtures['root']
+
+    acq_dir = tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab')
+
+    node = st.StorageNode.get(st.StorageNode.name == 'x')
+
+    # import for hello.txt should be ignored while creating the acquisition
+    # because 'zab' acq type only tracks *.zxc and *.log files
+    auto_import.import_file(node, node.root, acq_dir.join('summary.txt').relto(tmpdir))
+    assert ac.ArchiveInst.get(ac.ArchiveInst.name == 'inst') is not None
+    assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
+
+    # the acquisition is still created
+    acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_dir.relto(tmpdir))
+    assert acq is not None
+    assert acq.name == acq_dir.relto(tmpdir)
+    assert acq.inst.name == 'inst'
+    assert acq.type.name == 'zab'
+
+    # while no file has been imported yet
+    assert (ac.ArchiveFile
+            .select()
+            .where(ac.ArchiveFile.acq == acq)
+            .count()) == 0
+
+    # now import 'acq_123_1.zxc', which should succeed
+    auto_import.import_file(node, node.root, acq_dir.join('acq_data/x_123_1_data/raw/acq_123_1.zxc').relto(tmpdir))
+    file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'acq_data/x_123_1_data/raw/acq_123_1.zxc')
+    assert file.acq.name == acq_dir.relto(tmpdir)
+    assert file.type.name == 'zxc'
+    assert file.size_b == len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents'])
+    assert file.md5sum == fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5']
+
+    file_copy = ar.ArchiveFileCopy.get(ar.ArchiveFileCopy.file == file,
+                                       ar.ArchiveFileCopy.node == node)
+    assert file_copy.file == file
+    assert file_copy.has_file == 'Y'
+    assert file_copy.wants_file == 'Y'
 
 
 def file_copy_count(file_name):
