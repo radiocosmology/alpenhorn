@@ -104,11 +104,23 @@ class AcqType(base_model):
         node : StorageNode
             The node we are importing from. Needed so we can inspect the actual
             acquisition.
+
+        Returns
+        -------
+        (AcqType, str) or None
+            A tuple of acquisition type and name or None if one could not be found
+
+        Notes
+        -----
+
+        The returned acquisition name is either equal to the parameter
+        `acqname` or the closest ancestor directory which had a matching
+        `AcqType`.
+
         """
-        # TODO: document return type
 
         # Iterate over all known acquisition types to try and find one that
-        # matches the directory being processed. If nothing is found, repeat
+        # can handle the acqname path. If nothing is found, repeat
         # the process with the parent directory of acqname, until we run out of
         # directory segments
         while acqname != '':

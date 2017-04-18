@@ -29,7 +29,7 @@ def import_file(node, root, file_path):
             log.error("MySQL connexion dropped. Will attempt to reconnect in "
                       "five seconds.")
             time.sleep(5)
-            # TODO: reconnection
+            # TODO: handle reconnection
             db.database_proxy.connect()
 
 
@@ -57,7 +57,6 @@ def _import_file(node, root, file_path):
         return
 
     # Check if we can handle this acquisition, and skip if we can't
-    # TODO: detect on the full file_path or just dir_name?
     acq_type_name = ac.AcqType.detect(file_path, node)
     if acq_type_name is None:
         log.info("Skipping non-acquisition path %s." % file_path)
@@ -77,9 +76,6 @@ def _import_file(node, root, file_path):
         log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
     except pw.DoesNotExist:
         acq = add_acq(acq_type, acq_name, node)
-        if acq is None:
-            # TODO: raise error? is a check even necessary?
-            return
         log.info("Acquisition \"%s\" added to DB." % acq_name)
 
     # What kind of file do we have?
@@ -117,6 +113,7 @@ def _import_file(node, root, file_path):
                           "five seconds.")
                 time.sleep(5)
 
+                # TODO: re-implement
                 # di.connect_database(True)
         log.info("File \"%s/%s\" added to DB." % (acq_name, file_name))
 
@@ -186,12 +183,8 @@ def add_acq(acq_type, name, node, comment=""):
         raise AlreadyExists("Acquisition \"%s\" already exists in DB." %
                             name)
 
-    # TODO: should we still check?
-    # if acq_type is None:
-    #     log.debug("No handler available to process \"%s\"" % name)
-    #     return
-
     # At the moment we need an instrument, so just create one.
+    # TODO: this should probably go away
     try:
         inst_rec = ac.ArchiveInst.get(name='inst')
     except pw.DoesNotExist:
