@@ -3,6 +3,8 @@ groups:
     notes: null
   - name: bar
     notes: Some bar!
+  - name: transport
+    notes: null
 
 nodes:
   - name: x

@@ -2,3 +2,4 @@ peewee >= 2.7.0
 Click >= 6.0
 globre
 watchdog
+tabulate

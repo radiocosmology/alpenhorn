@@ -76,7 +76,7 @@ def test_schema(fixtures):
 
 def test_model(fixtures):
     groups = set(StorageGroup.select(StorageGroup.name).tuples())
-    assert groups == { ( 'foo', ), ( 'bar',  )}
+    assert groups == { ( 'foo', ), ( 'bar', ), ('transport', ) }
     assert StorageGroup.get(StorageGroup.name == 'bar').notes == 'Some bar!'
     
     nodes = list(StorageNode.select().dicts())
