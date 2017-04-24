@@ -504,7 +504,7 @@ def test_nested_import_files(fixtures):
         md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
 
     result = runner.invoke(cli.import_files, args = ['-vv', 'x'])
-    print result.output
+
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Added 1 files\n\n' +
