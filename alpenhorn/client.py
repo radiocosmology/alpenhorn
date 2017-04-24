@@ -877,7 +877,7 @@ def import_files(node_name, verbose, acq, dry):
         print
         print "Added files:"
 
-        for fn in added_files:
+        for fn in sorted(added_files):
             print fn
 
         print
@@ -885,17 +885,17 @@ def import_files(node_name, verbose, acq, dry):
     if verbose > 1:
 
         print "Corrupt:"
-        for fn in corrupt_files:
+        for fn in sorted(corrupt_files):
             print fn
         print
 
         print "Unknown files:"
-        for fn in unknown_files:
+        for fn in sorted(unknown_files):
             print fn
         print
 
         print "Unknown acquisitions:"
-        for fn in not_acqs_roots:
+        for fn in sorted(not_acqs_roots):
             print fn
         print
 

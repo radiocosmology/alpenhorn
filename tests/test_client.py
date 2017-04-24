@@ -493,6 +493,7 @@ def test_nested_import_files(fixtures):
         md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
 
     result = runner.invoke(cli.import_files, args = ['-vv', 'x'])
+    print result.output
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Added 1 files\n\n' +
@@ -505,7 +506,6 @@ def test_nested_import_files(fixtures):
                     r'Corrupt:\n' +
                     r'x/jim\n\n' +
                     r'Unknown files:\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/.acq_123_2_proc.zxc.lock\n' +
@@ -513,6 +513,7 @@ def test_nested_import_files(fixtures):
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/.hk_123.zxc.lock\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/hk_123.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
                     r'x/foo\.log\n\n' +
                     r'Unknown acquisitions:\n' +
                     r'12345678T000000Z_inst_zab\n$',
