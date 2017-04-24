@@ -890,7 +890,7 @@ def import_files(node_name, verbose, acq, dry):
         print
 
         print "Unknown files:"
-        for fn in sorted(unknown_files):
+        for fn in sorted(unknown_files, cmp=lambda x, y: cmp(x.count('/'), y.count('/')) or cmp(x, y)):
             print fn
         print
 
