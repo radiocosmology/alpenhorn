@@ -1,4 +1,7 @@
 """Routines for the importing of new files on a node."""
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 import time
 import os
 import re
@@ -188,7 +191,7 @@ def add_acq(acq_type, name, node, comment=""):
     try:
         inst_rec = ac.ArchiveInst.get(name='inst')
     except pw.DoesNotExist:
-        print "Creating inst."
+        print("Creating inst.")
         inst_rec = ac.ArchiveInst.create(name='inst')
 
     # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition. Run

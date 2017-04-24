@@ -5,13 +5,20 @@ test_client
 
 Tests for `alpenhorn.clien` module.
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import pytest
 from click.testing import CliRunner
 import os
 import re
 from io import StringIO
-from mock import patch, call
+
+try:
+    from unittest.mock import patch, call
+except ImportError:
+    from mock import patch, call
 
 # TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
 os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
@@ -94,6 +101,10 @@ def test_sync(fixtures):
 
     ## if we run sync again, the copy request will simply get the 'n_requests' count incremented by 1
     result = runner.invoke(cli.sync, args = ['--force', '--show_acq', '--show_files', 'x', 'bar'])
+
+    print(result.output)
+    print(result.exception)
+
     assert result.exit_code == 0
     assert re.match(r'x \[1 files\]\n' +
                     r'x/fred\n' +

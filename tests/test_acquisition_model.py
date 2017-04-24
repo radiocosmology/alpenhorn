@@ -4,6 +4,9 @@ test_acquisition_model
 
 Tests for `alpenhorn.acquisition` module.
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import pytest
 import yaml

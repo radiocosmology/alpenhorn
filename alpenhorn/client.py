@@ -1,4 +1,7 @@
 """Alpenhorn client interface."""
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import sys
 import os
@@ -136,7 +139,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         copy = copy.where(ac.ArchiveFile.acq == acq)
 
     if not copy.count():
-        print "No files to copy from node %s." % (node_name)
+        print("No files to copy from node %s." % (node_name))
         return
 
     # Show acquisitions based summary of files to be copied
@@ -145,12 +148,12 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
         import collections
         for acq, count in collections.Counter(acqs).items():
-            print "%s [%i files]" % (acq, count)
+            print("%s [%i files]" % (acq, count))
 
     # Show all files to be copied
     if show_files:
         for c in copy:
-            print "%s/%s" % (c.file.acq.name, c.file.name)
+            print("%s/%s" % (c.file.acq.name, c.file.name))
 
     size_bytes = copy.aggregate(pw.fn.Sum(ac.ArchiveFile.size_b))
     size_gb = int(size_bytes) / 1073741824.0
@@ -159,7 +162,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
            (copy.count(), size_gb, node_name, group_name))
 
     if not (force or click.confirm("Do you want to proceed?")):
-        print "Aborted."
+        print("Aborted.")
         return
 
     dtnow = datetime.datetime.now()
@@ -178,8 +181,8 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         req_file_ids = [req.file_id for req in requests]
 
         # Separate the files into ones that already have requests and ones that don't
-        files_in = filter(lambda x: x in req_file_ids, files_ids)
-        files_out = filter(lambda x: x not in req_file_ids, files_ids)
+        files_in = [x for x in files_ids if x in req_file_ids]
+        files_out = [x for x in files_ids if x not in req_file_ids]
 
         click.echo("Updating %i existing requests and inserting %i new ones.\n" % (len(files_in), len(files_out)))
 
@@ -227,7 +230,7 @@ def status(all):
         nodes = nodes.where(st.StorageNode.mounted)
 
     log.info("Nodes: %s" % nodes.count())
-    
+
     # Totals for the whole archive
     tot = ac.ArchiveFile.select(pw.fn.Count(ac.ArchiveFile.id).alias('count'),
                                 pw.fn.Sum(ac.ArchiveFile.size_b).alias('total_size')).scalar(as_tuple=True)
@@ -238,7 +241,7 @@ def status(all):
 
     headers = ['Node', 'Files', 'Size [TB]', 'Files [%]', 'Size [%]', 'Path']
 
-    print tabulate.tabulate(data, headers=headers, floatfmt=".1f")
+    print(tabulate.tabulate(data, headers=headers, floatfmt=".1f"))
 
 
 @cli.command()
@@ -317,7 +320,7 @@ def verify(node_name, md5, fixdb, acq):
             click.echo(fname)
 
     if len(corrupt_files) > 0:
-        print
+        print()
         click.echo("=== Corrupt files ===")
         for fname in corrupt_files:
             click.echo(fname)
@@ -381,14 +384,14 @@ def clean(node_name, days, force, now, target, acq):
     try:
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
     except pw.DoesNotExist:
-        print "Specified node does not exist."
+        print("Specified node does not exist.")
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
         if force or click.confirm('DANGER: run clean on archive node?'):
-            print "%s is an archive node. Forcing clean." % node_name
+            print("%s is an archive node. Forcing clean." % node_name)
         else:
-            print "Cannot clean archive node %s without forcing." % node_name
+            print("Cannot clean archive node %s without forcing." % node_name)
             return
 
     # Select FileCopys on this node.
@@ -483,13 +486,13 @@ def clean(node_name, days, force, now, target, acq):
 
             size_gb = int(size_bytes) / 1073741824.0
 
-            print 'Cleaning up %i files (%.1f GB) from %s.' % (count, size_gb, node_name)
+            print('Cleaning up %i files (%.1f GB) from %s.' % (count, size_gb, node_name))
 
     # If there are any files to clean, ask for confirmation and the mark them in
     # the database for removal
     if len(file_ids) > 0:
         if force or click.confirm("  Are you sure?"):
-            print "  Marking files for cleaning."
+            print("  Marking files for cleaning.")
 
             state = 'N' if now else 'M'
 
@@ -498,12 +501,12 @@ def clean(node_name, days, force, now, target, acq):
 
             n = update.execute()
 
-            print "Marked %i files for cleaning" % n
+            print("Marked %i files for cleaning" % n)
 
         else:
-            print "  Cancelled"
+            print("  Cancelled")
     else:
-        print "No files selected for cleaning on %s." % node_name
+        print("No files selected for cleaning on %s." % node_name)
 
 
 @cli.command()
@@ -522,10 +525,10 @@ def mounted(host):
                    .select() \
                    .where(ar.ArchiveFileCopy.node == node) \
                    .count()
-        print "%-25s %-30s %5d files" % (node.name, node.root, n_file)
+        print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
         zero = False
     if zero:
-        print "No nodes are mounted on host %s." % host
+        print("No nodes are mounted on host %s." % host)
 
 
 @cli.command()
@@ -540,25 +543,25 @@ def format_transport(serial_num):
     import glob
 
     if os.getuid() != 0:
-        print "You must be root to run mount on a transport disc. I quit."
+        print("You must be root to run mount on a transport disc. I quit.")
         return
 
     # Find the disc.
     dev = glob.glob("/dev/disk/by-id/*%s" % serial_num)
     if len(dev) == 0:
-        print "No disc with that serial number is attached."
+        print("No disc with that serial number is attached.")
         return
     elif len(dev) > 1:
-        print "Confused: found more than one device matching that serial number:"
+        print("Confused: found more than one device matching that serial number:")
         for d in dev:
-            print "  %s" % dev
-        print "Aborting."
+            print("  %s" % dev)
+        print("Aborting.")
         return
     dev = dev[0]
     dev_part = "%s-part1" % dev
 
     # Figure out if it is formatted.
-    print "Checking to see if disc is formatted. Please wait."
+    print("Checking to see if disc is formatted. Please wait.")
     fp = os.popen("parted -s %s print" % dev)
     formatted = False
     part_start = False
@@ -575,32 +578,32 @@ def format_transport(serial_num):
     if not formatted:
         if not click.confirm("Disc is not formatted. Should I format it?"):
             return
-        print "Creating partition. Please wait."
+        print("Creating partition. Please wait.")
         os.system("parted -s -a optimal %s mklabel gpt -- mkpart primary 0%% 100%%" % dev)
-        print "Formatting disc. Please wait."
+        print("Formatting disc. Please wait.")
         os.system("mkfs.ext4 %s -m 0 -L CH-%s" % (dev_part, serial_num))
     else:
-        print "Disc is already formatted."
+        print("Disc is already formatted.")
 
     e2label = get_e2label(dev_part)
     name = "CH-%s" % serial_num
     if e2label and e2label != name:
-        print "Disc label %s does not conform to labelling standard, " \
-              "which is CH-<serialnum>."
+        print("Disc label %s does not conform to labelling standard, " \
+              "which is CH-<serialnum>.")
         exit
     elif not e2label:
-        print "Labelling the disc as \"%s\" (using e2label) ..." % (name)
+        print("Labelling the disc as \"%s\" (using e2label) ..." % (name))
         assert dev_part is not None
         assert len(name) <= MAX_E2LABEL_LEN
         stat = os.system("/sbin/e2label %s %s" % (dev_part, name))
         if stat:
-            print "Failed to e2label! Stat = %s. I quit." % (stat)
+            print("Failed to e2label! Stat = %s. I quit." % (stat))
             exit()
 
     # Ensure the mount path exists.
     root = "/mnt/%s" % name
     if not os.path.isdir(root):
-        print "Creating mount point %s." % root
+        print("Creating mount point %s." % root)
         os.mkdir(root)
 
     # Check to see if the disc is mounted.
@@ -615,19 +618,19 @@ def format_transport(serial_num):
             if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
                 mounted = True
             else:
-                print "%s is a mount point, but %s is already mounted there." \
-                      (root, l.split()[0])
+                print("%s is a mount point, but %s is already mounted there." \
+                      (root, l.split()[0]))
     fp.close()
 
     try:
         node = st.StorageNode.get(name=name)
     except pw.DoesNotExist:
-        print "This disc has not been registered yet as a storage node. " \
-              "Registering now."
+        print("This disc has not been registered yet as a storage node. " \
+              "Registering now.")
         try:
             group = st.StorageGroup.get(name="transport")
         except pw.DoesNotExist:
-            print "Hmmm. Storage group \"transport\" does not exist. I quit."
+            print("Hmmm. Storage group \"transport\" does not exist. I quit.")
             exit()
 
         # TODO: ensure write access to the database
@@ -636,9 +639,9 @@ def format_transport(serial_num):
         node = st.StorageNode.create(name=name, root=root, group=group,
                                      storage_type="T", min_avail_gb=1)
 
-        print "Successfully created storage node."
+        print("Successfully created storage node.")
 
-    print "Node created but not mounted. Run alpenhorn mount_transport for that."
+    print("Node created but not mounted. Run alpenhorn mount_transport for that.")
 
 
 @cli.command()
@@ -652,7 +655,7 @@ def mount_transport(ctx, node, user, address):
 
     mnt_point = "/mnt/%s" % node
 
-    print "Mounting disc at %s" % mnt_point
+    print("Mounting disc at %s" % mnt_point)
     os.system("mount %s" % mnt_point)
 
     ctx.invoke(mount, name=node, path=mnt_point, user=user, address=address)
@@ -667,7 +670,7 @@ def unmount_transport(ctx, node):
 
     mnt_point = "/mnt/%s" % node
 
-    print "Unmounting disc at %s" % mnt_point
+    print("Unmounting disc at %s" % mnt_point)
     os.system("umount %s" % mnt_point)
 
     ctx.invoke(unmount, root_or_name=node)
@@ -750,7 +753,7 @@ def unmount(root_or_name):
     else:
         node.mounted = False
         node.save()
-        print "Node successfully unmounted."
+        print("Node successfully unmounted.")
 
 
 @cli.command()
@@ -779,7 +782,7 @@ def import_files(node_name, verbose, acq, dry):
     try:
         node = st.StorageNode.select().where(st.StorageNode.name == node_name).get()
     except pw.DoesNotExist:
-        print "Unknown node."
+        print("Unknown node.")
         return
 
     # Construct list of directories that might be acquisitions
@@ -864,42 +867,42 @@ def import_files(node_name, verbose, acq, dry):
             not_acqs_roots.append(d)
             last_acq_root = d
 
-    print "\n==== Summary ===="
-    print
-    print "Added %i files" % len(added_files)
-    print
-    print "%i corrupt files." % len(corrupt_files)
-    print "%i files already registered." % len(registered_files)
-    print "%i files not known" % len(unknown_files)
-    print "%i directories were not acquisitions." % len(not_acqs_roots)
+    print("\n==== Summary ====")
+    print()
+    print("Added %i files" % len(added_files))
+    print()
+    print("%i corrupt files." % len(corrupt_files))
+    print("%i files already registered." % len(registered_files))
+    print("%i files not known" % len(unknown_files))
+    print("%i directories were not acquisitions." % len(not_acqs_roots))
 
     if verbose > 0:
-        print
-        print "Added files:"
+        print()
+        print("Added files:")
 
         for fn in sorted(added_files):
-            print fn
+            print(fn)
 
-        print
+        print()
 
     if verbose > 1:
 
-        print "Corrupt:"
+        print("Corrupt:")
         for fn in sorted(corrupt_files):
-            print fn
-        print
+            print(fn)
+        print()
 
-        print "Unknown files:"
+        print("Unknown files:")
         for fn in sorted(unknown_files):
-            print fn
-        print
+            print(fn)
+        print()
 
-        print "Unknown acquisitions:"
+        print("Unknown acquisitions:")
         for fn in sorted(not_acqs_roots):
-            print fn
-        print
+            print(fn)
+        print()
 
-        
+
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
 

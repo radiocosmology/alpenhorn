@@ -4,6 +4,9 @@ test_archive_model
 
 Tests for `alpenhorn.archive` module.
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import pytest
 import yaml
@@ -51,8 +54,8 @@ def fixtures():
 
     db.connect()
 
-    fs = ts.fixtures(False).next()
-    fa = ta.fixtures(False).next()
+    fs = next(ts.fixtures(False))
+    fa = next(ta.fixtures(False))
 
     db.database_proxy.create_tables([ArchiveFileCopy, ArchiveFileCopyRequest ])
 
