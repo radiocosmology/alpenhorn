@@ -507,9 +507,13 @@ def test_nested_import_files(fixtures):
                     r'x/jim\n\n' +
                     r'Unknown files:\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
-                    r'(alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/.*?\n){5}' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/\.?hk_123.zxc(\.lock)?\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/\.?hk_123.zxc(\.lock)?\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/.acq_123_2_proc.zxc.lock\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/acq_123_2_proc.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/hk_123.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/.hk_123.zxc.lock\n' +
                     r'x/foo\.log\n\n' +
                     r'Unknown acquisitions:\n' +
                     r'12345678T000000Z_inst_zab\n$',
