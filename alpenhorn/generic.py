@@ -107,6 +107,16 @@ class GenericFileInfo(ac.FileInfoBase):
         pass
 
 
+def register_extension():
+
+    ext_dict = {
+        'acq_types': [GenericAcqInfo],
+        'file_types': [GenericFileInfo]
+    }
+
+    return ext_dict
+
+
 def _check_match(name, patterns, glob):
     # Get the match function to use depending on whether globbing is enabled.
     if glob:

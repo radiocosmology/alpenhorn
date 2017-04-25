@@ -1,10 +1,10 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
 import logging
 import peewee as pw
 import playhouse.db_url as db_url
-
 
 # All peewee-generated logs are logged to this namespace.
 logger = logging.getLogger("db")
@@ -15,61 +15,48 @@ logger.addHandler(logging.NullHandler())
 # ================================
 
 # _property = property  # Do this because we want a class named "property".
-database_proxy = pw.Proxy()
+
+class RobustProxy(pw.Proxy):
+    """A robust database proxy.
+
+    A merger of peewee's database proxy support and the functionality of the
+    `RetryOperationalError` mixin. to try and make the database connection more
+    robust by default.
+    """
+
+    def execute_sql(self, sql, params=None, require_commit=True):
+        # Code in this function is a modified version of some in peewee
+        # Copyright (c) 2010 Charles Leifer
+
+        # Check that the proxy exists
+        if self.obj is None:
+            raise AttributeError('Cannot use uninitialized Proxy.')
+
+        # If it does try to run the query...
+        try:
+            cursor = self.obj.execute_sql(
+                sql, params, require_commit
+            )
+
+        # ... if it fails, try to run it again.
+        except pw.OperationalError:
+            if not self.obj.is_closed():
+                self.obj.close()
+            cursor = self.obj.get_cursor()
+            cursor.execute(sql, params or ())
+            if require_commit and self.obj.get_autocommit():
+                self.obj.commit()
+        return cursor
 
 
-def connect(url = None):
+database_proxy = RobustProxy()
+
+
+def connect(url=None):
     # TODO: use connectdb?
     db = db_url.connect(url or 'sqlite:///:memory:')
     db.register_fields({'enum': 'enum'})
     database_proxy.initialize(db)
-
-
-# Exceptions
-# ==========
-
-class NotFound(Exception):
-    """Raise when a search fails."""
-
-
-class NoSubgraph(Exception):
-    """Raise when a subgraph specification is missing."""
-
-
-class BadSubgraph(Exception):
-    """Raise when an error in subgraph specification is made."""
-
-
-class AlreadyExists(Exception):
-    """The event already exists at the specified time."""
-
-
-class DoesNotExist(Exception):
-    """The event does not exist at the specified time."""
-
-
-class UnknownUser(Exception):
-    """The user requested is unknown."""
-
-
-class NoPermission(Exception):
-    """User does not have permission for a task."""
-
-
-class LayoutIntegrity(Exception):
-    """Action would harm the layout integrity."""
-
-
-class PropertyType(Exception):
-    """Bad property type."""
-
-
-class PropertyUnchanged(Exception):
-    """A property change was requested, but no change is needed."""
-
-
-class ClosestDraw(Exception):
-    """There is a draw for the shortest path to a given component type."""
 
 
 # Helper classes for the peewee ORM
@@ -102,6 +89,5 @@ class EnumField(pw.Field):
 class base_model(pw.Model):
     """Baseclass for all models."""
 
-    class Meta:
+    class Meta(object):
         database = database_proxy
-

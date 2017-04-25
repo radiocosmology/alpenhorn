@@ -14,21 +14,27 @@ Example config:
 
 .. codeblock:: yaml
 
-    db: peewee_url
+    # Configure the data base connection with a peewee db_url
+    database:
+        url:    peewee_url
 
+    # Logging configuration
     logging:
         file:   alpenhorn.log
         level:  debug
 
+    # Specify extensions as a list of fully qualified references to python packages or modules
     extensions:
         - alpenhorn.generic
         - alpenhorn_chime
 
+    # Set any configuration for acquisition type extensions
     acq_types:
         generic:
             patterns:
                 - ".*/.*"
 
+    # Set any configuration for file type extensions
     file_types:
         generic:
             patterns:
@@ -40,6 +46,9 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+# Setup the logging
+from . import logger
+log = logger.get_log()
 
 configdict = None
 
@@ -74,14 +83,16 @@ def load_config():
     for cfile in config_files:
 
         # Expand the configuration file path
-        cfile = os.path.abspath(os.path.expanduser(os.path.expandvars(cfile)))
+        absfile = os.path.abspath(os.path.expanduser(os.path.expandvars(cfile)))
 
-        if not os.path.exists(cfile):
+        if not os.path.exists(absfile):
             continue
 
         any_exist = True
 
-        with open(cfile, 'r') as fh:
+        log.info('Loading config file %s', cfile)
+
+        with open(absfile, 'r') as fh:
             conf = yaml.safe_load(fh)
 
         configdict.update(conf)
@@ -97,7 +108,7 @@ class ConfigClass(object):
     """
 
     @classmethod
-    def set_config(self, configdict):
+    def set_config(cls, configdict):
         """Configure the class from the supplied `configdict`.
         """
         pass

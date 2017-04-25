@@ -69,8 +69,8 @@ def fixtures():
 
     # fixup foreign keys for the file copies
     for copy in fixtures['file_copies']:
-        copy['file']= fa['files'][copy['file']]
-        copy['node']= fs['nodes'][copy['node']]
+        copy['file'] = fa['files'][copy['file']]
+        copy['node'] = fs['nodes'][copy['node']]
 
     # bulk load the file copies
     ArchiveFileCopy.insert_many(fixtures['file_copies']).execute()
@@ -78,9 +78,9 @@ def fixtures():
 
     # fixup foreign keys for the copy requests
     for req in fixtures['copy_requests']:
-        req['file']= fa['files'][req['file']]
-        req['node_from']= fs['nodes'][req['node_from']]
-        req['group_to']= fs['groups'][req['group_to']]
+        req['file'] = fa['files'][req['file']]
+        req['node_from'] = fs['nodes'][req['node_from']]
+        req['group_to'] = fs['groups'][req['group_to']]
 
     # bulk load the file copies
     ArchiveFileCopyRequest.insert_many(fixtures['copy_requests']).execute()
