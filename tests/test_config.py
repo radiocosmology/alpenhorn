@@ -1,8 +1,19 @@
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 import os
 
 import pytest
 
 from alpenhorn import config
+
+
+def merge_dict(a, b):
+
+    c = a.copy()
+    c.update(b)
+
+    return c
 
 
 def test_no_config():
@@ -20,7 +31,7 @@ def test_config_env(fs, monkeypatch):
 
     monkeypatch.setenv('ALPENHORN_CONFIG_FILE', '/test/from/env/test.yaml')
     config.load_config()
-    assert config.configdict == dict(config._default_config.items() + [('hello', 'test')])
+    assert config.configdict == merge_dict(config._default_config, {'hello': 'test'})
 
 
 def test_precendence(fs, monkeypatch):
@@ -28,17 +39,17 @@ def test_precendence(fs, monkeypatch):
 
     fs.CreateFile('/etc/alpenhorn/alpenhorn.conf', contents='hello: test\n')
     config.load_config()
-    assert config.configdict == dict(config._default_config.items() + [('hello', 'test')])
+    assert config.configdict == merge_dict(config._default_config, {'hello': 'test'})
 
     fs.CreateFile('/etc/xdg/alpenhorn/alpenhorn.conf', contents='hello: test2\n')
     config.load_config()
-    assert config.configdict == dict(config._default_config.items() + [('hello', 'test2')])
+    assert config.configdict == merge_dict(config._default_config, {'hello': 'test2'})
 
     fs.CreateFile(os.path.expanduser('~/.config/alpenhorn/alpenhorn.conf'), contents='hello: test3\nmeh: embiggens')
     config.load_config()
-    assert config.configdict == dict(config._default_config.items() + [('hello', 'test3'), ('meh', 'embiggens')])
+    assert config.configdict == merge_dict(config._default_config, {'hello': 'test3', 'meh': 'embiggens'})
 
     fs.CreateFile('/test/from/env/test.yaml', contents='hello: test4\n')
     monkeypatch.setenv('ALPENHORN_CONFIG_FILE', '/test/from/env/test.yaml')
     config.load_config()
-    assert config.configdict == dict(config._default_config.items() + [('hello', 'test4'), ('meh', 'embiggens')])
+    assert config.configdict == merge_dict(config._default_config, {'hello': 'test4', 'meh': 'embiggens'})

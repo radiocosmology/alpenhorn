@@ -4,6 +4,9 @@ test_import
 
 Tests for `alpenhorn.auto_import` module.
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import pytest
 import yaml
@@ -50,7 +53,7 @@ class LogInfo(ge.GenericFileInfo):
 
 @pytest.fixture
 def fixtures(tmpdir):
-    fs = ta.fixtures().next()
+    fs = next(ta.fixtures())
 
     p = tmpdir.join("ROOT")
 
@@ -74,8 +77,8 @@ def fixtures(tmpdir):
 
     def make_files(dir_name, files, root):
         d = root.mkdir(dir_name)
-        for file_name, file_data in files.iteritems():
-            if file_data.has_key('md5'):
+        for file_name, file_data in files.items():
+            if 'md5' in file_data:
                 f = d.join(file_name)
                 f.write(file_data['contents'])
             else:               # it's really a directory, recurse!
