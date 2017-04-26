@@ -118,11 +118,11 @@ def _connect(url=None, db=None):
 
 
 class EnumField(pw.Field):
-    """Implements an ENUM field for the peewee.
+    """Implements an ENUM field for peewee.
 
     Only MySQL and PostgreSQL support `ENUM` types natively in the database. For
-    Sqlite, the `ENUM` is implemented as an appropriately sized `VARCHAR` and
-    the validation is done at the Python level.
+    Sqlite (and others), the `ENUM` is implemented as an appropriately sized
+    `VARCHAR` and the validation is done at the Python level.
 
     .. warning::
         For the *native* ``ENUM`` to work you *must* register it with peewee like::
