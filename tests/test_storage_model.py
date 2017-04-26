@@ -16,26 +16,6 @@ import alpenhorn.db as db
 from alpenhorn.storage import *
 
 
-class SqliteEnumField(pw.CharField):
-    """Implements an enum field for the ORM.
-
-    Why doesn't peewee support enums? That's dumb. We should make one."""
-
-    def __init__(self, choices, *args, **kwargs):
-        super(SqliteEnumField, self).__init__(*args, **kwargs)
-        self.choices = choices
-
-    def coerce(self, val):
-        if val is None:
-            return str(self.default)
-        if val not in self.choices:
-            raise ValueError("Invalid enum value '%s'" % val)
-        return str(val)
-
-
-# Use Sqlite-compatible EnumField
-SqliteEnumField(['A', 'T', 'F'], default='A').add_to_class(StorageNode, 'storage_type')
-
 tests_path = path.abspath(path.dirname(__file__))
 
 
@@ -81,7 +61,7 @@ def test_model(fixtures):
     groups = set(StorageGroup.select(StorageGroup.name).tuples())
     assert groups == { ( 'foo', ), ( 'bar', ), ('transport', ) }
     assert StorageGroup.get(StorageGroup.name == 'bar').notes == 'Some bar!'
-    
+
     nodes = list(StorageNode.select().dicts())
     assert nodes == [
         {

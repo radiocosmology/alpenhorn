@@ -24,26 +24,6 @@ import alpenhorn.acquisition as acquisition
 import test_storage_model as ts
 import test_acquisition_model as ta
 
-class SqliteEnumField(pw.CharField):
-    """Implements an enum field for the ORM.
-
-    Why doesn't peewee support enums? That's dumb. We should make one."""
-
-    def __init__(self, choices, *args, **kwargs):
-        super(SqliteEnumField, self).__init__(*args, **kwargs)
-        self.choices = choices
-
-    def coerce(self, val):
-        if val is None:
-            return str(self.default)
-        if val not in self.choices:
-            raise ValueError("Invalid enum value '%s'" % val)
-        return str(val)
-
-
-# Use Sqlite-compatible EnumField
-SqliteEnumField(['N', 'Y', 'M', 'X'], default='N').add_to_class(ArchiveFileCopy, 'has_file')
-SqliteEnumField(['Y', 'M', 'N'], default='Y').add_to_class(ArchiveFileCopy, 'wants_file')
 
 tests_path = path.abspath(path.dirname(__file__))
 
