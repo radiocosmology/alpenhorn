@@ -120,9 +120,10 @@ EnumField = None
 
 
 class EnumFieldDB(pw.Field):
-    """Implements an enum field for the ORM.
+    """Implements an enum field for the peewee at the database level.
 
-    Why doesn't peewee support enums? That's dumb. We should make one."""
+    Only MySQL and PostgreSQL support `ENUM` types in the database.
+    """
     db_field = 'enum'
 
     def __init__(self, enum_list, *args, **kwargs):
@@ -144,7 +145,8 @@ class EnumFieldDB(pw.Field):
 
 
 class EnumFieldPython(pw.CharField):
-    """An EnumField implementation for Sqlite that enforces the type at the Python level.
+    """An EnumField implementation for Sqlite that enforces the type at the
+    Python level.
 
     Parameters
     ----------
@@ -152,18 +154,18 @@ class EnumFieldPython(pw.CharField):
         A list of the string values for the ENUM.
     """
 
-    def __init__(self, enum_values, *args, **kwargs):
+    def __init__(self, enum_list, *args, **kwargs):
 
-        self.enum_values = list(enum_values)
+        self.enum_list = list(enum_list)
 
         # Get the maximum length of any string in the set of enum values, and
         # use this to initialise the length of the underlying CharField
-        maxlen = max([len(val) for val in self.enum_values])
+        maxlen = max([len(val) for val in self.enum_list])
         super(EnumFieldPython, self).__init__(max_length=maxlen, *args, **kwargs)
 
         def db_value(self, value):
-            if value not in self.enum_values:
-                raise TypeError("Value %s not in ENUM(%s)" % str(enum_values))
+            if value not in self.enum_list:
+                raise TypeError("Value %s not in ENUM(%s)" % str(self.enum_list))
             return super(EnumFieldPython, self).db_field(value)
 
 
