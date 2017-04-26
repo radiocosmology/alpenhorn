@@ -12,15 +12,21 @@ import alpenhorn
 
 here = path.abspath(path.dirname(__file__))
 
+
+def strip_envmark(requires):
+    # Strip out environment markers options
+    return [req.split(';')[0].rstrip() for req in requires]
+
+
 # Get the long description from the README file
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 with open(path.join(here, 'requirements.txt')) as f:
-    requirements = f.readlines()
+    requirements = strip_envmark(f.readlines())
 
 with open(path.join(here, 'test-requirements.txt')) as f:
-    test_requirements = f.readlines()
+    test_requirements = strip_envmark(f.readlines())
 
 setup_requirements = [
     'pytest-runner',
