@@ -52,7 +52,7 @@ tests_path = path.abspath(path.dirname(__file__))
 def fixtures():
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
 
-    db.connect()
+    db._connect()
 
     fs = next(ts.fixtures(False))
     fa = next(ta.fixtures(False))

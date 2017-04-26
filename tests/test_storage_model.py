@@ -44,7 +44,7 @@ def fixtures(clear_db=True):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
 
     if clear_db:
-        db.connect()
+        db._connect()
 
     db.database_proxy.create_tables([StorageGroup, StorageNode], safe=not clear_db)
 

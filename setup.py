@@ -41,7 +41,8 @@ setup(
     scripts=[],
     entry_points={
         'console_scripts': [
-
+            'alpenhorn = alpenhorn.client:cli',
+            'alpenhornd = alpenhorn.service:cli'
         ]
     },
 

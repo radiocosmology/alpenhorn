@@ -19,7 +19,7 @@ def fixtures():
 
     from alpenhorn import db
 
-    db.connect()
+    db._connect()
 
     db.database_proxy.create_tables([
         acquisition.AcqType, acquisition.FileType, acquisition.ArchiveAcq,

@@ -7,7 +7,8 @@ alpenhorn configuration as fully qualified python name. They must have a
 functionality they provide. There are currently three supported keys:
 
 `database`
-    A callable that returns a `peewee.Database` instance.
+    A function that returns a `peewee.Database` instance. The function receives
+    any `'database'` section of the config as an argument (or an empty `dict`).
 `acq_types`
     The acquisition type extensions, given as a list of `AcqInfoBase` subclasses.
 `file_types`
@@ -67,6 +68,7 @@ def load_extensions():
         except AttributeError:
             raise RuntimeError('Module %s is not a valid alpenhorn extension (no register_extension hook).', name)
 
+        extension_dict['name'] = name
         extension_dict['module'] = ext_module
 
         _ext.append(extension_dict)
@@ -87,10 +89,13 @@ def connect_database_extension():
     for ext_dict in _ext:
 
         if 'database' in ext_dict:
+            log.debug('Found database helper in extension %s', ext_dict['name'])
             dbconnect = ext_dict['database']
 
     if dbconnect is not None:
-        return dbconnect()
+        log.info('Using external database helper')
+        conf = config.configdict.get('database', {})
+        return dbconnect(conf)
     else:
         return None
 

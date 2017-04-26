@@ -29,6 +29,40 @@ def cli():
 
 
 @cli.command()
+def init():
+    """Initialise an alpenhorn database.
+
+    Creates the database tables required for alpenhorn and any extensions
+    specified in its configuration.
+    """
+
+    from alpenhorn import config, extensions, db
+
+    # Load the configuration and initialise the database connection
+    config.load_config()
+    extensions.load_extensions()
+    db.config_connect()
+
+    # Create any alpenhorn core tables
+    core_tables = [
+        ac.AcqType, ac.ArchiveInst, ac.ArchiveAcq, ac.FileType,
+        ac.ArchiveFile, st.StorageGroup, st.StorageNode,
+        ar.ArchiveFileCopy, ar.ArchiveFileCopyRequest
+    ]
+
+    db.database_proxy.create_tables(core_tables, safe=True)
+
+    # Register the acq/file type extensions
+    extensions.register_type_extensions()
+
+    # Create any tables registered by extensions
+    ext_tables = (list(ac.AcqType._registered_acq_types.values()) +
+                  list(ac.FileType._registered_file_types.values()))
+
+    db.database_proxy.create_tables(ext_tables, safe=True)
+
+
+@cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.argument('group_name', metavar='GROUP')
 @click.option('--acq', help='Sync only this acquisition.', metavar='ACQ', type=str, default=None)

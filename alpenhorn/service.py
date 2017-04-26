@@ -8,9 +8,8 @@ import socket
 
 import click
 
-from alpenhorn import logger
-from ch_util import data_index as di
-from alpenhorn import update, auto_import
+from alpenhorn import (logger, extensions, db, config,
+                       auto_import, storage)
 
 log = logger.get_log()
 
@@ -30,35 +29,49 @@ def cli():
     """Alpenhorn data management service.
     """
 
-    # We need write access to the DB.
-    di.connect_database(read_write=True)
+    # Load the configuration for alpenhorn
+    config.load_config()
+
+    # Attempt to load any alpenhor extensions
+    extensions.load_extensions()
+
+    # Connect to the database using the loaded config
+    db.config_connect()
+
+    # Regsiter any extension types
+    extensions.register_type_extensions()
 
     # Get the name of this host
     host = socket.gethostname().split(".")[0]
 
     # Get the list of nodes currently mounted
-    node_list = list(di.StorageNode.select().where(di.StorageNode.host == host, di.StorageNode.mounted))
+    # node_list = list(storage.StorageNode.select().where(
+    #     storage.StorageNode.host == host, storage.StorageNode.mounted
+    # ))
 
     # Warn if there are no mounted nodes. We used to exit here, but actually
     # it's useful to keep alpenhornd running for nodes where we exclusively use
     # transport disks (e.g. jingle)
-    if len(node_list) == 0:
-        log.warn("No nodes on this host (\"%s\") registered in the DB!" % host)
+    # if len(node_list) == 0:
+    #     log.warn("No nodes on this host (\"%s\") registered in the DB!" % host)
 
     # Load the cache of already imported files
-    auto_import.load_import_cache()
+    # auto_import.load_import_cache()
 
     # Setup the observers to watch the nodes for new files
-    auto_import.setup_observers(node_list)
+    # auto_import.setup_observers(node_list)
 
     # Enter main loop performing node updates
     try:
-        update.update_loop(host)
+        # update.update_loop(host)
+        import time
+        while True:
+            time.sleep(10)
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:
         log.info('Exiting...')
-        auto_import.stop_observers()
+        # auto_import.stop_observers()
 
     # Wait for watchdog threads to terminate
-    auto_import.join_observers()
+    # auto_import.join_observers()
