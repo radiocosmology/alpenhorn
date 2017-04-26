@@ -104,11 +104,11 @@ def _connect(url=None, db=None):
     if url is not None:
         db = db_url.connect(url)
 
-    if isinstance(db, pw.SqliteDatabase):
-        EnumField = EnumFieldPython
-    else:
+    if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
         db.register_fields({'enum': 'enum'})
-        EnumField = EnumFieldDB
+        EnumField.native = True
+    else:
+        EnumField.native = False
 
     database_proxy.initialize(db)
 
@@ -116,60 +116,72 @@ def _connect(url=None, db=None):
 # Helper classes for the peewee ORM
 # =================================
 
-EnumField = None
 
+class EnumField(pw.Field):
+    """Implements an ENUM field for the peewee.
 
-class EnumFieldDB(pw.Field):
-    """Implements an enum field for the peewee at the database level.
+    Only MySQL and PostgreSQL support `ENUM` types natively in the database. For
+    Sqlite, the `ENUM` is implemented as an appropriately sized `VARCHAR` and
+    the validation is done at the Python level.
 
-    Only MySQL and PostgreSQL support `ENUM` types in the database.
+    .. warning::
+        For the *native* ``ENUM`` to work you *must* register it with peewee like::
+
+            db.register_fields({'enum': 'enum'})
+
+    Parameters
+    ----------
+    enum_list : list
+        A list of the string values for the ENUM.
+
+    Attributes
+    ----------
+    native : bool
+        Attempt to use the native database `ENUM` type. Should be set at the
+        *class* level. Only supported for MySQL or PostgreSQL, and will throw
+        SQL syntax errors if used for other databases.
     """
-    db_field = 'enum'
+
+    native = True
+
+    @property
+    def db_field(self):
+        if self.native:
+            return 'enum'
+        else:
+            return 'string'
 
     def __init__(self, enum_list, *args, **kwargs):
         self.enum_list = enum_list
+
         self.value = []
         for e in enum_list:
-            self.value.append("'" + str(e) + "'")
+            self.value.append("'%s'" % e)
+
+        self.maxlen = max([len(val) for val in self.enum_list])
+
         super(EnumField, self).__init__(*args, **kwargs)
 
     def clone_base(self, **kwargs):
+        # Add the extra parameter so the field is cloned properly
         return super(EnumField, self).clone_base(
             enum_list=self.enum_list, **kwargs)
 
     def get_modifiers(self):
-        return self.value or None
+        # This routine seems to be for setting the arguments for creating the
+        # column.
+        if self.native:
+            return self.value or None
+        else:
+            return [self.maxlen]
 
     def coerce(self, val):
-        return str(val or '')
-
-
-class EnumFieldPython(pw.CharField):
-    """An EnumField implementation for Sqlite that enforces the type at the
-    Python level.
-
-    Parameters
-    ----------
-    enum_values : list
-        A list of the string values for the ENUM.
-    """
-
-    def __init__(self, enum_list, *args, **kwargs):
-
-        self.enum_list = list(enum_list)
-
-        # Get the maximum length of any string in the set of enum values, and
-        # use this to initialise the length of the underlying CharField
-        maxlen = max([len(val) for val in self.enum_list])
-        super(EnumFieldPython, self).__init__(max_length=maxlen, *args, **kwargs)
-
-        def db_value(self, value):
-            if value not in self.enum_list:
-                raise TypeError("Value %s not in ENUM(%s)" % str(self.enum_list))
-            return super(EnumFieldPython, self).db_field(value)
-
-
-EnumField = EnumFieldPython
+        # Coerce the db/python value to the correct output. Also perform
+        # validation for non native ENUMs.
+        if self.native or val in self.enum_list:
+            return str(val or '')
+        else:
+            raise TypeError("Value %s not in ENUM(%s)" % str(self.value))
 
 
 class base_model(pw.Model):
