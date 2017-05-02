@@ -46,12 +46,16 @@ def network():
 
 @pytest.fixture(scope='module')
 def db(network, images):
-    """Set up the database and create the tables for alpenhorn."""
+    """Set up the database and create the tables for alpenhorn.
+
+    Also connect peewee to this database, so we can query its state."""
+
+    from alpenhorn import db
 
     print ('Creating the database...')
 
     # Create the database container
-    db = client.containers.run(
+    db_container = client.containers.run(
         'mysql:latest', name='db', detach=True,
         network_mode=network, ports={'3306/tcp': 63306},
         environment={'MYSQL_ALLOW_EMPTY_PASSWORD': 'yes'}
@@ -77,29 +81,55 @@ def db(network, images):
         command="alpenhorn init"
     )
 
-    yield db
+    # Connect our peewee models to the database
+    db._connect(url='mysql://root@127.0.0.1:63306/alpenhorn_db')
+
+    yield db_container
+
+    # Take down the peewee connection
+    db.database_proxy.close()
 
     print('Cleaning up db container...')
-    _stop_or_kill(db)
-    db.remove()
+    _stop_or_kill(db_container)
+    db_container.remove()
 
 
 @pytest.fixture(scope='module')
-def workers(db, network, images):
+def workers(db, network, images, tmpdir_factory):
     """Create a group of alpenhorn entries."""
 
-    node_names = ['node_a', 'node_b', 'node_c']
+    from alpenhorn import storage as st
 
-    def create_worker(name):
-        print('Creating alpenhorn container %s' % name)
-        return client.containers.run('alpenhorn', name=name, detach=True,
-                                     network_mode=network)
+    workers = []
 
-    nodes = {name: create_worker(name) for name in node_names}
+    for i in range(3):
 
-    yield nodes
+        hostname = 'container-%i' % i
+        print('Creating alpenhorn container %s' % hostname)
 
-    for container in nodes.values():
+        # Create db entries for the alpenhorn instance
+        group = st.StorageGroup.create(name=('group_%i' % i))
+        node = st.StorageNode.create(
+            name=('node_%i' % i), root='/data', group=group, host=hostname,
+            address=hostname, mounted=True, auto_import=True, min_avail_gb=0.0
+        )
+
+        # Create a temporary directory on the host to store the data, which will
+        # get mounted into the container
+        data_dir = tmpdir_factory.mktemp(hostname)
+
+        container = client.containers.run(
+            'alpenhorn', name=hostname, detach=True, network_mode=network,
+            volumes={str(data_dir): {'bind': '/data', 'mode': 'rw'}}
+        )
+
+        workers.append({'node': node, 'container': container, 'dir': data_dir})
+
+    yield workers
+
+    # Cleanup
+    for worker in workers:
+        container = worker['container']
         print('Stopping and removing alpenhorn container %s' % container.name)
         _stop_or_kill(container, timeout=1)
         container.remove()
@@ -121,4 +151,5 @@ def test_stuff(workers):
 
     import time
 
-    time.sleep(10)
+    #time.sleep(10)
+    raw_input('Press a key.')
