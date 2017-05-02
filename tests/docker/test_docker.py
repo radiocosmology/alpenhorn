@@ -14,17 +14,21 @@ client = docker.from_env()
 def images():
     """Build the images for the tests."""
 
-    print('Building docker images...')
+    import os.path
+
+    context = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+    print('Building docker images from location %s...' % context)
 
     # Build base image
     client.images.build(
-        path='../../', tag='jrs65/python-mysql', rm=True, forcerm=True,
+        path=context, tag='jrs65/python-mysql', rm=True, forcerm=True,
         dockerfile='tests/docker/Dockerfile.base'
     )
 
     # Build alpenhorn image
     client.images.build(
-        path='../../', tag='alpenhorn', rm=True, forcerm=True,
+        path=context, tag='alpenhorn', rm=True, forcerm=True,
         dockerfile='tests/docker/Dockerfile.alpenhorn'
     )
 
@@ -117,6 +121,7 @@ def workers(db, network, images, tmpdir_factory):
         # Create a temporary directory on the host to store the data, which will
         # get mounted into the container
         data_dir = tmpdir_factory.mktemp(hostname)
+        print('Node directory (on host): %s' % str(data_dir))
 
         container = client.containers.run(
             'alpenhorn', name=hostname, detach=True, network_mode=network,
