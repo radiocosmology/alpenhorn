@@ -21,10 +21,12 @@ from alpenhorn import archive as ar
 from alpenhorn import storage as st
 
 
-# Skip all these tests if docker-py is not installed
-docker = pytest.importorskip('docker')
-
-client = docker.from_env()
+# Try and import docker.
+try:
+    import docker
+    client = docker.from_env()
+except ImportError:
+    pass
 
 
 # ====== Fixtures for controlling Docker ======
