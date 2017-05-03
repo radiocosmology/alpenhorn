@@ -4,11 +4,25 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import time
+import os
+from os.path import join, dirname, exists
+
 import pytest
-import docker
+import yaml
+
+from alpenhorn import acquisition as ac
+from alpenhorn import archive as ar
+from alpenhorn import storage as st
+
+
+# Skip all these tests if docker-py is not installed
+docker = pytest.importorskip('docker')
 
 client = docker.from_env()
 
+
+# ====== Fixtures for controlling Docker ======
 
 @pytest.fixture(scope='module')
 def images():
@@ -102,8 +116,6 @@ def db(network, images):
 def workers(db, network, images, tmpdir_factory):
     """Create a group of alpenhorn entries."""
 
-    from alpenhorn import storage as st
-
     workers = []
 
     for i in range(3):
@@ -120,12 +132,12 @@ def workers(db, network, images, tmpdir_factory):
 
         # Create a temporary directory on the host to store the data, which will
         # get mounted into the container
-        data_dir = tmpdir_factory.mktemp(hostname)
+        data_dir = str(tmpdir_factory.mktemp(hostname))
         print('Node directory (on host): %s' % str(data_dir))
 
         container = client.containers.run(
             'alpenhorn', name=hostname, detach=True, network_mode=network,
-            volumes={str(data_dir): {'bind': '/data', 'mode': 'rw'}}
+            volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
         )
 
         workers.append({'node': node, 'container': container, 'dir': data_dir})
@@ -150,6 +162,145 @@ def _stop_or_kill(container, timeout=10):
     except requests.exceptions.ReadTimeout:
         container.kill()
 
+
+# ====== Fixtures for generating test files ======
+
+@pytest.fixture(scope='module')
+def test_files():
+    """Get a set of test files.
+
+    Read the test files config, and structure it into acquisitions and files,
+    labelling each with their respective types.
+    """
+
+    files = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'fixtures', 'files.yml'))
+
+    with open(files, 'r') as f:
+        fs = yaml.safe_load(f.read())
+
+    acqs = _recurse_acq(fs)
+
+    return acqs
+
+
+def _recurse_acq(f, root=''):
+    """Recurse over a dictionary based tree, and find the acquisitions and their files.
+    """
+
+    def _type(x):
+        if 'zab' in x:
+            return 'zab'
+        elif 'quux' in x or x == 'x':
+            return 'quux'
+        else:
+            return None
+
+    acqlist = []
+
+    for name, sub in f.items():
+
+        new_root = join(root, name)
+
+        if _type(new_root) is not None:
+            acqlist.append({
+                'name': new_root, 'type': _type(new_root),
+                'files': _recurse_files(sub)
+            })
+        else:
+            acqlist += _recurse_acq(sub, root=join(root, name))
+
+    return acqlist
+
+
+def _recurse_files(f, root=''):
+    """Recurse over a dictionary tree at the acq root, and get the files."""
+
+    def _type(x):
+        if x[-4:] == '.log':
+            return 'log'
+        elif x[-4:] == '.zxc' or x == 'jim':
+            return 'zxc'
+        elif x[-5:] == '.lock':
+            return 'lock'
+
+    filelist = []
+
+    for name, sub in f.items():
+
+        new_root = join(root, name)
+
+        if 'md5' in sub:
+            fileprop = {'name': new_root, 'type': _type(new_root)}
+            fileprop.update(sub)
+            filelist.append(fileprop)
+        else:
+            filelist += _recurse_files(sub, root=new_root)
+
+    return filelist
+
+
+def _make_files(acqs, base, skip_lock=True):
+
+    for acq in acqs:
+
+        for file_ in acq['files']:
+
+            path = join(base, acq['name'], file_['name'])
+
+            if not exists(dirname(path)):
+                os.makedirs(dirname(path))
+
+            if not skip_lock or file_['type'] != 'lock':
+                with open(path, 'w') as fh:
+                    fh.write(file_['contents'])
+
+
+# ===== Test the auto_import behaviour =====
+
+def test_import(workers, test_files):
+
+    # Create the files
+    _make_files(test_files, workers[0]['dir'], skip_lock=True)
+
+    time.sleep(2)
+
+    node = workers[0]['node']
+
+    for acq in test_files:
+
+        # Test that the acquisition exists
+        acq_query = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == acq['name'])
+        assert acq_query.count() == 1
+        acq_obj = acq_query.get()
+
+        # Test that it has the correct type
+        assert acq_obj.type.name == acq['type']
+
+        for file_ in acq['files']:
+
+            # Test that the file exists
+            file_query = ac.ArchiveFile.select().where(
+                ac.ArchiveFile.acq == acq_obj,
+                ac.ArchiveFile.name == file_['name']
+            )
+
+            assert file_query.count() == 1
+            file_obj = file_query.get()
+
+            # Test that it has the correct type
+            assert file_obj.type.name == file_['type']
+
+            # Test that this node has a copy
+            copy_query = ar.ArchiveFileCopy.select().where(
+                ar.ArchiveFileCopy.file == file_obj,
+                ar.ArchiveFileCopy.node == node
+            )
+
+            assert copy_query.count() == 1
+            copy_obj = copy_query.get()
+
+            assert copy_obj.has_file == 'Y'
+            assert copy_obj.wants_file == 'Y'
 
 
 def test_stuff(workers):

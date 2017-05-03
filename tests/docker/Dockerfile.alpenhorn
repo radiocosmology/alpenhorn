@@ -16,9 +16,13 @@ RUN pip install -r /build_req/test-requirements.txt
 ADD . /build
 RUN pip install /build
 
-# Copy the configuration file, and create the log directory
+# Copy the configuration file and create the log directory
 COPY tests/docker/alpenhorn.conf /etc/alpenhorn/alpenhorn.conf
 RUN mkdir /var/log/alpenhorn
+
+# Install the custom acq and file types
+COPY tests/docker/custom_test_types.py /root/python/custom_test_types.py
+ENV PYTHONPATH /root/python/
 
 # Set up ssh key based login for root
 RUN ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
