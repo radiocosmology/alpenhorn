@@ -25,7 +25,7 @@ from alpenhorn import storage as st
 try:
     import docker
     client = docker.from_env()
-except ImportError:
+except ImportError, AttributeError:
     pass
 
 
