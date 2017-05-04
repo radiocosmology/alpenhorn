@@ -133,8 +133,9 @@ def workers(db, network, images, tmpdir_factory):
         # Create db entries for the alpenhorn instance
         group = st.StorageGroup.create(name=('group_%i' % i))
         node = st.StorageNode.create(
-            name=('node_%i' % i), root='/data', group=group, host=hostname,
-            address=hostname, mounted=True, auto_import=True, min_avail_gb=0.0
+            name=('node_%i' % i), root='/data', username='root',
+            group=group, host=hostname, address=hostname, mounted=True,
+            auto_import=(i == 0), min_avail_gb=0.0
         )
 
         # Create a temporary directory on the host to store the data, which will
@@ -143,8 +144,8 @@ def workers(db, network, images, tmpdir_factory):
         print('Node directory (on host): %s' % str(data_dir))
 
         container = client.containers.run(
-            'alpenhorn', name=hostname, detach=True, network_mode=network,
-            volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
+            'alpenhorn', name=hostname, hostname=hostname, network_mode=network,
+            detach=True, volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
         )
 
         workers.append({'node': node, 'container': container, 'dir': data_dir})
@@ -265,14 +266,20 @@ def _make_files(acqs, base, skip_lock=True):
 # ===== Test the auto_import behaviour =====
 
 def test_import(workers, test_files):
+    # Add a bunch of files onto node_0, wait for them to be picked up by the
+    # auto_import, and then verify that they all got imported to the db
+    # correctly.
 
     # Create the files
     _make_files(test_files, workers[0]['dir'], skip_lock=True)
 
-    time.sleep(2)
+    # Wait for the auto_import to catch them (it polls at 30s intervals)
+    time.sleep(5)
 
     node = workers[0]['node']
 
+    # Loop over all acquisitions and files and check that they have been
+    # correctly added to the database
     for acq in test_files:
 
         # Test that the acquisition exists
@@ -290,6 +297,11 @@ def test_import(workers, test_files):
                 ac.ArchiveFile.acq == acq_obj,
                 ac.ArchiveFile.name == file_['name']
             )
+
+            # Check that we haven't imported types we don't want
+            if file_['type'] in [None, 'lock']:
+                assert file_query.count() == 0
+                continue
 
             assert file_query.count() == 1
             file_obj = file_query.get()
@@ -315,4 +327,7 @@ def test_stuff(workers):
     import time
 
     #time.sleep(10)
-    raw_input('Press a key.')
+    try:
+        raw_input('Press enter.')
+    except:
+        input('Press enter.')

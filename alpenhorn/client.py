@@ -9,6 +9,7 @@ import datetime
 import click
 import peewee as pw
 
+from alpenhorn import config, extensions, db
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
@@ -35,8 +36,6 @@ def init():
     Creates the database tables required for alpenhorn and any extensions
     specified in its configuration.
     """
-
-    from alpenhorn import config, extensions, db
 
     # Load the configuration and initialise the database connection
     config.load_config()
@@ -83,9 +82,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
     archive (e.g. HPSS, transport disks).
     """
 
-    # TODO: ensure write access to the database
-    # # We need to write to the database.
-    # di.connect_database(read_write=True)
+    _init_config_db()
 
     try:
         from_node = st.StorageNode.get(name=node_name)
@@ -250,6 +247,8 @@ def status(all):
 
     import tabulate
 
+    _init_config_db()
+
     # Data to fetch from the database (node name, total files, total size)
     query_info = (
         st.StorageNode.name, pw.fn.Count(ar.ArchiveFileCopy.id).alias('count'),
@@ -291,6 +290,8 @@ def verify(node_name, md5, fixdb, acq):
     """
 
     import os
+
+    _init_config_db()
 
     try:
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
@@ -412,9 +413,7 @@ def clean(node_name, days, force, now, target, acq):
     considered for removal.
     """
 
-    # TODO: ensure write access to the database
-    # # We need to write to the database.
-    # di.connect_database(read_write=True)
+    _init_config_db()
 
     try:
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
@@ -549,6 +548,8 @@ def mounted(host):
     """List the nodes mounted on this, or another specified, machine"""
     import socket
 
+    _init_config_db()
+
     if host is None:
         host = socket.gethostname().split(".")[0]
     zero = True
@@ -574,6 +575,8 @@ def format_transport(serial_num):
     """
     import os
     import glob
+
+    _init_config_db()
 
     if os.getuid() != 0:
         print("You must be root to run mount on a transport disc. I quit.")
@@ -721,9 +724,7 @@ def mount(name, path, user, address, hostname):
 
     import socket
 
-    # TODO: ensure write access to the database
-    # # We need to write to the database.
-    # di.connect_database(read_write=True)
+    _init_config_db()
 
     try:
         node = st.StorageNode.get(name=name)
@@ -760,9 +761,7 @@ def unmount(root_or_name):
     import os
     import socket
 
-    # TODO: ensure write access to the database
-    # # We need to write to the database.
-    # di.connect_database(read_write=True)
+    _init_config_db()
 
     try:
         node = st.StorageNode.get(name=root_or_name)
@@ -801,9 +800,7 @@ def import_files(node_name, verbose, acq, dry):
     This command is useful for manually maintaining an archive where we cannot
     run alpenhornd in the usual manner.
     """
-    # TODO: ensure write access to the database
-    # # We need to write to the database.
-    # di.connect_database(read_write=True)
+    _init_config_db()
 
     # Keep track of state as we process the files
     added_files = []  # Files we have added to the database
@@ -953,3 +950,15 @@ def get_e2label(dev):
     if not len(err) and len(res) < MAX_E2LABEL_LEN:
         return res
     return None
+
+
+def _init_config_db():
+    """Load the config, start the database and register extensions.
+    """
+    # Load the configuration and initialise the database connection
+    config.load_config()
+    extensions.load_extensions()
+    db.config_connect()
+
+    # Register the acq/file type extensions
+    extensions.register_type_extensions()
