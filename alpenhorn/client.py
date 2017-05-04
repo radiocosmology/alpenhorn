@@ -3,6 +3,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import sys
 import os
 import datetime
 
@@ -287,6 +288,18 @@ def status(all):
               help='Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.')
 def verify(node_name, md5, fixdb, acq):
     """Verify the archive on NODE against the database.
+
+    If there are no issues with the archive returns with exit status of zero,
+    non-zero if there are issues. Specifically:
+
+    `0`
+        No problems.
+    `1`
+        Corrupt files found.
+    `2`
+        Files missing from archive.
+    `3`
+        Both corrupt and missing files.
     """
 
     import os
@@ -389,6 +402,12 @@ def verify(node_name, md5, fixdb, acq):
                               .where(ar.ArchiveFileCopy.id << corrupt_ids)\
                               .execute()
             click.echo("  %i corrupt files marked for verification" % corrupt_count)
+    else:
+        # Set the exit status
+        status = 1 if corrupt_files else 0
+        status += 2 if missing_files else 0
+
+        sys.exit(status)
 
 
 @cli.command()

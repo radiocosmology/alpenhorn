@@ -190,7 +190,7 @@ def test_verify(fixtures):
     file_copy.has_file = 'Y'
     file_copy.save()
     result = runner.invoke(cli.verify, ['x'])
-    assert result.exit_code == 0
+    assert result.exit_code == 2
     assert re.match(r'.*\n=== Missing files ===\n' +
                     str(tmpdir.join(file_copy.file.acq.name, file_copy.file.name)),
                     result.output, re.DOTALL)
