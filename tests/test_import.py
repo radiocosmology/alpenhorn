@@ -12,9 +12,6 @@ import pytest
 import yaml
 import os
 
-# TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
-os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
-
 import alpenhorn.db as db
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
@@ -34,22 +31,27 @@ class ZabInfo(ge.GenericAcqInfo):
     _file_types = ['zxc', 'log']
     patterns = ['**zab']
 
+
 class QuuxInfo(ge.GenericAcqInfo):
     _acq_type = 'quux'
     _file_types = ['zxc', 'log']
     patterns = ['*quux', 'x']
 
+
 class ZxcInfo(ge.GenericFileInfo):
     _file_type = 'zxc'
     patterns = ['**.zxc', 'jim*', 'sheila']
+
 
 class SpqrInfo(ge.GenericFileInfo):
     _file_type = 'spqr'
     patterns = ['*spqr*']
 
+
 class LogInfo(ge.GenericFileInfo):
     _file_type = 'log'
     patterns = ['*.log']
+
 
 @pytest.fixture
 def fixtures(tmpdir):

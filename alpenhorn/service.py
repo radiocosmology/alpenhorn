@@ -5,13 +5,15 @@ from __future__ import absolute_import
 
 import sys
 import socket
+import logging
 
 import click
 
-from alpenhorn import (logger, extensions, db, config,
-                       auto_import, storage, update)
+from . import (extensions, db, config, logger,
+               auto_import, storage, update)
 
-log = logger.get_log()
+
+log = logging.getLogger(__name__)
 
 
 # Register Hook to Log Exception
@@ -31,6 +33,9 @@ def cli():
 
     # Load the configuration for alpenhorn
     config.load_config()
+
+    # Set up logging
+    logger.start_logging()
 
     # Attempt to load any alpenhor extensions
     extensions.load_extensions()

@@ -2,8 +2,10 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
 import time
 import os
+import logging
 
 import peewee as pw
 
@@ -17,11 +19,8 @@ from . import acquisition as ac
 from . import util
 from . import config
 
-# Setup the logging
-from . import logger
-log = logger.get_log()
 
-log.setLevel(logger.logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 def import_file(node, root, file_path):

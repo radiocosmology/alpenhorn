@@ -7,8 +7,8 @@ import peewee as pw
 import playhouse.db_url as db_url
 
 # All peewee-generated logs are logged to this namespace.
-logger = logging.getLogger("db")
-logger.addHandler(logging.NullHandler())
+logger = logging.getLogger(__name__)
+# logger.addHandler(logging.NullHandler())
 
 
 # Global variables and constants.
