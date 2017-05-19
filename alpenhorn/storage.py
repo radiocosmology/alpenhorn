@@ -75,5 +75,3 @@ class StorageNode(base_model):
     avail_gb_last_checked = pw.DateTimeField(null=True)
     min_delete_age_days = pw.FloatField(default=30)
     notes = pw.TextField(null=True)
-
-

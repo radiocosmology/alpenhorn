@@ -3,17 +3,16 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-import sys
 import os
 import datetime
 
 import click
 import peewee as pw
 
-import alpenhorn.db as db
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
+import alpenhorn.auto_import as ai
 
 # Setup the logging
 from . import logger
@@ -21,11 +20,46 @@ log = logger.get_log()
 
 log.setLevel(logger.logging.DEBUG)
 
+
 @click.group()
 def cli():
     """Client interface for alpenhorn. Use to request transfers, mount drives,
     check status etc."""
     pass
+
+
+@cli.command()
+def init():
+    """Initialise an alpenhorn database.
+
+    Creates the database tables required for alpenhorn and any extensions
+    specified in its configuration.
+    """
+
+    from alpenhorn import config, extensions, db
+
+    # Load the configuration and initialise the database connection
+    config.load_config()
+    extensions.load_extensions()
+    db.config_connect()
+
+    # Create any alpenhorn core tables
+    core_tables = [
+        ac.AcqType, ac.ArchiveInst, ac.ArchiveAcq, ac.FileType,
+        ac.ArchiveFile, st.StorageGroup, st.StorageNode,
+        ar.ArchiveFileCopy, ar.ArchiveFileCopyRequest
+    ]
+
+    db.database_proxy.create_tables(core_tables, safe=True)
+
+    # Register the acq/file type extensions
+    extensions.register_type_extensions()
+
+    # Create any tables registered by extensions
+    ext_tables = (list(ac.AcqType._registered_acq_types.values()) +
+                  list(ac.FileType._registered_file_types.values()))
+
+    db.database_proxy.create_tables(ext_tables, safe=True)
 
 
 @cli.command()
@@ -200,12 +234,13 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         if len(files_out) > 0:
 
             # Construct a list of all the rows to insert
-            insert = [{ 'file': fid, 'node_from': from_node, 'nice': 0,
-                        'group_to': to_group, 'completed': False,
-                        'n_requests': 1, 'timestamp': dtnow} for fid in files_out]
+            insert = [{'file': fid, 'node_from': from_node, 'nice': 0,
+                       'group_to': to_group, 'completed': False,
+                       'n_requests': 1, 'timestamp': dtnow} for fid in files_out]
 
             # Do a bulk insert of these new rows
             ar.ArchiveFileCopyRequest.insert_many(insert).execute()
+
 
 @cli.command()
 @click.option('--all', help='Show the status of all nodes, not just mounted ones.', is_flag=True)
@@ -216,14 +251,15 @@ def status(all):
     import tabulate
 
     # Data to fetch from the database (node name, total files, total size)
-    query_info = (st.StorageNode.name, pw.fn.Count(ar.ArchiveFileCopy.id).alias('count'),
+    query_info = (
+        st.StorageNode.name, pw.fn.Count(ar.ArchiveFileCopy.id).alias('count'),
         pw.fn.Sum(ac.ArchiveFile.size_b).alias('total_size'), st.StorageNode.host, st.StorageNode.root
     )
 
     # Per node totals
     nodes = st.StorageNode.select(*query_info)\
-    .join(ar.ArchiveFileCopy).where(ar.ArchiveFileCopy.has_file=='Y')\
-    .join(ac.ArchiveFile).group_by(st.StorageNode).order_by(st.StorageNode.name)
+        .join(ar.ArchiveFileCopy).where(ar.ArchiveFileCopy.has_file == 'Y')\
+        .join(ac.ArchiveFile).group_by(st.StorageNode).order_by(st.StorageNode.name)
 
     log.info("Nodes: %s (all=%s)" % (nodes.count(), all))
     if not all:
@@ -249,7 +285,7 @@ def status(all):
 @click.option('--md5', help='perform full check against md5sum', is_flag=True)
 @click.option('--fixdb', help='fix up the database to be consistent with reality', is_flag=True)
 @click.option('--acq', metavar='ACQ', multiple=True,
-    help='Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.')
+              help='Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.')
 def verify(node_name, md5, fixdb, acq):
     """Verify the archive on NODE against the database.
     """
@@ -262,13 +298,13 @@ def verify(node_name, md5, fixdb, acq):
         click.echo("Specified node does not exist.")
         return
 
-    ## Use a complicated query with a tuples construct to fetch everything we
-    ## need in a single query. This massively speeds up the whole process versus
-    ## fetching all the FileCopy's then querying for Files and Acqs.
+    # Use a complicated query with a tuples construct to fetch everything we
+    # need in a single query. This massively speeds up the whole process versus
+    # fetching all the FileCopy's then querying for Files and Acqs.
     lfiles = ac.ArchiveFile\
                .select(ac.ArchiveFile.name, ac.ArchiveAcq.name,
-                          ac.ArchiveFile.size_b, ac.ArchiveFile.md5sum,
-                          ar.ArchiveFileCopy.id)\
+                       ac.ArchiveFile.size_b, ac.ArchiveFile.md5sum,
+                       ar.ArchiveFileCopy.id)\
                .join(ac.ArchiveAcq)\
                .switch(ac.ArchiveFile)\
                .join(ar.ArchiveFileCopy)\
@@ -302,7 +338,7 @@ def verify(node_name, md5, fixdb, acq):
                 continue
 
             if md5:
-                file_md5 = di.md5sum_file(filepath)
+                file_md5 = ai.md5sum_file(filepath)
                 corrupt = (file_md5 != md5sum)
             else:
                 corrupt = (os.path.getsize(filepath) != filesize)
@@ -311,7 +347,6 @@ def verify(node_name, md5, fixdb, acq):
                 corrupt_files.append(filepath)
                 corrupt_ids.append(fc_id)
                 continue
-
 
     if len(missing_files) > 0:
         click.echo()
@@ -432,7 +467,6 @@ def clean(node_name, days, force, now, target, acq):
         # Only match files that are also available at the target
         files = files.where(ar.ArchiveFileCopy.file << files_at_target)
 
-
     # If --days has been set we need to restrict to files older than the given
     # time. This only works for a few particular file types
     if days is not None and days > 0:
@@ -518,9 +552,8 @@ def mounted(host):
     if host is None:
         host = socket.gethostname().split(".")[0]
     zero = True
-    for node in st.StorageNode \
-                  .select() \
-                  .where(st.StorageNode.host == host, st.StorageNode.mounted == True):
+    for node in (st.StorageNode.select()
+                 .where(st.StorageNode.host == host, st.StorageNode.mounted)):
         n_file = ar.ArchiveFileCopy \
                    .select() \
                    .where(ar.ArchiveFileCopy.node == node) \
@@ -588,7 +621,7 @@ def format_transport(serial_num):
     e2label = get_e2label(dev_part)
     name = "CH-%s" % serial_num
     if e2label and e2label != name:
-        print("Disc label %s does not conform to labelling standard, " \
+        print("Disc label %s does not conform to labelling standard, "
               "which is CH-<serialnum>.")
         exit
     elif not e2label:
@@ -618,14 +651,14 @@ def format_transport(serial_num):
             if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
                 mounted = True
             else:
-                print("%s is a mount point, but %s is already mounted there." \
+                print("%s is a mount point, but %s is already mounted there."
                       (root, l.split()[0]))
     fp.close()
 
     try:
         node = st.StorageNode.get(name=name)
     except pw.DoesNotExist:
-        print("This disc has not been registered yet as a storage node. " \
+        print("This disc has not been registered yet as a storage node. "
               "Registering now.")
         try:
             group = st.StorageGroup.get(name="transport")
@@ -681,7 +714,8 @@ def unmount_transport(ctx, node):
 @click.option("--path", help="Root path for this node", type=str, default=None)
 @click.option("--user", help="username to access this node.", type=str, default=None)
 @click.option("--address", help="address for remote access to this node.", type=str, default=None)
-@click.option("--hostname", help="hostname running the alpenhornd instance for this node (set to this hostname by default).", type=str, default=None)
+@click.option("--hostname", type=str, default=None,
+              help="hostname running the alpenhornd instance for this node (set to this hostname by default).")
 def mount(name, path, user, address, hostname):
     """Interactive routine for mounting a storage node located at ROOT."""
 
@@ -737,15 +771,15 @@ def unmount(root_or_name):
             root_or_name = root_or_name[:len(root_or_name) - 1]
 
         if not os.path.exists(root_or_name):
-            click.echo("That is neither a node name, nor a path on this host. " \
-                  "I quit.")
+            click.echo("That is neither a node name, nor a path on this host. "
+                       "I quit.")
             exit()
         try:
             node = st.StorageNode.get(root=root_or_name,
                                       host=socket.gethostname())
         except pw.DoesNotExist:
-            click.echo("That is neither a node name nor a root name that is " \
-                  "known. I quit.")
+            click.echo("That is neither a node name nor a root name that is "
+                       "known. I quit.")
             exit()
 
     if not node.mounted:
@@ -810,7 +844,7 @@ def import_files(node_name, verbose, acq, dry):
             else:
                 not_acqs.append(d)
     else:
-        acqs = [ acq ]
+        acqs = [acq]
 
     with click.progressbar(acqs, label='Scanning acquisitions') as acq_iter:
 

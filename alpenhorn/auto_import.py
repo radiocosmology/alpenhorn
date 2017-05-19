@@ -21,6 +21,7 @@ log = logger.get_log()
 
 log.setLevel(logger.logging.DEBUG)
 
+
 def import_file(node, root, file_path):
     done = False
     while not done:
@@ -206,6 +207,7 @@ def add_acq(acq_type, name, node, comment=""):
         acq_type.acq_info.new(acq, node)
 
     return acq
+
 
 # Helper routines for adding files
 # ================================

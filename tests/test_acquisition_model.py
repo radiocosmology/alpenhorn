@@ -25,7 +25,7 @@ tests_path = path.abspath(path.dirname(__file__))
 def fixtures(clear_db=True):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
     if (clear_db):
-        db.connect()
+        db._connect()
     db.database_proxy.create_tables([ArchiveAcq, ArchiveInst, AcqType, FileType, ArchiveFile], safe=not clear_db)
 
     # Check we're starting from a clean slate

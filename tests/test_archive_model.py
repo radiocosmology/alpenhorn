@@ -24,26 +24,6 @@ import alpenhorn.acquisition as acquisition
 import test_storage_model as ts
 import test_acquisition_model as ta
 
-class SqliteEnumField(pw.CharField):
-    """Implements an enum field for the ORM.
-
-    Why doesn't peewee support enums? That's dumb. We should make one."""
-
-    def __init__(self, choices, *args, **kwargs):
-        super(SqliteEnumField, self).__init__(*args, **kwargs)
-        self.choices = choices
-
-    def coerce(self, val):
-        if val is None:
-            return str(self.default)
-        if val not in self.choices:
-            raise ValueError("Invalid enum value '%s'" % val)
-        return str(val)
-
-
-# Use Sqlite-compatible EnumField
-SqliteEnumField(['N', 'Y', 'M', 'X'], default='N').add_to_class(ArchiveFileCopy, 'has_file')
-SqliteEnumField(['Y', 'M', 'N'], default='Y').add_to_class(ArchiveFileCopy, 'wants_file')
 
 tests_path = path.abspath(path.dirname(__file__))
 
@@ -52,7 +32,7 @@ tests_path = path.abspath(path.dirname(__file__))
 def fixtures():
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
 
-    db.connect()
+    db._connect()
 
     fs = next(ts.fixtures(False))
     fa = next(ta.fixtures(False))
@@ -69,8 +49,8 @@ def fixtures():
 
     # fixup foreign keys for the file copies
     for copy in fixtures['file_copies']:
-        copy['file']= fa['files'][copy['file']]
-        copy['node']= fs['nodes'][copy['node']]
+        copy['file'] = fa['files'][copy['file']]
+        copy['node'] = fs['nodes'][copy['node']]
 
     # bulk load the file copies
     ArchiveFileCopy.insert_many(fixtures['file_copies']).execute()
@@ -78,9 +58,9 @@ def fixtures():
 
     # fixup foreign keys for the copy requests
     for req in fixtures['copy_requests']:
-        req['file']= fa['files'][req['file']]
-        req['node_from']= fs['nodes'][req['node_from']]
-        req['group_to']= fs['groups'][req['group_to']]
+        req['file'] = fa['files'][req['file']]
+        req['node_from'] = fs['nodes'][req['node_from']]
+        req['group_to'] = fs['groups'][req['group_to']]
 
     # bulk load the file copies
     ArchiveFileCopyRequest.insert_many(fixtures['copy_requests']).execute()
