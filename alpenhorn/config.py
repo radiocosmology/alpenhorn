@@ -61,6 +61,8 @@ from __future__ import division
 from __future__ import absolute_import
 
 import logging
+import os
+import yaml
 
 
 log = logging.getLogger(__name__)
@@ -87,9 +89,6 @@ def load_config():
     """
 
     global config
-
-    import os
-    import yaml
 
     # Initialise with the default configuration
     config = _default_config.copy()
