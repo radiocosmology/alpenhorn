@@ -138,10 +138,13 @@ def update_node_integrity(node):
 def update_node_delete(node):
     """Process this node for files to delete."""
 
-    # If we are below the minimum available size, we should consider all files
-    # not explicitly wanted (wants_file != 'Y') as candidates for deletion,
-    # otherwise only those explicitly marked (wants_file == 'N')
-    # Also do not clean on archive type nodes.
+    # If we have less than the minimum available space, we should consider all files
+    # not explicitly wanted (i.e. wants_file != 'Y') as candidates for deletion, provided
+    # the copy is not on an archive node. If we have more than the minimum space, or 
+    # we are on archive node then only those explicitly marked (wants_file == 'N')
+    # will be removed.
+    #
+    # A file will never be removed if there exist less than two copies available elsewhere.
     if node.avail_gb < node.min_avail_gb and node.storage_type != 'A':
         log.info("Hit minimum available space on %s -- considering all unwanted "
                  "files for deletion!" % (node.name))
