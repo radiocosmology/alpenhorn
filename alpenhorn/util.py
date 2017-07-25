@@ -5,9 +5,12 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-import os
 import re
 import shlex
+import logging
+
+
+log = logging.getLogger(__name__)
 
 
 def run_command(cmd, **kwargs):
@@ -32,6 +35,8 @@ def run_command(cmd, **kwargs):
     """
 
     import subprocess
+
+    log.debug('Running command "%s"', cmd)
 
     # Split the cmd string appropriately and then run using Popen
     proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE,

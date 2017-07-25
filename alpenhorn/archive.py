@@ -1,7 +1,9 @@
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
+
 import peewee as pw
+
 from .db import base_model, EnumField
 from alpenhorn.storage import *
 from alpenhorn.acquisition import *

@@ -6,6 +6,7 @@ from __future__ import absolute_import
 import sys
 import os
 import datetime
+import logging
 
 import click
 import peewee as pw
@@ -16,11 +17,8 @@ import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
 import alpenhorn.auto_import as ai
 
-# Setup the logging
-from . import logger
-log = logger.get_log()
 
-log.setLevel(logger.logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 @click.group()

@@ -26,8 +26,13 @@ Example config:
 
     # Logging configuration
     logging:
-        file: alpenhorn.log
+
+        # Set the overall logging level
         level: debug
+
+        # Allow overriding the level on a module by module basis
+        module_levels:
+            alpenhorn.db: info
 
     # Configure the operation of the local service
     service:
@@ -55,9 +60,12 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-# Setup the logging
-from . import logger
-log = logger.get_log()
+import logging
+import os
+import yaml
+
+
+log = logging.getLogger(__name__)
 
 config = None
 
@@ -65,6 +73,13 @@ _default_config = {
     'service': {
         'update_interval': 60,
         'auto_import_interval': 30
+    },
+
+    'logging': {
+        'level': 'warning',
+        'module_levels': {
+            'alpenhorn': 'info'
+        }
     }
 }
 
@@ -74,9 +89,6 @@ def load_config():
     """
 
     global config
-
-    import os
-    import yaml
 
     # Initialise with the default configuration
     config = _default_config.copy()

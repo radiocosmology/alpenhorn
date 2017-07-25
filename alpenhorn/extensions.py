@@ -24,12 +24,12 @@ from __future__ import division
 from __future__ import absolute_import
 
 import importlib
+import logging
 
-from . import config
+from . import config, acquisition
 
-# Setup the logging
-from . import logger, acquisition
-log = logger.get_log()
+
+log = logging.getLogger(__name__)
 
 
 # Internal variable for holding the extension references

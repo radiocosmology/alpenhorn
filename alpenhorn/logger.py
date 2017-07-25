@@ -3,48 +3,55 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
 import logging
-import logging.handlers
-import sys
-import os
 
-# Use the concurrent logging file handler if we can
-try:
-    from cloghandler import ConcurrentRotatingFileHandler as RFHandler
-except ImportError:
-    # Next 2 lines are optional:  issue a warning to the user
-    from warnings import warn
-    warn("ConcurrentLogHandler package not installed.  Using builtin log handler")
-    from logging.handlers import RotatingFileHandler as RFHandler
+from . import config
 
-# Set up logger.
-_log = logging.getLogger("alpenhornd")
-_log.setLevel(logging.DEBUG)
-log_stream = logging.StreamHandler(stream=sys.stdout)
+
+root_logger = logging.getLogger()
+
+log_stream = logging.StreamHandler()
 
 log_fmt = logging.Formatter("%(asctime)s %(levelname)s >> %(message)s",
                             "%b %d %H:%M:%S")
 
-log_stream.setLevel(logging.INFO)
 log_stream.setFormatter(log_fmt)
-_log.addHandler(log_stream)
 
-# Find path to use for logging output (get from environment if possible)
-log_path = "/var/log/alpenhorn/alpenhornd.log"  # default path
-
-if 'ALPENHORN_LOG_FILE' in os.environ:
-    log_path = os.environ['ALPENHORN_LOG_FILE']
-
-# If log_path is set, set up as log handler
-if log_path != "":
-    log_file = RFHandler(log_path,
-                         maxBytes=(2**22), backupCount=100)
-    log_file.setLevel(logging.INFO)
-    log_file.setFormatter(log_fmt)
-    _log.addHandler(log_file)
+root_logger.setLevel(logging.DEBUG)
+root_logger.addHandler(log_stream)
 
 
-def get_log():
-    """Get a logging instance.
+def start_logging():
+    """From the config, setup logging.
     """
-    return _log
+
+    # TODO: apply different settings for the client
+
+    # TODO: add in a way of taking completely custom logging parameters from the
+    # config using logging.dictConfig
+
+    # TODO: while I'm mostly buying into the philosophy that logs should
+    # generally just be sent to stdout and then be left to the system to deal
+    # with, on SciNet it's probably useful to specify file locations, so we
+    # should bring that back
+
+    def _check_level(level):
+
+        if level not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+            raise RuntimeError('Log level %s is not valid' % level)
+
+    # Set the overall level
+    level = config.config['logging']['level'].upper()
+    _check_level(level)
+
+    root_logger.setLevel(level)
+
+    # Apply any module specific logging levels
+    for name, level in config.config['logging']['module_levels'].items():
+
+        logger = logging.getLogger(name)
+        level = level.upper()
+
+        _check_level(level)
+        logger.setLevel(level)

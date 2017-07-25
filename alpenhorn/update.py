@@ -8,6 +8,7 @@ import os
 import time
 import datetime
 import re
+import logging
 
 import peewee as pw
 from peewee import fn
@@ -17,9 +18,8 @@ from . import archive as ar
 from . import storage as st
 from . import util, config, db
 
-# Setup the logging
-from . import logger
-log = logger.get_log()
+
+log = logging.getLogger(__name__)
 
 # Parameters.
 max_time_per_node_operation = 300   # Don't let node operations hog time.

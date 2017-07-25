@@ -20,9 +20,6 @@ try:
 except ImportError:
     from mock import patch, call
 
-# TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
-os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
-
 
 import alpenhorn.db as db
 import alpenhorn.client as cli
