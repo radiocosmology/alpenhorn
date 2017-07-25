@@ -7,10 +7,6 @@ try:
 except ImportError:
     from mock import patch
 
-# TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
-os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
-
-
 from alpenhorn import extensions, acquisition, generic
 
 
@@ -37,11 +33,11 @@ def test_invalid_extension():
     # Test that invalid extension paths, or modules that are not extensions
     # throw the approproate exceptions
 
-    with patch('alpenhorn.config.configdict', {'extensions': ['unknown_module']}):
+    with patch('alpenhorn.config.config', {'extensions': ['unknown_module']}):
         with pytest.raises(ImportError):
             extensions.load_extensions()
 
-    with patch('alpenhorn.config.configdict', {'extensions': ['alpenhorn.acquisition']}):
+    with patch('alpenhorn.config.config', {'extensions': ['alpenhorn.acquisition']}):
         with pytest.raises(RuntimeError):
             extensions.load_extensions()
 
@@ -65,7 +61,7 @@ def test_generic_extension(fixtures):
     }
 
     # Load the extensions. This should cause the acq/file info types to be registered
-    with patch('alpenhorn.config.configdict', conf):
+    with patch('alpenhorn.config.config', conf):
         extensions.load_extensions()
 
         extensions.register_type_extensions()

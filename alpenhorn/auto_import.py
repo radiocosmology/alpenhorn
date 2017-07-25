@@ -2,24 +2,25 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
 import time
 import os
-import re
+import logging
 
 import peewee as pw
 
+from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
-import alpenhorn.db as db
-import alpenhorn.archive as ar
-import alpenhorn.storage as st
-import alpenhorn.acquisition as ac
+from . import db
+from . import archive as ar
+from . import acquisition as ac
+from . import util
+from . import config
 
-# Setup the logging
-from . import logger
-log = logger.get_log()
 
-log.setLevel(logger.logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 def import_file(node, root, file_path):
@@ -66,13 +67,6 @@ def _import_file(node, root, file_path):
         log.info("Skipping non-acquisition path %s." % file_path)
         return
 
-    # TODO: imported files caching
-    # if import_done is not None:
-    #     i = bisect.bisect_left(import_done, fullpath)
-    #     if i != len(import_done) and import_done[i] == fullpath:
-    #         log.debug("Skipping already-registered file %s." % fullpath)
-    #         return
-
     # Figure out which acquisition this is; add if necessary.
     acq_type, acq_name = acq_type_name
     try:
@@ -98,7 +92,7 @@ def _import_file(node, root, file_path):
 
     except pw.DoesNotExist:
         log.debug("Computing md5sum of \"%s\"." % file_name)
-        md5sum = md5sum_file(fullpath, cmd_line=False)
+        md5sum = util.md5sum_file(fullpath, cmd_line=False)
         size_b = os.path.getsize(fullpath)
 
         done = False
@@ -209,52 +203,8 @@ def add_acq(acq_type, name, node, comment=""):
     return acq
 
 
-# Helper routines for adding files
-# ================================
-
-def md5sum_file(filename, hr=True, cmd_line=False):
-    """Find the md5sum of a given file.
-
-    Output should reproduce that of UNIX md5sum command.
-
-    Parameters
-    ----------
-    filename: string
-        Name of file to checksum.
-    hr: boolean, optional
-        Should output be a human readable hexstring (default is True).
-    cmd_line: boolean, optional
-        If True, then simply do an os call to md5sum (default is False).
-
-    See Also
-    --------
-    http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-
-    python
-    """
-    if cmd_line:
-        p = os.popen("md5sum %s 2> /dev/null" % filename, "r")
-        res = p.read()
-        p.close()
-        md5 = res.split()[0]
-        assert len(md5) == 32
-        return md5
-    else:
-        import hashlib
-
-        block_size = 256 * 128
-
-        md5 = hashlib.md5()
-        with open(filename, 'rb') as f:
-            for chunk in iter(lambda: f.read(block_size), b''):
-                md5.update(chunk)
-        if hr:
-            return md5.hexdigest()
-        return md5.digest()
-
-
 # Exceptions
 # ==========
-
 
 class Validation(Exception):
     """Raise when validation of a name or field fails."""
@@ -310,3 +260,73 @@ class RegisterFile(FileSystemEventHandler):
         if basename[0] == "." and basename[-5:] == ".lock":
             basename = basename[1:-5]
             import_file(self.node, self.root, os.path.join(dirname, basename))
+
+
+# Routines to control the filesystem watchdogs.
+# =============================================
+
+obs_list = None
+
+
+def setup_observers(node_list):
+    """Setup the watchdogs to look for new files in the nodes.
+    """
+
+    global obs_list
+
+    # If any node has auto_import set, look for new files and add them to the
+    # DB. Then set up a watchdog for it.
+    obs_list = []
+    for node in node_list:
+        if node.auto_import:
+
+            # Get list of all files that exist on the node
+            q = (ar.ArchiveFileCopy.select(ac.ArchiveFile.name, ac.ArchiveAcq.name)
+                 .where(ar.ArchiveFileCopy.node == node,
+                        ar.ArchiveFileCopy.has_file == 'Y')
+                 .join(ac.ArchiveFile).join(ac.ArchiveAcq))
+
+            already_imported_files = [os.path.join(a, f) for a, f in q.tuples()]
+
+            log.info("Crawling base directory \"%s\" for new files.", node.root)
+
+            for acq_name, d, f_list in os.walk(node.root):
+                log.info("Crawling %s." % acq_name)
+                for file_name in sorted(f_list):
+
+                    if file_name in already_imported_files:
+                        log.debug("Skipping already-registered file %s.", file_name)
+                    else:
+                        import_file(node, node.root, os.path.basename(acq_name),
+                                    file_name)
+
+            # TODO: this test needs fixing
+            # If it is an NFS mount, then the default Observer() doesn't work.
+            # Determine this by seeing if the node name is the same as the node host:
+            # not failsafe, but it will do for now.
+            # if node.host == node.name:
+            #     obs_list.append(Observer())
+            # else:
+            obs_list.append(PollingObserver(timeout=config.config['service']['auto_import_interval']))
+            obs_list[-1].schedule(RegisterFile(node), node.root, recursive=True)
+        else:
+            obs_list.append(None)
+
+    # Start up the watchdog threads
+    for obs in obs_list:
+        if obs:
+            obs.start()
+
+
+def stop_observers():
+    """Stop watchidog threads."""
+    for obs in obs_list:
+        if obs:
+            obs.stop()
+
+
+def join_observers():
+    """Wait for watchdog threads to terminate."""
+    for obs in obs_list:
+        if obs:
+            obs.join()

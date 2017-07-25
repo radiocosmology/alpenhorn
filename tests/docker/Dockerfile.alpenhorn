@@ -1,0 +1,35 @@
+## Generate an image that automatically starts alpenhornd and sshd (for
+## transfers)
+
+# Use the base base image
+FROM jrs65/python-mysql
+
+MAINTAINER Richard Shaw <richard@phas.ubc.ca>
+
+# Install any needed packages specified in requirements.txt
+COPY requirements.txt /build_req/
+COPY test-requirements.txt /build_req/
+RUN pip install -r /build_req/requirements.txt
+RUN pip install -r /build_req/test-requirements.txt
+
+# Install alpenhorn
+ADD . /build
+RUN pip install /build
+
+# Copy the configuration file and create the log directory
+COPY tests/docker/alpenhorn.conf /etc/alpenhorn/alpenhorn.conf
+RUN mkdir /var/log/alpenhorn
+
+# Install the custom acq and file types
+COPY tests/docker/custom_test_types.py /root/python/custom_test_types.py
+ENV PYTHONPATH /root/python/
+
+# Set up ssh key based login for root
+RUN ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
+RUN cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys
+RUN echo 'Host *\n\
+    StrictHostKeyChecking no\n' > /root/.ssh/config
+
+# Run alpenhorn and ssh
+CMD service ssh start && \
+    alpenhornd

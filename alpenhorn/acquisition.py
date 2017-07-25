@@ -1,15 +1,16 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
+import logging
 from os import path
 
 import peewee as pw
 from .db import base_model
 from .config import ConfigClass
 
-# Setup the logging
-from . import logger
-log = logger.get_log()
+
+log = logging.getLogger(__name__)
 
 
 class ArchiveInst(base_model):

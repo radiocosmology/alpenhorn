@@ -7,8 +7,7 @@ import peewee as pw
 import playhouse.db_url as db_url
 
 # All peewee-generated logs are logged to this namespace.
-logger = logging.getLogger("db")
-logger.addHandler(logging.NullHandler())
+logger = logging.getLogger(__name__)
 
 
 # Global variables and constants.
@@ -63,9 +62,9 @@ def config_connect():
     from . import config, extensions
 
     # Connect to the database
-    if 'database' in config.configdict and \
-       'url' in config.configdict['database']:
-        _connect(url=config.configdict['database']['url'])
+    if 'database' in config.config and \
+       'url' in config.config['database']:
+        _connect(url=config.config['database']['url'])
     else:
         db_ext = extensions.database_extension()
 
@@ -125,7 +124,8 @@ class EnumField(pw.Field):
     `VARCHAR` and the validation is done at the Python level.
 
     .. warning::
-        For the *native* ``ENUM`` to work you *must* register it with peewee like::
+        For the *native* ``ENUM`` to work you *must* register it with peewee by
+        doing something like::
 
             db.register_fields({'enum': 'enum'})
 
@@ -189,3 +189,5 @@ class base_model(pw.Model):
 
     class Meta(object):
         database = database_proxy
+
+        # TODO: consider whether to use only_save_dirty = True here
