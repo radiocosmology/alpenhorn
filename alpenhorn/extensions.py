@@ -48,11 +48,11 @@ def load_extensions():
 
     _ext = []
 
-    if 'extensions' not in config.configdict:
+    if 'extensions' not in config.config:
         log.info('No extensions to load.')
         return
 
-    extension_list = list(config.configdict['extensions'])
+    extension_list = list(config.config['extensions'])
 
     for name in extension_list:
 
@@ -94,7 +94,7 @@ def connect_database_extension():
 
     if dbconnect is not None:
         log.info('Using external database helper')
-        conf = config.configdict.get('database', {})
+        conf = config.config.get('database', {})
         return dbconnect(conf)
     else:
         return None
@@ -124,7 +124,7 @@ def _register_acq_extensions(acq_types):
         acquisition.AcqType.register_type(acq_type)
 
         try:
-            conf = config.configdict['acq_types'][name]
+            conf = config.config['acq_types'][name]
         except KeyError:
             conf = {}
 
@@ -139,7 +139,7 @@ def _register_file_extensions(file_types):
         acquisition.FileType.register_type(file_type)
 
         try:
-            conf = config.configdict['file_types'][name]
+            conf = config.config['file_types'][name]
         except KeyError:
             conf = {}
 

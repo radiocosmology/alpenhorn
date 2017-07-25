@@ -3,7 +3,7 @@
 test_client
 ----------------------------------
 
-Tests for `alpenhorn.clien` module.
+Tests for `alpenhorn.client` module.
 """
 from __future__ import print_function
 from __future__ import division
@@ -23,6 +23,7 @@ except ImportError:
 # TODO: use Pytest's directory used for tmpdir/basedir, not '/tmp'
 os.environ['ALPENHORN_LOG_FILE'] = '/tmp' + '/alpenhornd.log'
 
+
 import alpenhorn.db as db
 import alpenhorn.client as cli
 import alpenhorn.acquisition as ac
@@ -31,12 +32,19 @@ import alpenhorn.storage as st
 
 import test_import as ti
 
+
 @pytest.fixture
 def fixtures(tmpdir):
     return ti.fixtures(tmpdir)
 
+
+@pytest.fixture(autouse=True)
+def no_cli_init(monkeypatch):
+    monkeypatch.setattr(cli, '_init_config_db', lambda: None )
+
+
 def test_import_schema(fixtures):
-    assert set(db.database_proxy.get_tables() )== {
+    assert set(db.database_proxy.get_tables()) == {
         u'storagegroup', u'storagenode',
         u'acqtype', u'archiveinst', u'archiveacq',
         u'filetype', u'archivefile',
@@ -65,7 +73,7 @@ def test_sync(fixtures):
     assert 'Copy all files from NODE to GROUP that are not already present.' in help_result.output
     assert 'Options:\n  --acq ACQ              Sync only this acquisition.' in help_result.output
 
-    result = runner.invoke(cli.sync, args = ['x', 'bar'])
+    result = runner.invoke(cli.sync, args=['x', 'bar'])
     assert result.exit_code == 0
     assert result.output == 'No files to copy from node x.\n'
 
@@ -80,7 +88,7 @@ def test_sync(fixtures):
     file_copy.save()
     file_copy.file.save()
 
-    result = runner.invoke(cli.sync, args = ['--force', '--show_acq', '--show_files', 'x', 'bar'])
+    result = runner.invoke(cli.sync, args=['--force', '--show_acq', '--show_files', 'x', 'bar'])
     assert result.exit_code == 0
     assert re.match(r'x \[1 files\]\n' +
                     r'x/fred\n' +
@@ -100,7 +108,7 @@ def test_sync(fixtures):
     assert copy_request.n_requests == 1
 
     ## if we run sync again, the copy request will simply get the 'n_requests' count incremented by 1
-    result = runner.invoke(cli.sync, args = ['--force', '--show_acq', '--show_files', 'x', 'bar'])
+    result = runner.invoke(cli.sync, args=['--force', '--show_acq', '--show_files', 'x', 'bar'])
 
     print(result.output)
     print(result.exception)
@@ -135,7 +143,7 @@ def test_status(fixtures):
 
     # we start off with no good file copies, so the output should only contain
     # the header
-    result = runner.invoke(cli.status, args = ['--all'])
+    result = runner.invoke(cli.status, args=['--all'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 2
@@ -153,7 +161,7 @@ def test_status(fixtures):
     file_copy.save()
     file_copy.file.save()
 
-    result = runner.invoke(cli.status, args = ['--all'])
+    result = runner.invoke(cli.status, args=['--all'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 3
@@ -182,7 +190,7 @@ def test_verify(fixtures):
     file_copy.has_file = 'Y'
     file_copy.save()
     result = runner.invoke(cli.verify, ['x'])
-    assert result.exit_code == 0
+    assert result.exit_code == 2
     assert re.match(r'.*\n=== Missing files ===\n' +
                     str(tmpdir.join(file_copy.file.acq.name, file_copy.file.name)),
                     result.output, re.DOTALL)
@@ -209,7 +217,7 @@ def test_clean(fixtures):
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
-    result = runner.invoke(cli.clean, args = ['-f', 'x'])
+    result = runner.invoke(cli.clean, args=['-f', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
                     r'Marked 1 files for cleaning\n',
@@ -225,7 +233,7 @@ def test_clean(fixtures):
     ## if we clean with the '--now' option, the copy should be marked as 'not wanted'
     file_copy.wants_file = 'Y'
     file_copy.save()
-    result = runner.invoke(cli.clean, args = ['-f', '--now', 'x'])
+    result = runner.invoke(cli.clean, args=['-f', '--now', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
                     r'Marked 1 files for cleaning\n',
@@ -247,7 +255,7 @@ def test_mounted(fixtures):
     assert 'List the nodes mounted on this' in help_result.output
     assert 'Options:\n  -H, --host TEXT  use specified host' in help_result.output
 
-    result = runner.invoke(cli.mounted, args = ['--host', 'foo.example.com'])
+    result = runner.invoke(cli.mounted, args=['--host', 'foo.example.com'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
@@ -270,10 +278,10 @@ def test_format_transport(system_mock, getuid_mock, glob_mock, popen_mock, mkdir
     assert 'Interactive routine for formatting a transport disc as a storage node' in help_result.output
     assert 'Options:\n  --help  Show this message and exit.' in help_result.output
 
-    result = runner.invoke(cli.format_transport, args = ['12-34-56-78'])
+    result = runner.invoke(cli.format_transport, args=['12-34-56-78'])
     assert result.exit_code == 0
     assert re.match(r'.*\nDisc is already formatted\.\n' +
-                    r'Labelling the disc as "CH-12-34-56-78"'+
+                    r'Labelling the disc as "CH-12-34-56-78"' +
                     r'.*\nSuccessfully created storage node.\n' +
                     r'Node created but not mounted. Run alpenhorn mount_transport for that.',
                     result.output, re.DOTALL)
@@ -296,7 +304,7 @@ def test_mount_transport(mock, fixtures):
     assert 'Mount a transport disk into the system and then make it available' in help_result.output
     assert 'Options:\n  --user TEXT     username to access this node' in help_result.output
 
-    result = runner.invoke(cli.mount_transport, args = ['z'])
+    result = runner.invoke(cli.mount_transport, args=['z'])
     assert result.exit_code == 0
     assert mock.mock_calls == [call('mount /mnt/z')]
     assert re.match(r'Mounting disc at /mnt/z',
@@ -312,7 +320,7 @@ def test_unmount_transport(mock, fixtures):
     assert 'Unmount a transport disk from the system and then remove it from alpenhorn.' in help_result.output
     assert 'Options:\n  --help  Show this message and exit.' in help_result.output
 
-    result = runner.invoke(cli.unmount_transport, args = ['x'])
+    result = runner.invoke(cli.unmount_transport, args=['x'])
     assert result.exit_code == 0
     assert mock.mock_calls == [call('umount /mnt/x')]
     assert re.match(r'Unmounting disc at /mnt/x',
@@ -328,7 +336,7 @@ def test_mount(fixtures):
     assert 'Interactive routine for mounting a storage node located at ROOT.' in help_result.output
     assert 'Options:\n  --path TEXT      Root path for this node' in help_result.output
 
-    result = runner.invoke(cli.mount, args = ['x'])
+    result = runner.invoke(cli.mount, args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
@@ -340,10 +348,10 @@ def test_mount(fixtures):
     node.save()
 
     result = runner.invoke(cli.mount,
-                           args = ['--path=/bla',
-                                   '--user=bozo',
-                                   '--address=foobar.example.com',
-                                   'x'])
+                           args=['--path=/bla',
+                                 '--user=bozo',
+                                 '--address=foobar.example.com',
+                                 'x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 2
@@ -368,7 +376,7 @@ def test_unmount(fixtures):
     assert 'Unmount a storage node with location or named ROOT_OR_NAME.' in help_result.output
     assert 'Options:\n  --help  Show this message and exit.' in help_result.output
 
-    result = runner.invoke(cli.unmount, args = ['x'])
+    result = runner.invoke(cli.unmount, args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
@@ -378,7 +386,7 @@ def test_unmount(fixtures):
 
     # unmount already unmounted node
     result = runner.invoke(cli.unmount,
-                           args = ['x'])
+                           args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
@@ -386,7 +394,7 @@ def test_unmount(fixtures):
 
     # unmount an unknown node
     result = runner.invoke(cli.unmount,
-                           args = ['y'])
+                           args=['y'])
     assert result.exit_code == 1
     output = result.output.splitlines()
     assert 'That is neither a node name, nor a path on this host. I quit.' == output[0]
@@ -403,7 +411,7 @@ def test_import_files(fixtures):
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
-    result = runner.invoke(cli.import_files, args = ['-vv', 'x'])
+    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
 
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
@@ -428,8 +436,7 @@ def test_import_files(fixtures):
     f.size_b = 0
     f.save()
 
-
-    result = runner.invoke(cli.import_files, args = ['-vv', '--dry', 'x'])
+    result = runner.invoke(cli.import_files, args=['-vv', '--dry', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Added 1 files\n\n' +
@@ -454,7 +461,7 @@ def test_import_files(fixtures):
             .count()) == 0
 
     ## now repeat but allowing database change
-    result = runner.invoke(cli.import_files, args = ['-vv', 'x'])
+    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Added 1 files\n\n' +
@@ -503,7 +510,7 @@ def test_nested_import_files(fixtures):
         size_b=len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents']),
         md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
 
-    result = runner.invoke(cli.import_files, args = ['-vv', 'x'])
+    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
 
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
@@ -531,12 +538,12 @@ def test_nested_import_files(fixtures):
                     result.output, re.DOTALL)
     ## check the database state
     acq_files = list(ar.ArchiveFileCopy
-                .select(ac.ArchiveFile.name,
-                        ar.ArchiveFileCopy.has_file,
-                        ar.ArchiveFileCopy.wants_file)
-                .join(ac.ArchiveFile)
-                .where(ac.ArchiveFile.name == acq_file.name)
-                .dicts())
+                     .select(ac.ArchiveFile.name,
+                             ar.ArchiveFileCopy.has_file,
+                             ar.ArchiveFileCopy.wants_file)
+                     .join(ac.ArchiveFile)
+                     .where(ac.ArchiveFile.name == acq_file.name)
+                     .dicts())
     assert acq_files == [
         {'name': acq_file.name, 'has_file': 'Y', 'wants_file': 'Y'}
     ]

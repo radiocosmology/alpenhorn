@@ -133,8 +133,9 @@ def workers(db, network, images, tmpdir_factory):
         # Create db entries for the alpenhorn instance
         group = st.StorageGroup.create(name=('group_%i' % i))
         node = st.StorageNode.create(
-            name=('node_%i' % i), root='/data', group=group, host=hostname,
-            address=hostname, mounted=True, auto_import=True, min_avail_gb=0.0
+            name=('node_%i' % i), root='/data', username='root',
+            group=group, host=hostname, address=hostname, mounted=True,
+            auto_import=(i == 0), min_avail_gb=0.0
         )
 
         # Create a temporary directory on the host to store the data, which will
@@ -143,8 +144,8 @@ def workers(db, network, images, tmpdir_factory):
         print('Node directory (on host): %s' % str(data_dir))
 
         container = client.containers.run(
-            'alpenhorn', name=hostname, detach=True, network_mode=network,
-            volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
+            'alpenhorn', name=hostname, hostname=hostname, network_mode=network,
+            detach=True, volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
         )
 
         workers.append({'node': node, 'container': container, 'dir': data_dir})
@@ -262,18 +263,23 @@ def _make_files(acqs, base, skip_lock=True):
                     fh.write(file_['contents'])
 
 
-# ===== Test the auto_import behaviour =====
+# ====== Helper routines for checking the database ======
 
-def test_import(workers, test_files):
+def _verify_db(acqs, copies_on_node=None):
+    """Verify that files are in the database.
 
-    # Create the files
-    _make_files(test_files, workers[0]['dir'], skip_lock=True)
+    Parameters
+    ----------
+    acqs : dict
+        Set of acquisitions and files as output by test_files.
+    copies_on_node : StorageNode, optional
+        Verify that the database believes there are copies on this node. If
+        `None` skip this test.
+    """
 
-    time.sleep(2)
-
-    node = workers[0]['node']
-
-    for acq in test_files:
+    # Loop over all acquisitions and files and check that they have been
+    # correctly added to the database
+    for acq in acqs:
 
         # Test that the acquisition exists
         acq_query = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == acq['name'])
@@ -291,28 +297,103 @@ def test_import(workers, test_files):
                 ac.ArchiveFile.name == file_['name']
             )
 
+            # Check that we haven't imported types we don't want
+            if file_['type'] in [None, 'lock']:
+                assert file_query.count() == 0
+                continue
+
             assert file_query.count() == 1
             file_obj = file_query.get()
 
             # Test that it has the correct type
             assert file_obj.type.name == file_['type']
 
-            # Test that this node has a copy
-            copy_query = ar.ArchiveFileCopy.select().where(
-                ar.ArchiveFileCopy.file == file_obj,
-                ar.ArchiveFileCopy.node == node
-            )
+            if copies_on_node is not None:
+                # Test that this node has a copy
+                copy_query = ar.ArchiveFileCopy.select().where(
+                    ar.ArchiveFileCopy.file == file_obj,
+                    ar.ArchiveFileCopy.node == copies_on_node
+                )
 
-            assert copy_query.count() == 1
-            copy_obj = copy_query.get()
+                assert copy_query.count() == 1
+                copy_obj = copy_query.get()
 
-            assert copy_obj.has_file == 'Y'
-            assert copy_obj.wants_file == 'Y'
+                assert copy_obj.has_file == 'Y'
+                assert copy_obj.wants_file == 'Y'
 
 
-def test_stuff(workers):
+def _verify_files(worker):
+    """Verify the files are in place using the alpenhorn verify command.
+    """
 
-    import time
+    # Run alpenhron verify and return the exit status as a string
+    output = worker['container'].exec_run(
+        "bash -c 'alpenhorn verify %s &> /dev/null; echo $?'" %
+        worker['node'].name
+    )
 
-    #time.sleep(10)
-    raw_input('Press a key.')
+    # Convert the output back to an exit status
+    assert not int(output)
+
+
+# ====== Test the auto_import behaviour ======
+
+def test_import(workers, test_files):
+    # Add a bunch of files onto node_0, wait for them to be picked up by the
+    # auto_import, and then verify that they all got imported to the db
+    # correctly.
+
+    # Create the files
+    _make_files(test_files, workers[0]['dir'], skip_lock=True)
+
+    # Wait for the auto_import to catch them (it polls at 30s intervals)
+    time.sleep(3)
+
+    node = workers[0]['node']
+
+    _verify_db(test_files, copies_on_node=node)
+
+    _verify_files(workers[0])
+
+
+# ====== Test that the sync between nodes works ======
+
+def test_sync_all(workers, network, test_files):
+
+    # Request sync onto a different node
+    client.containers.run(
+        'alpenhorn', remove=True, detach=False, network_mode=network,
+        command="alpenhorn sync -f node_0 group_1"
+    )
+
+    time.sleep(3)
+
+    _verify_db(test_files, copies_on_node=workers[1]['node'])
+
+    _verify_files(workers[1])
+
+
+def test_sync_acq(workers, network, test_files):
+
+    for acq in test_files:
+
+        # Request sync of a single acq onto a different node
+        client.containers.run(
+            'alpenhorn', remove=True, detach=False, network_mode=network,
+            command=("alpenhorn sync -f node_0 group_2 --acq=%s" % acq['name'])
+        )
+
+        time.sleep(3)
+
+        # Verify that the requested files hve been copied
+        _verify_db([acq], copies_on_node=workers[1]['node'])
+
+        _verify_files(workers[2])
+
+
+# def test_stuff(workers):
+#
+#     try:
+#         raw_input('Press enter.')
+#     except:
+#         input('Press enter.')

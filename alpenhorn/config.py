@@ -8,7 +8,8 @@ Configuration file search order:
 - `ALPENHORN_CONFIG_FILE` environment variable
 
 This is in order of increasing precendence, with options in later files
-overriding those in earlier entries.
+overriding those in earlier entries. Configuration is merged recursively by
+`merge_dict_tree`.
 
 Example config:
 
@@ -16,17 +17,25 @@ Example config:
 
     # Configure the data base connection with a peewee db_url
     database:
-        url:    peewee_url
-
-    # Logging configuration
-    logging:
-        file:   alpenhorn.log
-        level:  debug
+        url: peewee_url
 
     # Specify extensions as a list of fully qualified references to python packages or modules
     extensions:
         - alpenhorn.generic
         - alpenhorn_chime
+
+    # Logging configuration
+    logging:
+        file: alpenhorn.log
+        level: debug
+
+    # Configure the operation of the local service
+    service:
+        # Minimum time length (in seconds) between updates
+        update_interval: 60
+
+        # Timescale on which to poll the filesystem for new data to import
+        auto_import_interval: 30
 
     # Set any configuration for acquisition type extensions
     acq_types:
@@ -50,23 +59,27 @@ from __future__ import absolute_import
 from . import logger
 log = logger.get_log()
 
-configdict = None
+config = None
 
-_default_config = {}
+_default_config = {
+    'service': {
+        'update_interval': 60,
+        'auto_import_interval': 30
+    }
+}
 
 
 def load_config():
     """Find and load the configuration from a file.
     """
 
-    global configdict
+    global config
 
     import os
     import yaml
 
-    # Initialise and merge in any default configuration
-    configdict = {}
-    configdict.update(_default_config)
+    # Initialise with the default configuration
+    config = _default_config.copy()
 
     # Construct the configuration file path
     config_files = [
@@ -95,7 +108,7 @@ def load_config():
         with open(absfile, 'r') as fh:
             conf = yaml.safe_load(fh)
 
-        configdict.update(conf)
+        config = merge_dict_tree(config, conf)
 
     if not any_exist:
         raise RuntimeError("No configuration files available.")
@@ -112,3 +125,58 @@ class ConfigClass(object):
         """Configure the class from the supplied `configdict`.
         """
         pass
+
+
+def merge_dict_tree(a, b):
+    """Merge two dictionaries recursively.
+
+    The following rules applied:
+
+      - Dictionaries at each level are merged, with `b` updating `a`.
+      - Lists at the same level are combined, with that in `b` appended to `a`.
+      - For all other cases, scalars, mixed types etc, `b` replaces `a`.
+
+    Parameters
+    ----------
+    a, b : dict
+        Two dictionaries to merge recursively. Where there are conflicts `b`
+        takes preference over `a`.
+
+    Returns
+    -------
+    c : dict
+        Merged dictionary.
+    """
+
+    # Different types should return b
+    if type(a) != type(b):
+        return b
+
+    # From this point on both have the same type, so we only need to check
+    # either a or b.
+    if isinstance(a, list):
+        return a + b
+
+    # Dict's should be merged recursively
+    if isinstance(a, dict):
+        keys_a = set(a.keys())
+        keys_b = set(b.keys())
+
+        c = {}
+
+        # Add the keys only in a...
+        for k in (keys_a - keys_b):
+            c[k] = a[k]
+
+        # ... now the ones only in b
+        for k in (keys_b - keys_a):
+            c[k] = b[k]
+
+        # Recursively merge any common keys
+        for k in (keys_a & keys_b):
+            c[k] = merge_dict_tree(a[k], b[k])
+
+        return c
+
+    # All other cases (scalars etc) we should favour b
+    return b

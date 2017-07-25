@@ -31,7 +31,7 @@ def test_config_env(fs, monkeypatch):
 
     monkeypatch.setenv('ALPENHORN_CONFIG_FILE', '/test/from/env/test.yaml')
     config.load_config()
-    assert config.configdict == merge_dict(config._default_config, {'hello': 'test'})
+    assert config.config == merge_dict(config._default_config, {'hello': 'test'})
 
 
 def test_precendence(fs, monkeypatch):
@@ -39,17 +39,65 @@ def test_precendence(fs, monkeypatch):
 
     fs.CreateFile('/etc/alpenhorn/alpenhorn.conf', contents='hello: test\n')
     config.load_config()
-    assert config.configdict == merge_dict(config._default_config, {'hello': 'test'})
+    assert config.config == merge_dict(config._default_config, {'hello': 'test'})
 
     fs.CreateFile('/etc/xdg/alpenhorn/alpenhorn.conf', contents='hello: test2\n')
     config.load_config()
-    assert config.configdict == merge_dict(config._default_config, {'hello': 'test2'})
+    assert config.config == merge_dict(config._default_config, {'hello': 'test2'})
 
     fs.CreateFile(os.path.expanduser('~/.config/alpenhorn/alpenhorn.conf'), contents='hello: test3\nmeh: embiggens')
     config.load_config()
-    assert config.configdict == merge_dict(config._default_config, {'hello': 'test3', 'meh': 'embiggens'})
+    assert config.config == merge_dict(config._default_config, {'hello': 'test3', 'meh': 'embiggens'})
 
     fs.CreateFile('/test/from/env/test.yaml', contents='hello: test4\n')
     monkeypatch.setenv('ALPENHORN_CONFIG_FILE', '/test/from/env/test.yaml')
     config.load_config()
-    assert config.configdict == merge_dict(config._default_config, {'hello': 'test4', 'meh': 'embiggens'})
+    assert config.config == merge_dict(config._default_config, {'hello': 'test4', 'meh': 'embiggens'})
+
+
+def test_merge():
+    # Test the dictionary merging algorithm used by the configuration
+
+    conf_a = {
+        'dict1': {
+            'dict2': {
+                'scalar1': 'a',
+                'scalar2': 'a'
+            },
+            'scalar3': 'a',
+            'list1': ['a']
+        },
+        'dict_or_list': {
+            'scalar4': 'a'
+        }
+    }
+
+    conf_b = {
+        'dict1': {
+            'dict2': {
+                'scalar1': 'b',
+                'scalar4': 'b'
+            },
+            'scalar3': 'b',
+            'list1': ['b']
+        },
+        'dict_or_list': ['b']
+    }
+
+    test_c = config.merge_dict_tree(conf_a, conf_b)
+
+    # The correctly merged output
+    conf_c = {
+        'dict1': {
+            'dict2': {
+                'scalar1': 'b',
+                'scalar2': 'a',
+                'scalar4': 'b'
+            },
+            'scalar3': 'b',
+            'list1': ['a', 'b']
+        },
+        'dict_or_list': ['b']
+    }
+
+    assert conf_c == test_c
