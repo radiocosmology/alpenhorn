@@ -78,7 +78,7 @@ def fixtures():
 def test_schema(fixtures):
     assert set(db.database_proxy.get_tables() )== {
         u'storagegroup', u'storagenode',
-        u'acqtype', u'archiveinst', u'archiveacq',
+        u'acqtype', u'archiveacq',
         u'filetype', u'archivefile',
         u'archivefilecopyrequest', u'archivefilecopy'
     }

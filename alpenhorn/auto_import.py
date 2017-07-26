@@ -181,21 +181,11 @@ def add_acq(acq_type, name, node, comment=""):
         raise AlreadyExists("Acquisition \"%s\" already exists in DB." %
                             name)
 
-    # At the moment we need an instrument, so just create one.
-    # TODO: this should probably go away
-    try:
-        inst_rec = ac.ArchiveInst.get(name='inst')
-    except pw.DoesNotExist:
-        print("Creating inst.")
-        inst_rec = ac.ArchiveInst.create(name='inst')
-
     # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition. Run
     # in a transaction so we don't end up with inconsistency.
     with db.database_proxy.atomic():
         # Insert the archive record
-        acq = ac.ArchiveAcq.create(name=name, inst=inst_rec,
-                                   type=acq_type,
-                                   comment=comment)
+        acq = ac.ArchiveAcq.create(name=name, type=acq_type, comment=comment)
 
         # Generate the metadata table
         acq_type.acq_info.new(acq, node)

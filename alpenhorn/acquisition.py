@@ -13,18 +13,6 @@ from .config import ConfigClass
 log = logging.getLogger(__name__)
 
 
-class ArchiveInst(base_model):
-    """Instrument that took the data.
-
-    Attributes
-    ----------
-    name : string
-        Name of instrument.
-    """
-    name = pw.CharField(max_length=64)
-    notes = pw.TextField(null=True)
-
-
 class AcqType(base_model):
     """The type of data that is being taken in the acquisition.
 
@@ -179,7 +167,6 @@ class ArchiveAcq(base_model):
     n_timed_files
     """
     name = pw.CharField(max_length=64)
-    inst = pw.ForeignKeyField(ArchiveInst, related_name='acqs')
     type = pw.ForeignKeyField(AcqType, related_name='acqs')
     comment = pw.TextField(null=True)
 
