@@ -43,7 +43,7 @@ def no_cli_init(monkeypatch):
 def test_import_schema(fixtures):
     assert set(db.database_proxy.get_tables()) == {
         u'storagegroup', u'storagenode',
-        u'acqtype', u'archiveinst', u'archiveacq',
+        u'acqtype', u'archiveacq',
         u'filetype', u'archivefile',
         u'archivefilecopyrequest', u'archivefilecopy',
         u'zabinfo', u'quuxinfo', u'zxcinfo', u'spqrinfo', u'loginfo'
@@ -496,9 +496,8 @@ def test_nested_import_files(fixtures):
     tmpdir.chdir()
 
     ## pretend 'jim' should be added
-    inst = ac.ArchiveInst.get(ac.ArchiveInst.name == 'foo')
     acq_type = ac.AcqType.create(name='zab')
-    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type, inst=inst)
+    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
     file_type = ac.FileType.get(name='zxc')
     acq_file = ac.ArchiveFile.create(
         name='acq_data/x_123_1_data/raw/acq_123_1.zxc',
