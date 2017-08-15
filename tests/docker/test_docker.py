@@ -9,10 +9,13 @@ import os
 from os.path import join, dirname, exists
 
 import pytest
+
+
 pytestmark = pytest.mark.skipif(
-    'RUN_DOCKER_TESTS' not in os.environ,
+    (('RUN_DOCKER_TESTS' not in os.environ) and ('PLAYGROUND' not in os.environ)),
     reason=('Docker tests must be enabled by setting the RUN_DOCKER_TESTS environment variable')
 )
+
 
 import yaml
 
@@ -88,13 +91,13 @@ def db(network, images):
 
     # Wait until the MySQL instance is properly up
     client.containers.run(
-        'alpenhorn', remove=True, detach=False, network_mode=network,
+        'alpenhorn', remove=True, detach=False, network=network,
         command="bash -c 'while ! mysqladmin ping -h db --silent; do sleep 3; done'"
     )
 
     # Create the database
     client.containers.run(
-        'alpenhorn', remove=True, detach=False, network_mode=network,
+        'alpenhorn', remove=True, detach=False, network=network,
         command="mysql -h db -e 'CREATE DATABASE alpenhorn_db'"
     )
 
@@ -102,7 +105,7 @@ def db(network, images):
 
     # Initialise alpenhorn
     client.containers.run(
-        'alpenhorn', remove=True, detach=False, network_mode=network,
+        'alpenhorn', remove=True, detach=False, network=network,
         command="alpenhorn init"
     )
 
@@ -391,9 +394,26 @@ def test_sync_acq(workers, network, test_files):
         _verify_files(workers[2])
 
 
-# def test_stuff(workers):
-#
-#     try:
-#         raw_input('Press enter.')
-#     except:
-#         input('Press enter.')
+@pytest.mark.skipif(
+    'PLAYGROUND' not in os.environ,
+    reason=('Set PLAYGROUND to leave alpenhorn alive for interactive fun.')
+)
+def test_playground(workers):
+
+    print("""
+To connect the alpenhorn database to this instance run:
+
+>>> from alpenhorn import db
+>>> db._connect(url='mysql://root@127.0.0.1:63306/alpenhorn_db')
+
+To interact with the individual alpenhorn instances use docker exec, e.g.
+
+$ docker exec container_0 alpenhorn status
+
+When you are finished playing, press enter to close the docker containers and
+clean up everything.""")
+
+    try:
+        raw_input('')
+    except:
+        input('')
