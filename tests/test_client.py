@@ -544,3 +544,16 @@ def test_nested_import_files(fixtures):
     assert acq_files == [
         {'name': acq_file.name, 'has_file': 'Y', 'wants_file': 'Y'}
     ]
+
+def test_create_storagenode(fixtures):
+    """Test the 'import_files' command"""
+    runner = CliRunner()
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+
+    result = runner.invoke(cli.create_storagenode, args=['node_x'])
+    print(result.output)
+
+    # assert result.exit_code == 0
+    # assert result.output ==

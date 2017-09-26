@@ -951,6 +951,20 @@ def import_files(node_name, verbose, acq, dry):
         print()
 
 
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.option('-v', '--verbose', count=True)
+def create_storagenode(node_name, verbose):
+    """Create storage node
+    """
+    _init_config_db()
+
+    for sn in st.StorageNode.select():
+        print(sn.name)
+
+    print("New node name:")
+    print(node_name)
+
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
 
