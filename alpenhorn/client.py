@@ -43,7 +43,7 @@ def init():
 
     # Create any alpenhorn core tables
     core_tables = [
-        ac.AcqType, ac.ArchiveInst, ac.ArchiveAcq, ac.FileType,
+        ac.AcqType, ac.ArchiveAcq, ac.FileType,
         ac.ArchiveFile, st.StorageGroup, st.StorageNode,
         ar.ArchiveFileCopy, ar.ArchiveFileCopyRequest
     ]

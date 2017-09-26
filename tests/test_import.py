@@ -95,7 +95,7 @@ def test_schema(fixtures):
     """Basic sanity test of fixtures used"""
     assert set(db.database_proxy.get_tables()) == {
         u'storagegroup', u'storagenode',
-        u'acqtype', u'archiveinst', u'archiveacq',
+        u'acqtype', u'archiveacq',
         u'filetype', u'archivefile',
         u'archivefilecopyrequest', u'archivefilecopy',
         u'zabinfo', u'quuxinfo', u'zxcinfo', u'spqrinfo', u'loginfo'
@@ -119,14 +119,12 @@ def test_import(fixtures):
     # import for hello.txt should be ignored while creating the acquisition
     # because 'zab' acq type only tracks *.zxc and *.log files
     auto_import.import_file(node, node.root, acq_dir.join('hello.txt').relto(tmpdir))
-    assert ac.ArchiveInst.get(ac.ArchiveInst.name == 'inst') is not None
     assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
 
     # the acquisition is still created
     acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_dir.basename)
     assert acq is not None
     assert acq.name == acq_dir.basename
-    assert acq.inst.name == 'inst'
     assert acq.type.name == 'zab'
 
     # while no file has been imported yet
@@ -305,14 +303,12 @@ def test_import_nested(fixtures):
     # import for hello.txt should be ignored while creating the acquisition
     # because 'zab' acq type only tracks *.zxc and *.log files
     auto_import.import_file(node, node.root, acq_dir.join('summary.txt').relto(tmpdir))
-    assert ac.ArchiveInst.get(ac.ArchiveInst.name == 'inst') is not None
     assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
 
     # the acquisition is still created
     acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_dir.relto(tmpdir))
     assert acq is not None
     assert acq.name == acq_dir.relto(tmpdir)
-    assert acq.inst.name == 'inst'
     assert acq.type.name == 'zab'
 
     # while no file has been imported yet

@@ -11,7 +11,7 @@ from os.path import join, dirname, exists
 import pytest
 pytestmark = pytest.mark.skipif(
     'RUN_DOCKER_TESTS' not in os.environ,
-    reason=('Docker tests must be enabled by setting the RUN_DOCKER_TEST environment variable')
+    reason=('Docker tests must be enabled by setting the RUN_DOCKER_TESTS environment variable')
 )
 
 import yaml
