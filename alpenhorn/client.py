@@ -952,18 +952,28 @@ def import_files(node_name, verbose, acq, dry):
 
 
 @cli.command()
+@click.argument('group_name', metavar='GROUP')
+@click.argument('group_notes')
 @click.argument('node_name', metavar='NODE')
 @click.option('-v', '--verbose', count=True)
-def create_storagenode(node_name, verbose):
+def create(group_name, group_notes, node_name, verbose):
     """Create storage node
     """
     _init_config_db()
 
-    for sn in st.StorageNode.select():
+    try:
+        this_group = st.StorageGroup.get(name=group_name)
+        print("Group name \"%s\" already exists! Try a different name!" % group_name)
+    except pw.DoesNotExist:
+        st.StorageGroup.create(name=group_name, notes=group_notes)
+        print("Added group \"%s\" to database." % group_name)
+
+    for sn in st.StorageGroup.select():
         print(sn.name)
 
     print("New node name:")
-    print(node_name)
+    print(group_name)
+
 
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
