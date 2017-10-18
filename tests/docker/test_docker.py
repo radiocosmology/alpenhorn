@@ -268,7 +268,7 @@ def _make_files(acqs, base, skip_lock=True):
 
 # ====== Helper routines for checking the database ======
 
-def _verify_db(acqs, copies_on_node=None):
+def _verify_db(acqs, copies_on_node=None, wants_on_node='Y', has_on_node='Y'):
     """Verify that files are in the database.
 
     Parameters
@@ -276,8 +276,14 @@ def _verify_db(acqs, copies_on_node=None):
     acqs : dict
         Set of acquisitions and files as output by test_files.
     copies_on_node : StorageNode, optional
-        Verify that the database believes there are copies on this node. If
+        Verify that what the database believes is on this node. If
         `None` skip this test.
+    has_on_node : str, optional
+        'Has' state of files to check for. Default 'Y'.
+        `None` to skip test.
+    wants_on_node : str, optional
+        'Wants' state of files to check for. Default 'Y'.
+        `None` to skip test.
     """
 
     # Loop over all acquisitions and files and check that they have been
@@ -321,8 +327,8 @@ def _verify_db(acqs, copies_on_node=None):
                 assert copy_query.count() == 1
                 copy_obj = copy_query.get()
 
-                assert copy_obj.has_file == 'Y'
-                assert copy_obj.wants_file == 'Y'
+                if has_on_node is not None: assert copy_obj.has_file == has_on_node
+                if wants_on_node is not None: assert copy_obj.wants_file == wants_on_node
 
 
 def _verify_files(worker):
@@ -392,6 +398,35 @@ def test_sync_acq(workers, network, test_files):
         _verify_db([acq], copies_on_node=workers[1]['node'])
 
         _verify_files(workers[2])
+
+
+# ====== Test that the clean command works ======
+
+def test_clean(workers, network, test_files):
+
+    node_to_clean = workers[1]['node']
+    # Simplest clean request
+    client.containers.run(
+        'alpenhorn', remove=True, detach=False, network_mode=network,
+        command=("alpenhorn clean -f {}".format(node_to_clean.name))
+    )
+
+    # Check files set to 'M'
+    for acq in test_files:
+        _verify_db([acq], copies_on_node=node_to_clean, has_on_node='Y', wants_on_node='M')
+
+    # Changed my mind, delete them NOW
+    client.containers.run(
+        'alpenhorn', remove=True, detach=False, network_mode=network,
+        command=("alpenhorn clean -nf {}".format(node_to_clean.name))
+    )
+
+    # Check files are set to be deleted
+    for acq in test_files:
+        _verify_db([acq], copies_on_node=node_to_clean, has_on_node=None, wants_on_node='N')
+
+
+
 
 
 @pytest.mark.skipif(
