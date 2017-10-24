@@ -401,11 +401,33 @@ def test_sync_acq(workers, network, test_files):
 
 
 # ====== Test that the clean command works ======
+# TODO: - Check that lock files are handled correctly? Currently lock files are not created.
+
+def _verify_clean(acqs, worker, unclean=False):
+    """ Check the clean command has been executed as expected on the node associated with 'worker'.
+        If 'unclean' is set to True, check that files are not wanted but still present (until
+        additional copies on other archive nodes are found).
+    """
+    # Check files are set to deleted / not deleted but not wanted in database
+    for acq in acqs:
+        if unclean:
+            _verify_db([acq], copies_on_node=worker['node'], has_on_node='Y', wants_on_node='N')
+        else:
+            _verify_db([acq], copies_on_node=worker['node'], has_on_node='N', wants_on_node='N')
+
+    # Check files are in fact gone / still there
+    if unclean:
+        for acq in acqs:
+            for f in acq['files']:
+                assert os.path.exists(os.path.join(worker['dir'], f))
+    else:
+        assert os.listdir(worker['dir']) == 0
+
 
 def test_clean(workers, network, test_files):
 
-    node_to_clean = workers[1]['node']
     # Simplest clean request
+    node_to_clean = workers[1]['node']
     client.containers.run(
         'alpenhorn', remove=True, detach=False, network_mode=network,
         command=("alpenhorn clean -f {}".format(node_to_clean.name))
@@ -421,12 +443,21 @@ def test_clean(workers, network, test_files):
         command=("alpenhorn clean -nf {}".format(node_to_clean.name))
     )
 
-    # Check files are set to be deleted
-    for acq in test_files:
-        _verify_db([acq], copies_on_node=node_to_clean, has_on_node=None, wants_on_node='N')
+    # Check files have been deleted
+    time.sleep(3)
+    _verify_clean(test_files, workers[1])
 
+    # Request clean on a node when only one other archive node has a copy
+    # Files should not be deleted
+    node_to_clean = workers[2]['node']
+    client.containers.run(
+        'alpenhorn', remove=True, detach=False, network_mode=network,
+        command=("alpenhorn clean -nf {}".format(node_to_clean.name))
+    )
 
-
+    # Check files are still present
+    time.sleep(3)
+    _verify_clean(test_files, workers[2], unclean=True)
 
 
 @pytest.mark.skipif(
