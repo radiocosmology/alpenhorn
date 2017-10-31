@@ -185,13 +185,17 @@ def update_node_delete(node):
                 if os.path.exists(fullpath):
                     os.remove(fullpath)  # Remove the actual file
 
-                    # Check if the acquisition directory is now empty,
-                    # and remove if it is.
+                    # Check if the acquisition directory or containing directories are now empty,
+                    # and remove if they are.
                     dirname = os.path.dirname(fullpath)
-                    if not os.listdir(dirname):
-                        log.info("Removing acquisition directory %s on %s" %
-                                 (fcopy.file.acq.name, fcopy.node.name))
-                        os.rmdir(dirname)
+                    while dirname != node.root:
+                        if not os.listdir(dirname):
+                            log.info("Removing acquisition directory %s on %s" %
+                                     (fcopy.file.acq.name, fcopy.node.name))
+                            os.rmdir(dirname)
+                            dirname = os.path.dirname(dirname)
+                        else:
+                            break
 
                 fcopy.has_file = 'N'
                 fcopy.wants_file = 'N'  # Set in case it was 'M' before
