@@ -167,7 +167,8 @@ def update_node_delete(node):
             break
 
         # Get all the *other* copies.
-        other_copies = fcopy.file.copies.where(ar.ArchiveFileCopy.id != fcopy.id)
+        other_copies = fcopy.file.copies.where(ar.ArchiveFileCopy.id != fcopy.id,
+                                               ar.ArchiveFileCopy.has_file == 'Y')
 
         # Get the number of copies on archive nodes
         ncopies = other_copies.join(st.StorageNode) \
