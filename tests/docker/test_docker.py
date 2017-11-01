@@ -419,9 +419,9 @@ def _verify_clean(acqs, worker, unclean=False):
     if unclean:
         for acq in acqs:
             for f in acq['files']:
-                assert os.path.exists(os.path.join(worker['dir'], f))
+                assert os.path.exists(os.path.join(worker['dir'], acq['name'], f['name']))
     else:
-        assert os.listdir(worker['dir']) == 0
+        assert len(os.listdir(worker['dir'])) == 0
 
 
 def test_clean(workers, network, test_files):
@@ -446,7 +446,8 @@ def test_clean(workers, network, test_files):
     # Check files have been deleted
     time.sleep(3)
     _verify_clean(test_files, workers[1])
-
+    
+    # TODO: test fails because summary.txt file gets deleted
     # Request clean on a node when only one other archive node has a copy
     # Files should not be deleted
     node_to_clean = workers[2]['node']
