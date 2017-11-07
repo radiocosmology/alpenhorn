@@ -401,9 +401,8 @@ def test_sync_acq(workers, network, test_files):
 
 
 # ====== Test that the clean command works ======
-# TODO: - Check that lock files are handled correctly? Currently lock files are not created.
 
-def _verify_clean(acqs, worker, unclean=False):
+def _verify_clean(acqs, worker, unclean=False, check_empty=False):
     """ Check the clean command has been executed as expected on the node associated with 'worker'.
         If 'unclean' is set to True, check that files are not wanted but still present (until
         additional copies on other archive nodes are found).
@@ -416,11 +415,15 @@ def _verify_clean(acqs, worker, unclean=False):
             _verify_db([acq], copies_on_node=worker['node'], has_on_node='N', wants_on_node='N')
 
     # Check files are in fact gone / still there
-    if unclean:
-        for acq in acqs:
-            for f in acq['files']:
-                assert os.path.exists(os.path.join(worker['dir'], acq['name'], f['name']))
-    else:
+    for acq in acqs:
+        for f in acq['files']:
+            # Ignore files not tracked by the database
+            if f['type'] is not None and f['type'] != 'lock':
+                file_exists = os.path.exists(os.path.join(worker['dir'], acq['name'], f['name']))
+                assert (file_exists and unclean) or (not file_exists and not unclean)
+
+    # If specified, check no files or directories are left over
+    if not unclean and check_empty:
         assert len(os.listdir(worker['dir'])) == 0
 
 
@@ -446,8 +449,9 @@ def test_clean(workers, network, test_files):
     # Check files have been deleted
     time.sleep(3)
     _verify_clean(test_files, workers[1])
-    
-    # TODO: test fails because summary.txt file gets deleted
+    # Since no untracked files should be present, check root is empty
+    _verify_clean(test_files, workers[1], check_empty=True)
+
     # Request clean on a node when only one other archive node has a copy
     # Files should not be deleted
     node_to_clean = workers[2]['node']
