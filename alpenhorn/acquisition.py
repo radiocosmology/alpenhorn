@@ -359,7 +359,7 @@ class AcqInfoBase(base_model, ConfigClass):
         node_root : string
             Path to the root of the node containing the acquisition.
         """
-        return NotImplementedError()
+        raise NotImplementedError()
 
     @classmethod
     def get_acq_type(cls):
@@ -377,7 +377,7 @@ class AcqInfoBase(base_model, ConfigClass):
         acqpath : string
             Path to the acquisition directory.
         """
-        return NotImplementedError()
+        raise NotImplementedError()
 
 
 class FileInfoBase(base_model, ConfigClass):
@@ -442,7 +442,7 @@ class FileInfoBase(base_model, ConfigClass):
         acq_root : string
             Path to the root of the the acquisition on the node.
         """
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def set_info(self, filename, acq_root):
         """Set any metadata from the file.
@@ -456,4 +456,4 @@ class FileInfoBase(base_model, ConfigClass):
         acq_root : string
             Path to the root of the the acquisition on the node.
         """
-        return NotImplementedError()
+        raise NotImplementedError()
