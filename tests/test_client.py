@@ -212,6 +212,14 @@ def test_clean(fixtures):
     f.size_b = 1073741824.0
     f.save()
 
+    # By default a FileCopy is set to has_file='N'
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')).get()
+    file_copy.has_file = 'Y'
+    file_copy.save()
+
     tmpdir = fixtures['root']
     tmpdir.chdir()
     result = runner.invoke(cli.clean, args=['-f', 'x'])

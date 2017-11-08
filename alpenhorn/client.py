@@ -436,6 +436,7 @@ def clean(node_name, days, force, now, target, acq):
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
     except pw.DoesNotExist:
         print("Specified node does not exist.")
+        return
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
@@ -448,7 +449,7 @@ def clean(node_name, days, force, now, target, acq):
     # Select FileCopys on this node.
     files = ar.ArchiveFileCopy.select(ar.ArchiveFileCopy.id).where(
         ar.ArchiveFileCopy.node == this_node,
-        ar.ArchiveFileCopy.wants_file == 'Y'
+        ar.ArchiveFileCopy.has_file == 'Y'
     )
 
     # Limit to acquisition
