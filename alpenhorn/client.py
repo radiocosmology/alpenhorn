@@ -956,13 +956,14 @@ def import_files(node_name, verbose, acq, dry):
 @click.option('--group_notes', metavar='NOTES')
 @click.option('-v', '--verbose', count=True)
 def create_group(group_name, group_notes, verbose):
-    """Create a storage GROUP
+    """Create a storage GROUP and add to database
     """
     _init_config_db()
 
     try:
         this_group = st.StorageGroup.get(name=group_name)
         print("Group name \"%s\" already exists! Try a different name!" % group_name)
+        exit(1)
     except pw.DoesNotExist:
         st.StorageGroup.create(name=group_name, notes=group_notes)
         print("Added group \"%s\" to database." % group_name)
@@ -972,8 +973,8 @@ def create_group(group_name, group_notes, verbose):
 @click.argument('node_name', metavar='NODE')
 @click.argument('root', metavar='ROOT')
 @click.argument('hostname', metavar='HOSTNAME')
+@click.argument('group', metavar='GROUP', type=str, default=None)
 @click.option('--address', help='Internet address for the host.', metavar='ADDRESS', type=str, default=None)
-@click.option('--group', help='The group to which this node belongs.', metavar='GROUP', type=str, default=None)
 @click.option('--mounted', help='Is the node mounted?', metavar="BOOL", type=bool, default=False)
 @click.option('--auto_import', help='Should files that appear on this node be \
               automatically added?', metavar='BOOL', type=bool, default=False)
@@ -1001,11 +1002,12 @@ def create_node(node_name, root, hostname, address, group, mounted, auto_import,
         this_group = st.StorageGroup.get(name=group)
     except pw.DoesNotExist:
         print("Requested group \"%s\" does not exit in DB." % group)
-        return
+        exit(1)
 
     try:
         this_node = st.StorageNode.get(name=node_name)
         print("Node name \"%s\" already exists! Try a different name!" % node_name)
+
     except pw.DoesNotExist:
         st.StorageNode.create(name=node_name, root=root, host=hostname,
                               address=address, group=this_group.id, mounted=mounted,
