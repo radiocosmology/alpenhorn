@@ -574,7 +574,7 @@ def test_create_node(fixtures):
 
     help_result = runner.invoke(cli.create_node, ['--help'])
     assert help_result.exit_code == 0
-    assert 'Create a storage NODE in the ROOT directory at HOSTNAME where this node\n  lives on' in help_result.output
+    assert "Create a storage NODE within storage GROUP with a ROOT directory on\n  HOSTNAME." in help_result.output
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
