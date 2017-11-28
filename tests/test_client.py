@@ -551,3 +551,57 @@ def test_nested_import_files(fixtures):
     assert acq_files == [
         {'name': acq_file.name, 'has_file': 'Y', 'wants_file': 'Y'}
     ]
+
+
+def test_create_group(fixtures):
+    """Test the create group command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.create_group, ['--help'])
+    assert help_result.exit_code == 0
+    assert 'Create a storage GROUP' in help_result.output
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+    result = runner.invoke(cli.create_group, args=['group_x'])
+
+    assert result.exit_code == 0
+    assert result.output == 'Added group "group_x" to database.\n'
+    this_group = st.StorageGroup.get(name='group_x')
+    assert this_group.name == "group_x"
+
+    # create an already existing node
+    result = runner.invoke(cli.create_group, args=['foo'])
+    assert result.exit_code == 1
+    assert result.output == 'Group name "foo" already exists! Try a different name!\n'
+
+
+def test_create_node(fixtures):
+    """Test the create node command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.create_node, ['--help'])
+    assert help_result.exit_code == 0
+    assert "Create a storage NODE within storage GROUP with a ROOT directory on\n  HOSTNAME." in help_result.output
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+
+    result = runner.invoke(cli.create_node, args=['y', 'root', 'hostname', 'bar'])
+
+    node = st.StorageNode.get(name='y')
+
+    assert result.exit_code == 0
+    assert node.group.name == 'bar'
+    assert node.name == 'y'
+    assert node.root == 'root'
+    assert node.host == 'hostname'
+
+    result = runner.invoke(cli.create_node, args=['y', 'root', 'hostname', 'baba'])
+
+    assert result.exit_code == 1
+    assert result.output == 'Requested group "baba" does not exit in DB.\n'
+
+    result = runner.invoke(cli.create_node, args=['x', 'root', 'hostname', 'bar'])
+    assert result.exit_code == 0
+    assert result.output == 'Node name "x" already exists! Try a different name!\n'

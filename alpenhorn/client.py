@@ -952,6 +952,80 @@ def import_files(node_name, verbose, acq, dry):
         print()
 
 
+@cli.command()
+@click.argument('group_name', metavar='GROUP')
+@click.option('--notes', metavar='NOTES')
+def create_group(group_name, notes):
+    """Create a storage GROUP and add to database.
+    """
+    _init_config_db()
+
+    try:
+        st.StorageGroup.get(name=group_name)
+        print("Group name \"%s\" already exists! Try a different name!" % group_name)
+        exit(1)
+    except pw.DoesNotExist:
+        st.StorageGroup.create(name=group_name, notes=notes)
+        print("Added group \"%s\" to database." % group_name)
+
+
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.argument('root', metavar='ROOT')
+@click.argument('hostname', metavar='HOSTNAME')
+@click.argument('group', metavar='GROUP', type=str, default=None)
+@click.option('--address', help="Domain name or IP address for the host \
+              (if network accessible).", metavar='ADDRESS',
+              type=str, default=None)
+@click.option('--mounted', help='Is the node mounted?', metavar="BOOL",
+              type=bool, default=False)
+@click.option('--auto_import', help='Should files that appear on this node be \
+              automatically added?', metavar='BOOL', type=bool, default=False)
+@click.option('--suspect', help='Is this node corrupted?',
+              metavar='BOOL', type=bool, default=False)
+@click.option('--storage_type', help='What is the type of storage? Options:\
+                A - archive for the data, T - for transiting data \
+                F - for data in the field (i.e acquisition machines)',
+              type=str, default='A')
+@click.option('--max_total_gb', help='The maximum amout of storage we should \
+              use.', metavar='FLOAT', type=float, default=-1.)
+@click.option('--min_avail_gb', help='What is the minimum amount of free space \
+               we should leave on this node?', metavar='FLOAT',
+              type=float, default=-1.)
+@click.option('--min_delete_age_days', help='What is the minimum amount of time \
+              a file must remain on the node before we are allowed to delete \
+              it?', metavar='FLOAT', type=float, default=30)
+@click.option('--notes', help='Any notes or comments about this node.',
+              type=str, default=None)
+def create_node(node_name, root, hostname, group, address, mounted, auto_import,
+                suspect, storage_type, max_total_gb, min_avail_gb,
+                min_delete_age_days, notes):
+    """Create a storage NODE within storage GROUP with a ROOT directory on
+    HOSTNAME.
+    """
+    _init_config_db()
+
+    try:
+        this_group = st.StorageGroup.get(name=group)
+    except pw.DoesNotExist:
+        print("Requested group \"%s\" does not exit in DB." % group)
+        exit(1)
+
+    try:
+        this_node = st.StorageNode.get(name=node_name)
+        print("Node name \"%s\" already exists! Try a different name!" % node_name)
+
+    except pw.DoesNotExist:
+        st.StorageNode.create(name=node_name, root=root, host=hostname,
+                              address=address, group=this_group.id, mounted=mounted,
+                              auto_import=auto_import, suspect=suspect,
+                              storage_type=storage_type, max_total_gb=max_total_gb,
+                              min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,
+                              notes=notes)
+
+        print("Added node \"%s\" belonging to group \"%s\" in the directory \
+              \"%s\" at host \"%s\" to database." % (node_name, root, group, hostname))
+
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
 
