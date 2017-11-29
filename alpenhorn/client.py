@@ -436,6 +436,7 @@ def clean(node_name, days, force, now, target, acq):
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
     except pw.DoesNotExist:
         print("Specified node does not exist.")
+        return
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
@@ -448,7 +449,7 @@ def clean(node_name, days, force, now, target, acq):
     # Select FileCopys on this node.
     files = ar.ArchiveFileCopy.select(ar.ArchiveFileCopy.id).where(
         ar.ArchiveFileCopy.node == this_node,
-        ar.ArchiveFileCopy.wants_file == 'Y'
+        ar.ArchiveFileCopy.has_file == 'Y'
     )
 
     # Limit to acquisition
@@ -953,19 +954,18 @@ def import_files(node_name, verbose, acq, dry):
 
 @cli.command()
 @click.argument('group_name', metavar='GROUP')
-@click.option('--group_notes', metavar='NOTES')
-@click.option('-v', '--verbose', count=True)
-def create_group(group_name, group_notes, verbose):
-    """Create a storage GROUP and add to database
+@click.option('--notes', metavar='NOTES')
+def create_group(group_name, notes):
+    """Create a storage GROUP and add to database.
     """
     _init_config_db()
 
     try:
-        this_group = st.StorageGroup.get(name=group_name)
+        st.StorageGroup.get(name=group_name)
         print("Group name \"%s\" already exists! Try a different name!" % group_name)
         exit(1)
     except pw.DoesNotExist:
-        st.StorageGroup.create(name=group_name, notes=group_notes)
+        st.StorageGroup.create(name=group_name, notes=notes)
         print("Added group \"%s\" to database." % group_name)
 
 
@@ -974,27 +974,34 @@ def create_group(group_name, group_notes, verbose):
 @click.argument('root', metavar='ROOT')
 @click.argument('hostname', metavar='HOSTNAME')
 @click.argument('group', metavar='GROUP', type=str, default=None)
-@click.option('--address', help='Internet address for the host.', metavar='ADDRESS', type=str, default=None)
-@click.option('--mounted', help='Is the node mounted?', metavar="BOOL", type=bool, default=False)
+@click.option('--address', help="Domain name or IP address for the host \
+              (if network accessible).", metavar='ADDRESS',
+              type=str, default=None)
+@click.option('--mounted', help='Is the node mounted?', metavar="BOOL",
+              type=bool, default=False)
 @click.option('--auto_import', help='Should files that appear on this node be \
               automatically added?', metavar='BOOL', type=bool, default=False)
-@click.option('--suspect', help='Could this node be corrupted?', metavar='BOOL', type=bool, default=False)
+@click.option('--suspect', help='Is this node corrupted?',
+              metavar='BOOL', type=bool, default=False)
 @click.option('--storage_type', help='What is the type of storage? Options:\
                 A - archive for the data, T - for transiting data \
-                F - for data in the field (i.e acquisition machines)', type=str, default='A')
+                F - for data in the field (i.e acquisition machines)',
+              type=str, default='A')
 @click.option('--max_total_gb', help='The maximum amout of storage we should \
               use.', metavar='FLOAT', type=float, default=-1.)
 @click.option('--min_avail_gb', help='What is the minimum amount of free space \
-               we should leave on this node?', metavar='FLOAT', type=float, default=-1.)
+               we should leave on this node?', metavar='FLOAT',
+              type=float, default=-1.)
 @click.option('--min_delete_age_days', help='What is the minimum amount of time \
               a file must remain on the node before we are allowed to delete \
               it?', metavar='FLOAT', type=float, default=30)
-@click.option('--notes', help='Any notes or comments about this node.', type=str, default=None)
-@click.option('-v', '--verbose', count=True)
-def create_node(node_name, root, hostname, address, group, mounted, auto_import,
+@click.option('--notes', help='Any notes or comments about this node.',
+              type=str, default=None)
+def create_node(node_name, root, hostname, group, address, mounted, auto_import,
                 suspect, storage_type, max_total_gb, min_avail_gb,
-                min_delete_age_days, notes, verbose):
-    """Create a storage NODE in the ROOT directory at HOSTNAME where this node lives on.
+                min_delete_age_days, notes):
+    """Create a storage NODE within storage GROUP with a ROOT directory on
+    HOSTNAME.
     """
     _init_config_db()
 

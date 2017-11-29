@@ -212,6 +212,14 @@ def test_clean(fixtures):
     f.size_b = 1073741824.0
     f.save()
 
+    # By default a FileCopy is set to has_file='N'
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')).get()
+    file_copy.has_file = 'Y'
+    file_copy.save()
+
     tmpdir = fixtures['root']
     tmpdir.chdir()
     result = runner.invoke(cli.clean, args=['-f', 'x'])
@@ -574,7 +582,7 @@ def test_create_node(fixtures):
 
     help_result = runner.invoke(cli.create_node, ['--help'])
     assert help_result.exit_code == 0
-    assert 'Create a storage NODE in the ROOT directory at HOSTNAME where this node\n  lives on' in help_result.output
+    assert "Create a storage NODE within storage GROUP with a ROOT directory on\n  HOSTNAME." in help_result.output
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
