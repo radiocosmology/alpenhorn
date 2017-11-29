@@ -146,6 +146,11 @@ def workers(db, network, images, tmpdir_factory):
         data_dir = str(tmpdir_factory.mktemp(hostname))
         print('Node directory (on host): %s' % str(data_dir))
 
+        with open(str(data_dir) + '/ALPENHORN_NODE', 'w') as f:
+            f.write(node.name)
+
+        print('Created ALPENHORN_NODE file on host: %s' % str(data_dir))
+
         container = client.containers.run(
             'alpenhorn', name=hostname, hostname=hostname, network_mode=network,
             detach=True, volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
@@ -340,6 +345,29 @@ def _verify_files(worker):
 
 
 # ====== Test the auto_import behaviour ======
+def test_node_mounted(workers):
+
+    data_dir0 = workers[1]['dir']
+    os.rename(data_dir0 + '/ALPENHORN_NODE', data_dir0 + '/DIFFERENT_NAME')
+    print('Changed name of ALPENHORN_NODE file in directory', data_dir0)
+
+    this_node = workers[1]['node']
+
+    time.sleep(3)
+
+    node_0 = st.StorageNode.get(name=this_node.name)
+    assert not node_0.mounted
+
+    os.rename(data_dir0 + '/DIFFERENT_NAME', data_dir0 + '/ALPENHORN_NODE')
+
+    time.sleep(3)
+
+    node_0 = st.StorageNode.get(name=this_node.name)
+    node_0.mounted = True
+    node_0.save(only=node_0.dirty_fields)
+
+    assert node_0.mounted
+
 
 def test_import(workers, test_files):
     # Add a bunch of files onto node_0, wait for them to be picked up by the

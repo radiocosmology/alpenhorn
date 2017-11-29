@@ -287,8 +287,8 @@ def setup_observers(node_list):
                     if file_name in already_imported_files:
                         log.debug("Skipping already-registered file %s.", file_name)
                     else:
-                        import_file(node, node.root, os.path.basename(acq_name),
-                                    file_name)
+                        import_file(node, node.root, os.path.join(acq_name,
+                                    file_name))
 
             # TODO: this test needs fixing
             # If it is an NFS mount, then the default Observer() doesn't work.
