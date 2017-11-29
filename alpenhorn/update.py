@@ -71,6 +71,12 @@ def update_node(node):
 
     log.info("Updating node \"%s\"." % (node.name))
 
+    # Check if the node is acutally mounted in the filesystem
+    check_node = update_node_mounted(node)
+
+    if check_node is False:
+        return
+
     # Check and update the amount of free space then reload the instance for use
     # in later routines
     update_node_free_space(node)
@@ -140,7 +146,7 @@ def update_node_delete(node):
 
     # If we have less than the minimum available space, we should consider all files
     # not explicitly wanted (i.e. wants_file != 'Y') as candidates for deletion, provided
-    # the copy is not on an archive node. If we have more than the minimum space, or 
+    # the copy is not on an archive node. If we have more than the minimum space, or
     # we are on archive node then only those explicitly marked (wants_file == 'N')
     # will be removed.
     #
@@ -472,3 +478,35 @@ def update_node_requests(node):
 
         if time.time() - start_time > max_time_per_node_operation:
             break  # Don't hog all the time.
+
+
+def update_node_mounted(node):
+    """Check if a node is actually mounted in the filesystem"""
+
+    fname = 'ALPENHORN_NODE'
+    fullpath = "%s/%s" % (node.root, fname)
+
+    # Check if the node shows up as mounted in database
+    if node.mounted is True:
+        # Check if a file fname exists in the root of the node
+        if os.path.exists(fullpath):
+            log.debug("Checking if file \"%s\" exists on node \"%s\"." % (fname, node.name))
+
+            # Open fname
+            with open(fullpath, 'r') as f:
+                first_line = f.readline()
+                # Check if the actual node name is in the textfile
+                if node.name == first_line:
+                    log.debug("Node %s matches with node name %s in textfile", (node.name, first_line))
+                else:
+                    log.error("Node %s does not match string %s in textfile", (node.name, first_line))
+
+        # If file does not exist in the root directory of the node, then mark
+        # node as unmounted
+        if not os.path.exists(fullpath):
+            log.error("WARNING! Node %s marked falsely as mounted in database.", node.name)
+            node.mounted = False
+            node.save(only=node.dirty_fields)  # save only fields that have been updated
+            log.info("Correcting. Node %s is now set to unmounted" % node.name)
+
+    return node.mounted
