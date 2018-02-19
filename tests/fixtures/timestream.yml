@@ -1,0 +1,30 @@
+types:
+  - name: hk
+  - name: corr
+
+acquisitions:
+  - name: blue
+    type: hk
+
+file_types:
+  - name: zxc
+  - name: spqr
+
+files:
+  - name: apple
+    acq: blue
+    type: zxc
+  - name: banana
+    acq: blue
+    type: zxc
+  - name: cherry
+    acq: blue
+    type: spqr
+
+timestreamfileinfo:
+  - file: apple
+    start_time: 1.5
+    finish_time: 10.1
+
+timestreamacqinfo:
+  - acq: blue
