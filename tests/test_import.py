@@ -118,7 +118,7 @@ def test_import(fixtures):
 
     # import for hello.txt should be ignored while creating the acquisition
     # because 'zab' acq type only tracks *.zxc and *.log files
-    auto_import.import_file(node, node.root, acq_dir.join('hello.txt').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('hello.txt').relto(tmpdir))
     assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
 
     # the acquisition is still created
@@ -134,7 +134,7 @@ def test_import(fixtures):
             .count()) == 0
 
     # now import 'ch_master.log', which should succeed
-    auto_import.import_file(node, node.root, acq_dir.join('ch_master.log').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('ch_master.log').relto(tmpdir))
     file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'ch_master.log')
     assert file is not None
     assert file.acq == acq
@@ -150,7 +150,7 @@ def test_import(fixtures):
     assert file_copy.wants_file == 'Y'
 
     # re-importing ch_master.log should be a no-op
-    auto_import.import_file(node, node.root, acq_dir.join('ch_master.log').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('ch_master.log').relto(tmpdir))
 
     assert list(ac.ArchiveFile
                 .select()
@@ -178,7 +178,7 @@ def test_import_existing(fixtures):
             .count()) == 1
 
     ## import an unknown file
-    auto_import.import_file(node, node.root, acq_dir.join('foo.log').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('foo.log').relto(tmpdir))
     assert (ar.ArchiveFileCopy
             .select()
             .join(ac.ArchiveFile)
@@ -193,7 +193,7 @@ def test_import_existing(fixtures):
             .where(ac.ArchiveFile.name == 'jim')
             .count()
     ) == 0
-    auto_import.import_file(node, node.root, acq_dir.join('jim').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('jim').relto(tmpdir))
     assert (ar.ArchiveFileCopy  # now we have an ArchiveFileCopy for 'jim'
             .select()
             .join(ac.ArchiveFile)
@@ -211,7 +211,7 @@ def test_import_locked(fixtures):
 
     # import for foo.zxc should be ignored because there is also the
     # foo.zxc.lock file
-    auto_import.import_file(node, node.root, acq_dir.join('foo.zxc').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('foo.zxc').relto(tmpdir))
     assert (ac.ArchiveFile
             .select()
             .where(ac.ArchiveFile.name == 'foo.zxc')
@@ -219,7 +219,7 @@ def test_import_locked(fixtures):
 
     # now delete the lock and try reimport, which should succeed
     acq_dir.join('.foo.zxc.lock').remove()
-    auto_import.import_file(node, node.root, acq_dir.join('foo.zxc').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('foo.zxc').relto(tmpdir))
     file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'foo.zxc')
     assert file.acq.name == acq_dir.basename
     assert file.type.name == 'zxc'
@@ -249,7 +249,7 @@ def test_import_corrupted(fixtures):
                 .dicts()) == [
                     {'has_file': 'X', 'wants_file': 'M'}
     ]
-    auto_import.import_file(node, node.root, acq_dir.join('sheila').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('sheila').relto(tmpdir))
     assert list(ar.ArchiveFileCopy
                 .select(ar.ArchiveFileCopy.has_file,
                         ar.ArchiveFileCopy.wants_file)
@@ -302,7 +302,7 @@ def test_import_nested(fixtures):
 
     # import for hello.txt should be ignored while creating the acquisition
     # because 'zab' acq type only tracks *.zxc and *.log files
-    auto_import.import_file(node, node.root, acq_dir.join('summary.txt').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('summary.txt').relto(tmpdir))
     assert ac.AcqType.get(ac.AcqType.name == 'zab') is not None
 
     # the acquisition is still created
@@ -318,7 +318,7 @@ def test_import_nested(fixtures):
             .count()) == 0
 
     # now import 'acq_123_1.zxc', which should succeed
-    auto_import.import_file(node, node.root, acq_dir.join('acq_data/x_123_1_data/raw/acq_123_1.zxc').relto(tmpdir))
+    auto_import.import_file(node, acq_dir.join('acq_data/x_123_1_data/raw/acq_123_1.zxc').relto(tmpdir))
     file = ac.ArchiveFile.get(ac.ArchiveFile.name == 'acq_data/x_123_1_data/raw/acq_123_1.zxc')
     assert file.acq.name == acq_dir.relto(tmpdir)
     assert file.type.name == 'zxc'
