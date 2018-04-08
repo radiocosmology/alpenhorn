@@ -66,8 +66,6 @@ def _import_file(node, file_path):
         be within the node root, otherwise is is assumed to be relative to
         the node root.
     """
-    # global import_done
-    curr_done = True
 
     log.debug("Considering \"%s\" for import.", file_path)
 
