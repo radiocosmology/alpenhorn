@@ -46,7 +46,7 @@ def update_loop(host):
 
         # Check the time spent so far, and wait if needed
         loop_time = time.time() - loop_start
-        log.info("Main loop execution was %d sec." % loop_time)
+        log.info("Main loop execution was %d sec.", loop_time)
         remaining = config.config['service']['update_interval'] - loop_time
         if remaining > 1:
             time.sleep(remaining)
@@ -64,12 +64,12 @@ def update_node(node):
 
     # Make sure this node is usable.
     if not node.mounted:
-        log.debug("Skipping unmounted node \"%s\"." % node.name)
+        log.debug("Skipping unmounted node \"%s\".", node.name)
         return
     if node.suspect:
-        log.debug("Skipping suspected node \"%s\"." % node.name)
+        log.debug("Skipping suspected node \"%s\".", node.name)
 
-    log.info("Updating node \"%s\"." % (node.name))
+    log.info("Updating node \"%s\".", node.name)
 
     # Check if the node is acutally mounted in the filesystem
     check_node = update_node_mounted(node)
