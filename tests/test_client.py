@@ -588,6 +588,8 @@ def test_create_node(fixtures):
     tmpdir.chdir()
 
     result = runner.invoke(cli.create_node, args=['y', 'root', 'hostname', 'bar'])
+    assert result.exit_code == 0
+    assert result.output == 'Added node "y" belonging to group "bar" in the directory "root" at host "hostname" to database.\n'
 
     node = st.StorageNode.get(name='y')
 
