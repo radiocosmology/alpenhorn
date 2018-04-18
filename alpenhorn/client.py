@@ -1014,6 +1014,7 @@ def create_node(node_name, root, hostname, group, address, mounted, auto_import,
     try:
         this_node = st.StorageNode.get(name=node_name)
         print("Node name \"%s\" already exists! Try a different name!" % node_name)
+        exit(1)
 
     except pw.DoesNotExist:
         st.StorageNode.create(name=node_name, root=root, host=hostname,
