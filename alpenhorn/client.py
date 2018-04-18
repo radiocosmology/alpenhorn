@@ -1023,8 +1023,13 @@ def create_node(node_name, root, hostname, group, address, mounted, auto_import,
                               min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,
                               notes=notes)
 
-        print("Added node \"%s\" belonging to group \"%s\" in the directory \
-              \"%s\" at host \"%s\" to database." % (node_name, root, group, hostname))
+        print('Added node "%(node)s" belonging to group "%(group)s" in the directory '
+              '"%(root)s" at host "%(host)s" to database.' % dict(
+                  node=node_name,
+                  root=root,
+                  group=group,
+                  host=hostname
+              ))
 
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
