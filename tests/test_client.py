@@ -603,5 +603,5 @@ def test_create_node(fixtures):
     assert result.output == 'Requested group "baba" does not exit in DB.\n'
 
     result = runner.invoke(cli.create_node, args=['x', 'root', 'hostname', 'bar'])
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert result.output == 'Node name "x" already exists! Try a different name!\n'
