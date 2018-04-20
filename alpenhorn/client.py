@@ -11,7 +11,7 @@ import logging
 import click
 import peewee as pw
 
-from alpenhorn import config, extensions, db
+from alpenhorn import config, extensions, db, util
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
@@ -350,7 +350,7 @@ def verify(node_name, md5, fixdb, acq):
                 continue
 
             if md5:
-                file_md5 = ai.md5sum_file(filepath)
+                file_md5 = util.md5sum_file(filepath)
                 corrupt = (file_md5 != md5sum)
             else:
                 corrupt = (os.path.getsize(filepath) != filesize)
