@@ -342,7 +342,7 @@ def _verify_files(worker):
     )
 
     # Convert the output back to an exit status
-    assert not int(output)
+    assert not output.exit_code
 
 
 # ====== Test the auto_import behaviour ======
