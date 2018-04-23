@@ -197,6 +197,18 @@ def test_verify(fixtures):
                     '  0 corrupt files',
                     result.output, re.DOTALL)
 
+    ## now add a known file ('fred')
+    tmpdir.join('x', 'fred').write('')
+    result = runner.invoke(cli.verify, ['--md5', 'x'])
+    assert result.exit_code == 1
+    assert re.match(r'.*\n=== Corrupt files ===\n' +
+                    '/.*/ROOT/x/fred\n'
+                    '.*\n=== Summary ===\n' +
+                    '  1 total files\n' +
+                    '  0 missing files\n' +
+                    '  1 corrupt files',
+                    result.output, re.DOTALL)
+
 
 def test_clean(fixtures):
     """Test the 'clean' command"""
