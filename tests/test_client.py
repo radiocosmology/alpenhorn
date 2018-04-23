@@ -197,6 +197,18 @@ def test_verify(fixtures):
                     '  0 corrupt files',
                     result.output, re.DOTALL)
 
+    ## now add a known file ('fred')
+    tmpdir.join('x', 'fred').write('')
+    result = runner.invoke(cli.verify, ['--md5', 'x'])
+    assert result.exit_code == 1
+    assert re.match(r'.*\n=== Corrupt files ===\n' +
+                    '/.*/ROOT/x/fred\n'
+                    '.*\n=== Summary ===\n' +
+                    '  1 total files\n' +
+                    '  0 missing files\n' +
+                    '  1 corrupt files',
+                    result.output, re.DOTALL)
+
 
 def test_clean(fixtures):
     """Test the 'clean' command"""
@@ -588,6 +600,8 @@ def test_create_node(fixtures):
     tmpdir.chdir()
 
     result = runner.invoke(cli.create_node, args=['y', 'root', 'hostname', 'bar'])
+    assert result.exit_code == 0
+    assert result.output == 'Added node "y" belonging to group "bar" in the directory "root" at host "hostname" to database.\n'
 
     node = st.StorageNode.get(name='y')
 
@@ -603,5 +617,5 @@ def test_create_node(fixtures):
     assert result.output == 'Requested group "baba" does not exit in DB.\n'
 
     result = runner.invoke(cli.create_node, args=['x', 'root', 'hostname', 'bar'])
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert result.output == 'Node name "x" already exists! Try a different name!\n'

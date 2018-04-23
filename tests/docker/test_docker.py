@@ -347,7 +347,7 @@ def _verify_files(worker):
     )
 
     # Convert the output back to an exit status
-    assert not int(output)
+    assert not output.exit_code
 
 
 # ====== Test the auto_import behaviour ======
@@ -488,12 +488,13 @@ def test_node_mounted(workers):
 
     os.rename(data_dir0 + '/DIFFERENT_NAME', data_dir0 + '/ALPENHORN_NODE')
 
-    time.sleep(3)
-
     node_0 = st.StorageNode.get(name=this_node.name)
     node_0.mounted = True
     node_0.save(only=node_0.dirty_fields)
 
+    time.sleep(3)
+
+    node_0 = st.StorageNode.get(name=this_node.name)
     assert node_0.mounted
 
 

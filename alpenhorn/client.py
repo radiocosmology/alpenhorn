@@ -11,7 +11,7 @@ import logging
 import click
 import peewee as pw
 
-from alpenhorn import config, extensions, db
+from alpenhorn import config, extensions, db, util
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
@@ -350,7 +350,7 @@ def verify(node_name, md5, fixdb, acq):
                 continue
 
             if md5:
-                file_md5 = ai.md5sum_file(filepath)
+                file_md5 = util.md5sum_file(filepath)
                 corrupt = (file_md5 != md5sum)
             else:
                 corrupt = (os.path.getsize(filepath) != filesize)
@@ -1014,6 +1014,7 @@ def create_node(node_name, root, hostname, group, address, mounted, auto_import,
     try:
         this_node = st.StorageNode.get(name=node_name)
         print("Node name \"%s\" already exists! Try a different name!" % node_name)
+        exit(1)
 
     except pw.DoesNotExist:
         st.StorageNode.create(name=node_name, root=root, host=hostname,
@@ -1023,8 +1024,13 @@ def create_node(node_name, root, hostname, group, address, mounted, auto_import,
                               min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,
                               notes=notes)
 
-        print("Added node \"%s\" belonging to group \"%s\" in the directory \
-              \"%s\" at host \"%s\" to database." % (node_name, root, group, hostname))
+        print('Added node "%(node)s" belonging to group "%(group)s" in the directory '
+              '"%(root)s" at host "%(host)s" to database.' % dict(
+                  node=node_name,
+                  root=root,
+                  group=group,
+                  host=hostname
+              ))
 
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
