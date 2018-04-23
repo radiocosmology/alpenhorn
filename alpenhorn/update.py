@@ -74,7 +74,7 @@ def update_node(node):
     # Check if the node is acutally mounted in the filesystem
     check_node = update_node_mounted(node)
 
-    if check_node is False:
+    if not check_node:
         return
 
     # Check and update the amount of free space then reload the instance for use
@@ -131,7 +131,7 @@ def update_node_mounted(node):
     node.save(only=node.dirty_fields)  # save only fields that have been updated
     log.info("Correcting. Node %s is now set to unmounted", node.name)
 
-    return node.mounted
+    return False
 
 def update_node_free_space(node):
     """Calculate the free space on the node and update the database with it."""
