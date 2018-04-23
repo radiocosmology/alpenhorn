@@ -146,6 +146,11 @@ def workers(db, network, images, tmpdir_factory):
         data_dir = str(tmpdir_factory.mktemp(hostname))
         print('Node directory (on host): %s' % str(data_dir))
 
+        with open(str(data_dir) + '/ALPENHORN_NODE', 'w') as f:
+            f.write(node.name)
+
+        print('Created ALPENHORN_NODE file on host: %s' % str(data_dir))
+
         container = client.containers.run(
             'alpenhorn', name=hostname, hostname=hostname, network_mode=network,
             detach=True, volumes={data_dir: {'bind': '/data', 'mode': 'rw'}}
@@ -422,9 +427,12 @@ def _verify_clean(acqs, worker, unclean=False, check_empty=False):
                 file_exists = os.path.exists(os.path.join(worker['dir'], acq['name'], f['name']))
                 assert (file_exists and unclean) or (not file_exists and not unclean)
 
-    # If specified, check no files or directories are left over
+    # If specified, check no files or directories are left over other than the
+    # ALPENHORN_NODE file
     if not unclean and check_empty:
-        assert len(os.listdir(worker['dir'])) == 0
+        files = os.listdir(worker['dir'])
+        assert 'ALPENHORN_NODE' in files
+        assert len(files) == 1
 
 
 def test_clean(workers, network, test_files):
@@ -463,6 +471,31 @@ def test_clean(workers, network, test_files):
     # Check files are still present
     time.sleep(3)
     _verify_clean(test_files, workers[2], unclean=True)
+
+#=== Test that the node file is being checked successfully
+def test_node_mounted(workers):
+
+    data_dir0 = workers[1]['dir']
+    os.rename(data_dir0 + '/ALPENHORN_NODE', data_dir0 + '/DIFFERENT_NAME')
+    print('Changed name of ALPENHORN_NODE file in directory', data_dir0)
+
+    this_node = workers[1]['node']
+
+    time.sleep(3)
+
+    node_0 = st.StorageNode.get(name=this_node.name)
+    assert not node_0.mounted
+
+    os.rename(data_dir0 + '/DIFFERENT_NAME', data_dir0 + '/ALPENHORN_NODE')
+
+    node_0 = st.StorageNode.get(name=this_node.name)
+    node_0.mounted = True
+    node_0.save(only=node_0.dirty_fields)
+
+    time.sleep(3)
+
+    node_0 = st.StorageNode.get(name=this_node.name)
+    assert node_0.mounted
 
 
 @pytest.mark.skipif(

@@ -111,15 +111,21 @@ class AcqType(base_model):
 
         """
 
+        # Paths must be relative, otherwise we enter an infinite loop below
+        if path.isabs(acqname):
+            log.error("acqname (%s) is absolute path. Must be relative to node root.", acqname)
+            return None
+
         # Iterate over all known acquisition types to try and find one that
         # can handle the acqname path. If nothing is found, repeat
         # the process with the parent directory of acqname, until we run out of
-        # directory segments
+        # directory segment
         while acqname != '':
             for acq_type in cls.select():
                 if acq_type.is_type(acqname, node):
                     return acq_type, acqname
             acqname = path.dirname(acqname)
+
         return None
 
     @property

@@ -46,7 +46,7 @@ def update_loop(host):
 
         # Check the time spent so far, and wait if needed
         loop_time = time.time() - loop_start
-        log.info("Main loop execution was %d sec." % loop_time)
+        log.info("Main loop execution was %d sec.", loop_time)
         remaining = config.config['service']['update_interval'] - loop_time
         if remaining > 1:
             time.sleep(remaining)
@@ -64,12 +64,18 @@ def update_node(node):
 
     # Make sure this node is usable.
     if not node.mounted:
-        log.debug("Skipping unmounted node \"%s\"." % node.name)
+        log.debug("Skipping unmounted node \"%s\".", node.name)
         return
     if node.suspect:
-        log.debug("Skipping suspected node \"%s\"." % node.name)
+        log.debug("Skipping suspected node \"%s\".", node.name)
 
-    log.info("Updating node \"%s\"." % (node.name))
+    log.info("Updating node \"%s\".", node.name)
+
+    # Check if the node is acutally mounted in the filesystem
+    check_node = update_node_mounted(node)
+
+    if not check_node:
+        return
 
     # Check and update the amount of free space then reload the instance for use
     # in later routines
@@ -88,6 +94,44 @@ def update_node(node):
     # Process any tranfers out of HPSS onto this node
     # update_node_hpss_outbound(node)
 
+
+def update_node_mounted(node):
+    """Check if a node is actually mounted in the filesystem"""
+
+    fname = 'ALPENHORN_NODE'
+    fullpath = os.path.join(node.root, fname)
+
+    # Check if the node shows up as mounted in database
+    if node.mounted is True:
+        # Check if a file fname exists in the root of the node
+        if os.path.exists(fullpath):
+            log.debug("Checking if file \"%s\" exists on node \"%s\".", fname, node.name)
+
+            # Open fname
+            with open(fullpath, 'r') as f:
+                first_line = f.readline()
+                # Check if the actual node name is in the textfile
+                if node.name == first_line.rstrip():
+                    # Great! Everything is as expected. Exit this routine.
+                    log.debug("Node %s matches with node name %s in %s file",
+                              node.name, first_line, fname)
+                    return True
+                else:
+                    log.error("Node %s does not match string %s in %s file",
+                              node.name, first_line, fname)
+
+        # If file does not exist in the root directory of the node, then mark
+        # node as unmounted
+        else:
+            log.error("Node \"%s\" is not mounted as expected from db (missing %s file).",
+                      node.name, fname)
+
+    # If we are here the node it not correctly mounted so we should unmount it...
+    node.mounted = False
+    node.save(only=node.dirty_fields)  # save only fields that have been updated
+    log.info("Correcting. Node %s is now set to unmounted", node.name)
+
+    return False
 
 def update_node_free_space(node):
     """Calculate the free space on the node and update the database with it."""
@@ -140,7 +184,7 @@ def update_node_delete(node):
 
     # If we have less than the minimum available space, we should consider all files
     # not explicitly wanted (i.e. wants_file != 'Y') as candidates for deletion, provided
-    # the copy is not on an archive node. If we have more than the minimum space, or 
+    # the copy is not on an archive node. If we have more than the minimum space, or
     # we are on archive node then only those explicitly marked (wants_file == 'N')
     # will be removed.
     #
