@@ -111,7 +111,7 @@ def update_node_mounted(node):
             with open(fullpath, 'r') as f:
                 first_line = f.readline()
                 # Check if the actual node name is in the textfile
-                if node.name == first_line:
+                if node.name == first_line.rstrip():
                     # Great! Everything is as expected. Exit this routine.
                     log.debug("Node %s matches with node name %s in %s file",
                               node.name, first_line, fname)
