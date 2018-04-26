@@ -1,0 +1,36 @@
+version: '3'
+services:
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+      MYSQL_DATABASE: alpenhorn_db
+  host_1:
+    build:
+      context: ..
+      dockerfile: tests/docker/Dockerfile.alpenhorn
+    image: alpenhorn
+    command: sh -c "service ssh start && alpenhornd"
+    depends_on:
+      - db
+    hostname: host_1
+    volumes:
+      - ./data/host_1:/data
+      - ./data/transport/t1:/mnt/t1
+  host_2:
+    image: alpenhorn
+    command: sh -c "service ssh start && alpenhornd"
+    depends_on:
+      - db
+    hostname: host_2
+    volumes:
+      - ./data/host_2:/data
+  host_3:
+    image: alpenhorn
+    command: sh -c "service ssh start && alpenhornd"
+    depends_on:
+      - db
+    hostname: host_3
+    volumes:
+      - ./data/host_3:/data
+      - ./data/transport/t1:/mnt/t1
