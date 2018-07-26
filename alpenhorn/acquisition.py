@@ -161,8 +161,6 @@ class ArchiveAcq(base_model):
     ----------
     name : string
         Name of acquisition.
-    inst : foreign key
-        Reference to the instrument that took the acquisition.
     type : foreign key
         Reference to the data type type.
     comment : string
