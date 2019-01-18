@@ -19,12 +19,10 @@ from alpenhorn.acquisition import *
 
 tests_path = path.abspath(path.dirname(__file__))
 
-@pytest.fixture
-def fixtures(clear_db=True):
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    if (clear_db):
-        db._connect()
-    db.database_proxy.create_tables([ArchiveAcq, AcqType, FileType, ArchiveFile], safe=not clear_db)
+
+def load_fixtures():
+    """Loads data from tests/fixtures into the connected database"""
+    db.database_proxy.create_tables([ArchiveAcq, AcqType, FileType, ArchiveFile])
 
     # Check we're starting from a clean slate
     assert ArchiveAcq.select().count() == 0
@@ -54,11 +52,17 @@ def fixtures(clear_db=True):
     ArchiveFile.insert_many(fixtures['files']).execute()
     files = dict(ArchiveFile.select(ArchiveFile.name, ArchiveFile.id).tuples())
 
-    yield {'types': types, 'file_types': file_types, 'files': files}
+    return {'types': types, 'file_types': file_types, 'files': files}
 
-    # cleanup
-    if clear_db:
-        db.database_proxy.close()
+
+@pytest.fixture
+def fixtures():
+    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
+    db._connect()
+
+    yield load_fixtures()
+
+    db.database_proxy.close()
 
 
 def test_schema(fixtures):

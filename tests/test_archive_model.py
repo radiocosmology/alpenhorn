@@ -26,14 +26,10 @@ import test_acquisition_model as ta
 tests_path = path.abspath(path.dirname(__file__))
 
 
-@pytest.fixture
-def fixtures():
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-
-    db._connect()
-
-    fs = next(ts.fixtures(False))
-    fa = next(ta.fixtures(False))
+def load_fixtures():
+    """Loads data from tests/fixtures into the connected database"""
+    fs = ts.load_fixtures()
+    fa = ta.load_fixtures()
 
     db.database_proxy.create_tables([ArchiveFileCopy, ArchiveFileCopyRequest ])
 
@@ -66,12 +62,19 @@ def fixtures():
                                                        ArchiveFileCopyRequest.node_from,
                                                        ArchiveFileCopyRequest.group_to).tuples())
 
-    yield {
+    return {
         'file_copies': file_copies,
         'copy_requests': copy_requests
     }
 
-    # cleanup
+
+@pytest.fixture
+def fixtures():
+    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
+    db._connect()
+
+    yield load_fixtures()
+
     db.database_proxy.close()
 
 
