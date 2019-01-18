@@ -53,9 +53,9 @@ class LogInfo(ge.GenericFileInfo):
     patterns = ['*.log']
 
 
-@pytest.fixture
-def fixtures(tmpdir):
-    fs = next(ta.fixtures())
+def load_fixtures(tmpdir):
+    """Loads data from tests/fixtures into the connected database"""
+    fs = ta.load_fixtures()
 
     p = tmpdir.join("ROOT")
 
@@ -89,6 +89,16 @@ def fixtures(tmpdir):
     make_files(p.basename, fixtures, tmpdir)
 
     return {'root': p, 'files': fixtures}
+
+
+@pytest.fixture
+def fixtures(tmpdir):
+    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
+    db._connect()
+
+    yield load_fixtures(tmpdir)
+
+    db.database_proxy.close()
 
 
 def test_schema(fixtures):
