@@ -652,7 +652,7 @@ def format_transport(serial_num):
         stat = os.system("/sbin/e2label %s %s" % (dev_part, name))
         if stat:
             print("Failed to e2label! Stat = %s. I quit." % (stat))
-            exit()
+            exit(1)
 
     # Ensure the mount path exists.
     root = "/mnt/%s" % name
@@ -685,7 +685,7 @@ def format_transport(serial_num):
             group = st.StorageGroup.get(name="transport")
         except pw.DoesNotExist:
             print("Hmmm. Storage group \"transport\" does not exist. I quit.")
-            exit()
+            exit(1)
 
         # TODO: ensure write access to the database
         # # We need to write to the database.
@@ -790,14 +790,14 @@ def unmount(root_or_name):
         if not os.path.exists(root_or_name):
             click.echo("That is neither a node name, nor a path on this host. "
                        "I quit.")
-            exit()
+            exit(1)
         try:
             node = st.StorageNode.get(root=root_or_name,
                                       host=socket.gethostname())
         except pw.DoesNotExist:
             click.echo("That is neither a node name nor a root name that is "
                        "known. I quit.")
-            exit()
+            exit(1)
 
     if not node.mounted:
         click.echo("There is no node mounted there any more.")
