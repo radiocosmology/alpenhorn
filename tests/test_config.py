@@ -27,7 +27,7 @@ def test_no_config():
 
 def test_config_env(fs, monkeypatch):
     # Test that we can load config from an environment variable
-    fs.CreateFile('/test/from/env/test.yaml', contents='hello: test\n')
+    fs.create_file('/test/from/env/test.yaml', contents='hello: test\n')
 
     monkeypatch.setenv('ALPENHORN_CONFIG_FILE', '/test/from/env/test.yaml')
     config.load_config()
@@ -37,19 +37,19 @@ def test_config_env(fs, monkeypatch):
 def test_precendence(fs, monkeypatch):
     # Test the precedence of configuration imported from files is correct
 
-    fs.CreateFile('/etc/alpenhorn/alpenhorn.conf', contents='hello: test\n')
+    fs.create_file('/etc/alpenhorn/alpenhorn.conf', contents='hello: test\n')
     config.load_config()
     assert config.config == merge_dict(config._default_config, {'hello': 'test'})
 
-    fs.CreateFile('/etc/xdg/alpenhorn/alpenhorn.conf', contents='hello: test2\n')
+    fs.create_file('/etc/xdg/alpenhorn/alpenhorn.conf', contents='hello: test2\n')
     config.load_config()
     assert config.config == merge_dict(config._default_config, {'hello': 'test2'})
 
-    fs.CreateFile(os.path.expanduser('~/.config/alpenhorn/alpenhorn.conf'), contents='hello: test3\nmeh: embiggens')
+    fs.create_file(os.path.expanduser('~/.config/alpenhorn/alpenhorn.conf'), contents='hello: test3\nmeh: embiggens')
     config.load_config()
     assert config.config == merge_dict(config._default_config, {'hello': 'test3', 'meh': 'embiggens'})
 
-    fs.CreateFile('/test/from/env/test.yaml', contents='hello: test4\n')
+    fs.create_file('/test/from/env/test.yaml', contents='hello: test4\n')
     monkeypatch.setenv('ALPENHORN_CONFIG_FILE', '/test/from/env/test.yaml')
     config.load_config()
     assert config.config == merge_dict(config._default_config, {'hello': 'test4', 'meh': 'embiggens'})
