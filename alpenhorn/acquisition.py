@@ -371,7 +371,7 @@ class AcqInfoBase(base_model, ConfigClass):
         """
         return AcqType.get(name=cls._acq_type)
 
-    def set_info(self, acqpath):
+    def set_info(self, acqpath, node_root):
         """Set any metadata from the acquisition directory.
 
         Abstract method, must be implemented in a derived AcqInfo table.
@@ -380,6 +380,8 @@ class AcqInfoBase(base_model, ConfigClass):
         ----------
         acqpath : string
             Path to the acquisition directory.
+        node_root : string
+            Path to the root directory for data in the node we are currently on.
         """
         raise NotImplementedError()
 
