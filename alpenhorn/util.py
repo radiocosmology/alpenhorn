@@ -8,6 +8,7 @@ from __future__ import absolute_import
 import re
 import shlex
 import logging
+import socket
 
 
 log = logging.getLogger(__name__)
@@ -95,3 +96,8 @@ def md5sum_file(filename, hr=True, cmd_line=False):
         if hr:
             return md5.hexdigest()
         return md5.digest()
+
+
+def get_short_hostname():
+    """Returns the short hostname (up to the first '.')"""
+    return socket.gethostname().split(".")[0]

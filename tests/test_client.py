@@ -26,6 +26,7 @@ import alpenhorn.client as cli
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
+import alpenhorn.util as util
 
 import test_import as ti
 
@@ -386,7 +387,7 @@ def test_mount(fixtures):
     assert node.root == '/bla'
     assert node.username == 'bozo'
     assert node.address == 'foobar.example.com'
-    assert node.host == output[0].split('"')[1] == socket.gethostname()
+    assert node.host == output[0].split('"')[1] == util.get_short_hostname()
 
 
 def test_unmount(fixtures):

@@ -47,7 +47,7 @@ def cli():
     extensions.register_type_extensions()
 
     # Get the name of this host
-    host = socket.gethostname().split(".")[0]
+    host = util.get_short_hostname()
 
     # Get the list of nodes currently mounted
     node_list = list(storage.StorageNode.select().where(
