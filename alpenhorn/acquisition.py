@@ -300,7 +300,7 @@ class ArchiveFile(base_model):
     """
     acq = pw.ForeignKeyField(ArchiveAcq, related_name='files')
     type = pw.ForeignKeyField(FileType, related_name='files')
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=255)
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
 
