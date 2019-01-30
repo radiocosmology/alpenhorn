@@ -569,7 +569,7 @@ def mounted(host):
     _init_config_db()
 
     if host is None:
-        host = socket.gethostname().split(".")[0]
+        host = util.get_short_hostname()
     zero = True
     for node in (st.StorageNode.select()
                  .where(st.StorageNode.host == host, st.StorageNode.mounted)):
@@ -755,7 +755,7 @@ def mount(name, path, user, address, hostname):
 
     # Set the default hostname if required
     if hostname is None:
-        hostname = socket.gethostname()
+        hostname = util.get_short_hostname()
         click.echo("I will set the host to \"%s\"." % hostname)
 
     # Set the parameters of this node
@@ -793,7 +793,7 @@ def unmount(root_or_name):
             exit(1)
         try:
             node = st.StorageNode.get(root=root_or_name,
-                                      host=socket.gethostname())
+                                      host=util.get_short_hostname())
         except pw.DoesNotExist:
             click.echo("That is neither a node name nor a root name that is "
                        "known. I quit.")
