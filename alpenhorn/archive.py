@@ -31,8 +31,8 @@ class ArchiveFileCopy(base_model):
         - 'N': no, attempt to delete
         In all cases we try to keep at least two copies of the file around.
     """
-    file = pw.ForeignKeyField(ArchiveFile, related_name='copies')
-    node = pw.ForeignKeyField(StorageNode, related_name='copies')
+    file = pw.ForeignKeyField(ArchiveFile, backref='copies')
+    node = pw.ForeignKeyField(StorageNode, backref='copies')
     has_file = EnumField(['N', 'Y', 'M', 'X'], default='N')
     wants_file = EnumField(['Y', 'M', 'N'], default='Y')
 
@@ -59,9 +59,9 @@ class ArchiveFileCopyRequest(base_model):
     timestamp : datetime
         The time the most recent request was made.
     """
-    file = pw.ForeignKeyField(ArchiveFile, related_name='requests')
-    group_to = pw.ForeignKeyField(StorageGroup, related_name='requests_to')
-    node_from = pw.ForeignKeyField(StorageNode, related_name='requests_from')
+    file = pw.ForeignKeyField(ArchiveFile, backref='requests')
+    group_to = pw.ForeignKeyField(StorageGroup, backref='requests_to')
+    node_from = pw.ForeignKeyField(StorageNode, backref='requests_from')
     nice = pw.IntegerField()
     completed = pw.BooleanField()
     cancelled = pw.BooleanField(default=False)
