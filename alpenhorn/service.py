@@ -10,7 +10,7 @@ import logging
 import click
 
 from . import (extensions, db, config, logger,
-               auto_import, storage, update)
+               auto_import, storage, update, util)
 
 
 log = logging.getLogger(__name__)
