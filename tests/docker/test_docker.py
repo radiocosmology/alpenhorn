@@ -384,16 +384,16 @@ def test_sync_all(workers, network, test_files):
 def test_sync_acq(workers, network, test_files):
 
     for acq in test_files:
-
         # Request sync of a single acq onto a different node
         client.containers.run(
             'alpenhorn', remove=True, detach=False, network_mode=network,
             command=("alpenhorn sync -f node_0 group_2 --acq=%s" % acq['name'])
         )
 
-        time.sleep(3)
+    time.sleep(3)
 
-        # Verify that the requested files hve been copied
+    # Verify that the requested files have been copied
+    for acq in test_files:
         _verify_db([acq], copies_on_node=workers[1]['node'])
 
         _verify_files(workers[2])
