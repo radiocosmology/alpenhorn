@@ -104,7 +104,7 @@ def _connect(url=None, db=None):
         db = db_url.connect(url)
 
     if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
-        db.register_fields({'enum': 'enum'})
+        db.field_types['enum'] = 'enum'
         EnumField.native = True
     else:
         EnumField.native = False
@@ -145,7 +145,7 @@ class EnumField(pw.Field):
     native = True
 
     @property
-    def db_field(self):
+    def field_type(self):
         if self.native:
             return 'enum'
         else:

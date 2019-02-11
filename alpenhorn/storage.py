@@ -65,7 +65,7 @@ class StorageNode(base_model):
     host = pw.CharField(max_length=64, null=True)
     username = pw.CharField(max_length=64, null=True)
     address = pw.CharField(max_length=255, null=True)
-    group = pw.ForeignKeyField(StorageGroup, related_name='nodes')
+    group = pw.ForeignKeyField(StorageGroup, backref='nodes')
     mounted = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
     suspect = pw.BooleanField(default=False)

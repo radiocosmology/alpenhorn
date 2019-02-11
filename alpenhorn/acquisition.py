@@ -171,7 +171,7 @@ class ArchiveAcq(base_model):
     n_timed_files
     """
     name = pw.CharField(max_length=64)
-    type = pw.ForeignKeyField(AcqType, related_name='acqs')
+    type = pw.ForeignKeyField(AcqType, backref='acqs')
     comment = pw.TextField(null=True)
 
 
@@ -298,8 +298,8 @@ class ArchiveFile(base_model):
     md5sum : string
         md5 checksum of file. Used for verifying integrity.
     """
-    acq = pw.ForeignKeyField(ArchiveAcq, related_name='files')
-    type = pw.ForeignKeyField(FileType, related_name='files')
+    acq = pw.ForeignKeyField(ArchiveAcq, backref='files')
+    type = pw.ForeignKeyField(FileType, backref='files')
     name = pw.CharField(max_length=255)
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)

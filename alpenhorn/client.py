@@ -185,7 +185,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         for c in copy:
             print("%s/%s" % (c.file.acq.name, c.file.name))
 
-    size_bytes = copy.aggregate(pw.fn.Sum(ac.ArchiveFile.size_b))
+    size_bytes = copy.select(pw.fn.Sum(ac.ArchiveFile.size_b)).scalar()
     size_gb = int(size_bytes) / 1073741824.0
 
     print ('Will request that %d files (%.1f GB) be copied from node %s to group %s.' %
@@ -533,7 +533,7 @@ def clean(node_name, days, force, now, target, acq):
         if count > 0:
             size_bytes = ar.ArchiveFileCopy.select().where(
                 ar.ArchiveFileCopy.id << file_ids
-            ).join(ac.ArchiveFile).aggregate(pw.fn.Sum(ac.ArchiveFile.size_b))
+            ).join(ac.ArchiveFile).select(pw.fn.Sum(ac.ArchiveFile.size_b)).scalar()
 
             size_gb = int(size_bytes) / 1073741824.0
 
