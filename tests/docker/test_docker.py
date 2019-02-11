@@ -78,7 +78,7 @@ def db(network, images):
 
     # Create the database container
     db_container = client.containers.run(
-        'mysql:latest', name='db', detach=True,
+        'mysql:5.7', name='db', detach=True,
         network_mode=network, ports={'3306/tcp': 63306},
         environment={'MYSQL_ALLOW_EMPTY_PASSWORD': 'yes'}
     )
