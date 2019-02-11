@@ -44,12 +44,6 @@ def images():
 
     print('Building docker images from location %s...' % context)
 
-    # Build base image
-    client.images.build(
-        path=context, tag='jrs65/python-mysql', rm=True, forcerm=True,
-        dockerfile='tests/docker/Dockerfile.base'
-    )
-
     # Build alpenhorn image
     client.images.build(
         path=context, tag='alpenhorn', rm=True, forcerm=True,
