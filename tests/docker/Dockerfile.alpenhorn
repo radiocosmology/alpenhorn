@@ -1,20 +1,27 @@
 ## Generate an image that automatically starts alpenhornd and sshd (for
 ## transfers)
 
-# Use the base base image
-FROM jrs65/python-mysql
+# Use an official Python runtime as a base image
+FROM python:3.6
 
 MAINTAINER Richard Shaw <richard@phas.ubc.ca>
 
-# Install any needed packages specified in requirements.txt
-COPY requirements.txt /build_req/
-COPY test-requirements.txt /build_req/
-RUN pip install -r /build_req/requirements.txt
-RUN pip install -r /build_req/test-requirements.txt
+# System prerequisites for the test image
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    ssh \
+    rsync \
+    netcat \
+    mysql-client
+RUN pip install --no-cache-dir mysqlclient
 
-# Install alpenhorn
-ADD . /build
-RUN pip install /build
+# Set up ssh key based login for root
+RUN ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
+RUN cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys
+RUN echo 'Host *\n\
+    StrictHostKeyChecking no\n' > /root/.ssh/config
+
+# Make port 22 available to the world outside this container
+EXPOSE 22
 
 # Copy the configuration file and create the log directory
 COPY tests/docker/alpenhorn.conf /etc/alpenhorn/alpenhorn.conf
@@ -24,11 +31,14 @@ RUN mkdir /var/log/alpenhorn
 COPY tests/docker/custom_test_types.py /root/python/custom_test_types.py
 ENV PYTHONPATH /root/python/
 
-# Set up ssh key based login for root
-RUN ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
-RUN cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys
-RUN echo 'Host *\n\
-    StrictHostKeyChecking no\n' > /root/.ssh/config
+# Install any needed packages specified in requirements.txt
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install alpenhorn
+ADD . /build
+RUN pip install --no-deps .
 
 # Run alpenhorn and ssh
 CMD service ssh start && \

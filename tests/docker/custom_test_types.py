@@ -9,7 +9,8 @@ class ZabInfo(ge.GenericAcqInfo):
     _file_types = ['zxc', 'log']
     patterns = ['**zab']
 
-    def set_config(configdict):
+    @classmethod
+    def set_config(cls, configdict):
         pass
 
 
@@ -18,7 +19,8 @@ class QuuxInfo(ge.GenericAcqInfo):
     _file_types = ['zxc', 'log']
     patterns = ['*quux', 'x']
 
-    def set_config(configdict):
+    @classmethod
+    def set_config(cls, configdict):
         pass
 
 
@@ -26,7 +28,8 @@ class ZxcInfo(ge.GenericFileInfo):
     _file_type = 'zxc'
     patterns = ['**.zxc', 'jim*', 'sheila']
 
-    def set_config(configdict):
+    @classmethod
+    def set_config(cls, configdict):
         pass
 
 
@@ -34,7 +37,8 @@ class LogInfo(ge.GenericFileInfo):
     _file_type = 'log'
     patterns = ['*.log']
 
-    def set_config(configdict):
+    @classmethod
+    def set_config(cls, configdict):
         pass
 
 
