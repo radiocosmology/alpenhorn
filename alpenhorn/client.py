@@ -261,7 +261,7 @@ def status(all):
 
     log.info("Nodes: %s (all=%s)" % (nodes.count(), all))
     if not all:
-        nodes = nodes.where(st.StorageNode.mounted)
+        nodes = nodes.where(st.StorageNode.active)
 
     log.info("Nodes: %s" % nodes.count())
 
@@ -583,7 +583,7 @@ def active(host):
         host = util.get_short_hostname()
     zero = True
     for node in (st.StorageNode.select()
-                 .where(st.StorageNode.host == host, st.StorageNode.mounted)):
+                 .where(st.StorageNode.host == host, st.StorageNode.active)):
         n_file = ar.ArchiveFileCopy \
                    .select() \
                    .where((ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == 'Y')) \
@@ -764,7 +764,7 @@ def activate(name, path, user, address, hostname):
         click.echo("Storage node \"%s\" does not exist. I quit." % name)
         exit(1)
 
-    if node.mounted:
+    if node.active:
         click.echo("Node \"%s\" is already active." % name)
         return
 
@@ -783,7 +783,7 @@ def activate(name, path, user, address, hostname):
     # Set the parameters of this node
     node.username = user
     node.address = address
-    node.mounted = True
+    node.active = True
     node.host = hostname
 
     node.save()
@@ -818,10 +818,10 @@ def deactivate(root_or_name):
                        "known. I quit.")
             exit(1)
 
-    if not node.mounted:
+    if not node.active:
         click.echo("There is no active node there any more.")
     else:
-        node.mounted = False
+        node.active = False
         node.save()
         print("Node successfully deactivated.")
 
@@ -1037,7 +1037,7 @@ def create_node(node_name, root, hostname, group, address, active, auto_import,
 
     except pw.DoesNotExist:
         st.StorageNode.create(name=node_name, root=root, host=hostname,
-                              address=address, group=this_group.id, mounted=active,
+                              address=address, group=this_group.id, active=active,
                               auto_import=auto_import, suspect=suspect,
                               storage_type=storage_type, max_total_gb=max_total_gb,
                               min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,

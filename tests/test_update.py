@@ -51,7 +51,7 @@ def fixtures(tmpdir):
 def test_update_node_mounted(fixtures):
     tmpdir = fixtures['root']
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
 
     # if there is a valid ALPENHORN_NODE, `update_node_mounted` should not
     # change node's mounted status
@@ -59,19 +59,19 @@ def test_update_node_mounted(fixtures):
     assert node_file.check()
     update.update_node_mounted(node)
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
 
     # rename ALPENHORN_NODE, and check that `update_node_mounted` unmounts the node
     node_file.rename(tmpdir.join('SOMETHING_ELSE'))
     update.update_node_mounted(node)
     node = st.StorageNode.get(name='x')
-    assert not node.mounted
+    assert not node.active
 
 
 def test_update_node_mounted_no_node_file(fixtures):
     tmpdir = fixtures['root']
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
 
     # we start off with no ALPENHORN_NODE, and so `update_node_mounted` should unmount it
     node_file = tmpdir.join('ALPENHORN_NODE')
@@ -80,7 +80,7 @@ def test_update_node_mounted_no_node_file(fixtures):
 
     update.update_node_mounted(node)
     node = st.StorageNode.get(name='x')
-    assert not node.mounted
+    assert not node.active
 
 
 @patch('os.statvfs')

@@ -63,8 +63,8 @@ def update_node(node):
     #     return
 
     # Make sure this node is usable.
-    if not node.mounted:
-        log.debug("Skipping unmounted node \"%s\".", node.name)
+    if not node.active:
+        log.debug("Skipping inactive node \"%s\".", node.name)
         return
     if node.suspect:
         log.debug("Skipping suspected node \"%s\".", node.name)
@@ -98,7 +98,7 @@ def update_node(node):
 def update_node_mounted(node):
     """Check if a node is actually mounted in the filesystem"""
 
-    if node.mounted:
+    if node.active:
         if util.alpenhorn_node_check(node):
             return True
         else:
@@ -107,10 +107,10 @@ def update_node_mounted(node):
     else:
         log.error('Node "%s" is not mounted', node.name)
 
-    # Mark the node as unmouted in the database
-    node.mounted = False
+    # Mark the node as inactive in the database
+    node.active = False
     node.save(only=node.dirty_fields)  # save only fields that have been updated
-    log.info('Correcting the database: node "%s" is now set to unmounted.', node.name)
+    log.info('Correcting the database: node "%s" is now set to inactive.', node.name)
 
     return False
 
@@ -287,8 +287,8 @@ def update_node_requests(node):
 
     for req in requests:
 
-        # Only continue if the node is actually mounted
-        if not req.node_from.mounted:
+        # Only continue if the node is actually active
+        if not req.node_from.active:
             continue
 
         # For transport disks we should only copy onto the transport

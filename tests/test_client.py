@@ -425,7 +425,7 @@ def test_activate(mock_node_check, fixtures):
 
     # now pretend the node is inactive so we can try to activate it
     node = st.StorageNode.get(name='x')
-    node.mounted = False
+    node.active = False
     node.save()
 
     # test for error when check for ALPENHORN_NODE fails
@@ -433,7 +433,7 @@ def test_activate(mock_node_check, fixtures):
     result = runner.invoke(cli.activate, args=['x'])
     assert result.exit_code == 1
     assert 'Node "x" does not match ALPENHORN_NODE' in result.output
-    assert not st.StorageNode.get(name='x').mounted
+    assert not st.StorageNode.get(name='x').active
 
     # test for success when check for ALPENHORN_NODE passes and the node is
     # mounted
@@ -450,7 +450,7 @@ def test_activate(mock_node_check, fixtures):
     assert 'Successfully activated "x".' == output[1]
 
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
     assert node.root == '/bla'
     assert node.username == 'bozo'
     assert node.address == 'foobar.example.com'
@@ -472,7 +472,7 @@ def test_deactivate(fixtures):
     assert len(output) == 1
     assert 'Node successfully deactivated.' in output[0]
     node = st.StorageNode.get(name='x')
-    assert not node.mounted
+    assert not node.active
 
     # deactivate already deactivated node
     result = runner.invoke(cli.deactivate,

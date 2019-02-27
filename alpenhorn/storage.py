@@ -35,8 +35,8 @@ class StorageNode(base_model):
         The internet address for the host (e.g., mistaya.phas.ubc.ca)
     group : foreign key
         The group to which this node belongs.
-    mounted : bool
-        Is the node mounted?
+    active : bool
+        Is the node active?
     auto_import : bool
         Should files that appear on this node be automatically added?
     suspect : bool
@@ -66,7 +66,7 @@ class StorageNode(base_model):
     username = pw.CharField(max_length=64, null=True)
     address = pw.CharField(max_length=255, null=True)
     group = pw.ForeignKeyField(StorageGroup, backref='nodes')
-    mounted = pw.BooleanField(default=False)
+    active = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
     suspect = pw.BooleanField(default=False)
     storage_type = EnumField(['A', 'T', 'F'], default='A')
