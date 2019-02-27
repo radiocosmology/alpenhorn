@@ -63,6 +63,10 @@ def cli():
     # Setup the observers to watch the nodes for new files
     auto_import.setup_observers(node_list)
 
+    # Now catch up with the existing files to see if there are any new ones
+    # that should be imported
+    auto_import.catchup(node_list)
+
     # Enter main loop performing node updates
     try:
         update.update_loop(host)
