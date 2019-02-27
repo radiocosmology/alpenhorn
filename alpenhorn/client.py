@@ -748,6 +748,7 @@ def mount(name, path, user, address, hostname):
         node = st.StorageNode.get(name=name)
     except pw.DoesNotExist:
         click.echo("Storage node \"%s\" does not exist. I quit." % name)
+        exit(1)
 
     if node.mounted:
         click.echo("Node \"%s\" is already mounted." % name)
