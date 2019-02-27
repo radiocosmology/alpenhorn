@@ -299,7 +299,22 @@ def setup_observers(node_list):
     obs_list = []
     for node in node_list:
         if node.auto_import:
+            # TODO: Normal observers don't work via NFS so we use the polling
+            # observer, however, we could try and detect this and switch back
+            obs_list.append(PollingObserver(timeout=config.config['service']['auto_import_interval']))
+            obs_list[-1].schedule(RegisterFile(node), node.root, recursive=True)
+        else:
+            obs_list.append(None)
 
+    # Start up the watchdog threads
+    for obs in obs_list:
+        if obs:
+            obs.start()
+
+def catchup(node_list):
+    """Traverse the node directory for new files and importem"""
+    for node in node_list:
+        if node.auto_import:
             # Get list of all files that exist on the node
             q = (ar.ArchiveFileCopy.select(ac.ArchiveFile.name, ac.ArchiveAcq.name)
                  .where(ar.ArchiveFileCopy.node == node,
@@ -319,17 +334,6 @@ def setup_observers(node_list):
                     else:
                         import_file(node, os.path.join(dirpath, file_name))
 
-            # TODO: Normal observers don't work via NFS so we use the polling
-            # observer, however, we could try and detect this and switch back
-            obs_list.append(PollingObserver(timeout=config.config['service']['auto_import_interval']))
-            obs_list[-1].schedule(RegisterFile(node), node.root, recursive=True)
-        else:
-            obs_list.append(None)
-
-    # Start up the watchdog threads
-    for obs in obs_list:
-        if obs:
-            obs.start()
 
 
 def stop_observers():
