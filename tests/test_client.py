@@ -359,6 +359,13 @@ def test_mount(fixtures):
     assert 'Interactive routine for mounting a storage node located at ROOT.' in help_result.output
     assert 'Options:\n  --path TEXT      Root path for this node' in help_result.output
 
+    # test mounting a non-existent node
+    result = runner.invoke(cli.mount, args=['nonexistent'])
+    assert result.exit_code == 1
+    output = result.output.splitlines()
+    assert len(output) == 1
+    assert 'Storage node "nonexistent" does not exist. I quit.' in output[0]
+
     result = runner.invoke(cli.mount, args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
