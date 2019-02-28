@@ -21,7 +21,7 @@ import alpenhorn.auto_import as ai
 log = logging.getLogger(__name__)
 
 
-@click.group()
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
 def cli():
     """Client interface for alpenhorn. Use to request transfers, mount drives,
     check status etc."""

@@ -65,6 +65,7 @@ def test_command_line_interface(fixtures):
     result = runner.invoke(cli.cli)
     assert result.exit_code == 0
     assert 'Client interface for alpenhorn' in result.output
+    assert '-h, --help  Show this message and exit.' in result.output
 
 
 def test_sync(fixtures):
