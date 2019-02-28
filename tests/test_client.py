@@ -632,3 +632,7 @@ def test_create_node(fixtures):
     result = runner.invoke(cli.create_node, args=['x', 'root', 'hostname', 'bar'])
     assert result.exit_code == 1
     assert result.output == 'Node name "x" already exists! Try a different name!\n'
+
+    result = runner.invoke(cli.create_node, args=['--storage_type=Z', 'z', 'root', 'hostname', 'bar'])
+    assert result.exit_code == 2  # Click usage error
+    assert 'Invalid value for "--storage_type": invalid choice: Z. (choose from A, T, F)' in result.output
