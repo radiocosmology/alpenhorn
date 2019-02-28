@@ -987,7 +987,7 @@ def create_group(group_name, notes):
 @click.option('--storage_type', help='What is the type of storage? Options:\
                 A - archive for the data, T - for transiting data \
                 F - for data in the field (i.e acquisition machines)',
-              type=str, default='A')
+              type=click.Choice(['A', 'T', 'F']), default='A')
 @click.option('--max_total_gb', help='The maximum amout of storage we should \
               use.', metavar='FLOAT', type=float, default=-1.)
 @click.option('--min_avail_gb', help='What is the minimum amount of free space \
