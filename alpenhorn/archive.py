@@ -36,6 +36,11 @@ class ArchiveFileCopy(base_model):
     has_file = EnumField(['N', 'Y', 'M', 'X'], default='N')
     wants_file = EnumField(['Y', 'M', 'N'], default='Y')
 
+    class Meta:
+        indexes = (
+            (('file', 'node'), True),
+        )
+
 
 class ArchiveFileCopyRequest(base_model):
     """Requests for file copies.
