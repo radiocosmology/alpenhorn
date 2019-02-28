@@ -256,8 +256,8 @@ def status(all):
 
     # Per node totals
     nodes = st.StorageNode.select(*query_info)\
-        .join(ar.ArchiveFileCopy).where(ar.ArchiveFileCopy.has_file == 'Y')\
-        .join(ac.ArchiveFile).group_by(st.StorageNode).order_by(st.StorageNode.name)
+        .join(ar.ArchiveFileCopy, pw.JOIN.LEFT_OUTER, on=((st.StorageNode.id == ar.ArchiveFileCopy.node_id) & (ar.ArchiveFileCopy.has_file == 'Y')))\
+        .join(ac.ArchiveFile, pw.JOIN.LEFT_OUTER, on=(ac.ArchiveFile.id == ar.ArchiveFileCopy.file_id)).group_by(st.StorageNode).order_by(st.StorageNode.name)
 
     log.info("Nodes: %s (all=%s)" % (nodes.count(), all))
     if not all:
@@ -266,12 +266,19 @@ def status(all):
     log.info("Nodes: %s" % nodes.count())
 
     # Totals for the whole archive
-    tot = ac.ArchiveFile.select(pw.fn.Count(ac.ArchiveFile.id).alias('count'),
-                                pw.fn.Sum(ac.ArchiveFile.size_b).alias('total_size')).scalar(as_tuple=True)
+    total_count, total_size = ac.ArchiveFile.select(
+        pw.fn.Count(ac.ArchiveFile.id).alias('count'),
+        pw.fn.Sum(ac.ArchiveFile.size_b).alias('total_size')).scalar(as_tuple=True)
 
-    data = [[node[0], int(node[1]), int(node[2]) / 2**40.0,
-             100.0 * int(node[1]) / int(tot[0]), 100.0 * int(node[2]) / int(tot[1]),
-             '%s:%s' % (node[3], node[4])] for node in nodes.tuples()]
+    # Create table of node stats to present to the user
+    data = []
+    for node in nodes.tuples():
+        node_name, file_count, file_size, node_host, node_root = node
+        pct_count = (100.0 * file_count / total_count) if total_count else None
+        pct_size = (100.0 * file_size / total_size) if total_count and file_size else None
+        file_size_tb = (file_size / 2**40.0) if file_count else None
+        node_path = '%s:%s' % (node_host, node_root)
+        data.append([node_name, file_count, file_size_tb, pct_count, pct_size, node_path])
 
     headers = ['Node', 'Files', 'Size [TB]', 'Files [%]', 'Size [%]', 'Path']
 
