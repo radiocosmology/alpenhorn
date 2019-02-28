@@ -120,3 +120,18 @@ def test_model(fixtures):
             .where(ArchiveFile.name == 'sheila')
             .get()
             .wants_file) == 'M'
+
+
+def test_unique_copy_constraint(fixtures):
+    f = ArchiveFile.get(name='fred')
+    assert f.name == 'fred'
+    n = StorageNode.get(name='x')
+    assert n.name == 'x'
+
+    # we have one copy
+    assert [fc for fc in f.copies] == [ArchiveFileCopy.get(file=f, node=n)]
+
+    # but can't insert a second with identical file and node:
+    with pytest.raises(pw.IntegrityError):
+        file_copy = ArchiveFileCopy.create(file=f, node=n)
+        file_copy.save()
