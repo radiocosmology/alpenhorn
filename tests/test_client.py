@@ -279,11 +279,29 @@ def test_mounted(fixtures):
     assert 'List the nodes mounted on this' in help_result.output
     assert 'Options:\n  -H, --host TEXT  use specified host' in help_result.output
 
+    # there are no files yet on the 'foo' host (i.e., on storage node 'x')
     result = runner.invoke(cli.mounted, args=['--host', 'foo.example.com'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
-    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+2 files$', output[0])
+    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+0 files$', output[0])
+
+    # now pretend node 'x' has a copy of 'fred'
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')
+                 .get())
+    file_copy.has_file = 'Y'
+    file_copy.save()
+    file_copy.file.save()
+
+    # now `mounted` should report one file
+    result = runner.invoke(cli.mounted, args=['--host', 'foo.example.com'])
+    assert result.exit_code == 0
+    output = result.output.splitlines()
+    assert len(output) == 1
+    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+1 files$', output[0])
 
 
 @patch('alpenhorn.client.get_e2label', return_value=None)
