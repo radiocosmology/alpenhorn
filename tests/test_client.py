@@ -231,17 +231,14 @@ def test_clean(fixtures):
     f.size_b = 1073741824.0
     f.save()
 
-    # By default a FileCopy is set to has_file='N'
-    file_copy = (ar.ArchiveFileCopy
-                 .select()
-                 .join(ac.ArchiveFile)
-                 .where(ac.ArchiveFile.name == 'fred')).get()
+    # Pretend there is a copy of 'fred' on storage node 'x'
+    file_copy = ar.ArchiveFileCopy.get(file=f.id).get()
     file_copy.has_file = 'Y'
     file_copy.save()
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
-    result = runner.invoke(cli.clean, args=['-f', 'x'])
+    result = runner.invoke(cli.clean, args=['-f', 'x'], catch_exceptions=False)
     assert result.exit_code == 0
     assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
                     r'Marked 1 files for cleaning\n',
@@ -268,6 +265,38 @@ def test_clean(fixtures):
                  .join(ac.ArchiveFile)
                  .where(ac.ArchiveFile.name == 'fred')).get()
     assert file_copy.wants_file == 'N'
+
+
+def test_clean_with_targets(fixtures):
+    """Test the 'clean' command with multiple targets"""
+    runner = CliRunner()
+
+    ## pretend 'fred' is 1 GB in size
+    f = ac.ArchiveFile.get(ac.ArchiveFile.name == 'fred')
+    f.size_b = 1073741824.0
+    f.save()
+
+    # Pretend there is a copy of 'fred' on storage node 'x' and 'z'
+    file_copy = ar.ArchiveFileCopy.get(file=f.id).get()
+    file_copy.has_file = 'Y'
+    file_copy.save()
+
+    # TODO: clean should fail if the file is not already available on the `--target argument`
+
+
+#     z_copy = ar.ArchiveFileCopy(file=f, node=st.StorageNode.get(name='z'), has_file='Y')
+#     z_copy.save()
+#     assert z_copy.id is not None
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+    result = runner.invoke(cli.clean, args=['-f', '--target=foo', '--target=bar', 'x'])
+    print(result.output)
+    assert result.exit_code == 0
+    raise NotImplementedError("TODO")
+    assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
+                    r'Marked 1 files for cleaning\n',
+                    result.output, re.DOTALL)
 
 
 def test_mounted(fixtures):

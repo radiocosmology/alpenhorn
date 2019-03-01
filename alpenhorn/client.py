@@ -413,7 +413,7 @@ def verify(node_name, md5, fixdb, acq):
 @click.option('--days', '-d', help='Clean files older than <days>.', type=int, default=None)
 @click.option('--force', '-f', help='Force cleaning on an archive node.', is_flag=True)
 @click.option('--now', '-n', help='Force immediate removal.', is_flag=True)
-@click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
+@click.option('--target', metavar='TARGET_GROUP', default=None, multiple=True,
               help='Only clean files already available in this group.')
 @click.option('--acq', metavar='ACQ', default=None, type=str,
               help='Limit removal to acquisition.')
