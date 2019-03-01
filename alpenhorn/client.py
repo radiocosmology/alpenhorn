@@ -575,7 +575,7 @@ def mounted(host):
                  .where(st.StorageNode.host == host, st.StorageNode.mounted)):
         n_file = ar.ArchiveFileCopy \
                    .select() \
-                   .where(ar.ArchiveFileCopy.node == node) \
+                   .where((ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == 'Y')) \
                    .count()
         print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
         zero = False
