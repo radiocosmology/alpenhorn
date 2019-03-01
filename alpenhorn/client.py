@@ -709,8 +709,11 @@ def mount_transport(ctx, node, user, address):
 
     mnt_point = "/mnt/%s" % node
 
-    print("Mounting disc at %s" % mnt_point)
-    os.system("mount %s" % mnt_point)
+    if os.path.ismount(mnt_point):
+        print('{} is already mounted in the filesystem. Proceeding to activate it.'.format(node))
+    else:
+        print("Mounting disc at %s" % mnt_point)
+        os.system("mount %s" % mnt_point)
 
     ctx.invoke(mount, name=node, path=mnt_point, user=user, address=address)
 

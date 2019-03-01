@@ -336,8 +336,9 @@ def test_format_transport(system_mock, getuid_mock, glob_mock, popen_mock, mkdir
     assert node.storage_type == 'T'
 
 
+@patch('os.path.ismount')
 @patch('os.system')
-def test_mount_transport(mock, fixtures):
+def test_mount_transport(mock, mock_ismount, fixtures):
     """Test the 'mount_transport' command"""
     runner = CliRunner()
 
@@ -346,11 +347,20 @@ def test_mount_transport(mock, fixtures):
     assert 'Mount a transport disk into the system and then make it available' in help_result.output
     assert 'Options:\n  --user TEXT     username to access this node' in help_result.output
 
+    mock_ismount.return_value = False
     result = runner.invoke(cli.mount_transport, args=['z'])
     assert result.exit_code == 0
     assert mock.mock_calls == [call('mount /mnt/z')]
     assert re.match(r'Mounting disc at /mnt/z',
                     result.output, re.DOTALL)
+
+    mock_ismount.return_value = True
+    result = runner.invoke(cli.mount_transport, args=['x'])
+    assert result.exit_code == 0
+    assert mock.mock_calls == [call('mount /mnt/z')]
+    assert re.match(r'x is already mounted in the filesystem. Proceeding to activate it.',
+                    result.output, re.DOTALL)
+
 
 @patch('os.system')
 def test_unmount_transport(mock, fixtures):
