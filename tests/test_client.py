@@ -336,9 +336,10 @@ def test_format_transport(system_mock, getuid_mock, glob_mock, popen_mock, mkdir
     assert node.storage_type == 'T'
 
 
+@patch('alpenhorn.util.alpenhorn_node_check')
 @patch('os.path.ismount')
 @patch('os.system')
-def test_mount_transport(mock, mock_ismount, fixtures):
+def test_mount_transport(mock, mock_ismount, mock_node_check, fixtures):
     """Test the 'mount_transport' command"""
     runner = CliRunner()
 
@@ -347,6 +348,7 @@ def test_mount_transport(mock, mock_ismount, fixtures):
     assert 'Mount a transport disk into the system and then make it available' in help_result.output
     assert 'Options:\n  --user TEXT     username to access this node' in help_result.output
 
+    mock_node_check.return_value = True
     mock_ismount.return_value = False
     result = runner.invoke(cli.mount_transport, args=['z'])
     assert result.exit_code == 0
@@ -379,7 +381,8 @@ def test_unmount_transport(mock, fixtures):
                     result.output, re.DOTALL)
 
 
-def test_mount(fixtures):
+@patch('alpenhorn.util.alpenhorn_node_check')
+def test_mount(mock_node_check, fixtures):
     """Test the 'mount' command"""
     runner = CliRunner()
 
@@ -388,24 +391,35 @@ def test_mount(fixtures):
     assert 'Interactive routine for mounting a storage node located at ROOT.' in help_result.output
     assert 'Options:\n  --path TEXT      Root path for this node' in help_result.output
 
-    # test mounting a non-existent node
+    # test for error when mounting a non-existent node
     result = runner.invoke(cli.mount, args=['nonexistent'])
     assert result.exit_code == 1
     output = result.output.splitlines()
     assert len(output) == 1
     assert 'Storage node "nonexistent" does not exist. I quit.' in output[0]
 
+    # test for error when trying to mount a node that's already mounted
     result = runner.invoke(cli.mount, args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
     assert 'Node "x" is already mounted.' in output[0]
 
-    # now pretend the node is unmounted and mount it again
+    # now pretend the node is unmounted so we can try to mount it
     node = st.StorageNode.get(name='x')
     node.mounted = False
     node.save()
 
+    # test for error when check for ALPENHORN_NODE fails
+    mock_node_check.return_value = False
+    result = runner.invoke(cli.mount, args=['x'])
+    assert result.exit_code == 1
+    assert 'Node "x" does not match ALPENHORN_NODE' in result.output
+    assert not st.StorageNode.get(name='x').mounted
+
+    # test for success when check for ALPENHORN_NODE passes and the node is
+    # mounted
+    mock_node_check.return_value = True
     result = runner.invoke(cli.mount,
                            args=['--path=/bla',
                                  '--user=bozo',
@@ -417,7 +431,6 @@ def test_mount(fixtures):
     assert re.match(r'^I will set the host to ".+"\.$', output[0])
     assert 'Successfully mounted "x".' == output[1]
 
-    import socket
     node = st.StorageNode.get(name='x')
     assert node.mounted
     assert node.root == '/bla'
