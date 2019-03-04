@@ -305,10 +305,14 @@ def verify(node_name, md5, fixdb, acq):
     _init_config_db()
 
     try:
-        this_node = st.StorageNode.get(st.StorageNode.name == node_name)
+        this_node = st.StorageNode.get(name=node_name)
     except pw.DoesNotExist:
-        click.echo("Specified node does not exist.")
-        return
+        click.echo('Storage node "{}" does not exist.'.format(node_name))
+        exit(1)
+
+    if not util.alpenhorn_node_check(node_name):
+        click.echo('Node "{}" does not match ALPENHORN_NODE'.format(node_name))
+        exit(1)
 
     # Use a complicated query with a tuples construct to fetch everything we
     # need in a single query. This massively speeds up the whole process versus

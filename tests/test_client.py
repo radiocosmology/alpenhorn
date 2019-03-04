@@ -172,11 +172,26 @@ def test_status(fixtures):
     assert re.match(r'x\s+1\s+0\.0\s+33\.3\s+100\.0\s+foo.example.com:', output[2])
 
 
-def test_verify(fixtures):
+@patch('alpenhorn.util.alpenhorn_node_check')
+def test_verify(mock_node_check, fixtures):
     """Test the output of the 'verify' command"""
     tmpdir = fixtures['root']
 
     runner = CliRunner()
+
+    # test for error when mounting a non-existent node
+    result = runner.invoke(cli.verify, ['foo'])
+    assert result.exit_code == 1
+    assert 'Storage node "foo" does not exist.' in result.output
+
+    # test for error when check for ALPENHORN_NODE fails
+    mock_node_check.return_value = False
+    result = runner.invoke(cli.verify, ['z'])
+    assert result.exit_code == 1
+    assert 'Node "z" does not match ALPENHORN_NODE' in result.output
+
+    # test for 'x' when it is mounted, but contains no files
+    mock_node_check.return_value = True
     result = runner.invoke(cli.verify, ['x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n=== Summary ===\n' +
