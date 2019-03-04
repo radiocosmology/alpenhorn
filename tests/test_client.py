@@ -150,9 +150,11 @@ def test_status(fixtures):
     result = runner.invoke(cli.status, args=['--all'])
     assert result.exit_code == 0
     output = result.output.splitlines()
-    assert len(output) == 2
+    assert len(output) == 4
     assert re.match(r'^Node\s+Files\s+Size \[TB\]\s+', output[0])
     assert re.match(r'^[- ]+$', output[1])
+    assert re.match(r'x\s+0\s+0\.0\s+foo.example.com:', output[2])
+    assert re.match(r'z\s+0\s+0\.0\s+bar.example.com:None', output[3])
 
     # now pretend node 'x' has a copy of 'fred'
     file_copy = (ar.ArchiveFileCopy
@@ -168,8 +170,9 @@ def test_status(fixtures):
     result = runner.invoke(cli.status, args=['--all'])
     assert result.exit_code == 0
     output = result.output.splitlines()
-    assert len(output) == 3
+    assert len(output) == 4
     assert re.match(r'x\s+1\s+0\.0\s+33\.3\s+100\.0\s+foo.example.com:', output[2])
+    assert re.match(r'z\s+0\s+0\.0\s+bar.example.com:None', output[3])
 
 
 def test_verify(fixtures):
