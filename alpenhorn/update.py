@@ -98,40 +98,22 @@ def update_node(node):
 def update_node_mounted(node):
     """Check if a node is actually mounted in the filesystem"""
 
-    fname = 'ALPENHORN_NODE'
-    fullpath = os.path.join(node.root, fname)
-
-    # Check if the node shows up as mounted in database
-    if node.mounted is True:
-        # Check if a file fname exists in the root of the node
-        if os.path.exists(fullpath):
-            log.debug("Checking if file \"%s\" exists on node \"%s\".", fname, node.name)
-
-            # Open fname
-            with open(fullpath, 'r') as f:
-                first_line = f.readline()
-                # Check if the actual node name is in the textfile
-                if node.name == first_line.rstrip():
-                    # Great! Everything is as expected. Exit this routine.
-                    log.debug("Node %s matches with node name %s in %s file",
-                              node.name, first_line, fname)
-                    return True
-                else:
-                    log.error("Node %s does not match string %s in %s file",
-                              node.name, first_line, fname)
-
-        # If file does not exist in the root directory of the node, then mark
-        # node as unmounted
+    if node.mounted:
+        if alpenhorn_node_check(node):
+            return True
         else:
-            log.error("Node \"%s\" is not mounted as expected from db (missing %s file).",
-                      node.name, fname)
+            log.error('Node "%s" does not have the expected ALPENHORN_NODE file',
+                        node.name)
+    else:
+        log.error('Node "%s" is not mounted', node.name)
 
-    # If we are here the node it not correctly mounted so we should unmount it...
+    # Mark the node as unmouted in the database
     node.mounted = False
     node.save(only=node.dirty_fields)  # save only fields that have been updated
-    log.info("Correcting. Node %s is now set to unmounted", node.name)
+    log.info('Correcting the database: node "%s" is now set to unmounted.', node.name)
 
     return False
+
 
 def update_node_free_space(node):
     """Calculate the free space on the node and update the database with it."""

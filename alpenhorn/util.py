@@ -5,6 +5,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import os.path
 import re
 import shlex
 import logging
@@ -101,3 +102,19 @@ def md5sum_file(filename, hr=True, cmd_line=False):
 def get_short_hostname():
     """Returns the short hostname (up to the first '.')"""
     return socket.gethostname().split(".")[0]
+
+
+def alpenhorn_node_check(node):
+    """Returns True if ALPENHORN_NODE contains node name"""
+
+    if node.mounted:
+        file_path = os.path.join(node.root, 'ALPENHORN_NODE')
+        if os.path.isfile(file_path):
+            with open(file_path, 'r') as f:
+                first_line = f.readline()
+                # Check if the actual node name is in the textfile
+                if node.name == first_line.rstrip():
+                    # Great! Everything is as expected.
+                    return True
+
+    return False

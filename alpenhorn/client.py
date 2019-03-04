@@ -757,6 +757,13 @@ def mount(name, path, user, address, hostname):
         click.echo("Node \"%s\" is already mounted." % name)
         return
 
+    if path is not None:
+        node.root = path
+
+    if not util.alpenhorn_node_check(node):
+        click.echo('Node "{}" does not match ALPENHORN_NODE'.format(node.name))
+        exit(1)
+
     # Set the default hostname if required
     if hostname is None:
         hostname = util.get_short_hostname()
@@ -767,9 +774,6 @@ def mount(name, path, user, address, hostname):
     node.address = address
     node.mounted = True
     node.host = hostname
-
-    if path is not None:
-        node.root = path
 
     node.save()
 
