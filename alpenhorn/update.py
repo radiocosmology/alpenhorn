@@ -99,7 +99,7 @@ def update_node_mounted(node):
     """Check if a node is actually mounted in the filesystem"""
 
     if node.mounted:
-        if alpenhorn_node_check(node):
+        if util.alpenhorn_node_check(node):
             return True
         else:
             log.error('Node "%s" does not have the expected ALPENHORN_NODE file',
