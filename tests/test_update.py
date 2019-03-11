@@ -37,8 +37,7 @@ def fixtures(tmpdir):
 
     fixtures = ti.load_fixtures(tmpdir)
 
-    # create a valid ALPENHORN_NODE, and check that `update_node_mounted` does
-    # not change node's mounted status
+    # create a valid ALPENHORN_NODE
     node_file = fixtures['root'].join('ALPENHORN_NODE')
     node_file.write('x')
     assert node_file.check()
@@ -48,39 +47,39 @@ def fixtures(tmpdir):
     db.database_proxy.close()
 
 
-def test_update_node_mounted(fixtures):
+def test_update_node_active(fixtures):
     tmpdir = fixtures['root']
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
 
-    # if there is a valid ALPENHORN_NODE, `update_node_mounted` should not
-    # change node's mounted status
+    # if there is a valid ALPENHORN_NODE, `update_node_active` should not
+    # change node's active status
     node_file = tmpdir.join('ALPENHORN_NODE')
     assert node_file.check()
-    update.update_node_mounted(node)
+    update.update_node_active(node)
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
 
-    # rename ALPENHORN_NODE, and check that `update_node_mounted` unmounts the node
+    # rename ALPENHORN_NODE, and check that `update_node_active` unmounts the node
     node_file.rename(tmpdir.join('SOMETHING_ELSE'))
-    update.update_node_mounted(node)
+    update.update_node_active(node)
     node = st.StorageNode.get(name='x')
-    assert not node.mounted
+    assert not node.active
 
 
-def test_update_node_mounted_no_node_file(fixtures):
+def test_update_node_active_no_node_file(fixtures):
     tmpdir = fixtures['root']
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
 
-    # we start off with no ALPENHORN_NODE, and so `update_node_mounted` should unmount it
+    # we start off with no ALPENHORN_NODE, and so `update_node_active` should unmount it
     node_file = tmpdir.join('ALPENHORN_NODE')
     node_file.remove()
     assert not node_file.check()
 
-    update.update_node_mounted(node)
+    update.update_node_active(node)
     node = st.StorageNode.get(name='x')
-    assert not node.mounted
+    assert not node.active
 
 
 @patch('os.statvfs')

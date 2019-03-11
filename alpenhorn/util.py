@@ -107,7 +107,7 @@ def get_short_hostname():
 def alpenhorn_node_check(node):
     """Returns True if ALPENHORN_NODE contains node name"""
 
-    if node.mounted:
+    if node.active:
         file_path = os.path.join(node.root, 'ALPENHORN_NODE')
         if os.path.isfile(file_path):
             with open(file_path, 'r') as f:

@@ -131,7 +131,7 @@ def workers(db, network, images, tmpdir_factory):
         group = st.StorageGroup.create(name=('group_%i' % i))
         node = st.StorageNode.create(
             name=('node_%i' % i), root='/data', username='root',
-            group=group, host=hostname, address=hostname, mounted=True,
+            group=group, host=hostname, address=hostname, active=True,
             auto_import=(i == 0), min_avail_gb=0.0
         )
 
@@ -467,7 +467,7 @@ def test_clean(workers, network, test_files):
     _verify_clean(test_files, workers[2], unclean=True)
 
 #=== Test that the node file is being checked successfully
-def test_node_mounted(workers):
+def test_node_active(workers):
 
     data_dir0 = workers[1]['dir']
     os.rename(data_dir0 + '/ALPENHORN_NODE', data_dir0 + '/DIFFERENT_NAME')
@@ -478,18 +478,18 @@ def test_node_mounted(workers):
     time.sleep(3)
 
     node_0 = st.StorageNode.get(name=this_node.name)
-    assert not node_0.mounted
+    assert not node_0.active
 
     os.rename(data_dir0 + '/DIFFERENT_NAME', data_dir0 + '/ALPENHORN_NODE')
 
     node_0 = st.StorageNode.get(name=this_node.name)
-    node_0.mounted = True
+    node_0.active = True
     node_0.save(only=node_0.dirty_fields)
 
     time.sleep(3)
 
     node_0 = st.StorageNode.get(name=this_node.name)
-    assert node_0.mounted
+    assert node_0.active
 
 
 @pytest.mark.skipif(

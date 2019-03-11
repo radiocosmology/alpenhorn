@@ -49,12 +49,12 @@ def cli():
     # Get the name of this host
     host = util.get_short_hostname()
 
-    # Get the list of nodes currently mounted
+    # Get the list of currently nodes active
     node_list = list(storage.StorageNode.select().where(
-        storage.StorageNode.host == host, storage.StorageNode.mounted
+        storage.StorageNode.host == host, storage.StorageNode.active
     ))
 
-    # Warn if there are no mounted nodes. We used to exit here, but actually
+    # Warn if there are no active nodes. We used to exit here, but actually
     # it's useful to keep alpenhornd running for nodes where we exclusively use
     # transport disks (e.g. jingle)
     if len(node_list) == 0:

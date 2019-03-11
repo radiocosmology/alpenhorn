@@ -10,12 +10,12 @@ nodes:
   - name: x
     host: foo.example.com
     group: foo
-    mounted: True
+    active: True
     max_total_gb: 10
     min_avail_gb: 1
   - name: z
     host: bar.example.com
     group: bar
-    mounted: False
+    active: False
     max_total_gb: 10
     min_avail_gb: 1

@@ -288,17 +288,17 @@ def test_clean(fixtures):
     assert file_copy.wants_file == 'N'
 
 
-def test_mounted(fixtures):
-    """Test the output of the 'mounted' command"""
+def test_active(fixtures):
+    """Test the output of the 'active' command"""
     runner = CliRunner()
 
-    help_result = runner.invoke(cli.mounted, ['--help'])
+    help_result = runner.invoke(cli.active, ['--help'])
     assert help_result.exit_code == 0
-    assert 'List the nodes mounted on this' in help_result.output
+    assert 'List the nodes active on this' in help_result.output
     assert 'Options:\n  -H, --host TEXT  use specified host' in help_result.output
 
     # there are no files yet on the 'foo' host (i.e., on storage node 'x')
-    result = runner.invoke(cli.mounted, args=['--host', 'foo.example.com'])
+    result = runner.invoke(cli.active, args=['--host', 'foo.example.com'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
@@ -314,8 +314,8 @@ def test_mounted(fixtures):
     file_copy.save()
     file_copy.file.save()
 
-    # now `mounted` should report one file
-    result = runner.invoke(cli.mounted, args=['--host', 'foo.example.com'])
+    # now `active` should report one file
+    result = runner.invoke(cli.active, args=['--host', 'foo.example.com'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
@@ -343,7 +343,7 @@ def test_format_transport(system_mock, getuid_mock, glob_mock, popen_mock, mkdir
     assert re.match(r'.*\nDisc is already formatted\.\n' +
                     r'Labelling the disc as "CH-12-34-56-78"' +
                     r'.*\nSuccessfully created storage node.\n' +
-                    r'Node created but not mounted. Run alpenhorn mount_transport for that.',
+                    r'Node created but not activated. Run alpenhorn mount_transport for that.',
                     result.output, re.DOTALL)
     assert system_mock.mock_calls == [call('/sbin/e2label /dev/disk/by-id/fake-12-34-56-78-part1 CH-12-34-56-78')]
     assert popen_mock.mock_calls == [call('parted -s /dev/disk/by-id/fake-12-34-56-78 print'), call('df')]
@@ -400,45 +400,45 @@ def test_unmount_transport(mock, fixtures):
 
 
 @patch('alpenhorn.util.alpenhorn_node_check')
-def test_mount(mock_node_check, fixtures):
-    """Test the 'mount' command"""
+def test_activate(mock_node_check, fixtures):
+    """Test the 'activate' command"""
     runner = CliRunner()
 
-    help_result = runner.invoke(cli.mount, ['--help'])
+    help_result = runner.invoke(cli.activate, ['--help'])
     assert help_result.exit_code == 0
-    assert 'Interactive routine for mounting a storage node located at ROOT.' in help_result.output
+    assert 'Interactive routine for activating a storage node located at ROOT.' in help_result.output
     assert 'Options:\n  --path TEXT      Root path for this node' in help_result.output
 
     # test for error when mounting a non-existent node
-    result = runner.invoke(cli.mount, args=['nonexistent'])
+    result = runner.invoke(cli.activate, args=['nonexistent'])
     assert result.exit_code == 1
     output = result.output.splitlines()
     assert len(output) == 1
     assert 'Storage node "nonexistent" does not exist. I quit.' in output[0]
 
     # test for error when trying to mount a node that's already mounted
-    result = runner.invoke(cli.mount, args=['x'])
+    result = runner.invoke(cli.activate, args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
-    assert 'Node "x" is already mounted.' in output[0]
+    assert 'Node "x" is already active.' in output[0]
 
-    # now pretend the node is unmounted so we can try to mount it
+    # now pretend the node is inactive so we can try to activate it
     node = st.StorageNode.get(name='x')
-    node.mounted = False
+    node.active = False
     node.save()
 
     # test for error when check for ALPENHORN_NODE fails
     mock_node_check.return_value = False
-    result = runner.invoke(cli.mount, args=['x'])
+    result = runner.invoke(cli.activate, args=['x'])
     assert result.exit_code == 1
     assert 'Node "x" does not match ALPENHORN_NODE' in result.output
-    assert not st.StorageNode.get(name='x').mounted
+    assert not st.StorageNode.get(name='x').active
 
     # test for success when check for ALPENHORN_NODE passes and the node is
     # mounted
     mock_node_check.return_value = True
-    result = runner.invoke(cli.mount,
+    result = runner.invoke(cli.activate,
                            args=['--path=/bla',
                                  '--user=bozo',
                                  '--address=foobar.example.com',
@@ -447,43 +447,43 @@ def test_mount(mock_node_check, fixtures):
     output = result.output.splitlines()
     assert len(output) == 2
     assert re.match(r'^I will set the host to ".+"\.$', output[0])
-    assert 'Successfully mounted "x".' == output[1]
+    assert 'Successfully activated "x".' == output[1]
 
     node = st.StorageNode.get(name='x')
-    assert node.mounted
+    assert node.active
     assert node.root == '/bla'
     assert node.username == 'bozo'
     assert node.address == 'foobar.example.com'
     assert node.host == output[0].split('"')[1] == util.get_short_hostname()
 
 
-def test_unmount(fixtures):
-    """Test the 'unmount' command"""
+def test_deactivate(fixtures):
+    """Test the 'deactivate' command"""
     runner = CliRunner()
 
-    help_result = runner.invoke(cli.unmount, ['--help'])
+    help_result = runner.invoke(cli.deactivate, ['--help'])
     assert help_result.exit_code == 0
-    assert 'Unmount a storage node with location or named ROOT_OR_NAME.' in help_result.output
+    assert 'Deactivate a storage node with location or named ROOT_OR_NAME.' in help_result.output
     assert 'Options:\n  --help  Show this message and exit.' in help_result.output
 
-    result = runner.invoke(cli.unmount, args=['x'])
+    result = runner.invoke(cli.deactivate, args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
-    assert 'Node successfully unmounted.' in output[0]
+    assert 'Node successfully deactivated.' in output[0]
     node = st.StorageNode.get(name='x')
-    assert not node.mounted
+    assert not node.active
 
-    # unmount already unmounted node
-    result = runner.invoke(cli.unmount,
+    # deactivate already deactivated node
+    result = runner.invoke(cli.deactivate,
                            args=['x'])
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
-    assert 'There is no node mounted there any more' in output[0]
+    assert 'There is no active node there any more' in output[0]
 
-    # unmount an unknown node
-    result = runner.invoke(cli.unmount,
+    # deactivate an unknown node
+    result = runner.invoke(cli.deactivate,
                            args=['y'])
     assert result.exit_code == 1
     output = result.output.splitlines()

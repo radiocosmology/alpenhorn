@@ -239,7 +239,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
 
 @cli.command()
-@click.option('--all', help='Show the status of all nodes, not just mounted ones.', is_flag=True)
+@click.option('--all', help='Show the status of all nodes, not just active ones.', is_flag=True)
 def status(all):
     """Summarise the status of alpenhorn storage nodes.
     """
@@ -261,7 +261,7 @@ def status(all):
 
     log.info("Nodes: %s (all=%s)" % (nodes.count(), all))
     if not all:
-        nodes = nodes.where(st.StorageNode.mounted)
+        nodes = nodes.where(st.StorageNode.active)
 
     log.info("Nodes: %s" % nodes.count())
 
@@ -573,8 +573,8 @@ def clean(node_name, days, force, now, target, acq):
 
 @cli.command()
 @click.option('--host', '-H', help='use specified host rather than local machine', type=str, default=None)
-def mounted(host):
-    """List the nodes mounted on this, or another specified, machine"""
+def active(host):
+    """List the nodes active on this, or another specified, machine"""
     import socket
 
     _init_config_db()
@@ -583,7 +583,7 @@ def mounted(host):
         host = util.get_short_hostname()
     zero = True
     for node in (st.StorageNode.select()
-                 .where(st.StorageNode.host == host, st.StorageNode.mounted)):
+                 .where(st.StorageNode.host == host, st.StorageNode.active)):
         n_file = ar.ArchiveFileCopy \
                    .select() \
                    .where((ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == 'Y')) \
@@ -591,7 +591,7 @@ def mounted(host):
         print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
         zero = False
     if zero:
-        print("No nodes are mounted on host %s." % host)
+        print("No nodes are active on host %s." % host)
 
 
 @cli.command()
@@ -706,7 +706,7 @@ def format_transport(serial_num):
 
         print("Successfully created storage node.")
 
-    print("Node created but not mounted. Run alpenhorn mount_transport for that.")
+    print("Node created but not activated. Run alpenhorn mount_transport for that.")
 
 
 @cli.command()
@@ -726,7 +726,7 @@ def mount_transport(ctx, node, user, address):
         print("Mounting disc at %s" % mnt_point)
         os.system("mount %s" % mnt_point)
 
-    ctx.invoke(mount, name=node, path=mnt_point, user=user, address=address)
+    ctx.invoke(activate, name=node, path=mnt_point, user=user, address=address)
 
 
 @cli.command()
@@ -741,7 +741,7 @@ def unmount_transport(ctx, node):
     print("Unmounting disc at %s" % mnt_point)
     os.system("umount %s" % mnt_point)
 
-    ctx.invoke(unmount, root_or_name=node)
+    ctx.invoke(deactivate, root_or_name=node)
 
 
 @cli.command()
@@ -751,8 +751,8 @@ def unmount_transport(ctx, node):
 @click.option("--address", help="address for remote access to this node.", type=str, default=None)
 @click.option("--hostname", type=str, default=None,
               help="hostname running the alpenhornd instance for this node (set to this hostname by default).")
-def mount(name, path, user, address, hostname):
-    """Interactive routine for mounting a storage node located at ROOT."""
+def activate(name, path, user, address, hostname):
+    """Interactive routine for activating a storage node located at ROOT."""
 
     import socket
 
@@ -764,8 +764,8 @@ def mount(name, path, user, address, hostname):
         click.echo("Storage node \"%s\" does not exist. I quit." % name)
         exit(1)
 
-    if node.mounted:
-        click.echo("Node \"%s\" is already mounted." % name)
+    if node.active:
+        click.echo("Node \"%s\" is already active." % name)
         return
 
     if path is not None:
@@ -783,18 +783,18 @@ def mount(name, path, user, address, hostname):
     # Set the parameters of this node
     node.username = user
     node.address = address
-    node.mounted = True
+    node.active = True
     node.host = hostname
 
     node.save()
 
-    click.echo("Successfully mounted \"%s\"." % name)
+    click.echo("Successfully activated \"%s\"." % name)
 
 
 @cli.command()
 @click.argument("root_or_name")
-def unmount(root_or_name):
-    """Unmount a storage node with location or named ROOT_OR_NAME."""
+def deactivate(root_or_name):
+    """Deactivate a storage node with location or named ROOT_OR_NAME."""
     import os
     import socket
 
@@ -818,12 +818,12 @@ def unmount(root_or_name):
                        "known. I quit.")
             exit(1)
 
-    if not node.mounted:
-        click.echo("There is no node mounted there any more.")
+    if not node.active:
+        click.echo("There is no active node there any more.")
     else:
-        node.mounted = False
+        node.active = False
         node.save()
-        print("Node successfully unmounted.")
+        print("Node successfully deactivated.")
 
 
 @cli.command()
@@ -996,7 +996,7 @@ def create_group(group_name, notes):
 @click.option('--address', help="Domain name or IP address for the host \
               (if network accessible).", metavar='ADDRESS',
               type=str, default=None)
-@click.option('--mounted', help='Is the node mounted?', metavar="BOOL",
+@click.option('--active', help='Is the node active?', metavar="BOOL",
               type=bool, default=False)
 @click.option('--auto_import', help='Should files that appear on this node be \
               automatically added?', metavar='BOOL', type=bool, default=False)
@@ -1016,7 +1016,7 @@ def create_group(group_name, notes):
               it?', metavar='FLOAT', type=float, default=30)
 @click.option('--notes', help='Any notes or comments about this node.',
               type=str, default=None)
-def create_node(node_name, root, hostname, group, address, mounted, auto_import,
+def create_node(node_name, root, hostname, group, address, active, auto_import,
                 suspect, storage_type, max_total_gb, min_avail_gb,
                 min_delete_age_days, notes):
     """Create a storage NODE within storage GROUP with a ROOT directory on
@@ -1037,7 +1037,7 @@ def create_node(node_name, root, hostname, group, address, mounted, auto_import,
 
     except pw.DoesNotExist:
         st.StorageNode.create(name=node_name, root=root, host=hostname,
-                              address=address, group=this_group.id, mounted=mounted,
+                              address=address, group=this_group.id, active=active,
                               auto_import=auto_import, suspect=suspect,
                               storage_type=storage_type, max_total_gb=max_total_gb,
                               min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,
