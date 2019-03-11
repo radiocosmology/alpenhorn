@@ -71,8 +71,8 @@ def update_node(node):
 
     log.info("Updating node \"%s\".", node.name)
 
-    # Check if the node is acutally mounted in the filesystem
-    check_node = update_node_mounted(node)
+    # Check if the node is actually active
+    check_node = update_node_active(node)
 
     if not check_node:
         return
@@ -95,8 +95,8 @@ def update_node(node):
     # update_node_hpss_outbound(node)
 
 
-def update_node_mounted(node):
-    """Check if a node is actually mounted in the filesystem"""
+def update_node_active(node):
+    """Check if a node is actually active in the filesystem"""
 
     if node.active:
         if util.alpenhorn_node_check(node):
@@ -105,7 +105,7 @@ def update_node_mounted(node):
             log.error('Node "%s" does not have the expected ALPENHORN_NODE file',
                         node.name)
     else:
-        log.error('Node "%s" is not mounted', node.name)
+        log.error('Node "%s" is not active', node.name)
 
     # Mark the node as inactive in the database
     node.active = False
