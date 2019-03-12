@@ -86,11 +86,13 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
     try:
         from_node = st.StorageNode.get(name=node_name)
     except pw.DoesNotExist:
-        raise Exception("Node \"%s\" does not exist in the DB." % node_name)
+        click.echo("Node \"%s\" does not exist in the DB." % node_name)
+        exit(1)
     try:
         to_group = st.StorageGroup.get(name=group_name)
     except pw.DoesNotExist:
-        raise Exception("Group \"%s\" does not exist in the DB." % group_name)
+        click.echo("Group \"%s\" does not exist in the DB." % group_name)
+        exit(1)
 
     # Construct list of file copies that are available on the source node, and
     # not available on any nodes at the destination. This query is quite complex
@@ -120,7 +122,8 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         try:
             target_group = st.StorageGroup.get(name=target)
         except pw.DoesNotExist:
-            raise RuntimeError("Target group \"%s\" does not exist in the DB." % target)
+            click.echo("Target group \"%s\" does not exist in the DB." % target)
+            exit(1)
 
         # First get the nodes at the destination...
         nodes_at_target = st.StorageNode.select().where(st.StorageNode.group == target_group)
