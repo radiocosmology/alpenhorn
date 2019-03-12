@@ -77,6 +77,18 @@ def test_sync(fixtures):
     assert 'Copy all files from NODE to GROUP that are not already present.' in help_result.output
     assert 'Options:\n  --acq ACQ              Sync only this acquisition.' in help_result.output
 
+    result = runner.invoke(cli.sync, args=['--target', 'doesnotexist', 'x', 'bar'])
+    assert result.exit_code == 1
+    assert result.output == 'Target group "doesnotexist" does not exist in the DB.\n'
+
+    result = runner.invoke(cli.sync, args=['doesnotexist', 'bar'])
+    assert result.exit_code == 1
+    assert result.output == 'Node "doesnotexist" does not exist in the DB.\n'
+
+    result = runner.invoke(cli.sync, args=['x', 'doesnotexist'])
+    assert result.exit_code == 1
+    assert result.output == 'Group "doesnotexist" does not exist in the DB.\n'
+
     result = runner.invoke(cli.sync, args=['x', 'bar'])
     assert result.exit_code == 0
     assert result.output == 'No files to copy from node x.\n'
@@ -113,9 +125,6 @@ def test_sync(fixtures):
 
     ## if we run sync again, the copy request will simply get the 'n_requests' count incremented by 1
     result = runner.invoke(cli.sync, args=['--force', '--show_acq', '--show_files', 'x', 'bar'])
-
-    print(result.output)
-    print(result.exception)
 
     assert result.exit_code == 0
     assert re.match(r'x \[1 files\]\n' +
