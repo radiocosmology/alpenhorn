@@ -3,6 +3,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+from collections import defaultdict
 import sys
 import os
 import datetime
@@ -888,34 +889,64 @@ def import_files(node_name, verbose, acq, dry):
         print("Unknown node.")
         return
 
-    # Construct list of directories that might be acquisitions
+    cwd = os.getcwd()
+    # Construct a dictionary of directories that might be acquisitions and the of
+    # list files that they contain
+    db_acqs = ac.ArchiveAcq.select(ac.ArchiveAcq.name)
+    acq_files = defaultdict(list)
     if len(acq) == 0:
-        db_acqs = dict(ac.ArchiveAcq
-                       .select(ac.ArchiveAcq.name, ac.ArchiveAcq.id)
-                       .tuples())
-
-        acqs = []           # Directories which are known acquisitions
-        for d, ds, fs in os.walk(os.getcwd()):
-            d = os.path.relpath(d)
-            if d == '.':            # skip the current directory
+        tops = [cwd]
+    else:
+        db_acqs = db_acqs.where(ac.ArchiveAcq.name >> acq)
+        tops = []
+        for acq_name in acq:
+            acq_dir = os.path.join(node.root, acq_name)
+            if not os.path.isdir(acq_dir):
+                print('Aquisition "%s" does not exist in this node. Ignoring.' % acq_name,
+                      file=sys.stderr)
                 continue
-            for acq in db_acqs.keys():
+            if acq_dir == cwd:
+                # the current directory is one of the limiting acquisitions, so
+                # we can ignore all others in the `--acq` list
+                tops = [acq_dir]
+                break
+            elif cwd.startswith(acq_dir):
+                # the current directory is inside one of the limiting
+                # acquisitions, so we can just walk its subtree
+                tops = [cwd]
+                break
+            elif acq_dir.startswith(cwd):
+                # the acquisition is inside the current directory, so we can
+                # just walk its subtree
+                tops.append(acq_dir)
+            else:
+                print('Acquisition "%s" is outside the current directory and will be ignored.' % acq_name,
+                      file=sys.stderr)
+
+    known_acqs = set([a.name for a in db_acqs])
+    for top in tops:
+        for d, ds, fs in os.walk(top):
+            d = os.path.relpath(d, node.root)
+            if d == '.':            # skip the node root directory
+                continue
+            for acq in known_acqs:
                 if d == acq:
                     # the directory is the acquisition
-                    acqs.append(d)
+                    acq_files[acq] += fs
                     break
                 if d.startswith(acq + "/"):
                     # the directory is inside an acquisition
+                    acq_dirname = os.path.relpath(d, acq)
+                    acq_files[acq] += [(acq_dirname + '/' + f) for f in fs]
                     break
                 if acq.startswith(d + "/"):
-                    # the directory is an acquisition's ancestor
+                    # the directory is an acquisition's ancestor, we will get
+                    # to it during the traversal of the subdirectories
                     break
             else:
                 not_acqs.append(d)
-    else:
-        acqs = [acq]
 
-    with click.progressbar(acqs, label='Scanning acquisitions') as acq_iter:
+    with click.progressbar(acq_files, label='Scanning acquisitions') as acq_iter:
 
         for acq_name in acq_iter:
             try:
@@ -924,15 +955,7 @@ def import_files(node_name, verbose, acq, dry):
                 not_acqs.append(acq_name)
                 continue
 
-            files = []
-            for d, ds, fs in os.walk(acq_name):
-                d = os.path.relpath(d, acq_name)
-                if d == '.':
-                    d = ''
-                else:
-                    d += '/'
-                for f in fs:
-                    files.append(d + f)
+            files = acq_files[acq_name]
 
             # Fetch lists of all files in this acquisition, and all
             # files in this acq with local copies
@@ -953,7 +976,7 @@ def import_files(node_name, verbose, acq, dry):
                 else:
                     archive_file = ac.ArchiveFile.select().where(ac.ArchiveFile.name == f_name, ac.ArchiveFile.acq == acq).get()
 
-                    if (os.path.getsize(file_path) != archive_file.size_b):
+                    if (os.path.getsize(os.path.join(node.root, file_path)) != archive_file.size_b):
                         corrupt_files.append(file_path)
                         continue
 
