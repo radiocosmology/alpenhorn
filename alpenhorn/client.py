@@ -996,6 +996,8 @@ def create_group(group_name, notes):
 @click.argument('root', metavar='ROOT')
 @click.argument('hostname', metavar='HOSTNAME')
 @click.argument('group', metavar='GROUP', type=str, default=None)
+@click.option('--user', help='Username to use for remote access to the node.',
+              metavar='USER', type=str, default=None)
 @click.option('--address', help="Domain name or IP address for the host \
               (if network accessible).", metavar='ADDRESS',
               type=str, default=None)
@@ -1019,8 +1021,8 @@ def create_group(group_name, notes):
               it?', metavar='FLOAT', type=float, default=30)
 @click.option('--notes', help='Any notes or comments about this node.',
               type=str, default=None)
-def create_node(node_name, root, hostname, group, address, active, auto_import,
-                suspect, storage_type, max_total_gb, min_avail_gb,
+def create_node(node_name, root, hostname, group, user, address, active,
+                auto_import, suspect, storage_type, max_total_gb, min_avail_gb,
                 min_delete_age_days, notes):
     """Create a storage NODE within storage GROUP with a ROOT directory on
     HOSTNAME.
@@ -1040,7 +1042,8 @@ def create_node(node_name, root, hostname, group, address, active, auto_import,
 
     except pw.DoesNotExist:
         st.StorageNode.create(name=node_name, root=root, host=hostname,
-                              address=address, group=this_group.id, active=active,
+                              username=user, address=address,
+                              group=this_group.id, active=active,
                               auto_import=auto_import, suspect=suspect,
                               storage_type=storage_type, max_total_gb=max_total_gb,
                               min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,

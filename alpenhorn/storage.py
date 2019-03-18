@@ -31,6 +31,8 @@ class StorageNode(base_model):
         The root directory for data in this node.
     host : string
         The hostname that this node lives on.
+    username : string
+        The username to use for remote access to the host
     address : string
         The internet address for the host (e.g., mistaya.phas.ubc.ca)
     group : foreign key

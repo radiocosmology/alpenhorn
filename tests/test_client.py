@@ -681,27 +681,37 @@ def test_create_node(fixtures):
     tmpdir = fixtures['root']
     tmpdir.chdir()
 
+    # basic invocation of the command should succeed
     result = runner.invoke(cli.create_node, args=['y', 'root', 'hostname', 'bar'])
     assert result.exit_code == 0
     assert result.output == 'Added node "y" belonging to group "bar" in the directory "root" at host "hostname" to database.\n'
 
     node = st.StorageNode.get(name='y')
-
-    assert result.exit_code == 0
     assert node.group.name == 'bar'
     assert node.name == 'y'
     assert node.root == 'root'
     assert node.host == 'hostname'
+    assert node.username is None
 
+    # basic invocation of the command should succeed
+    result = runner.invoke(cli.create_node, args=['--user=foo', 'w', 'root', 'hostname', 'bar'])
+    assert result.exit_code == 0
+    assert result.output == 'Added node "w" belonging to group "bar" in the directory "root" at host "hostname" to database.\n'
+
+    node = st.StorageNode.get(name='w')
+    assert node.username == 'foo'
+
+    # creating a node on a group that doesn't exist should fail
     result = runner.invoke(cli.create_node, args=['y', 'root', 'hostname', 'baba'])
-
     assert result.exit_code == 1
     assert result.output == 'Requested group "baba" does not exit in DB.\n'
 
+    # creating a node that already exists should fail
     result = runner.invoke(cli.create_node, args=['x', 'root', 'hostname', 'bar'])
     assert result.exit_code == 1
     assert result.output == 'Node name "x" already exists! Try a different name!\n'
 
+    # using an invalid `--storage_type` should fail
     result = runner.invoke(cli.create_node, args=['--storage_type=Z', 'z', 'root', 'hostname', 'bar'])
     assert result.exit_code == 2  # Click usage error
     assert 'Invalid value for "--storage_type": invalid choice: Z. (choose from A, T, F)' in result.output
