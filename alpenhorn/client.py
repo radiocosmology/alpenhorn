@@ -438,14 +438,18 @@ def clean(node_name, days, cancel, force, now, target, acq):
     Files will never be removed until they are available on at least two
     archival nodes.
 
-    If --target is specified we will only remove files already available in the
-    TARGET_GROUP. This is useful for cleaning out intermediate locations such as
-    transport disks.
-
     Normally, files are marked to be removed only if the disk space on the node
     is running low. With the --now flag, they will be made available for
     immediate removal. Either way, they will *never* be actually removed until
     there are sufficient archival copies.
+
+    Using the --cancel option undoes previous cleaning operations by marking
+    files that are still on the node and that were marked as available for
+    removal as "must keep".
+
+    If --target is specified, the command will only affect files already
+    available in the TARGET_GROUP. This is useful for cleaning out intermediate
+    locations such as transport disks.
 
     Using the --days flag will only clean correlator and housekeeping
     files which have a timestamp associated with them. It will not
