@@ -453,21 +453,25 @@ def clean(node_name, days, cancel, force, now, target, acq):
     considered for removal.
     """
 
+    if cancel and now:
+        print('Options --cancel and --now are mutually exclusive.')
+        exit(1)
+
     _init_config_db()
 
     try:
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
     except pw.DoesNotExist:
-        print("Specified node does not exist.")
-        return
+        print('Storage node "%s" does not exist.' % node_name)
+        exit(1)
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
-        if force or click.confirm('DANGER: run clean on archive node?'):
-            print("%s is an archive node. Forcing clean." % node_name)
+        if force or click.confirm('DANGER: run clean on archive node "%s"?' % node_name):
+            print('"%s" is an archive node. Forcing clean.' % node_name)
         else:
-            print("Cannot clean archive node %s without forcing." % node_name)
-            return
+            print('Cannot clean archive node "%s" without forcing.' % node_name)
+            exit(1)
 
     # Select FileCopys on this node.
     files = ar.ArchiveFileCopy.select(ar.ArchiveFileCopy.id).where(

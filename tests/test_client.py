@@ -309,6 +309,22 @@ def test_clean(fixtures):
                  .where(ac.ArchiveFile.name == 'fred')).get()
     assert file_copy.wants_file == 'Y'
 
+    ## '--cancel' and '--now' are mutually exclusive options
+    result = runner.invoke(cli.clean, args=['--now', '--cancel', 'x'])
+    assert result.exit_code == 1
+    assert 'Options --cancel and --now are mutually exclusive.' in result.output
+
+    # using a non-existent node should be reported as an error
+    result = runner.invoke(cli.clean, args=['--force', '--cancel', 'y'])
+    assert result.exit_code == 1
+    assert 'Storage node "y" does not exist.' in result.output
+
+    # cleaning an archive node without the force flag or interactive
+    # confirmation should be an error
+    result = runner.invoke(cli.clean, args=['z'])
+    assert result.exit_code == 1
+    assert 'Cannot clean archive node "z" without forcing.' in result.output
+
 
 def test_active(fixtures):
     """Test the output of the 'active' command"""
