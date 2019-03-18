@@ -434,9 +434,17 @@ def verify(node_name, md5, fixdb, acq):
 def clean(node_name, days, force, now, target, acq):
     """Clean up NODE by marking older files as potentially removable.
 
+    Files will never be removed until they are available on at least two
+    archival nodes.
+
     If --target is specified we will only remove files already available in the
     TARGET_GROUP. This is useful for cleaning out intermediate locations such as
     transport disks.
+
+    Normally, files are marked to be removed only if the disk space on the node
+    is running low. With the --now flag, they will be made available for
+    immediate removal. Either way, they will *never* be actually removed until
+    there are sufficient archival copies.
 
     Using the --days flag will only clean correlator and housekeeping
     files which have a timestamp associated with them. It will not
@@ -551,13 +559,14 @@ def clean(node_name, days, force, now, target, acq):
 
             size_gb = int(size_bytes) / 1073741824.0
 
-            print('Cleaning up %i files (%.1f GB) from %s.' % (count, size_gb, node_name))
+            print('Mark %i files (%.1f GB) from "%s" available for removal.' %
+                  (count, size_gb, node_name))
 
     # If there are any files to clean, ask for confirmation and the mark them in
     # the database for removal
     if len(file_ids) > 0:
         if force or click.confirm("  Are you sure?"):
-            print("  Marking files for cleaning.")
+            print("  Marking...")
 
             state = 'N' if now else 'M'
 
@@ -566,10 +575,10 @@ def clean(node_name, days, force, now, target, acq):
 
             n = update.execute()
 
-            print("Marked %i files for cleaning" % n)
+            print("Marked %i files available for removal." % n)
 
         else:
-            print("  Cancelled")
+            print('  Cancelled. Exit without changes.')
     else:
         print("No files selected for cleaning on %s." % node_name)
 

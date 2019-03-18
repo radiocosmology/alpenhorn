@@ -270,8 +270,8 @@ def test_clean(fixtures):
     tmpdir.chdir()
     result = runner.invoke(cli.clean, args=['-f', 'x'])
     assert result.exit_code == 0
-    assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
-                    r'Marked 1 files for cleaning\n',
+    assert re.match(r'.*\nMark 1 files \(1\.0 GB\) from "x" available for removal\.\n.*' +
+                    r'Marked 1 files available for removal.\n',
                     result.output, re.DOTALL)
 
     ## by default, the cleaned copy should be marked as 'maybe wanted'
@@ -286,8 +286,8 @@ def test_clean(fixtures):
     file_copy.save()
     result = runner.invoke(cli.clean, args=['-f', '--now', 'x'])
     assert result.exit_code == 0
-    assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
-                    r'Marked 1 files for cleaning\n',
+    assert re.match(r'.*\nMark 1 files \(1\.0 GB\) from "x" available for removal\.\n.*' +
+                    r'Marked 1 files available for removal.\n',
                     result.output, re.DOTALL)
 
     file_copy = (ar.ArchiveFileCopy
