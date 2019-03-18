@@ -425,13 +425,14 @@ def verify(node_name, md5, fixdb, acq):
 @cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('--days', '-d', help='Clean files older than <days>.', type=int, default=None)
+@click.option('--cancel', help='Cancel files marked for cleaning', is_flag=True)
 @click.option('--force', '-f', help='Force cleaning on an archive node.', is_flag=True)
 @click.option('--now', '-n', help='Force immediate removal.', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
               help='Only clean files already available in this group.')
 @click.option('--acq', metavar='ACQ', default=None, type=str,
               help='Limit removal to acquisition.')
-def clean(node_name, days, force, now, target, acq):
+def clean(node_name, days, cancel, force, now, target, acq):
     """Clean up NODE by marking older files as potentially removable.
 
     Files will never be removed until they are available on at least two
@@ -473,6 +474,18 @@ def clean(node_name, days, force, now, target, acq):
         ar.ArchiveFileCopy.node == this_node,
         ar.ArchiveFileCopy.has_file == 'Y'
     )
+
+    if now:
+        # In 'now' cleaning, every copy will be set to wants_file="No", if it
+        # wasn't already
+        files = files.where(ar.ArchiveFileCopy.wants_file != 'N')
+    elif cancel:
+        # Undo any "Maybe" and "No" want_files and reset them to "Yes"
+        files = files.where(ar.ArchiveFileCopy.wants_file != 'Y')
+    else:
+        # In regular cleaning, we only mark as "Maybe" want_files that are
+        # currently "Yes", but leave "No" unchanged
+        files = files.where(ar.ArchiveFileCopy.wants_file == 'Y')
 
     # Limit to acquisition
     if acq is not None:
@@ -559,8 +572,9 @@ def clean(node_name, days, force, now, target, acq):
 
             size_gb = int(size_bytes) / 1073741824.0
 
-            print('Mark %i files (%.1f GB) from "%s" available for removal.' %
-                  (count, size_gb, node_name))
+            print('Mark %i files (%.1f GB) from "%s" %s.' %
+                  (count, size_gb, node_name,
+                   'for keeping' if cancel else 'available for removal'))
 
     # If there are any files to clean, ask for confirmation and the mark them in
     # the database for removal
@@ -568,14 +582,20 @@ def clean(node_name, days, force, now, target, acq):
         if force or click.confirm("  Are you sure?"):
             print("  Marking...")
 
-            state = 'N' if now else 'M'
+            if cancel:
+                state = 'Y'
+            else:
+                state = 'N' if now else 'M'
 
             update = ar.ArchiveFileCopy.update(wants_file=state)\
                 .where(ar.ArchiveFileCopy.id << file_ids)
 
             n = update.execute()
 
-            print("Marked %i files available for removal." % n)
+            if cancel:
+                print('Marked %i files for keeping.' % n)
+            else:
+                print('Marked %i files available for removal.' % n)
 
         else:
             print('  Cancelled. Exit without changes.')

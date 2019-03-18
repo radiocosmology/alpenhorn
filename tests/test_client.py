@@ -296,6 +296,19 @@ def test_clean(fixtures):
                  .where(ac.ArchiveFile.name == 'fred')).get()
     assert file_copy.wants_file == 'N'
 
+    ## if we clean with the '--cancel' option, all unwanted copies should again be marked wanted
+    result = runner.invoke(cli.clean, args=['-f', '--cancel', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\nMark 1 files \(1\.0 GB\) from "x" for keeping\.\n.*' +
+                    r'Marked 1 files for keeping.\n',
+                    result.output, re.DOTALL)
+
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')).get()
+    assert file_copy.wants_file == 'Y'
+
 
 def test_active(fixtures):
     """Test the output of the 'active' command"""
