@@ -425,18 +425,31 @@ def verify(node_name, md5, fixdb, acq):
 @cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('--days', '-d', help='Clean files older than <days>.', type=int, default=None)
+@click.option('--cancel', help='Cancel files marked for cleaning', is_flag=True)
 @click.option('--force', '-f', help='Force cleaning on an archive node.', is_flag=True)
 @click.option('--now', '-n', help='Force immediate removal.', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
               help='Only clean files already available in this group.')
 @click.option('--acq', metavar='ACQ', default=None, type=str,
               help='Limit removal to acquisition.')
-def clean(node_name, days, force, now, target, acq):
+def clean(node_name, days, cancel, force, now, target, acq):
     """Clean up NODE by marking older files as potentially removable.
 
-    If --target is specified we will only remove files already available in the
-    TARGET_GROUP. This is useful for cleaning out intermediate locations such as
-    transport disks.
+    Files will never be removed until they are available on at least two
+    archival nodes.
+
+    Normally, files are marked to be removed only if the disk space on the node
+    is running low. With the --now flag, they will be made available for
+    immediate removal. Either way, they will *never* be actually removed until
+    there are sufficient archival copies.
+
+    Using the --cancel option undoes previous cleaning operations by marking
+    files that are still on the node and that were marked as available for
+    removal as "must keep".
+
+    If --target is specified, the command will only affect files already
+    available in the TARGET_GROUP. This is useful for cleaning out intermediate
+    locations such as transport disks.
 
     Using the --days flag will only clean correlator and housekeeping
     files which have a timestamp associated with them. It will not
@@ -444,27 +457,43 @@ def clean(node_name, days, force, now, target, acq):
     considered for removal.
     """
 
+    if cancel and now:
+        print('Options --cancel and --now are mutually exclusive.')
+        exit(1)
+
     _init_config_db()
 
     try:
         this_node = st.StorageNode.get(st.StorageNode.name == node_name)
     except pw.DoesNotExist:
-        print("Specified node does not exist.")
-        return
+        print('Storage node "%s" does not exist.' % node_name)
+        exit(1)
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
-        if force or click.confirm('DANGER: run clean on archive node?'):
-            print("%s is an archive node. Forcing clean." % node_name)
+        if force or click.confirm('DANGER: run clean on archive node "%s"?' % node_name):
+            print('"%s" is an archive node. Forcing clean.' % node_name)
         else:
-            print("Cannot clean archive node %s without forcing." % node_name)
-            return
+            print('Cannot clean archive node "%s" without forcing.' % node_name)
+            exit(1)
 
     # Select FileCopys on this node.
     files = ar.ArchiveFileCopy.select(ar.ArchiveFileCopy.id).where(
         ar.ArchiveFileCopy.node == this_node,
         ar.ArchiveFileCopy.has_file == 'Y'
     )
+
+    if now:
+        # In 'now' cleaning, every copy will be set to wants_file="No", if it
+        # wasn't already
+        files = files.where(ar.ArchiveFileCopy.wants_file != 'N')
+    elif cancel:
+        # Undo any "Maybe" and "No" want_files and reset them to "Yes"
+        files = files.where(ar.ArchiveFileCopy.wants_file != 'Y')
+    else:
+        # In regular cleaning, we only mark as "Maybe" want_files that are
+        # currently "Yes", but leave "No" unchanged
+        files = files.where(ar.ArchiveFileCopy.wants_file == 'Y')
 
     # Limit to acquisition
     if acq is not None:
@@ -551,25 +580,33 @@ def clean(node_name, days, force, now, target, acq):
 
             size_gb = int(size_bytes) / 1073741824.0
 
-            print('Cleaning up %i files (%.1f GB) from %s.' % (count, size_gb, node_name))
+            print('Mark %i files (%.1f GB) from "%s" %s.' %
+                  (count, size_gb, node_name,
+                   'for keeping' if cancel else 'available for removal'))
 
     # If there are any files to clean, ask for confirmation and the mark them in
     # the database for removal
     if len(file_ids) > 0:
         if force or click.confirm("  Are you sure?"):
-            print("  Marking files for cleaning.")
+            print("  Marking...")
 
-            state = 'N' if now else 'M'
+            if cancel:
+                state = 'Y'
+            else:
+                state = 'N' if now else 'M'
 
             update = ar.ArchiveFileCopy.update(wants_file=state)\
                 .where(ar.ArchiveFileCopy.id << file_ids)
 
             n = update.execute()
 
-            print("Marked %i files for cleaning" % n)
+            if cancel:
+                print('Marked %i files for keeping.' % n)
+            else:
+                print('Marked %i files available for removal.' % n)
 
         else:
-            print("  Cancelled")
+            print('  Cancelled. Exit without changes.')
     else:
         print("No files selected for cleaning on %s." % node_name)
 

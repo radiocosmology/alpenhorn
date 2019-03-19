@@ -270,8 +270,8 @@ def test_clean(fixtures):
     tmpdir.chdir()
     result = runner.invoke(cli.clean, args=['-f', 'x'])
     assert result.exit_code == 0
-    assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
-                    r'Marked 1 files for cleaning\n',
+    assert re.match(r'.*\nMark 1 files \(1\.0 GB\) from "x" available for removal\.\n.*' +
+                    r'Marked 1 files available for removal.\n',
                     result.output, re.DOTALL)
 
     ## by default, the cleaned copy should be marked as 'maybe wanted'
@@ -286,8 +286,8 @@ def test_clean(fixtures):
     file_copy.save()
     result = runner.invoke(cli.clean, args=['-f', '--now', 'x'])
     assert result.exit_code == 0
-    assert re.match(r'.*\nCleaning up 1 files \(1\.0 GB\) from x\.\n.*' +
-                    r'Marked 1 files for cleaning\n',
+    assert re.match(r'.*\nMark 1 files \(1\.0 GB\) from "x" available for removal\.\n.*' +
+                    r'Marked 1 files available for removal.\n',
                     result.output, re.DOTALL)
 
     file_copy = (ar.ArchiveFileCopy
@@ -295,6 +295,35 @@ def test_clean(fixtures):
                  .join(ac.ArchiveFile)
                  .where(ac.ArchiveFile.name == 'fred')).get()
     assert file_copy.wants_file == 'N'
+
+    ## if we clean with the '--cancel' option, all unwanted copies should again be marked wanted
+    result = runner.invoke(cli.clean, args=['-f', '--cancel', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\nMark 1 files \(1\.0 GB\) from "x" for keeping\.\n.*' +
+                    r'Marked 1 files for keeping.\n',
+                    result.output, re.DOTALL)
+
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')).get()
+    assert file_copy.wants_file == 'Y'
+
+    ## '--cancel' and '--now' are mutually exclusive options
+    result = runner.invoke(cli.clean, args=['--now', '--cancel', 'x'])
+    assert result.exit_code == 1
+    assert 'Options --cancel and --now are mutually exclusive.' in result.output
+
+    # using a non-existent node should be reported as an error
+    result = runner.invoke(cli.clean, args=['--force', '--cancel', 'y'])
+    assert result.exit_code == 1
+    assert 'Storage node "y" does not exist.' in result.output
+
+    # cleaning an archive node without the force flag or interactive
+    # confirmation should be an error
+    result = runner.invoke(cli.clean, args=['z'])
+    assert result.exit_code == 1
+    assert 'Cannot clean archive node "z" without forcing.' in result.output
 
 
 def test_active(fixtures):
