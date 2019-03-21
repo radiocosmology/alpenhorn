@@ -221,8 +221,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
         # Perform an update of all the existing copy requests
         if len(files_in) > 0:
-            update = ar.ArchiveFileCopyRequest.update(nice=nice, completed=False, cancelled=False, timestamp=dtnow,
-                                                      n_requests=ar.ArchiveFileCopyRequest.n_requests + 1)
+            update = ar.ArchiveFileCopyRequest.update(nice=nice, completed=False, cancelled=False, timestamp=dtnow)
 
             update = update.where(ar.ArchiveFileCopyRequest.file << files_in,
                                   ar.ArchiveFileCopyRequest.group_to == to_group,
@@ -235,7 +234,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
             # Construct a list of all the rows to insert
             insert = [{'file': fid, 'node_from': from_node, 'nice': 0,
                        'group_to': to_group, 'completed': False,
-                       'n_requests': 1, 'timestamp': dtnow} for fid in files_out]
+                       'timestamp': dtnow} for fid in files_out]
 
             # Do a bulk insert of these new rows
             ar.ArchiveFileCopyRequest.insert_many(insert).execute()

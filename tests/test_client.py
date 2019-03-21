@@ -112,7 +112,7 @@ def test_sync(fixtures):
                     r'Updating 0 existing requests and inserting 1 new ones\.\n$',
                     result.output, re.DOTALL)
 
-    ## by default, the cleaned copy should be marked as 'maybe wanted'
+    ## verify that there is a copy request for 'fred' from node 'x' to group 'bar'
     copy_request = (ar.ArchiveFileCopyRequest
                     .select()
                     .join(ac.ArchiveFile)
@@ -121,9 +121,8 @@ def test_sync(fixtures):
     assert copy_request.group_to.name == 'bar'
     assert not copy_request.completed
     assert not copy_request.cancelled
-    assert copy_request.n_requests == 1
 
-    ## if we run sync again, the copy request will simply get the 'n_requests' count incremented by 1
+    ## if we run sync again, the copy request will simply update the timestamp of the latest request
     result = runner.invoke(cli.sync, args=['--force', '--show_acq', '--show_files', 'x', 'bar'])
 
     assert result.exit_code == 0
@@ -133,16 +132,18 @@ def test_sync(fixtures):
                     r'Updating 1 existing requests and inserting 0 new ones\.\n$',
                     result.output, re.DOTALL)
 
-    ## by default, the cleaned copy should be marked as 'maybe wanted'
-    copy_request = (ar.ArchiveFileCopyRequest
+    # there should still be only one copy request for fred, just it's timestamp should have changed
+    copy_requests = (ar.ArchiveFileCopyRequest
                     .select()
                     .join(ac.ArchiveFile)
-                    .where(ac.ArchiveFile.name == 'fred')).get()
-    assert copy_request.node_from.name == 'x'
-    assert copy_request.group_to.name == 'bar'
-    assert not copy_request.completed
-    assert not copy_request.cancelled
-    assert copy_request.n_requests == 2
+                    .where(ac.ArchiveFile.name == 'fred'))
+    assert len(copy_requests) == 1
+    for req in copy_requests:
+        assert req.node_from.name == 'x'
+        assert req.group_to.name == 'bar'
+        assert not req.completed
+        assert not req.cancelled
+        assert req.timestamp > copy_request.timestamp
 
 
 def test_status(fixtures):
