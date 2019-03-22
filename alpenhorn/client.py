@@ -209,7 +209,9 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         # Get a list of all the file ids for exisiting requests
         requests = ar.ArchiveFileCopyRequest.select().where(
             ar.ArchiveFileCopyRequest.group_to == to_group,
-            ar.ArchiveFileCopyRequest.node_from == from_node
+            ar.ArchiveFileCopyRequest.node_from == from_node,
+            ~ar.ArchiveFileCopyRequest.completed,
+            ~ar.ArchiveFileCopyRequest.cancelled,
         )
         req_file_ids = [req.file_id for req in requests]
 
@@ -217,16 +219,10 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         files_in = [x for x in files_ids if x in req_file_ids]
         files_out = [x for x in files_ids if x not in req_file_ids]
 
-        click.echo("Updating %i existing requests and inserting %i new ones.\n" % (len(files_in), len(files_out)))
-
-        # Perform an update of all the existing copy requests
-        if len(files_in) > 0:
-            update = ar.ArchiveFileCopyRequest.update(nice=nice, completed=False, cancelled=False, timestamp=dtnow)
-
-            update = update.where(ar.ArchiveFileCopyRequest.file << files_in,
-                                  ar.ArchiveFileCopyRequest.group_to == to_group,
-                                  ar.ArchiveFileCopyRequest.node_from == from_node)
-            update.execute()
+        click.echo("Adding {} new requests{}.\n"
+                   .format(len(files_out) or 'no',
+                           ', keeping {} already existing'
+                           .format(len(files_in)) if len(files_in) else ''))
 
         # Insert any new requests
         if len(files_out) > 0:

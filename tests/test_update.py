@@ -215,6 +215,8 @@ def test_update_node_requests(tmpdir, fixtures):
     update.update_node_requests(z)
     req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
     assert req.completed
+    assert req.transfer_started
+    assert req.transfer_completed > req.transfer_started
 
     assert root_z.join('x', 'jim').check()
     assert root_z.join('x', 'jim').read() == fixtures['root'].join('x', 'jim').read()

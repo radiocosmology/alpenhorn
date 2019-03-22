@@ -109,7 +109,7 @@ def test_sync(fixtures):
     assert re.match(r'x \[1 files\]\n' +
                     r'x/fred\n' +
                     r'Will request that 1 files \(1\.0 GB\) be copied from node x to group bar\.\n' +
-                    r'Updating 0 existing requests and inserting 1 new ones\.\n$',
+                    r'Adding 1 new requests\.\n$',
                     result.output, re.DOTALL)
 
     ## verify that there is a copy request for 'fred' from node 'x' to group 'bar'
@@ -124,12 +124,11 @@ def test_sync(fixtures):
 
     ## if we run sync again, the copy request will simply update the timestamp of the latest request
     result = runner.invoke(cli.sync, args=['--force', '--show_acq', '--show_files', 'x', 'bar'])
-
     assert result.exit_code == 0
     assert re.match(r'x \[1 files\]\n' +
                     r'x/fred\n' +
                     r'Will request that 1 files \(1\.0 GB\) be copied from node x to group bar\.\n' +
-                    r'Updating 1 existing requests and inserting 0 new ones\.\n$',
+                    r'Adding no new requests, keeping 1 already existing\.\n$',
                     result.output, re.DOTALL)
 
     # there should still be only one copy request for fred, just it's timestamp should have changed
@@ -143,7 +142,33 @@ def test_sync(fixtures):
         assert req.group_to.name == 'bar'
         assert not req.completed
         assert not req.cancelled
-        assert req.timestamp > copy_request.timestamp
+        assert req.timestamp == copy_request.timestamp
+
+    # adding a second request after the first one was cancelled should add it,
+    # while leaving the first request untouched
+    copy_request.cancelled = True
+    copy_request.save(only=copy_request.dirty_fields)
+
+    result = runner.invoke(cli.sync, args=['--force', '--show_acq', '--show_files', 'x', 'bar'])
+    assert result.exit_code == 0
+    assert re.match(r'x \[1 files\]\n' +
+                    r'x/fred\n' +
+                    r'Will request that 1 files \(1\.0 GB\) be copied from node x to group bar\.\n' +
+                    r'Adding 1 new requests\.\n$',
+                    result.output, re.DOTALL)
+    copy_requests = (ar.ArchiveFileCopyRequest
+                    .select()
+                    .join(ac.ArchiveFile)
+                    .where(ac.ArchiveFile.name == 'fred'))
+    assert len(copy_requests) == 2
+    for req in copy_requests:
+        if req.id == copy_request.id:
+            assert req.timestamp == copy_request.timestamp
+            assert not req.completed
+            assert req.cancelled
+        else:
+            assert not req.completed
+            assert not req.cancelled
 
 
 def test_status(fixtures):
