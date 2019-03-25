@@ -154,8 +154,10 @@ def _import_file(node, file_path):
     # does not exist, or (2) if there has previously been a copy here ensure it
     # is checksummed to ensure the archives integrity.
     if not file_.copies.where(ar.ArchiveFileCopy.node == node).count():
-        copy = ar.ArchiveFileCopy.create(file=file_, node=node, has_file='Y',
-                                         wants_file='Y')
+        copy_size_b = os.stat(abspath).st_blocks * 512
+        copy = ar.ArchiveFileCopy.create(file=file_, node=node,
+                                         has_file='Y', wants_file='Y',
+                                         size_b=copy_size_b)
         log.info("Registered file copy \"%s/%s\" to DB.", acq_name, file_name)
     else:
         # Mark any previous copies as not being present...

@@ -975,14 +975,17 @@ def import_files(node_name, verbose, acq, dry):
                     registered_files.append(file_path)
                 else:
                     archive_file = ac.ArchiveFile.select().where(ac.ArchiveFile.name == f_name, ac.ArchiveFile.acq == acq).get()
+                    abs_path = os.path.join(node.root, file_path)
 
-                    if (os.path.getsize(os.path.join(node.root, file_path)) != archive_file.size_b):
+                    if (os.path.getsize(abs_path) != archive_file.size_b):
                         corrupt_files.append(file_path)
                         continue
 
                     added_files.append(file_path)
                     if not dry:
-                        ar.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
+                        copy_size_b = os.stat(abs_path).st_blocks * 512
+                        ar.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y',
+                                                  size_b=copy_size_b)
 
     # now find the minimum unknown acqs paths that we can report
     not_acqs_roots = []

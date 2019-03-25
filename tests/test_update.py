@@ -108,7 +108,7 @@ def test_update_node_integrity(fixtures):
     jim_file.md5sum = fixtures['files']['x']['jim']['md5']
     jim_file.save(only=jim_file.dirty_fields)
 
-    jim = ar.ArchiveFileCopy(file=jim_file, node=node, has_file='M')
+    jim = ar.ArchiveFileCopy(file=jim_file, node=node, has_file='M', size_b=512)
     jim.save()
 
     # create a local copy of 'fred', but with a corrupt contents
@@ -169,8 +169,8 @@ def test_update_node_delete(fixtures):
         c.save(only=c.dirty_fields)
 
         # add copies of the file on the archival nodes
-        ar.ArchiveFileCopy.create(file=c.file, node=node2, has_file='Y').save()
-        ar.ArchiveFileCopy.create(file=c.file, node=node3, has_file='Y').save()
+        ar.ArchiveFileCopy.create(file=c.file, node=node2, has_file='Y', size_b=512).save()
+        ar.ArchiveFileCopy.create(file=c.file, node=node3, has_file='Y', size_b=512).save()
 
     # update_node_delete should mark these files not present or wanted on the
     # node, and delete them from the filesystem
@@ -199,7 +199,7 @@ def test_update_node_requests(tmpdir, fixtures):
     jim.size_b = 0
     jim.md5sum = fixtures['files']['x']['jim']['md5']
     jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(file=jim, node=x, has_file='Y').save()
+    ar.ArchiveFileCopy(file=jim, node=x, has_file='Y', size_b=512).save()
 
     # make the 'z' node available locally
     root_z = tmpdir.join("ROOT_z")
