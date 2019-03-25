@@ -8,14 +8,14 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import datetime as dt
 import pytest
 import yaml
-import os
 from os import path
-
+import peewee as pw
 
 import alpenhorn.db as db
-from alpenhorn.acquisition import *
+from alpenhorn.acquisition import ArchiveAcq, AcqType, FileType, ArchiveFile
 
 tests_path = path.abspath(path.dirname(__file__))
 
@@ -82,6 +82,23 @@ def test_model(fixtures):
     assert files == { ( 'fred', ), ( 'jim', ), ( 'sheila', ) }
 
     freds = list(ArchiveFile.select().where(ArchiveFile.name == 'fred').dicts())
+
+    # the archive file should be registered in the last 5 seconds
+    now = dt.datetime.now()
+    for f in freds:
+        diff = now - f['registered']
+        assert diff.days == 0 and diff.seconds <= 5
+        # we don't need to check the registered time in the rest of the test
+        del f['registered']
+
     assert freds == [
         { 'id': 1, 'name': 'fred', 'acq': 1, 'type': 1, 'md5sum': None, 'size_b': None}
     ]
+
+
+def test_registered(fixtures):
+    """Verifies that registered times are unique per each ArchiveFile instance"""
+    assert (ArchiveFile
+            .select(pw.fn.Count(
+                pw.fn.Distinct(ArchiveFile.registered)))
+            .scalar()) > 1
