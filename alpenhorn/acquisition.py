@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import datetime
 import logging
 from os import path
 
@@ -297,12 +298,15 @@ class ArchiveFile(base_model):
         Size of file in bytes.
     md5sum : string
         md5 checksum of file. Used for verifying integrity.
+    registered : datetime
+        The time the file was registered in the database.
     """
     acq = pw.ForeignKeyField(ArchiveAcq, backref='files')
     type = pw.ForeignKeyField(FileType, backref='files')
     name = pw.CharField(max_length=255)
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
+    registered = pw.DateTimeField(default=datetime.datetime.now)
 
 
 class AcqInfoBase(base_model, ConfigClass):
