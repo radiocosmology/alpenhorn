@@ -30,11 +30,15 @@ class ArchiveFileCopy(base_model):
         - 'M': maybe, can delete if we need space
         - 'N': no, attempt to delete
         In all cases we try to keep at least two copies of the file around.
+    size_b : integer
+        Allocated size of file in bytes (calculated as a multiple of 512-byte
+        blocks).
     """
     file = pw.ForeignKeyField(ArchiveFile, backref='copies')
     node = pw.ForeignKeyField(StorageNode, backref='copies')
     has_file = EnumField(['N', 'Y', 'M', 'X'], default='N')
     wants_file = EnumField(['Y', 'M', 'N'], default='Y')
+    size_b = pw.BigIntegerField()
 
     class Meta:
         indexes = (

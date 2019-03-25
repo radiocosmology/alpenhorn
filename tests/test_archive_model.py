@@ -45,6 +45,7 @@ def load_fixtures():
     for copy in fixtures['file_copies']:
         copy['file'] = fa['files'][copy['file']]
         copy['node'] = fs['nodes'][copy['node']]
+        copy['size_b'] = 512
 
     # bulk load the file copies
     ArchiveFileCopy.insert_many(fixtures['file_copies']).execute()

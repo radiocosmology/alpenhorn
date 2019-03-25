@@ -150,6 +150,8 @@ def update_node_integrity(node):
             if util.md5sum_file(fullpath) == fcopy.file.md5sum:
                 log.info("File is A-OK!")
                 fcopy.has_file = 'Y'
+                copy_size_b = os.stat(fullpath).st_blocks * 512
+                fcopy.size_b = copy_size_b
             else:
                 log.error("File is corrupted!")
                 fcopy.has_file = 'X'
@@ -444,6 +446,7 @@ def update_node_requests(node):
         # Check integrity.
         if md5sum == req.file.md5sum:
             size_mb = req.file.size_b / 2**20.0
+            copy_size_b = os.stat(to_file).st_blocks * 512
             trans_time = end_time - start_time
             rate = size_mb / trans_time
             log.info("Pull complete (md5sum correct). Transferred %.1f MB in %i "
@@ -461,6 +464,7 @@ def update_node_requests(node):
                                   .get()
                         fcopy.has_file = 'Y'
                         fcopy.wants_file = 'Y'
+                        fcopy.size_b = copy_size_b
                         fcopy.save()
                         done = True
                     except pw.OperationalError:
@@ -469,8 +473,9 @@ def update_node_requests(node):
                         time.sleep(5)
                         db.config_connect()
             except pw.DoesNotExist:
-                ar.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
-                                          wants_file='Y').execute()
+                ar.ArchiveFileCopy.insert(file=req.file, node=node,
+                                          has_file='Y', wants_file='Y',
+                                          size_b=copy_size_b).execute()
 
             # Mark any FileCopyRequest for this file as completed
             ar.ArchiveFileCopyRequest.update(completed=True,
