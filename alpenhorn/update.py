@@ -24,7 +24,8 @@ log = logging.getLogger(__name__)
 # Parameters.
 max_time_per_node_operation = 300   # Don't let node operations hog time.
 
-RSYNC_FLAG = "qtspgoDL"
+RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner " \
+    + "--copy-links --sparse"
 
 # Globals.
 done_transport_this_cycle = False
@@ -383,11 +384,12 @@ def update_node_requests(node):
                 else:
                     md5sum = None
 
-            # Next try rsync over ssh. We need to explicitly calculate the md5
-            # hash after the fact
+            # Next try rsync over ssh.
             elif util.command_available('rsync'):
-                cmd = ("rsync -z%s --rsync-path=\"ionice -c2 -n4 rsync\" -e \"ssh -q\" %s %s" %
-                       (RSYNC_FLAG, from_path, to_dir))
+                cmd = ('rsync --compress {0} '
+                       '--rsync-path="ionice -c2 -n4 rsync" '
+                       '--rsh="ssh -q" {1} {2}').format(RSYNC_OPTS,
+                                                        from_path, to_dir)
                 ret, stdout, stderr = util.run_command(cmd)
 
                 md5sum = util.md5sum_file(to_file) if ret == 0 else None
@@ -421,7 +423,7 @@ def update_node_requests(node):
             # If we couldn't just link the file, try copying it with rsync.
             except OSError:
                 if util.command_available('rsync'):
-                    cmd = "rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_dir)
+                    cmd = "rsync {0} {1} {2}".format(RSYNC_OPTS, from_path, to_dir)
                     ret, stdout, stderr = util.run_command(cmd)
 
                     md5sum = util.md5sum_file(to_file) if ret == 0 else None
