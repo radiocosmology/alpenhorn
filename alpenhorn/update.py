@@ -6,7 +6,7 @@ from __future__ import absolute_import
 
 import os
 import time
-import datetime
+import datetime as dt
 import re
 import logging
 
@@ -125,7 +125,7 @@ def update_node_free_space(node):
     # Update the DB with the free space. Save only the dirty fields to ensure we
     # don't clobber changes made manually to the database
     node.avail_gb = avail_gb
-    node.avail_gb_last_checked = datetime.datetime.now()
+    node.avail_gb_last_checked = dt.datetime.now()
     node.save(only=node.dirty_fields)
 
     log.info("Node \"%s\" has %.2f GB available." % (node.name, avail_gb))
@@ -357,6 +357,8 @@ def update_node_requests(node):
         # Giddy up!
         log.info("Transferring file \"%s/%s\"." % (req.file.acq.name, req.file.name))
         start_time = time.time()
+        req.transfer_started = dt.datetime.fromtimestamp(start_time)
+        req.save(only=req.dirty_fields)
 
         # Attempt to transfer the file. Each of the methods below needs to set a
         # return code `ret` and give an `md5sum` of the transferred file.
@@ -469,9 +471,12 @@ def update_node_requests(node):
                                           wants_file='Y').execute()
 
             # Mark any FileCopyRequest for this file as completed
-            ar.ArchiveFileCopyRequest.update(completed=True).where(
+            ar.ArchiveFileCopyRequest.update(completed=True,
+                                             transfer_completed=dt.datetime.fromtimestamp(end_time)).where(
                 ar.ArchiveFileCopyRequest.file == req.file).where(
-                ar.ArchiveFileCopyRequest.group_to == node.group).execute()
+                    ar.ArchiveFileCopyRequest.group_to == node.group,
+                    ~ar.ArchiveFileCopyRequest.completed,
+                    ~ar.ArchiveFileCopyRequest.cancelled).execute()
 
             if node.storage_type == "T":
                 # This node is getting the transport king.

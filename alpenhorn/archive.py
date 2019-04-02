@@ -59,10 +59,12 @@ class ArchiveFileCopyRequest(base_model):
         Set to true when the copy has succeeded.
     cancelled : bool
         Set to true if the copy is no longer wanted.
-    n_requests : integer
-        The number of previous requests that have been made for this copy.
     timestamp : datetime
-        The time the most recent request was made.
+        The time the request was made.
+    transfer_started : datetime
+        The time the transfer was started.
+    transfer_completed : datetime
+        The time the transfer was completed.
     """
     file = pw.ForeignKeyField(ArchiveFile, backref='requests')
     group_to = pw.ForeignKeyField(StorageGroup, backref='requests_to')
@@ -70,8 +72,11 @@ class ArchiveFileCopyRequest(base_model):
     nice = pw.IntegerField()
     completed = pw.BooleanField()
     cancelled = pw.BooleanField(default=False)
-    n_requests = pw.IntegerField()
     timestamp = pw.DateTimeField()
+    transfer_started = pw.DateTimeField(null=True)
+    transfer_completed = pw.DateTimeField(null=True)
 
     class Meta:
-        primary_key = pw.CompositeKey('file', 'group_to', 'node_from')
+        indexes = (
+            (('file', 'group_to', 'node_from'), False),        # non-unique index
+        )

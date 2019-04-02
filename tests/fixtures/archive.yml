@@ -12,5 +12,4 @@ copy_requests:
     group_to: bar
     nice: 3
     completed: False
-    n_requests: 0
     timestamp: '2017-03-03T15:02:43'
