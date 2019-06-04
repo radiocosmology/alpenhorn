@@ -702,6 +702,143 @@ def test_nested_import_files(fixtures):
     ]
 
 
+def test_import_files_from_acq_dir(fixtures):
+    """Test the 'import_files' command"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    # fixup 'jim' details in the DB
+    jim = ac.ArchiveFile.get(name='jim')
+    jim.size_b = 0
+    jim.md5sum = fixtures['files']['x']['jim']['md5']
+    jim.save(only=jim.dirty_fields)
+    assert jim.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+    # switch inside the acquisition
+    tmpdir.join('x').chdir()
+
+    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        ==== Summary ====
+
+        Added 1 files
+
+        0 corrupt files.
+        0 files already registered.
+        1 files not known
+        0 directories were not acquisitions.
+
+        Added files:
+        x/jim
+
+        Corrupt:
+
+        Unknown files:
+        x/foo.log
+
+        """
+    import textwrap
+    assert textwrap.dedent(expected_output) in result.output
+
+    assert jim.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
+
+
+def test_import_files_within_acq_dir(fixtures):
+    """Test the 'import_files' command"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    acq_type = ac.AcqType.create(name='zab')
+    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
+    file_type = ac.FileType.get(name='zxc')
+    acq_file = ac.ArchiveFile.create(
+        name='acq_data/x_123_1_data/raw/acq_123_1.zxc',
+        acq=acq,
+        type=file_type,
+        size_b=len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents']),
+        md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+    # switch inside the acquisition
+    tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
+
+    node = st.StorageNode.get(name='x')
+    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        ==== Summary ====
+
+        Added 1 files
+
+        0 corrupt files.
+        0 files already registered.
+        2 files not known
+        0 directories were not acquisitions.
+
+        Added files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc
+
+        Corrupt:
+
+        Unknown files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc
+
+        """
+    import textwrap
+    assert textwrap.dedent(expected_output) in result.output
+
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
+
+
+def test_import_files_with_limiting(fixtures):
+    """Test the 'import_files' command in combination with the `--acq` option"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    acq_type = ac.AcqType.create(name='zab')
+    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
+    file_type = ac.FileType.get(name='zxc')
+    acq_file = ac.ArchiveFile.create(
+        name='acq_data/x_123_1_data/raw/acq_123_1.zxc',
+        acq=acq,
+        type=file_type,
+        size_b=len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents']),
+        md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+    # switch inside the acquisition so the `--acq x` is completely outside the current path
+    tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
+
+    node = st.StorageNode.get(name='x')
+    result = runner.invoke(cli.import_files, args=['-vv', '--acq', 'x', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        Acquisition "x" is outside the current directory and will be ignored.
+
+        ==== Summary ====
+
+        Added 0 files
+
+        0 corrupt files.
+        0 files already registered.
+        0 files not known
+        0 directories were not acquisitions.
+
+        Added files:
+
+        Corrupt:
+
+        Unknown files:
+
+        """
+    import inspect
+    assert inspect.cleandoc(expected_output) in result.output
+
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+
 def test_create_group(fixtures):
     """Test the create group command"""
     runner = CliRunner()
