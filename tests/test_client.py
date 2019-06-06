@@ -646,6 +646,69 @@ def test_import_files(fixtures):
     ]
 
 
+def test_import_files_create(fixtures):
+    """Test the 'import_files' command with the `--create` flag"""
+    runner = CliRunner()
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+
+    ## check the starting database state
+    assert (ac.ArchiveAcq.select()
+            .where(ac.ArchiveAcq.name == '12345678T000000Z_inst_zab')
+            .count()) == 0
+
+    result = runner.invoke(cli.import_files, args=['--create', '-vv', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\n==== Summary ====\n\n' +
+                    r'Registered 2 new acquisitions\n' +
+                    r'Added 9 files\n\n' +
+                    r'0 corrupt files\.\n' +
+                    r'0 files already registered\.\n' +
+                    r'6 files not known\n' +
+                    r'0 directories were not acquisitions\.\n\n' +
+                    r'New acquisitions:\n' +
+                    r'12345678T000000Z_inst_zab\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab\n\n' +
+                    r'Added files:\n' +
+                    r'12345678T000000Z_inst_zab/ch_master.log\n' +
+                    r'12345678T000000Z_inst_zab/foo.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/acq_123_2_proc.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/hk_123.zxc\n' +
+                    r'x/foo.log\n' +
+                    r'x/jim\n\n' +
+                    r'Corrupt:\n' +
+                    r'\n' +
+                    r'Unknown files:\n' +
+                    r'12345678T000000Z_inst_zab/.foo.zxc.lock\n' +
+                    r'12345678T000000Z_inst_zab/hello.txt\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/.acq_123_2_proc.zxc.lock\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/.hk_123.zxc.lock\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
+                    r'\n' +
+                    r'Unknown acquisitions:\n\n$',
+                    result.output, re.DOTALL)
+
+    ## check the database state
+    assert (ac.ArchiveAcq.select()
+            .where(ac.ArchiveAcq.name == '12345678T000000Z_inst_zab')
+            .count()) == 1
+
+    foo_logs = list(ar.ArchiveFileCopy
+                    .select(ac.ArchiveFile.name,
+                            ar.ArchiveFileCopy.has_file,
+                            ar.ArchiveFileCopy.wants_file)
+                    .join(ac.ArchiveFile)
+                    .where(ac.ArchiveFile.name == 'foo.log')
+                    .dicts())
+    assert foo_logs == [
+        {'name': 'foo.log', 'has_file': 'Y', 'wants_file': 'Y'}
+    ]
+
 def test_nested_import_files(fixtures):
     """Test the 'import_files' command"""
     runner = CliRunner()
@@ -791,6 +854,50 @@ def test_import_files_within_acq_dir(fixtures):
     import textwrap
     assert textwrap.dedent(expected_output) in result.output
 
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
+
+
+def test_import_files_within_acq_dir_create(fixtures):
+    """Test the 'import_files' command from within a directory, combined with the --create flag"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    # switch inside the acquisition
+    tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
+
+    result = runner.invoke(cli.import_files, args=['--create', '-vv', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        ==== Summary ====
+
+        Registered 1 new acquisitions
+        Added 2 files
+
+        0 corrupt files.
+        0 files already registered.
+        1 files not known
+        0 directories were not acquisitions.
+
+        New acquisitions:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab
+
+        Added files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc
+
+        Corrupt:
+
+        Unknown files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock
+
+        """
+    import textwrap
+    assert textwrap.dedent(expected_output) in result.output
+
+    acq = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == 'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab').get()
+    acq_file = ac.ArchiveFile.select().where(ac.ArchiveFile.acq == acq, ac.ArchiveFile.name == 'acq_data/x_123_1_data/raw/acq_123_1.zxc').get()
+    assert acq_file.size_b == len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents'])
+    assert acq_file.md5sum == fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5']
     assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
 
 
