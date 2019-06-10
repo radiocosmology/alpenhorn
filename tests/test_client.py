@@ -565,8 +565,11 @@ def test_import_files(fixtures):
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
-    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
 
+    # corrupt 'x/jim':
+    tmpdir.join('x', 'jim').write('Corrupted for the test')
+
+    result = runner.invoke(cli.import_files, args=['-vv', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Added 0 files\n\n' +
@@ -584,11 +587,9 @@ def test_import_files(fixtures):
                     r'alp_root\n\n$',
                     result.output, re.DOTALL)
 
-    ## now add a known file ('fred') and pretend 'jim' should be added
+    ## now add a known file ('fred') and restore 'jim' to correct contents
     tmpdir.join('x', 'fred').write('')
-    f = ac.ArchiveFile.get(ac.ArchiveFile.name == 'jim')
-    f.size_b = 0
-    f.save()
+    tmpdir.join('x', 'jim').write('')
 
     result = runner.invoke(cli.import_files, args=['-vv', '--dry', 'x'])
     assert result.exit_code == 0
@@ -652,7 +653,8 @@ def test_nested_import_files(fixtures):
     tmpdir = fixtures['root']
     tmpdir.chdir()
 
-    ## pretend 'jim' should be added
+    ## corrupt 'jim' and pretend an acquisition in 'alp_root' should be added
+    tmpdir.join('x', 'jim').write('Corrupted for the test')
     acq_type = ac.AcqType.create(name='zab')
     acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
     file_type = ac.FileType.get(name='zxc')

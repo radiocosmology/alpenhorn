@@ -79,10 +79,20 @@ def load_fixtures(tmpdir):
 
     def make_files(dir_name, files, root):
         d = root.mkdir(dir_name)
+        rel_path = os.path.relpath(str(d), str(p))
         for file_name, file_data in files.items():
             if 'md5' in file_data:
                 f = d.join(file_name)
                 f.write(file_data['contents'])
+                for archive_file in (ac.ArchiveFile
+                                     .select()
+                                     .join(ac.ArchiveAcq)
+                                     .where(ac.ArchiveAcq.name + "/" + ac.ArchiveFile.name
+                                            == rel_path + "/" + file_name)):
+                    archive_file.size_b = len(file_data['contents'])
+                    archive_file.md5sum = file_data['md5']
+                    archive_file.save()
+                    break
             else:               # it's really a directory, recurse!
                 make_files(file_name, file_data, d)
 
