@@ -662,32 +662,25 @@ def test_import_files_create(fixtures):
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Registered 2 new acquisitions\n' +
-                    r'Added 9 files\n\n' +
+                    r'Added 6 files\n\n' +
                     r'0 corrupt files\.\n' +
                     r'0 files already registered\.\n' +
-                    r'6 files not known\n' +
+                    r'2 files not known\n' +
                     r'0 directories were not acquisitions\.\n\n' +
                     r'New acquisitions:\n' +
                     r'12345678T000000Z_inst_zab\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab\n\n' +
                     r'Added files:\n' +
                     r'12345678T000000Z_inst_zab/ch_master.log\n' +
-                    r'12345678T000000Z_inst_zab/foo.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/acq_123_2_proc.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/hk_123.zxc\n' +
                     r'x/foo.log\n' +
                     r'x/jim\n\n' +
                     r'Corrupt:\n' +
                     r'\n' +
                     r'Unknown files:\n' +
-                    r'12345678T000000Z_inst_zab/.foo.zxc.lock\n' +
                     r'12345678T000000Z_inst_zab/hello.txt\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/.acq_123_2_proc.zxc.lock\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/.hk_123.zxc.lock\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
                     r'\n' +
                     r'Unknown acquisitions:\n\n$',
@@ -729,26 +722,20 @@ def test_nested_import_files(fixtures):
         md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
 
     result = runner.invoke(cli.import_files, args=['-vv', 'x'])
-
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Added 1 files\n\n' +
                     r'1 corrupt files\.\n' +
                     r'0 files already registered\.\n' +
-                    r'9 files not known\n' +
+                    r'4 files not known\n' +
                     r'1 directories were not acquisitions\.\n\n' +
                     r'Added files:\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc\n\n' +
                     r'Corrupt:\n' +
                     r'x/jim\n\n' +
                     r'Unknown files:\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/.acq_123_2_proc.zxc.lock\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/proc/acq_123_2_proc.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/.hk_123.zxc.lock\n' +
-                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/housekeeping_data/hk_123.zxc\n' +
                     r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
                     r'x/foo\.log\n\n' +
                     r'Unknown acquisitions:\n' +
@@ -828,7 +815,6 @@ def test_import_files_within_acq_dir(fixtures):
     # switch inside the acquisition
     tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
 
-    node = st.StorageNode.get(name='x')
     result = runner.invoke(cli.import_files, args=['-vv', 'x'])
     assert result.exit_code == 0
     expected_output = """
@@ -838,7 +824,7 @@ def test_import_files_within_acq_dir(fixtures):
 
         0 corrupt files.
         0 files already registered.
-        2 files not known
+        1 files not known
         0 directories were not acquisitions.
 
         Added files:
@@ -847,7 +833,6 @@ def test_import_files_within_acq_dir(fixtures):
         Corrupt:
 
         Unknown files:
-        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock
         alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc
 
         """
@@ -875,7 +860,7 @@ def test_import_files_within_acq_dir_create(fixtures):
 
         0 corrupt files.
         0 files already registered.
-        1 files not known
+        0 files not known
         0 directories were not acquisitions.
 
         New acquisitions:
@@ -888,7 +873,6 @@ def test_import_files_within_acq_dir_create(fixtures):
         Corrupt:
 
         Unknown files:
-        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/.acq_123_proc.zxc.lock
 
         """
     import textwrap

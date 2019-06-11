@@ -8,6 +8,7 @@ import sys
 import os
 import datetime
 import logging
+import re
 
 import click
 import peewee as pw
@@ -20,6 +21,8 @@ import alpenhorn.auto_import as ai
 
 
 log = logging.getLogger(__name__)
+
+RE_LOCK_FILE = re.compile('^\..*\.lock$')
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
@@ -937,11 +940,11 @@ def import_files(node_name, verbose, acq, create, dry):
                 _, acq_name = acq_type_name
                 if d == acq_name:
                     # the directory is the acquisition
-                    acq_files[acq_name] += fs
+                    acq_files[acq_name] += [f for f in fs if not RE_LOCK_FILE.match(f) and not os.path.isfile(os.path.join(d, '.{}.lock'.format(f)))]
                 if d.startswith(acq_name + "/"):
                     # the directory is inside an acquisition
                     acq_dirname = os.path.relpath(d, acq_name)
-                    acq_files[acq_name] += [(acq_dirname + '/' + f) for f in fs]
+                    acq_files[acq_name] += [(acq_dirname + '/' + f) for f in fs if not RE_LOCK_FILE.match(f) and not os.path.isfile(os.path.join(d, '.{}.lock'.format(f)))]
             else:
                 not_acqs.append(d)
 
