@@ -7,6 +7,7 @@ from __future__ import absolute_import
 import time
 import os
 from os.path import join, dirname, exists
+import re
 
 import pytest
 
@@ -362,6 +363,21 @@ def test_import(workers, test_files):
     _verify_db(test_files, copies_on_node=node)
 
     _verify_files(workers[0])
+
+
+def test_status(workers, network):
+    """Check for #109, `alpenhorn status` failing with MySQL storage"""
+
+    status = client.containers.run(
+        'alpenhorn', remove=True, detach=False, network_mode=network,
+        command="alpenhorn status"
+    )
+    assert re.search(r'^node_0\s+9\s+0.0\s+100\.0\s+100\.0\s+container-0:/data$',
+                     status, re.MULTILINE)
+    assert re.search(r'^node_1\s+0\s+0.0\s+container-1:/data$',
+                     status, re.MULTILINE)
+    assert re.search(r'^node_2\s+0\s+0.0\s+container-2:/data$',
+                     status, re.MULTILINE)
 
 
 # ====== Test that the sync between nodes works ======
