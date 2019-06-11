@@ -290,6 +290,9 @@ def update_node_requests(node):
 
     for req in requests:
 
+        if time.time() - start_time > max_time_per_node_operation:
+            break  # Don't hog all the time.
+
         # Only continue if the node is actually active
         if not req.node_from.active:
             continue
@@ -507,6 +510,3 @@ def update_node_requests(node):
             ar.ArchiveFileCopy.update(has_file='M').where(
                 ar.ArchiveFileCopy.file == req.file,
                 ar.ArchiveFileCopy.node == req.node_from).execute()
-
-        if time.time() - start_time > max_time_per_node_operation:
-            break  # Don't hog all the time.
