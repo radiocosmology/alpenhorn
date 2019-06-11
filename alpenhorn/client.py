@@ -277,8 +277,8 @@ def status(all):
     for node in nodes.tuples():
         node_name, file_count, file_size, node_host, node_root = node
         pct_count = (100.0 * file_count / total_count) if total_count else None
-        pct_size = (100.0 * file_size / total_size) if total_count and file_size else None
-        file_size_tb = (file_size / 2**40.0) if file_count else None
+        pct_size = (100.0 * float(file_size / total_size)) if total_count and file_size else None
+        file_size_tb = (float(file_size) / 2**40.0) if file_count else None
         node_path = '%s:%s' % (node_host, node_root)
         data.append([node_name, file_count, file_size_tb, pct_count, pct_size, node_path])
 
