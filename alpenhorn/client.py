@@ -869,9 +869,9 @@ def deactivate(root_or_name):
 @click.argument('node_name', metavar='NODE')
 @click.option('-v', '--verbose', count=True)
 @click.option('--acq', help='Limit import to specified acquisition directories.', multiple=True, default=None)
-@click.option('--create', help='Allow import of new acquisitions', is_flag=True)
+@click.option('--register-new', help='Register new files instead of ignoring them.', is_flag=True)
 @click.option('--dry', '-d', help='Dry run. Do not modify database.', is_flag=True)
-def import_files(node_name, verbose, acq, create, dry):
+def import_files(node_name, verbose, acq, register_new, dry):
     """Scan the current directory for known acquisition files and add them into the database for NODE.
 
     This command is useful for manually maintaining an archive where we cannot
@@ -960,7 +960,7 @@ def import_files(node_name, verbose, acq, create, dry):
                 file_names = [f.name for f in acq.files]
                 local_file_names = [f.name for f in acq.files.join(ar.ArchiveFileCopy).where(ar.ArchiveFileCopy.node == node)]
             except pw.DoesNotExist:
-                if create:
+                if register_new:
                     acq_type, _ = ac.AcqType.detect(acq_name, node)
                     acq = ac.ArchiveAcq(name=acq_name, type=acq_type)
                     if not dry:
@@ -984,7 +984,7 @@ def import_files(node_name, verbose, acq, create, dry):
                 file_path = os.path.join(acq_name, f_name)
 
                 # Check if file exists in database
-                if not create and f_name not in file_names:
+                if not register_new and f_name not in file_names:
                     unknown_files.append(file_path)
                     continue
 
@@ -1010,7 +1010,7 @@ def import_files(node_name, verbose, acq, create, dry):
                                 corrupt_files.append(file_path)
                                 continue
                     else:
-                        # not a known file, create the ArchiveFile instance
+                        # not a known file, register the new ArchiveFile instance
                         file_type = ac.FileType.detect(f_name, acq, node)
                         if not file_type:
                             unknown_files.append(file_path)
@@ -1050,7 +1050,7 @@ def import_files(node_name, verbose, acq, create, dry):
 
     print("\n==== Summary ====")
     print()
-    if create:
+    if register_new:
         print("Registered %i new acquisitions" % len(new_acqs))
     print("Added %i files" % len(added_files))
     print()
@@ -1061,7 +1061,7 @@ def import_files(node_name, verbose, acq, create, dry):
 
     if verbose > 0:
         print()
-        if create:
+        if register_new:
             print("New acquisitions:")
             for an in sorted(new_acqs):
                 print(an)

@@ -561,7 +561,7 @@ def test_import_files(fixtures):
     help_result = runner.invoke(cli.import_files, ['--help'])
     assert help_result.exit_code == 0
     assert 'Scan the current directory for known acquisition files' in help_result.output
-    assert 'Options:\n  -v, --verbose\n  --acq TEXT     Limit import to specified acquisition directories.' in help_result.output
+    assert 'Options:\n  -v, --verbose\n  --acq TEXT      Limit import to specified acquisition directories.' in help_result.output
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
@@ -646,8 +646,8 @@ def test_import_files(fixtures):
     ]
 
 
-def test_import_files_create(fixtures):
-    """Test the 'import_files' command with the `--create` flag"""
+def test_import_files_register_new(fixtures):
+    """Test the 'import_files' command with the `--register-new` flag"""
     runner = CliRunner()
 
     tmpdir = fixtures['root']
@@ -658,7 +658,7 @@ def test_import_files_create(fixtures):
             .where(ac.ArchiveAcq.name == '12345678T000000Z_inst_zab')
             .count()) == 0
 
-    result = runner.invoke(cli.import_files, args=['--create', '-vv', 'x'])
+    result = runner.invoke(cli.import_files, args=['--register-new', '-vv', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n==== Summary ====\n\n' +
                     r'Registered 2 new acquisitions\n' +
@@ -842,15 +842,15 @@ def test_import_files_within_acq_dir(fixtures):
     assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
 
 
-def test_import_files_within_acq_dir_create(fixtures):
-    """Test the 'import_files' command from within a directory, combined with the --create flag"""
+def test_import_files_within_acq_dir_register_new(fixtures):
+    """Test the 'import_files' command from within a directory, combined with the --register-new flag"""
     tmpdir = fixtures['root']
     runner = CliRunner()
 
     # switch inside the acquisition
     tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
 
-    result = runner.invoke(cli.import_files, args=['--create', '-vv', 'x'])
+    result = runner.invoke(cli.import_files, args=['--register-new', '-vv', 'x'])
     assert result.exit_code == 0
     expected_output = """
         ==== Summary ====
