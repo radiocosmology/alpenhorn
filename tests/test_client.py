@@ -463,8 +463,7 @@ def test_unmount_transport(mock, fixtures):
                     result.output, re.DOTALL)
 
 
-@patch('alpenhorn.util.alpenhorn_node_check')
-def test_activate(mock_node_check, fixtures):
+def test_activate(fixtures):
     """Test the 'activate' command"""
     runner = CliRunner()
 
@@ -493,7 +492,6 @@ def test_activate(mock_node_check, fixtures):
     node.save()
 
     # test for error when check for ALPENHORN_NODE fails
-    mock_node_check.return_value = False
     result = runner.invoke(cli.activate, args=['x'])
     assert result.exit_code == 1
     assert 'Node "x" does not match ALPENHORN_NODE' in result.output
@@ -501,9 +499,10 @@ def test_activate(mock_node_check, fixtures):
 
     # test for success when check for ALPENHORN_NODE passes and the node is
     # mounted
-    mock_node_check.return_value = True
+    x_root = fixtures['root'].join('x')
+    x_root.join('ALPENHORN_NODE').write('x')
     result = runner.invoke(cli.activate,
-                           args=['--path=/bla',
+                           args=['--path=' + str(x_root),
                                  '--user=bozo',
                                  '--address=foobar.example.com',
                                  'x'])
@@ -515,7 +514,7 @@ def test_activate(mock_node_check, fixtures):
 
     node = st.StorageNode.get(name='x')
     assert node.active
-    assert node.root == '/bla'
+    assert node.root == x_root
     assert node.username == 'bozo'
     assert node.address == 'foobar.example.com'
     assert node.host == output[0].split('"')[1] == util.get_short_hostname()
