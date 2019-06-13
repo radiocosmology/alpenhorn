@@ -105,16 +105,25 @@ def get_short_hostname():
 
 
 def alpenhorn_node_check(node):
-    """Returns True if ALPENHORN_NODE contains node name"""
+    """Check for valid ALPENHORN_NODE file contents
 
-    if node.active:
-        file_path = os.path.join(node.root, 'ALPENHORN_NODE')
-        if os.path.isfile(file_path):
-            with open(file_path, 'r') as f:
-                first_line = f.readline()
-                # Check if the actual node name is in the textfile
-                if node.name == first_line.rstrip():
-                    # Great! Everything is as expected.
-                    return True
+    Return
+    ------
+
+    True if ALPENHORN_NODE is present in `node.root` directory and contains the
+    contains node name as its first line, False otherwise.
+
+    .. Note:: The caller needs to ensure the StorageNode has the appropriate
+    `active` status.
+    """
+
+    file_path = os.path.join(node.root, 'ALPENHORN_NODE')
+    if os.path.isfile(file_path):
+        with open(file_path, 'r') as f:
+            first_line = f.readline()
+            # Check if the actual node name is in the textfile
+            if node.name == first_line.rstrip():
+                # Great! Everything is as expected.
+                return True
 
     return False
