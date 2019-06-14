@@ -389,11 +389,15 @@ def test_active(fixtures):
 @patch('alpenhorn.client.get_e2label', return_value=None)
 @patch('os.path.realpath', return_value=None)
 @patch('os.mkdir')
-@patch('os.popen', side_effect=[StringIO(u'Number  Start   End     Size    Type     File system  Flags\nfoobar'), StringIO(u'')])
+@patch('subprocess.check_output', side_effect=[
+    'Number  Start   End     Size    Type     File system  Flags\nfoobar',
+    '',
+])
+@patch('subprocess.check_call', return_value=0)
 @patch('glob.glob', return_value=['/dev/disk/by-id/fake-12-34-56-78'])
 @patch('os.getuid', return_value=0)
-@patch('os.system', return_value=None)
-def test_format_transport(system_mock, getuid_mock, glob_mock, popen_mock, mkdir_mock, realpath_mock, get_e2label_mock, fixtures):
+def test_format_transport(getuid_mock, glob_mock, check_call_mock, check_output_mock,
+                          mkdir_mock, realpath_mock, get_e2label_mock, fixtures):
     """Test the 'mount_transport' command"""
     runner = CliRunner()
 
@@ -409,8 +413,13 @@ def test_format_transport(system_mock, getuid_mock, glob_mock, popen_mock, mkdir
                     r'.*\nSuccessfully created storage node.\n' +
                     r'Node created but not activated. Run alpenhorn mount_transport for that.',
                     result.output, re.DOTALL)
-    assert system_mock.mock_calls == [call('/sbin/e2label /dev/disk/by-id/fake-12-34-56-78-part1 CH-12-34-56-78')]
-    assert popen_mock.mock_calls == [call('parted -s /dev/disk/by-id/fake-12-34-56-78 print'), call('df')]
+    assert check_call_mock.mock_calls == [
+        call(['/sbin/e2label', '/dev/disk/by-id/fake-12-34-56-78-part1', 'CH-12-34-56-78'])i
+    ]
+    assert check_output_mock.mock_calls == [
+        call(['parted', '-s', '/dev/disk/by-id/fake-12-34-56-78', 'print']),
+        call(['df'])
+    ]
     assert mkdir_mock.mock_calls == [call('/mnt/CH-12-34-56-78')]
     node = st.StorageNode.get(name='CH-12-34-56-78')
     assert node.group.name == 'transport'
