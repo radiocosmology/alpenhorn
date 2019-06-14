@@ -10,6 +10,7 @@ import datetime
 import logging
 import re
 import subprocess
+import time
 
 import click
 import peewee as pw
@@ -669,18 +670,14 @@ def format_transport(serial_num):
     print("Checking to see if disc is formatted. Please wait.")
     try:
         formatted = False
-        part_start = False
-        output = subprocess.check_output(['parted', '-s', dev, 'print'])
-        for l in output.split('\n'):
-            if not l:
-                break
-            if l.find("Number") == 0 and l.find("Start") > 0 and l.find("File system") > 0:
-                part_start = True
-            elif l.strip() != "" and part_start:
-                formatted = True
-    except subprocess.CalledProcessError as e:
-        print("Reading the partition failed:", e.output)
-        exit(1)
+        # check if the block device is partitioned
+        subprocess.check_output(['blkid', '-p', dev])
+
+        # now check if the partition is formatted
+        if 'TYPE=' in subprocess.check_output(['blkid', '-p', dev_part]):
+            formatted = True
+    except subprocess.CalledProcessError:
+        pass
 
     if not formatted:
         if not click.confirm("Disc is not formatted. Should I format it?"):
@@ -694,6 +691,10 @@ def format_transport(serial_num):
         except subprocess.CalledProcessError as e:
             print("Failed to create the partition! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
             exit(1)
+
+        # pause to give udev rules time to get updated
+        time.sleep(1)
+
         print("Formatting disc. Please wait.")
         try:
             subprocess.check_call(['mkfs.ext4', dev_part, '-m', '0',
@@ -731,8 +732,6 @@ def format_transport(serial_num):
         output = subprocess.check_output(['df'])
         dev_part_abs = os.path.realpath(dev_part)
         for l in output.split('\n'):
-            if not l:
-                break
             if l.find(root) > 0:
                 if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
                     print("%s is already mounted at %s" %
