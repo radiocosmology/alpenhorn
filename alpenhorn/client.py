@@ -9,6 +9,8 @@ import os
 import datetime
 import logging
 import re
+import subprocess
+import time
 
 import click
 import peewee as pw
@@ -666,26 +668,40 @@ def format_transport(serial_num):
 
     # Figure out if it is formatted.
     print("Checking to see if disc is formatted. Please wait.")
-    fp = os.popen("parted -s %s print" % dev)
     formatted = False
-    part_start = False
-    while True:
-        l = fp.readline()
-        if not l:
-            break
-        if l.find("Number") == 0 and l.find("Start") > 0 and l.find("File system") > 0:
-            part_start = True
-        elif l.strip() != "" and part_start:
+    try:
+        # check if the block device is partitioned
+        subprocess.check_output(['blkid', '-p', dev])
+
+        # now check if the partition is formatted
+        if 'TYPE=' in subprocess.check_output(['blkid', '-p', dev_part]):
             formatted = True
-    fp.close()
+    except subprocess.CalledProcessError:
+        pass
 
     if not formatted:
         if not click.confirm("Disc is not formatted. Should I format it?"):
             return
         print("Creating partition. Please wait.")
-        os.system("parted -s -a optimal %s mklabel gpt -- mkpart primary 0%% 100%%" % dev)
+        try:
+            subprocess.check_call(['parted', '-s', '-a', 'optimal', dev,
+                                   'mklabel', 'gpt',
+                                   '--',
+                                   'mkpart', 'primary', '0%', '100%'])
+        except subprocess.CalledProcessError as e:
+            print("Failed to create the partition! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+            exit(1)
+
+        # pause to give udev rules time to get updated
+        time.sleep(1)
+
         print("Formatting disc. Please wait.")
-        os.system("mkfs.ext4 %s -m 0 -L CH-%s" % (dev_part, serial_num))
+        try:
+            subprocess.check_call(['mkfs.ext4', dev_part, '-m', '0',
+                                   '-L', 'CH-{}'.format(serial_num)])
+        except subprocess.CalledProcessError as e:
+            print("Failed to format the disk! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+            exit(1)
     else:
         print("Disc is already formatted.")
 
@@ -699,9 +715,10 @@ def format_transport(serial_num):
         print("Labelling the disc as \"%s\" (using e2label) ..." % (name))
         assert dev_part is not None
         assert len(name) <= MAX_E2LABEL_LEN
-        stat = os.system("/sbin/e2label %s %s" % (dev_part, name))
-        if stat:
-            print("Failed to e2label! Stat = %s. I quit." % (stat))
+        try:
+            subprocess.check_call(['/sbin/e2label', dev_part, name])
+        except subprocess.CalledProcessError as e:
+            print("Failed to e2label! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
             exit(1)
 
     # Ensure the mount path exists.
@@ -711,20 +728,20 @@ def format_transport(serial_num):
         os.mkdir(root)
 
     # Check to see if the disc is mounted.
-    fp = os.popen("df")
-    mounted = False
-    dev_part_abs = os.path.realpath(dev_part)
-    while 1:
-        l = fp.readline()
-        if not l:
-            break
-        if l.find(root) > 0:
-            if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
-                mounted = True
-            else:
-                print("%s is a mount point, but %s is already mounted there."
-                      (root, l.split()[0]))
-    fp.close()
+    try:
+        output = subprocess.check_output(['df'])
+        dev_part_abs = os.path.realpath(dev_part)
+        for l in output.split('\n'):
+            if l.find(root) > 0:
+                if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
+                    print("%s is already mounted at %s" %
+                          (l.split()[0], root))
+                else:
+                    print("%s is a mount point, but %s is already mounted there."
+                          (root, l.split()[0]))
+    except subprocess.CalledProcessError as e:
+        print("Failed to check the mountpoint! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+        exit(1)
 
     try:
         node = st.StorageNode.get(name=name)
@@ -1175,17 +1192,25 @@ MAX_E2LABEL_LEN = 16
 
 
 def get_e2label(dev):
-    import os
+    """Read filesystem label on an Ext{2,3,4}fs device
 
-    pin, pout, perr = os.popen3("/sbin/e2label %s" % dev, "r")
-    pin.close()
-    res = pout.read().strip()
-    err = perr.read()
-    pout.close()
-    perr.close()
-    if not len(err) and len(res) < MAX_E2LABEL_LEN:
-        return res
-    return None
+    Parameters
+    ----------
+    dev: str
+        The path to the device file.
+
+    Returns
+    -------
+    str or None
+        the filesystem label, or None if reading it failed.
+    """
+
+    try:
+        output = subprocess.check_output(["/sbin/e2label", dev]).strip()
+        if len(output) < MAX_E2LABEL_LEN:
+            return output
+    except subprocess.CalledProcessError:
+        return None
 
 
 def _init_config_db():
