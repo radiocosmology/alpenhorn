@@ -668,8 +668,8 @@ def format_transport(serial_num):
 
     # Figure out if it is formatted.
     print("Checking to see if disc is formatted. Please wait.")
+    formatted = False
     try:
-        formatted = False
         # check if the block device is partitioned
         subprocess.check_output(['blkid', '-p', dev])
 
@@ -1194,15 +1194,15 @@ MAX_E2LABEL_LEN = 16
 def get_e2label(dev):
     """Read filesystem label on an Ext{2,3,4}fs device
 
-    Arguments
-    ---------
-    dev: string
+    Parameters
+    ----------
+    dev: str
         The path to the device file.
 
     Returns
     -------
-        string: the filesystem label; or
-        None: if reading the label failed
+    str or None
+        the filesystem label, or None if reading it failed.
     """
 
     try:
