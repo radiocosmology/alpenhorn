@@ -321,8 +321,12 @@ def verify(node_name, md5, fixdb, acq):
         click.echo('Storage node "{}" does not exist.'.format(node_name))
         exit(1)
 
-    if not util.alpenhorn_node_check(node_name):
-        click.echo('Node "{}" does not match ALPENHORN_NODE'.format(node_name))
+    if not this_node.active:
+        click.echo('Node "{}" is not active.'.format(node_name))
+        exit(1)
+    if not util.alpenhorn_node_check(this_node):
+        click.echo('Node "{}" does not match ALPENHORN_NODE: {}'
+                   .format(node_name, this_node.root))
         exit(1)
 
     # Use a complicated query with a tuples construct to fetch everything we
