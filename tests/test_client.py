@@ -210,8 +210,7 @@ def test_status(fixtures):
     assert re.match(r'z\s+0\s+0\.0\s+bar.example.com:None', output[3])
 
 
-@patch('alpenhorn.util.alpenhorn_node_check')
-def test_verify(mock_node_check, fixtures):
+def test_verify(fixtures):
     """Test the output of the 'verify' command"""
     tmpdir = fixtures['root']
 
@@ -222,14 +221,27 @@ def test_verify(mock_node_check, fixtures):
     assert result.exit_code == 1
     assert 'Storage node "foo" does not exist.' in result.output
 
-    # test for error when check for ALPENHORN_NODE fails
-    mock_node_check.return_value = False
-    result = runner.invoke(cli.verify, ['z'])
+    # test for error when check when the node is not active
+    node = st.StorageNode.get(name='x')
+    node.active = False
+    node.save()
+
+    result = runner.invoke(cli.verify, ['x'])
     assert result.exit_code == 1
-    assert 'Node "z" does not match ALPENHORN_NODE' in result.output
+    assert 'Node "x" is not active.' in result.output
+
+    # test for error when check for ALPENHORN_NODE fails
+    node.active = True
+    node.root = str(tmpdir)
+    node.save()
+
+    result = runner.invoke(cli.verify, ['x'])
+    assert result.exit_code == 1
+    assert 'Node "x" does not match ALPENHORN_NODE: '.format(node.root) in result.output
 
     # test for 'x' when it is mounted, but contains no files
-    mock_node_check.return_value = True
+    tmpdir.join('ALPENHORN_NODE').write('x')
+
     result = runner.invoke(cli.verify, ['x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n=== Summary ===\n' +
