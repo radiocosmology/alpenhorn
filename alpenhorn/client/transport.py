@@ -20,9 +20,15 @@ from . import node
 MAX_E2LABEL_LEN = 16
 
 
-@click.command()
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
+def cli():
+    """Commands operating on transport nodes. Use to format, mount, etc."""
+    pass
+
+
+@cli.command()
 @click.argument("serial_num")
-def format_transport(serial_num):
+def format(serial_num):
     """Interactive routine for formatting a transport disc as a storage
     node; formats and labels the disc as necessary, the adds to the
     database. The disk is specified using the manufacturers
@@ -150,12 +156,12 @@ def format_transport(serial_num):
     print("Node created but not activated. Run alpenhorn mount_transport for that.")
 
 
-@click.command()
+@cli.command()
 @click.pass_context
 @click.argument("node_name", metavar="NODE")
 @click.option("--user", help="username to access this node.", type=str, default=None)
 @click.option("--address", help="address for remote access to this node.", type=str, default=None)
-def mount_transport(ctx, node_name, user, address):
+def mount(ctx, node_name, user, address):
     """Mount a transport disk into the system and then make it available to alpenhorn.
     """
 
@@ -170,10 +176,10 @@ def mount_transport(ctx, node_name, user, address):
     ctx.invoke(node.activate, name=node_name, path=mnt_point, user=user, address=address)
 
 
-@click.command()
+@cli.command()
 @click.pass_context
 @click.argument("node_name", metavar="NODE")
-def unmount_transport(ctx, node_name):
+def unmount(ctx, node_name):
     """Unmount a transport disk from the system and then remove it from alpenhorn.
     """
 

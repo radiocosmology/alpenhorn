@@ -11,10 +11,16 @@ import alpenhorn.storage as st
 from .connect_db import config_connect
 
 
-@click.command()
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
+def cli():
+    """Commands operating on storage groups. Use to create, modify, and list groups."""
+    pass
+
+
+@cli.command()
 @click.argument('group_name', metavar='GROUP')
 @click.option('--notes', metavar='NOTES')
-def create_group(group_name, notes):
+def create(group_name, notes):
     """Create a storage GROUP and add to database.
     """
     config_connect()

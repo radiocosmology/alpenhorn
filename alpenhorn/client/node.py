@@ -14,7 +14,13 @@ import alpenhorn.util as util
 from .connect_db import config_connect
 
 
-@click.command()
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
+def cli():
+    """Commands operating on storage nodes. Use to create, modify, mount drives, etc."""
+    pass
+
+
+@cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.argument('root', metavar='ROOT')
 @click.argument('hostname', metavar='HOSTNAME')
@@ -42,9 +48,9 @@ from .connect_db import config_connect
               it?', metavar='FLOAT', type=float, default=30)
 @click.option('--notes', help='Any notes or comments about this node.',
               type=str, default=None)
-def create_node(node_name, root, hostname, group, address, active, auto_import,
-                suspect, storage_type, max_total_gb, min_avail_gb,
-                min_delete_age_days, notes):
+def create(node_name, root, hostname, group, address, active, auto_import,
+           suspect, storage_type, max_total_gb, min_avail_gb,
+           min_delete_age_days, notes):
     """Create a storage NODE within storage GROUP with a ROOT directory on
     HOSTNAME.
     """
@@ -78,7 +84,7 @@ def create_node(node_name, root, hostname, group, address, active, auto_import,
               ))
 
 
-@click.command()
+@cli.command()
 @click.argument("name")
 @click.option("--path", help="Root path for this node", type=str, default=None)
 @click.option("--user", help="username to access this node.", type=str, default=None)
@@ -123,7 +129,7 @@ def activate(name, path, user, address, hostname):
     click.echo('Successfully activated "%s".' % name)
 
 
-@click.command()
+@cli.command()
 @click.argument("root_or_name")
 def deactivate(root_or_name):
     """Deactivate a storage node with location or named ROOT_OR_NAME."""
@@ -159,7 +165,7 @@ def deactivate(root_or_name):
         print("Node successfully deactivated.")
 
 
-@click.command()
+@cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('--md5', help='perform full check against md5sum', is_flag=True)
 @click.option('--fixdb', help='fix up the database to be consistent with reality', is_flag=True)
@@ -297,7 +303,7 @@ def verify(node_name, md5, fixdb, acq):
         exit(status)
 
 
-@click.command()
+@cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('--days', '-d', help='Clean files older than <days>.', type=int, default=None)
 @click.option('--cancel', help='Cancel files marked for cleaning', is_flag=True)

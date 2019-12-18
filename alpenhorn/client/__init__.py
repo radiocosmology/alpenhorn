@@ -538,14 +538,6 @@ def import_files(node_name, verbose, acq, register_new, dry):
         print()
 
 
-cli.add_command(group.create_group)
-
-cli.add_command(node.create_node)
-cli.add_command(node.activate)
-cli.add_command(node.deactivate)
-cli.add_command(node.verify)
-cli.add_command(node.clean)
-
-cli.add_command(transport.format_transport)
-cli.add_command(transport.mount_transport)
-cli.add_command(transport.unmount_transport)
+cli.add_command(group.cli, "group")
+cli.add_command(node.cli, "node")
+cli.add_command(transport.cli, "transport")

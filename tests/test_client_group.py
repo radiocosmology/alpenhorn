@@ -43,13 +43,13 @@ def test_create_group(fixtures):
     """Test the create group command"""
     runner = CliRunner()
 
-    help_result = runner.invoke(cli.cli, ['create-group', '--help'])
+    help_result = runner.invoke(cli.cli, ['group', 'create', '--help'])
     assert help_result.exit_code == 0
     assert 'Create a storage GROUP' in help_result.output
 
     tmpdir = fixtures['root']
     tmpdir.chdir()
-    result = runner.invoke(cli.cli, args=['create-group', 'group_x'])
+    result = runner.invoke(cli.cli, args=['group', 'create', 'group_x'])
 
     assert result.exit_code == 0
     assert result.output == 'Added group "group_x" to database.\n'
@@ -57,6 +57,6 @@ def test_create_group(fixtures):
     assert this_group.name == "group_x"
 
     # create an already existing node
-    result = runner.invoke(cli.cli, args=['create-group', 'foo'])
+    result = runner.invoke(cli.cli, args=['group', 'create', 'foo'])
     assert result.exit_code == 1
     assert result.output == 'Group name "foo" already exists! Try a different name!\n'
