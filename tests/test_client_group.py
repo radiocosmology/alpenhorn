@@ -10,6 +10,7 @@ from __future__ import absolute_import
 
 import pytest
 from click.testing import CliRunner
+import re
 
 try:
     from unittest.mock import patch, call
@@ -60,3 +61,77 @@ def test_create_group(fixtures):
     result = runner.invoke(cli.cli, args=['group', 'create', 'foo'])
     assert result.exit_code == 1
     assert result.output == 'Group name "foo" already exists! Try a different name!\n'
+
+
+def test_list_groups(fixtures):
+    """Test the group list command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['group', 'list', '--help'])
+    assert help_result.exit_code == 0
+    assert 'List known storage groups' in help_result.output
+
+    result = runner.invoke(cli.cli, args=['group', 'list'])
+    assert result.exit_code == 0
+    assert re.match(
+        r'Name +Notes\n'
+        r'-+ +-+\n'
+        r'foo\n'
+        r'bar +Some bar!\n'
+        r'transport\n',
+        result.output, re.DOTALL)
+
+
+def test_rename_group(fixtures):
+    """Test the group rename command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['group', 'rename', '--help'])
+    assert help_result.exit_code == 0
+    assert 'Change the name of a storage GROUP to NEW-NAME' in help_result.output
+
+    result = runner.invoke(cli.cli, args=['group', 'rename', 'foo', 'bar'])
+    assert result.exit_code == 1
+    assert result.output == 'Group "bar" already exists.\n'
+
+    old_group = st.StorageGroup.get(name='foo')
+    result = runner.invoke(cli.cli, args=['group', 'rename', 'foo', 'bla'])
+    assert result.exit_code == 0
+    assert result.output == "Updated.\n"
+
+    new_group = st.StorageGroup.get(name='bla')
+    assert old_group.id == new_group.id
+
+
+def test_modify_group(fixtures):
+    """Test the group modify command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['group', 'modify', '--help'])
+    assert help_result.exit_code == 0
+    assert 'Change the properties of a storage GROUP' in help_result.output
+
+    result = runner.invoke(cli.cli, args=['group', 'modify', 'bla'])
+    assert result.exit_code == 1
+    assert result.output == 'Group "bla" does not exist!\n'
+
+    result = runner.invoke(cli.cli, args=['group', 'modify', 'foo', '--notes=Test test test'])
+    assert result.exit_code == 0
+    assert result.output == "Updated.\n"
+
+    foo_group = st.StorageGroup.get(name='foo')
+    assert foo_group.notes == 'Test test test'
+
+    result = runner.invoke(cli.cli, args=['group', 'modify', 'foo'])
+    assert result.exit_code == 0
+    assert result.output == "Nothing to do.\n"
+
+    foo_group = st.StorageGroup.get(name='foo')
+    assert foo_group.notes == 'Test test test'
+
+    result = runner.invoke(cli.cli, args=['group', 'modify', 'foo', '--notes='])
+    assert result.exit_code == 0
+    assert result.output == "Updated.\n"
+
+    foo_group = st.StorageGroup.get(name='foo')
+    assert foo_group.notes is None
