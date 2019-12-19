@@ -38,7 +38,7 @@ def cli():
                 A - archive for the data, T - for transiting data \
                 F - for data in the field (i.e acquisition machines)',
               type=click.Choice(['A', 'T', 'F']), default='A')
-@click.option('--max_total_gb', help='The maximum amout of storage we should \
+@click.option('--max_total_gb', help='The maximum amount of storage we should \
               use.', metavar='FLOAT', type=float, default=-1.)
 @click.option('--min_avail_gb', help='What is the minimum amount of free space \
                we should leave on this node?', metavar='FLOAT',
@@ -82,6 +82,93 @@ def create(node_name, root, hostname, group, address, active, auto_import,
                   group=group,
                   host=hostname
               ))
+
+
+@cli.command()
+def list():
+    """List known storage nodes.
+    """
+    config_connect()
+
+    import tabulate
+
+    data = (
+        st.StorageNode.select(
+            st.StorageNode.name,
+            st.StorageGroup.name,
+            st.StorageNode.storage_type,
+            st.StorageNode.host,
+            st.StorageNode.root,
+            st.StorageNode.notes)
+        .join(st.StorageGroup)
+        .tuples()
+    )
+    if data:
+        print(tabulate.tabulate(data, headers=['Name', 'Group', 'Type', 'Host', 'Root', 'Notes']))
+
+
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.argument('new_name', metavar='NEW-NAME')
+def rename(node_name, new_name):
+    """Change the name of a storage NODE to NEW-NAME."""
+    config_connect()
+
+    try:
+        node = st.StorageNode.get(name=node_name)
+        try:
+            st.StorageNode.get(name=new_name)
+            print('Node "%s" already exists.' % new_name)
+            exit(1)
+        except pw.DoesNotExist:
+            node.name = new_name
+            node.save()
+            print('Updated.')
+    except pw.DoesNotExist:
+        print('Node "%s" does not exist!' % node_name)
+        exit(1)
+
+
+@cli.command()
+@click.argument('node_name', metavar='NODE')
+@click.option('--max_total_gb', help='New maximum amount of storage to use.',
+              metavar='FLOAT', type=float)
+@click.option('--min_avail_gb', help='New minimum amount of free space to '
+              'leave on the node', metavar='FLOAT', type=float)
+@click.option('--min_delete_age_days', help='New minimum amount of time '
+              'a file must remain on the node before we are allowed to delete '
+              'it.', metavar='FLOAT', type=float)
+@click.option('--notes', help='New value for the notes field', metavar='NOTES')
+def modify(node_name, max_total_gb, min_avail_gb, min_delete_age_days, notes):
+    """Change the properties of a storage NODE."""
+    config_connect()
+
+    try:
+        node = st.StorageNode.get(name=node_name)
+        changed = False
+        if max_total_gb is not None:
+            node.max_total_gb = max_total_gb
+            changed = True
+        if min_avail_gb is not None:
+            node.min_avail_gb = min_avail_gb
+            changed = True
+        if min_delete_age_days is not None:
+            node.min_delete_age_days = min_delete_age_days
+            changed = True
+        if notes is not None:
+            if notes == '':
+                notes = None
+            node.notes = notes
+            changed = True
+
+        if changed:
+            node.save()
+            print('Updated.')
+        else:
+            print('Nothing to do.')
+    except pw.DoesNotExist:
+        print('Node "%s" does not exist!' % node_name)
+        exit(1)
 
 
 @cli.command()
@@ -451,7 +538,7 @@ def clean(node_name, days, cancel, force, now, target, acq):
     # If days is not set, then just select all files that meet the requirements so far
     else:
 
-        file_ids = list(files)
+        file_ids = [f for f in files]
         count = files.count()
 
         if count > 0:

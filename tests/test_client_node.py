@@ -74,6 +74,85 @@ def test_create_node(fixtures):
     assert 'Invalid value for "--storage_type": invalid choice: Z. (choose from A, T, F)' in result.output
 
 
+def test_list_nodes(fixtures):
+    """Test the node list command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['node', 'list', '--help'])
+    assert help_result.exit_code == 0
+    assert 'List known storage nodes' in help_result.output
+
+    result = runner.invoke(cli.cli, args=['node', 'list'])
+    assert result.exit_code == 0
+    assert re.match(
+        r'Name +Group +Type +Host +Root +Notes *\n'
+        r'-+  -+  -+  -+  -+  -+\n'
+        r'x +foo +A +foo.example.com +[-_/\w]+\n'
+        r'z +bar +A +bar.example.com *\n',
+        result.output, re.DOTALL)
+
+
+def test_rename_node(fixtures):
+    """Test the node rename command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['node', 'rename', '--help'])
+    assert help_result.exit_code == 0
+    assert 'Change the name of a storage NODE to NEW-NAME' in help_result.output
+
+    result = runner.invoke(cli.cli, args=['node', 'rename', 'x', 'z'])
+    assert result.exit_code == 1
+    assert result.output == 'Node "z" already exists.\n'
+
+    old_node = st.StorageNode.get(name='x')
+    result = runner.invoke(cli.cli, args=['node', 'rename', 'x', 'y'])
+    assert result.exit_code == 0
+    assert result.output == "Updated.\n"
+
+    new_node = st.StorageNode.get(name='y')
+    assert old_node.id == new_node.id
+
+
+def test_modify_node(fixtures):
+    """Test the node modify command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['node', 'modify', '--help'])
+    assert help_result.exit_code == 0
+    assert 'Change the properties of a storage NODE' in help_result.output
+
+    result = runner.invoke(cli.cli, args=['node', 'modify', 'bla'])
+    assert result.exit_code == 1
+    assert result.output == 'Node "bla" does not exist!\n'
+
+    result = runner.invoke(cli.cli, args=['node', 'modify', 'x', '--notes=Test test test'])
+    assert result.exit_code == 0
+    assert result.output == "Updated.\n"
+
+    x_node = st.StorageNode.get(name='x')
+    assert x_node.notes == 'Test test test'
+
+    result = runner.invoke(cli.cli, args=['node', 'modify', 'x'])
+    assert result.exit_code == 0
+    assert result.output == "Nothing to do.\n"
+
+    x_node = st.StorageNode.get(name='x')
+    assert x_node.notes == 'Test test test'
+    assert x_node.max_total_gb == 10
+    assert x_node.min_avail_gb == 1
+    assert x_node.min_delete_age_days == 30
+
+    result = runner.invoke(cli.cli, args=['node', 'modify', 'x', '--min_avail_gb=5','--min_delete_age_days=5', '--notes='])
+    assert result.exit_code == 0
+    assert result.output == "Updated.\n"
+
+    x_node = st.StorageNode.get(name='x')
+    assert x_node.notes is None
+    assert x_node.max_total_gb == 10
+    assert x_node.min_avail_gb == 5
+    assert x_node.min_delete_age_days == 5
+
+
 def test_activate(fixtures):
     """Test the 'activate' command"""
     runner = CliRunner()
