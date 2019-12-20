@@ -27,6 +27,28 @@ def cli():
 
 
 @cli.command()
+def list():
+    """List known transport nodes.
+    """
+    config_connect()
+
+    import tabulate
+
+    data = (
+        st.StorageNode.select(
+            st.StorageNode.name,
+            pw.Case(st.StorageNode.active, [(True, 'Y'), (False, '-')]),
+            st.StorageNode.host,
+            st.StorageNode.root,
+            st.StorageNode.notes)
+        .where(st.StorageNode.storage_type == 'T')
+        .tuples()
+    )
+    if data:
+        print(tabulate.tabulate(data, headers=['Name', 'Mounted', 'Host', 'Root', 'Notes']))
+
+
+@cli.command()
 @click.argument("serial_num")
 def format(serial_num):
     """Interactive routine for formatting a transport disc as a storage

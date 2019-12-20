@@ -41,6 +41,28 @@ def no_cli_init(monkeypatch):
     monkeypatch.setattr(cli.transport, 'config_connect', lambda: None)
 
 
+def test_list_transports(fixtures):
+    """Test the transport list command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['transport', 'list', '--help'])
+    assert help_result.exit_code == 0
+    assert 'List known transport nodes' in help_result.output
+
+    # Modify node 'x' to appear as a transport disk
+    x_node = st.StorageNode.get(name='x')
+    x_node.storage_type = 'T'
+    x_node.save(only=x_node.dirty_fields)
+
+    result = runner.invoke(cli.cli, args=['transport', 'list'])
+    assert result.exit_code == 0
+    assert re.match(
+        r'Name +Mounted +Host +Root +Notes *\n'
+        r'-+  -+  -+  -+  -+\n'
+        r'x +Y +foo.example.com +[-_/\w]+\n',
+        result.output, re.DOTALL)
+
+
 @patch('alpenhorn.util.alpenhorn_node_check')
 @patch('os.path.ismount')
 @patch('os.system')
