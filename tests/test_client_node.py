@@ -397,3 +397,381 @@ def test_clean(fixtures):
     assert result.exit_code == 1
     assert 'Cannot clean archive node "z" without forcing.' in result.output
 
+
+def test_scan(fixtures):
+    """Test the 'node scan' command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, args=['node', 'scan', '--help'])
+    assert help_result.exit_code == 0
+    assert 'Scan the current directory for known acquisition files' in help_result.output
+    assert 'Options:\n  -v, --verbose\n  --acq TEXT      Limit import to specified acquisition directories.' in help_result.output
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+
+    # corrupt 'x/jim':
+    tmpdir.join('x', 'jim').write('Corrupted for the test')
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\n==== Summary ====\n\n' +
+                    r'Added 0 files\n\n' +
+                    r'1 corrupt files\.\n' +
+                    r'0 files already registered\.\n' +
+                    r'1 files not known\n' +
+                    r'2 directories were not acquisitions\.\n\n' +
+                    r'Added files:\n\n' +
+                    r'Corrupt:\n' +
+                    r'x/jim\n\n' +
+                    r'Unknown files:\n' +
+                    r'x/foo\.log\n\n' +
+                    r'Unknown acquisitions:\n' +
+                    r'12345678T000000Z_inst_zab\n' +
+                    r'alp_root\n\n$',
+                    result.output, re.DOTALL)
+
+    ## now add a known file ('fred') and restore 'jim' to correct contents
+    tmpdir.join('x', 'fred').write('')
+    tmpdir.join('x', 'jim').write('')
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', '--dry', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\n==== Summary ====\n\n' +
+                    r'Added 1 files\n\n' +
+                    r'0 corrupt files\.\n' +
+                    r'1 files already registered\.\n' +
+                    r'1 files not known\n' +
+                    r'2 directories were not acquisitions\.\n\n' +
+                    r'Added files:\n' +
+                    r'x/jim\n\n' +
+                    r'Corrupt:\n\n' +
+                    r'Unknown files:\n' +
+                    r'x/foo\.log\n\n' +
+                    r'Unknown acquisitions:\n' +
+                    r'12345678T000000Z_inst_zab\n' +
+                    r'alp_root\n\n$',
+                    result.output, re.DOTALL)
+    ## Because we're running in dry mode the database is not updated
+    assert (ar.ArchiveFileCopy
+            .select()
+            .join(ac.ArchiveFile)
+            .where(ac.ArchiveFile.name == 'jim')
+            .count()) == 0
+
+    ## now repeat but allowing database change
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\n==== Summary ====\n\n' +
+                    r'Added 1 files\n\n' +
+                    r'0 corrupt files\.\n' +
+                    r'1 files already registered\.\n' +
+                    r'1 files not known\n' +
+                    r'2 directories were not acquisitions\.\n\n' +
+                    r'Added files:\n' +
+                    r'x/jim\n\n' +
+                    r'Corrupt:\n\n' +
+                    r'Unknown files:\n' +
+                    r'x/foo\.log\n\n' +
+                    r'Unknown acquisitions:\n' +
+                    r'12345678T000000Z_inst_zab\n' +
+                    r'alp_root\n\n$',
+                    result.output, re.DOTALL)
+    ## check the database state
+    jims = list(ar.ArchiveFileCopy
+                .select(ac.ArchiveFile.name,
+                        ar.ArchiveFileCopy.has_file,
+                        ar.ArchiveFileCopy.wants_file)
+                .join(ac.ArchiveFile)
+                .where(ac.ArchiveFile.name == 'jim')
+                .dicts())
+    assert jims == [
+        {'name': 'jim', 'has_file': 'Y', 'wants_file': 'Y'}
+    ]
+
+
+def test_scan_register_new(fixtures):
+    """Test the 'node scan' command with the `--register-new` flag"""
+    runner = CliRunner()
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+
+    ## check the starting database state
+    assert (ac.ArchiveAcq.select()
+            .where(ac.ArchiveAcq.name == '12345678T000000Z_inst_zab')
+            .count()) == 0
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '--register-new', '-vv', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\n==== Summary ====\n\n' +
+                    r'Registered 2 new acquisitions\n' +
+                    r'Added 6 files\n\n' +
+                    r'0 corrupt files\.\n' +
+                    r'0 files already registered\.\n' +
+                    r'2 files not known\n' +
+                    r'0 directories were not acquisitions\.\n\n' +
+                    r'New acquisitions:\n' +
+                    r'12345678T000000Z_inst_zab\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab\n\n' +
+                    r'Added files:\n' +
+                    r'12345678T000000Z_inst_zab/ch_master.log\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
+                    r'x/foo.log\n' +
+                    r'x/jim\n\n' +
+                    r'Corrupt:\n' +
+                    r'\n' +
+                    r'Unknown files:\n' +
+                    r'12345678T000000Z_inst_zab/hello.txt\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
+                    r'\n' +
+                    r'Unknown acquisitions:\n\n$',
+                    result.output, re.DOTALL)
+
+    ## check the database state
+    assert (ac.ArchiveAcq.select()
+            .where(ac.ArchiveAcq.name == '12345678T000000Z_inst_zab')
+            .count()) == 1
+
+    foo_logs = list(ar.ArchiveFileCopy
+                    .select(ac.ArchiveFile.name,
+                            ar.ArchiveFileCopy.has_file,
+                            ar.ArchiveFileCopy.wants_file)
+                    .join(ac.ArchiveFile)
+                    .where(ac.ArchiveFile.name == 'foo.log')
+                    .dicts())
+    assert foo_logs == [
+        {'name': 'foo.log', 'has_file': 'Y', 'wants_file': 'Y'}
+    ]
+
+
+def test_nested_scan(fixtures):
+    """Test the 'node scan' command"""
+    runner = CliRunner()
+
+    tmpdir = fixtures['root']
+    tmpdir.chdir()
+
+    ## corrupt 'jim' and pretend an acquisition in 'alp_root' should be added
+    tmpdir.join('x', 'jim').write('Corrupted for the test')
+    acq_type = ac.AcqType.create(name='zab')
+    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
+    file_type = ac.FileType.get(name='zxc')
+    acq_file = ac.ArchiveFile.create(
+        name='acq_data/x_123_1_data/raw/acq_123_1.zxc',
+        acq=acq,
+        type=file_type,
+        size_b=len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents']),
+        md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'.*\n==== Summary ====\n\n' +
+                    r'Added 1 files\n\n' +
+                    r'1 corrupt files\.\n' +
+                    r'0 files already registered\.\n' +
+                    r'4 files not known\n' +
+                    r'1 directories were not acquisitions\.\n\n' +
+                    r'Added files:\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc\n\n' +
+                    r'Corrupt:\n' +
+                    r'x/jim\n\n' +
+                    r'Unknown files:\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_2_data/raw/acq_123_2.zxc\n' +
+                    r'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt\n' +
+                    r'x/foo\.log\n\n' +
+                    r'Unknown acquisitions:\n' +
+                    r'12345678T000000Z_inst_zab\n$',
+                    result.output, re.DOTALL)
+    ## check the database state
+    acq_files = list(ar.ArchiveFileCopy
+                     .select(ac.ArchiveFile.name,
+                             ar.ArchiveFileCopy.has_file,
+                             ar.ArchiveFileCopy.wants_file)
+                     .join(ac.ArchiveFile)
+                     .where(ac.ArchiveFile.name == acq_file.name)
+                     .dicts())
+    assert acq_files == [
+        {'name': acq_file.name, 'has_file': 'Y', 'wants_file': 'Y'}
+    ]
+
+
+def test_scan_from_acq_dir(fixtures):
+    """Test the 'node scan' command run from the acquisition directory"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    # fixup 'jim' details in the DB
+    jim = ac.ArchiveFile.get(name='jim')
+    jim.size_b = 0
+    jim.md5sum = fixtures['files']['x']['jim']['md5']
+    jim.save(only=jim.dirty_fields)
+    assert jim.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+    # switch inside the acquisition
+    tmpdir.join('x').chdir()
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        ==== Summary ====
+
+        Added 1 files
+
+        0 corrupt files.
+        0 files already registered.
+        1 files not known
+        0 directories were not acquisitions.
+
+        Added files:
+        x/jim
+
+        Corrupt:
+
+        Unknown files:
+        x/foo.log
+
+        """
+    import textwrap
+    assert textwrap.dedent(expected_output) in result.output
+
+    assert jim.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
+
+
+def test_scan_within_acq_dir(fixtures):
+    """Test the 'node scan' command run from an acquisition subdirectory"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    acq_type = ac.AcqType.create(name='zab')
+    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
+    file_type = ac.FileType.get(name='zxc')
+    acq_file = ac.ArchiveFile.create(
+        name='acq_data/x_123_1_data/raw/acq_123_1.zxc',
+        acq=acq,
+        type=file_type,
+        size_b=len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents']),
+        md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+    # switch inside the acquisition
+    tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        ==== Summary ====
+
+        Added 1 files
+
+        0 corrupt files.
+        0 files already registered.
+        1 files not known
+        0 directories were not acquisitions.
+
+        Added files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc
+
+        Corrupt:
+
+        Unknown files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc
+
+        """
+    import textwrap
+    assert textwrap.dedent(expected_output) in result.output
+
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
+
+
+def test_scan_within_acq_dir_register_new(fixtures):
+    """Test the 'node scan' command from within a directory, combined with the --register-new flag"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    # switch inside the acquisition
+    tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
+
+    result = runner.invoke(cli.cli, args=['node', 'scan', '--register-new', '-vv', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        ==== Summary ====
+
+        Registered 1 new acquisitions
+        Added 2 files
+
+        0 corrupt files.
+        0 files already registered.
+        0 files not known
+        0 directories were not acquisitions.
+
+        New acquisitions:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab
+
+        Added files:
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/proc/acq_123_1_proc.zxc
+        alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc
+
+        Corrupt:
+
+        Unknown files:
+
+        """
+    import textwrap
+    assert textwrap.dedent(expected_output) in result.output
+
+    acq = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == 'alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab').get()
+    acq_file = ac.ArchiveFile.select().where(ac.ArchiveFile.acq == acq, ac.ArchiveFile.name == 'acq_data/x_123_1_data/raw/acq_123_1.zxc').get()
+    assert acq_file.size_b == len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents'])
+    assert acq_file.md5sum == fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5']
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 1
+
+
+def test_scan_with_limiting(fixtures):
+    """Test the 'node scan' command in combination with the `--acq` option"""
+    tmpdir = fixtures['root']
+    runner = CliRunner()
+
+    acq_type = ac.AcqType.create(name='zab')
+    acq = ac.ArchiveAcq.create(name='alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab', type=acq_type)
+    file_type = ac.FileType.get(name='zxc')
+    acq_file = ac.ArchiveFile.create(
+        name='acq_data/x_123_1_data/raw/acq_123_1.zxc',
+        acq=acq,
+        type=file_type,
+        size_b=len(fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['contents']),
+        md5sum=fixtures['files']['alp_root']['2017']['03']['21']['acq_xy1_45678901T000000Z_inst_zab']['acq_data']['x_123_1_data']['raw']['acq_123_1.zxc']['md5'])
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
+
+    # switch inside the acquisition so the `--acq x` is completely outside the current path
+    tmpdir.join('alp_root/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data').chdir()
+
+    node = st.StorageNode.get(name='x')
+    result = runner.invoke(cli.cli, args=['node', 'scan', '-vv', '--acq', 'x', 'x'])
+    assert result.exit_code == 0
+    expected_output = """
+        Acquisition "x" is outside the current directory and will be ignored.
+
+        ==== Summary ====
+
+        Added 0 files
+
+        0 corrupt files.
+        0 files already registered.
+        0 files not known
+        0 directories were not acquisitions.
+
+        Added files:
+
+        Corrupt:
+
+        Unknown files:
+
+        """
+    import inspect
+    assert inspect.cleandoc(expected_output) in result.output
+
+    assert acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == 'x').count() == 0
