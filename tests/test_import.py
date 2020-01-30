@@ -74,7 +74,7 @@ def load_fixtures(tmpdir):
     db.database_proxy.create_tables([ZabInfo, QuuxInfo, ZxcInfo, SpqrInfo, LogInfo])
 
     with open(os.path.join(tests_path, 'fixtures/files.yml')) as f:
-        fixtures = yaml.load(f)
+        fixtures = yaml.safe_load(f)
 
 
     def make_files(dir_name, files, root):

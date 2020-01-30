@@ -39,7 +39,7 @@ def load_fixtures():
     assert StorageNode.select().count() != 0
 
     with open(path.join(tests_path, 'fixtures/archive.yml')) as f:
-        fixtures = yaml.load(f)
+        fixtures = yaml.safe_load(f)
 
     # fixup foreign keys for the file copies
     for copy in fixtures['file_copies']:

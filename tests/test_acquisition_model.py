@@ -29,7 +29,7 @@ def load_fixtures():
     assert AcqType.select().count() == 0
 
     with open(path.join(tests_path, 'fixtures/acquisition.yml')) as f:
-        fixtures = yaml.load(f)
+        fixtures = yaml.safe_load(f)
 
     AcqType.insert_many(fixtures['types']).execute()
     types = dict(AcqType.select(AcqType.name, AcqType.id).tuples())
