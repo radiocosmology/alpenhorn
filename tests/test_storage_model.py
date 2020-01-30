@@ -27,7 +27,7 @@ def load_fixtures():
     assert StorageNode.select().count() == 0
 
     with open(path.join(tests_path, 'fixtures/storage.yml')) as f:
-        fixtures = yaml.load(f)
+        fixtures = yaml.safe_load(f)
 
     StorageGroup.insert_many(fixtures['groups']).execute()
     groups = dict(StorageGroup.select(StorageGroup.name, StorageGroup.id).tuples())
