@@ -337,7 +337,7 @@ def _verify_files(worker):
 
     # Run alpenhron verify and return the exit status as a string
     output = worker['container'].exec_run(
-        "bash -c 'alpenhorn verify %s &> /dev/null; echo $?'" %
+        "bash -c 'alpenhorn node verify %s &> /dev/null; echo $?'" %
         worker['node'].name
     )
 
@@ -451,7 +451,7 @@ def test_clean(workers, network, test_files):
     node_to_clean = workers[1]['node']
     client.containers.run(
         'alpenhorn', remove=True, detach=False, network_mode=network,
-        command=("alpenhorn clean -f {}".format(node_to_clean.name))
+        command=("alpenhorn node clean -f {}".format(node_to_clean.name))
     )
 
     # Check files set to 'M'
@@ -461,7 +461,7 @@ def test_clean(workers, network, test_files):
     # Changed my mind, delete them NOW
     client.containers.run(
         'alpenhorn', remove=True, detach=False, network_mode=network,
-        command=("alpenhorn clean -nf {}".format(node_to_clean.name))
+        command=("alpenhorn node clean -nf {}".format(node_to_clean.name))
     )
 
     # Check files have been deleted
@@ -475,7 +475,7 @@ def test_clean(workers, network, test_files):
     node_to_clean = workers[2]['node']
     client.containers.run(
         'alpenhorn', remove=True, detach=False, network_mode=network,
-        command=("alpenhorn clean -nf {}".format(node_to_clean.name))
+        command=("alpenhorn node clean -nf {}".format(node_to_clean.name))
     )
 
     # Check files are still present
