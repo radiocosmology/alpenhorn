@@ -261,6 +261,28 @@ def deactivate(root_or_name):
 
 
 @cli.command()
+@click.option('--host', '-H', help='Use specified host rather than local machine', type=str, default=None)
+def active(host):
+    """List the nodes active on this, or another specified, machine"""
+
+    config_connect()
+
+    if host is None:
+        host = util.get_short_hostname()
+    zero = True
+    for node in (st.StorageNode.select()
+                 .where(st.StorageNode.host == host, st.StorageNode.active)):
+        n_file = ar.ArchiveFileCopy \
+                   .select() \
+                   .where((ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == 'Y')) \
+                   .count()
+        print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
+        zero = False
+    if zero:
+        print("No nodes are active on host %s." % host)
+
+
+@cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('-v', '--verbose', count=True)
 @click.option('--acq', help='Limit import to specified acquisition directories.', multiple=True, default=None)

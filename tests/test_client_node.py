@@ -244,6 +244,40 @@ def test_deactivate(fixtures):
     assert 'That is neither a node name, nor a path on this host. I quit.' == output[0]
 
 
+def test_active(fixtures):
+    """Test the output of the 'active' command"""
+    runner = CliRunner()
+
+    help_result = runner.invoke(cli.cli, ['node', 'active', '--help'])
+    assert help_result.exit_code == 0
+    assert 'List the nodes active on this' in help_result.output
+    assert 'Options:\n  -H, --host TEXT  Use specified host' in help_result.output
+
+    # there are no files yet on the 'foo' host (i.e., on storage node 'x')
+    result = runner.invoke(cli.cli, args=['node', 'active', '--host', 'foo.example.com'])
+    assert result.exit_code == 0
+    output = result.output.splitlines()
+    assert len(output) == 1
+    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+0 files$', output[0])
+
+    # now pretend node 'x' has a copy of 'fred'
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')
+                 .get())
+    file_copy.has_file = 'Y'
+    file_copy.save()
+    file_copy.file.save()
+
+    # now `active` should report one file
+    result = runner.invoke(cli.cli, args=['node', 'active', '--host', 'foo.example.com'])
+    assert result.exit_code == 0
+    output = result.output.splitlines()
+    assert len(output) == 1
+    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+1 files$', output[0])
+
+
 def test_verify(fixtures):
     """Test the output of the 'verify' command"""
     tmpdir = fixtures['root']

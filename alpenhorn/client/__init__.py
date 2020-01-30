@@ -285,28 +285,6 @@ def status(all):
     print(tabulate.tabulate(data, headers=headers, floatfmt=".1f"))
 
 
-@cli.command()
-@click.option('--host', '-H', help='use specified host rather than local machine', type=str, default=None)
-def active(host):
-    """List the nodes active on this, or another specified, machine"""
-
-    config_connect()
-
-    if host is None:
-        host = util.get_short_hostname()
-    zero = True
-    for node in (st.StorageNode.select()
-                 .where(st.StorageNode.host == host, st.StorageNode.active)):
-        n_file = ar.ArchiveFileCopy \
-                   .select() \
-                   .where((ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == 'Y')) \
-                   .count()
-        print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
-        zero = False
-    if zero:
-        print("No nodes are active on host %s." % host)
-
-
 cli.add_command(group.cli, "group")
 cli.add_command(node.cli, "node")
 cli.add_command(transport.cli, "transport")
