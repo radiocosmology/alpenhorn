@@ -348,6 +348,65 @@ def test_verify(fixtures):
                     '  0 missing files\n' +
                     '  1 corrupt files',
                     result.output, re.DOTALL)
+def test_verify_acqs(fixtures):
+    """Test the output of the 'verify' command limited to certain acqs"""
+    tmpdir = fixtures['root']
+
+    runner = CliRunner()
+
+    # now pretend node 'x' is present and has a copy of 'fred'
+    tmpdir.join('ALPENHORN_NODE').write('x')
+    file_copy = (ar.ArchiveFileCopy
+                 .select()
+                 .join(ac.ArchiveFile)
+                 .where(ac.ArchiveFile.name == 'fred')
+                 .get())
+    file_copy.has_file = 'Y'
+    file_copy.save()
+
+    # Verification ignores errors in acquisitions other than those specified by the `--acq` option
+    result = runner.invoke(cli.cli, ['node', 'verify', '--acq=z', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'\n=== Summary ===\n' +
+                    '  0 total files\n' +
+                    '  0 missing files\n' +
+                    '  0 corrupt files',
+                    result.output, re.DOTALL)
+
+    # Having multiple acqs works as an OR filter
+    result = runner.invoke(cli.cli, ['node', 'verify', '--acq=z', '--acq=x', 'x'])
+    assert result.exit_code == 2
+    assert re.match(r'\n=== Missing files ===\n' +
+                    str(tmpdir.join(file_copy.file.acq.name, file_copy.file.name)),
+                    result.output, re.DOTALL)
+    assert re.match(r'.*\n=== Summary ===\n' +
+                    '  1 total files\n' +
+                    '  1 missing files\n' +
+                    '  0 corrupt files',
+                    result.output, re.DOTALL)
+
+    ## Now add a known file ('fred'), but its content is wrong so it will fail the md5 check
+    tmpdir.join('x', 'fred').write('')
+
+    # This still doesn't cause an error if the acquisition is ignored
+    result = runner.invoke(cli.cli, ['node', 'verify', '--acq=z', '--md5', 'x'])
+    assert result.exit_code == 0
+    assert re.match(r'\n=== Summary ===\n' +
+                    '  0 total files\n' +
+                    '  0 missing files\n' +
+                    '  0 corrupt files',
+                    result.output, re.DOTALL)
+
+    ## When the acquisition matches the filter, the corruption is detected
+    result = runner.invoke(cli.cli, ['node', 'verify', '--md5', '--acq=x', 'x'])
+    assert result.exit_code == 1
+    assert re.match(r'.*\n=== Corrupt files ===\n' +
+                    '/.*/ROOT/x/fred\n'
+                    '.*\n=== Summary ===\n' +
+                    '  1 total files\n' +
+                    '  0 missing files\n' +
+                    '  1 corrupt files',
+                    result.output, re.DOTALL)
 
 
 def test_clean(fixtures):

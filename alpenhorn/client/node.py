@@ -558,8 +558,10 @@ def verify(node_name, md5, fixdb, acq):
                .switch(ac.ArchiveFile)\
                .join(ar.ArchiveFileCopy)\
                .where(ar.ArchiveFileCopy.node == this_node,
-                      ar.ArchiveFileCopy.has_file == 'Y')\
-               .tuples()
+                      ar.ArchiveFileCopy.has_file == 'Y')
+
+    if acq:
+        lfiles = lfiles.where(ac.ArchiveAcq.name << acq)
 
     missing_files = []
     corrupt_files = []
@@ -569,12 +571,8 @@ def verify(node_name, md5, fixdb, acq):
 
     nfiles = 0
 
-    with click.progressbar(lfiles, label='Scanning files') as lfiles_iter:
+    with click.progressbar(lfiles.tuples(), label='Scanning files') as lfiles_iter:
         for filename, acqname, filesize, md5sum, fc_id in lfiles_iter:
-
-            # Skip if not in specified acquisitions
-            if len(acq) > 0 and acqname not in acq:
-                continue
 
             nfiles += 1
 
