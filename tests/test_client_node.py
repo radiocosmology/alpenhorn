@@ -258,7 +258,7 @@ def test_active(fixtures):
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
-    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+0 files$', output[0])
+    assert re.match(r'^x\s+' + str(fixtures['root']) + r'\s+0 files$', output[0])
 
     # now pretend node 'x' has a copy of 'fred'
     file_copy = (ar.ArchiveFileCopy
@@ -275,7 +275,7 @@ def test_active(fixtures):
     assert result.exit_code == 0
     output = result.output.splitlines()
     assert len(output) == 1
-    assert re.match(r'^x\s+' + str(fixtures['root']) + '\s+1 files$', output[0])
+    assert re.match(r'^x\s+' + str(fixtures['root']) + r'\s+1 files$', output[0])
 
 
 def test_verify(fixtures):
@@ -313,9 +313,9 @@ def test_verify(fixtures):
     result = runner.invoke(cli.cli, ['node', 'verify', 'x'])
     assert result.exit_code == 0
     assert re.match(r'.*\n=== Summary ===\n' +
-                    '  0 total files\n' +
-                    '  0 missing files\n' +
-                    '  0 corrupt files',
+                    r'  0 total files\n' +
+                    r'  0 missing files\n' +
+                    r'  0 corrupt files',
                     result.output, re.DOTALL)
 
     # now pretend node 'x' has a copy of 'fred'
@@ -332,9 +332,9 @@ def test_verify(fixtures):
                     str(tmpdir.join(file_copy.file.acq.name, file_copy.file.name)),
                     result.output, re.DOTALL)
     assert re.match(r'.*\n=== Summary ===\n' +
-                    '  1 total files\n' +
-                    '  1 missing files\n' +
-                    '  0 corrupt files',
+                    r'  1 total files\n' +
+                    r'  1 missing files\n' +
+                    r'  0 corrupt files',
                     result.output, re.DOTALL)
 
     ## now add a known file ('fred')
@@ -342,11 +342,11 @@ def test_verify(fixtures):
     result = runner.invoke(cli.cli, ['node', 'verify', '--md5', 'x'])
     assert result.exit_code == 1
     assert re.match(r'.*\n=== Corrupt files ===\n' +
-                    '/.*/ROOT/x/fred\n'
-                    '.*\n=== Summary ===\n' +
-                    '  1 total files\n' +
-                    '  0 missing files\n' +
-                    '  1 corrupt files',
+                    r'/.*/ROOT/x/fred\n'
+                    r'.*\n=== Summary ===\n' +
+                    r'  1 total files\n' +
+                    r'  0 missing files\n' +
+                    r'  1 corrupt files',
                     result.output, re.DOTALL)
 
 
