@@ -15,6 +15,7 @@ import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
 
 from .connect_db import config_connect
+from . import acq
 from . import group
 from . import node
 from . import transport
@@ -285,6 +286,7 @@ def status(all):
     print(tabulate.tabulate(data, headers=headers, floatfmt=".1f"))
 
 
+cli.add_command(acq.cli, "acq")
 cli.add_command(group.cli, "group")
 cli.add_command(node.cli, "node")
 cli.add_command(transport.cli, "transport")
