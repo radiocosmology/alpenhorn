@@ -101,3 +101,79 @@ def test_files(fixtures):
         r'jim +0 *\n'
         r'sheila *\n',
         result.output, re.DOTALL)
+
+
+def test_syncable(fixtures):
+    """Test the 'acq syncable' command"""
+    runner = CliRunner()
+
+    # Check help output
+    help_result = runner.invoke(cli.cli, ['acq', 'syncable', '--help'])
+    assert help_result.exit_code == 0
+    assert "List all files that are in the ACQUISITION" in help_result.output
+
+    # Fail when given a non-existent acquisition
+    result = runner.invoke(cli.cli, ['acq', 'syncable', 'z', 'x', 'bar'])
+    assert result.exit_code == 1
+    assert "No such acquisition: z" in result.output
+
+    # Fail when given a non-existent source node
+    result = runner.invoke(cli.cli, ['acq', 'syncable', 'x', 'doesnotexist', 'bar'])
+    assert result.exit_code == 1
+    assert "No such storage node: doesnotexist" in result.output
+
+    # Fail when given a non-existent target group node
+    result = runner.invoke(cli.cli, ['acq', 'syncable', 'x', 'x', 'doesnotexist'])
+    assert result.exit_code == 1
+    assert "No such storage group: doesnotexist" in result.output
+
+    # Check that initially there are no files in 'x' acq to copy from 'x' to 'bar'
+    result = runner.invoke(cli.cli, ['acq', 'syncable', 'x', 'x', 'bar'])
+    assert result.exit_code == 0
+    assert "No files to copy from node 'x' to group 'bar'" in result.output
+
+    # Now pretend node 'x' has a copy of 'fred', 1 GB in size
+    fred_file = ar.ArchiveFile.get(name='fred')
+    fred_file.size_b = 1073741824.0
+    fred_copy = fred_file.copies[0]
+    fred_copy.has_file = 'Y'
+    fred_copy.save()
+    fred_file.save()
+
+    # ...and a copy of 'sheila', 0 bytes in size
+    sheila_copy = (ar.ArchiveFileCopy
+                   .select()
+                   .join(ac.ArchiveFile)
+                   .where(ac.ArchiveFile.name == 'sheila')
+                  .get())
+    sheila_copy.has_file = 'Y'
+    sheila_copy.file.size_b = 0
+    sheila_copy.save()
+    sheila_copy.file.save()
+
+    # And so 'fred' and 'sheila' should be syncable from 'x' to 'bar'
+    result = runner.invoke(cli.cli, ['acq', 'syncable', 'x', 'x', 'bar'])
+    assert result.exit_code == 0
+    assert re.match(
+        r'.*Name +Size\n'
+        r'-+  -+\n'
+        r'fred +1073741824 *\n'
+        r'sheila +0 *\n$',
+        result.output, re.DOTALL)
+
+    # Now pretend node 'z' also has a copy of 'fred'
+    z_node = st.StorageNode.get(name='z')
+    fred2_copy = ar.ArchiveFileCopy.create(file=fred_file,
+                                           node=z_node,
+                                           has_file='Y',
+                                           wants_file='Y',
+                                           size_b=123)
+
+    # And so only 'sheila' should be syncable from 'x' to 'bar'
+    result = runner.invoke(cli.cli, ['acq', 'syncable', 'x', 'x', 'bar'])
+    assert result.exit_code == 0
+    assert re.match(
+        r'.*Name +Size\n'
+        r'-+  -+\n'
+        r'sheila +0 *\n$',
+        result.output, re.DOTALL)
