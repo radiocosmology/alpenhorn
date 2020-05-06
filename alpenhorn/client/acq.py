@@ -71,8 +71,9 @@ def acq_list(node_name):
 
 @cli.command()
 @click.argument('acquisition')
-def files(acquisition):
-    """List files that are in the ACQUISITION.
+@click.argument('node_name', required=False)
+def files(acquisition, node_name):
+    """List files that are in the ACQUISITION. With NODE specified, list acquisitions with files on NODE.
     """
     config_connect()
 
@@ -84,26 +85,50 @@ def files(acquisition):
         print("No such acquisition:", acquisition)
         sys.exit(1)
 
-    query = (
-        ac.ArchiveFile.select(
-            ac.ArchiveFile.name,
-            ac.ArchiveFile.size_b)
-        .where(ac.ArchiveFile.acq_id == acq.id)
-    )
+    if node_name:
+        try:
+            node = st.StorageNode.get(name=node_name)
+        except pw.DoesNotExist:
+            print("No such storage node:", node_name)
+            sys.exit(1)
+
+        query = (
+            ac.ArchiveFile.select(
+                ac.ArchiveFile.name,
+                ar.ArchiveFileCopy.size_b,
+                ar.ArchiveFileCopy.has_file,
+                ar.ArchiveFileCopy.wants_file,
+            )
+            .join(ar.ArchiveFileCopy)
+            .where(
+                ac.ArchiveFile.acq == acq,
+                ar.ArchiveFileCopy.node == node,
+            )
+        )
+        headers = ['Name', 'Size', 'Has', 'Wants']
+    else:
+        query = (
+            ac.ArchiveFile.select(
+                ac.ArchiveFile.name,
+                ac.ArchiveFile.size_b)
+            .where(ac.ArchiveFile.acq_id == acq.id)
+        )
+        headers = ['Name', 'Size']
 
     data = query.tuples()
 
     if data:
-        print(tabulate.tabulate(data, headers=['Name', 'Size']))
+        print(tabulate.tabulate(data, headers=headers))
     else:
         print("No registered archive files.")
+
 
 @cli.command()
 @click.argument('acquisition')
 @click.argument('source_node')
 @click.argument('destination_group')
 def syncable(acquisition, source_node, destination_group):
-    """List all files that are in the ACQUISITION.
+    """List all files that are in the ACQUISITION that still need to be moved to DESTINATION_GROUP and are available on SOURCE_NODE.
     """
     config_connect()
 

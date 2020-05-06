@@ -63,6 +63,7 @@ def test_list(fixtures):
         r'x +3 *\n',
         result.output, re.DOTALL)
 
+    # Fail when given a non-existent storage node
     result = runner.invoke(cli.cli, ['acq', 'list', 'y'])
     assert result.exit_code == 1
     assert "No such storage node: y" in result.output
@@ -99,7 +100,22 @@ def test_files(fixtures):
         r'-+  -+\n'
         r'fred *\n'
         r'jim +0 *\n'
-        r'sheila *\n',
+        r'sheila *\n$',
+        result.output, re.DOTALL)
+
+    # Fail when given a non-existent storage node
+    result = runner.invoke(cli.cli, ['acq', 'files', 'x', 'y'])
+    assert result.exit_code == 1
+    assert "No such storage node: y" in result.output
+
+    # Check files from 'x' present on node 'x' (only 'fred' and 'sheila', with 'missing' and 'corrupted' has_file status)
+    result = runner.invoke(cli.cli, ['acq', 'files', 'x', 'x'])
+    assert result.exit_code == 0
+    assert re.match(
+        r'.*Name +Size +Has +Wants\n'
+        r'-+  -+  -+  -+\n'
+        r'fred +512 +N +Y *\n'
+        r'sheila +512 +X +M *\n$',
         result.output, re.DOTALL)
 
 
