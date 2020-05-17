@@ -71,7 +71,10 @@ def test_create_node(fixtures):
 
     result = runner.invoke(cli.cli, ['node', 'create', '--storage_type=Z', 'z', 'root', 'hostname', 'bar'])
     assert result.exit_code == 2  # Click usage error
-    assert "Invalid value for '--storage_type': invalid choice: Z. (choose from A, T, F)" in result.output
+    assert re.search(
+        r"Error: Invalid value for ['\"]--storage_type['\"]: "
+        r"invalid choice: Z. \(choose from A, T, F\)",
+        result.output, re.DOTALL)
 
 
 def test_list_nodes(fixtures):
