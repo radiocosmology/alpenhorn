@@ -96,10 +96,10 @@ def test_files(fixtures):
     result = runner.invoke(cli.cli, ['acq', 'files', 'x'])
     assert result.exit_code == 0
     assert re.match(
-        r'.*Name +Size\n'
-        r'-+  -+\n'
+        r'.*Name +Size +MD5 *\n'
+        r'-+  -+  -+\n'
         r'fred *\n'
-        r'jim +0 *\n'
+        r'jim +0 +d41d8cd98f00b204e9800998ecf8427e *\n'
         r'sheila *\n$',
         result.output, re.DOTALL)
 
