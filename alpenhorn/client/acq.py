@@ -110,10 +110,11 @@ def files(acquisition, node_name):
         query = (
             ac.ArchiveFile.select(
                 ac.ArchiveFile.name,
-                ac.ArchiveFile.size_b)
+                ac.ArchiveFile.size_b,
+                ac.ArchiveFile.md5sum)
             .where(ac.ArchiveFile.acq_id == acq.id)
         )
-        headers = ['Name', 'Size']
+        headers = ['Name', 'Size', 'MD5']
 
     data = query.tuples()
 
