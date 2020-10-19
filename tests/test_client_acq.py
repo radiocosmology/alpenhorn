@@ -119,6 +119,67 @@ def test_files(fixtures):
         result.output, re.DOTALL)
 
 
+def test_where(fixtures):
+    """Test the 'acq where' command"""
+    runner = CliRunner()
+
+    # Check help output
+    help_result = runner.invoke(cli.cli, ['acq', 'where', '--help'])
+    assert help_result.exit_code == 0
+    assert "List locations of files that are in the ACQUISITION." in help_result.output
+
+    # Fail when given a non-existent acquisition
+    result = runner.invoke(cli.cli, ['acq', 'where', 'z'])
+    assert result.exit_code == 1
+    assert "No such acquisition: z" in result.output
+
+    # Check regular case
+    result = runner.invoke(cli.cli, ['acq', 'where', 'x'], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert re.match(
+        r'Storage node: x\n'
+        r'.*Name +Size +Has +Wants\n'
+        r'-+  -+  -+  -+\n'
+        r'fred +512 +N +Y *\n'
+        r'sheila +512 +X +M *\n$',
+        result.output, re.DOTALL)
+
+    # Now pretend node 'z' also has a copy of 'fred'
+    z_node = st.StorageNode.get(name='z')
+    fred_file = ar.ArchiveFile.get(name='fred')
+    fred2_copy = ar.ArchiveFileCopy.create(file=fred_file,
+                                           node=z_node,
+                                           has_file='Y',
+                                           wants_file='Y',
+                                           size_b=123)
+    result = runner.invoke(cli.cli, ['acq', 'where', 'x'], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert re.match(
+        r'Storage node: x\n'
+        r'.*Name +Size +Has +Wants\n'
+        r'-+  -+  -+  -+\n'
+        r'fred +512 +N +Y *\n'
+        r'sheila +512 +X +M *\n\n'
+        r'Storage node: z\n'
+        r'.*Name +Size +Has +Wants\n'
+        r'-+  -+  -+  -+\n'
+        r'fred +123 +Y +Y *\n$',
+        result.output, re.DOTALL)
+
+    # Check when an acquisition does not have any files
+    zoo_acq = ac.ArchiveAcq.create(name='zoo', type=ac.AcqType.get(name='zab'))
+    result = runner.invoke(cli.cli, ['acq', 'where', 'zoo'], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'No registered archive files.\n'
+
+    # Check when there are no copies of an acquisition's files
+    ac.ArchiveFile.create(name='boo', acq=zoo_acq,
+                          type=ac.FileType.get(name='spqr'))
+    result = runner.invoke(cli.cli, ['acq', 'where', 'zoo'], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.output == 'No registered archive files.\n'
+
+
 def test_syncable(fixtures):
     """Test the 'acq syncable' command"""
     runner = CliRunner()
