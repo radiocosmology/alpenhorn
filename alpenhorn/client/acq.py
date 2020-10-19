@@ -126,6 +126,53 @@ def files(acquisition, node_name):
 
 @cli.command()
 @click.argument('acquisition')
+def where(acquisition):
+    """List locations of files that are in the ACQUISITION.
+    """
+    config_connect()
+
+    import tabulate
+
+    try:
+        acq = ac.ArchiveAcq.get(name=acquisition)
+    except pw.DoesNotExist:
+        print("No such acquisition:", acquisition)
+        sys.exit(1)
+
+    nodes = (
+        st.StorageNode.select()
+        .join(ar.ArchiveFileCopy)
+        .join(ac.ArchiveFile)
+        .where(ac.ArchiveFile.acq == acq)
+        .distinct()
+    ).execute()
+    if not nodes:
+        print("No registered archive files.")
+        return
+
+    for node in nodes:
+        print("Storage node:", node.name)
+        query = (
+            ac.ArchiveFile.select(
+                ac.ArchiveFile.name,
+                ar.ArchiveFileCopy.size_b,
+                ar.ArchiveFileCopy.has_file,
+                ar.ArchiveFileCopy.wants_file,
+            )
+            .join(ar.ArchiveFileCopy)
+            .where(
+                ac.ArchiveFile.acq == acq,
+                ar.ArchiveFileCopy.node == node,
+            )
+        )
+        headers = ["Name", "Size", "Has", "Wants"]
+        data = query.tuples()
+        print(tabulate.tabulate(data, headers=headers))
+        print()
+
+
+@cli.command()
+@click.argument('acquisition')
 @click.argument('source_node')
 @click.argument('destination_group')
 def syncable(acquisition, source_node, destination_group):
