@@ -32,16 +32,19 @@ class FailingSqliteDatabase(pw.SqliteDatabase):
             return super(FailingSqliteDatabase, self).close()
 
 
-from alpenhorn.storage import (StorageGroup, StorageNode)
+from alpenhorn.storage import StorageGroup, StorageNode
+
 
 @pytest.fixture
 def fixtures(tmpdir):
     db._connect()
 
     # the database connection will fail to execute a statement every other time
-    db.database_proxy.obj.__class__ = type('FailingRetryableDatabase',
-                                           (db.RetryOperationalError, FailingSqliteDatabase),
-                                           {})
+    db.database_proxy.obj.__class__ = type(
+        "FailingRetryableDatabase",
+        (db.RetryOperationalError, FailingSqliteDatabase),
+        {},
+    )
     db.database_proxy.obj.fail_count = 0
     db.database_proxy.obj.fail = False
 
@@ -50,11 +53,13 @@ def fixtures(tmpdir):
     assert db.database_proxy.obj.fail_count > 0
     db.database_proxy.close()
 
+
 def test_schema(fixtures):
     setup_fail_count = db.database_proxy.obj.fail_count
     ti.test_schema(fixtures)
     # we have had more failures during test_import
     assert db.database_proxy.obj.fail_count > setup_fail_count
+
 
 def test_model(fixtures):
     setup_fail_count = db.database_proxy.obj.fail_count

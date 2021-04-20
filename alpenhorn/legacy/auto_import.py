@@ -21,13 +21,14 @@ from ch_util import data_index as di
 
 # Setup the logging
 from . import logger
+
 log = logger.get_log()
 
 # File to use for caching files already imported
 LOCAL_IMPORT_RECORD = "/etc/alpenhornd_import.dat"  # default path
 
-if 'ALPENHORN_IMPORT_RECORD' in os.environ:
-    LOCAL_IMPORT_RECORD = os.environ['ALPENHORN_IMPORT_RECORD']
+if "ALPENHORN_IMPORT_RECORD" in os.environ:
+    LOCAL_IMPORT_RECORD = os.environ["ALPENHORN_IMPORT_RECORD"]
 
 import_done = None
 
@@ -55,9 +56,9 @@ def load_import_cache():
 # Routines to control the filesystem watchdogs.
 # =============================================
 
+
 def setup_observers(node_list):
-    """Setup the watchdogs to look for new files in the nodes.
-    """
+    """Setup the watchdogs to look for new files in the nodes."""
 
     global obs_list
 
@@ -66,12 +67,11 @@ def setup_observers(node_list):
     obs_list = []
     for node in node_list:
         if node.auto_import:
-            log.info("Crawling base directory \"%s\" for new files." % node.root)
+            log.info('Crawling base directory "%s" for new files.' % node.root)
             for acq_name, d, f_list in os.walk(node.root):
                 log.info("Crawling %s." % acq_name)
                 for file_name in sorted(f_list):
-                    import_file(node, node.root, os.path.basename(acq_name),
-                                file_name)
+                    import_file(node, node.root, os.path.basename(acq_name), file_name)
             # If it is an NFS mount, then the default Observer() doesn't work.
             # Determine this by seeing if the node name is the same as the node host:
             # not failsafe, but it will do for now.
@@ -106,16 +106,14 @@ def join_observers():
 # Routines for registering files, acquisitions, copies and info in the DB.
 # ========================================================================
 
+
 def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
-    """Add an aquisition to the database.
-    """
+    """Add an aquisition to the database."""
     ts, inst, atype = di.parse_acq_name(name)
 
     # Is the acquisition already in the database?
-    if di.ArchiveAcq.select(di.ArchiveAcq.id).where(
-            di.ArchiveAcq.name == name).count():
-        raise di.AlreadyExists("Acquisition \"%s\" already exists in DB." %
-                               name)
+    if di.ArchiveAcq.select(di.ArchiveAcq.id).where(di.ArchiveAcq.name == name).count():
+        raise di.AlreadyExists('Acquisition "%s" already exists in DB.' % name)
 
     # Does the instrument already exist in the database?
     try:
@@ -123,12 +121,10 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
     except pw.DoesNotExist:
         if allow_new_inst:
             di.ArchiveInst.insert(name=inst).execute()
-            logging.info("Added new acquisition instrument \"%s\" to DB." %
-                         inst)
+            logging.info('Added new acquisition instrument "%s" to DB.' % inst)
             inst_rec = di.ArchiveInst.get(di.ArchiveInst.name == inst)
         else:
-            raise di.DataBaseError("Acquisition instrument \"%s\" not in DB." %
-                                   inst)
+            raise di.DataBaseError('Acquisition instrument "%s" not in DB.' % inst)
 
     # Does the archive type already exist in the database?
     try:
@@ -136,15 +132,16 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
     except pw.DoesNotExist:
         if allow_new_atype:
             di.AcqType.insert(name=atype).execute()
-            logging.info("Added new acquisition type \"%s\" to DB." % atype)
+            logging.info('Added new acquisition type "%s" to DB.' % atype)
         else:
-            log.warning("Acquisition type \"%s\" not in DB." % atype)
+            log.warning('Acquisition type "%s" not in DB.' % atype)
             return None
-           #raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
+        # raise di.DataBaseError("Acquisition type \"%s\" not in DB." % atype)
 
     # Giddy up!
-    return di.ArchiveAcq.create(name=name, inst=inst_rec, type=atype_rec,
-                                comment=comment)
+    return di.ArchiveAcq.create(
+        name=name, inst=inst_rec, type=atype_rec, comment=comment
+    )
 
 
 def get_acqcorrinfo_keywords_from_h5(path):
@@ -153,8 +150,9 @@ def get_acqcorrinfo_keywords_from_h5(path):
         # This works on the 8-channel correlator.
         n_freq = f["/"].attrs["n_freq"][0]
         n_prod = len(f["/"].attrs["chan_indices"])
-        integration = f["/"].attrs["acq.udp.spf"][0] * \
-            f["/"].attrs["fpga.int_period"][0]
+        integration = (
+            f["/"].attrs["acq.udp.spf"][0] * f["/"].attrs["fpga.int_period"][0]
+        )
     except:
         # For now, at least, on the GPU correlator, we need to find the integration
         # time by hand. Find the median difference between timestamps.
@@ -172,8 +170,11 @@ def get_acqcorrinfo_keywords_from_h5(path):
             dt = np.array([])
             t = f["timestamp"]
             for i in range(1, len(t)):
-                ddt = float(t[i][1]) - float(t[i - 1][1]) + (float(t[i][2]) -
-                                                             float(t[i - 1][2])) * 1e-6
+                ddt = (
+                    float(t[i][1])
+                    - float(t[i - 1][1])
+                    + (float(t[i][2]) - float(t[i - 1][2])) * 1e-6
+                )
                 if t[i][2] + 2e-5 < t[i - 1][2]:
                     dt = np.append(dt, ddt + 1.0)
                 else:
@@ -183,16 +184,14 @@ def get_acqcorrinfo_keywords_from_h5(path):
             n_prod = len(f["/"].attrs["chan_indices"])
 
     f.close()
-    return {"integration": integration,
-            "nfreq": n_freq,
-            "nprod": n_prod}
+    return {"integration": integration, "nfreq": n_freq, "nprod": n_prod}
 
 
 def get_acqhkinfo_keywords_from_h5(path):
     fullpath = "%s/%s" % (path, di.fname_atmel)
     fp = open(fullpath, "r")
     if fp is None:
-        raise Exception("Could not find \"%s\"." % fullpath)
+        raise Exception('Could not find "%s".' % fullpath)
 
     ret = []
     while 1:
@@ -216,19 +215,20 @@ def get_rawinfo_keywords(path):
     conf = configobj.ConfigObj(fname)
     d = datetime.datetime.strptime(conf.get("start_time"), "%Y%m%dT%H%M%SZ")
     t = calendar.timegm(d.utctimetuple())
-    return {"start_time": t,
-            "nfreq": conf.get("num_freq"),
-            "ninput": conf.get("num_inputs"),
-            "nframe": conf.get("num_frames"),
-            "packet_len": conf.get("packet_len"),
-            "header_len": conf.get("header_len"),
-            "footer_len": conf.get("footer_len"),
-            "offset": conf.get("offset"),
-            "stream_id": conf.get("stream_id"),
-            "data_bits": conf.get("data_bits"),
-            "stride": conf.get("stride"),
-            "note": conf.get("note")
-            }
+    return {
+        "start_time": t,
+        "nfreq": conf.get("num_freq"),
+        "ninput": conf.get("num_inputs"),
+        "nframe": conf.get("num_frames"),
+        "packet_len": conf.get("packet_len"),
+        "header_len": conf.get("header_len"),
+        "footer_len": conf.get("footer_len"),
+        "offset": conf.get("offset"),
+        "stream_id": conf.get("stream_id"),
+        "data_bits": conf.get("data_bits"),
+        "stride": conf.get("stride"),
+        "note": conf.get("note"),
+    }
 
 
 def get_acqrawadcinfo_keywords_from_h5(acq_name):
@@ -249,10 +249,12 @@ def get_filecorrinfo_keywords_from_h5(path):
         finish_time = f["/index_map/time"][-1][1]
     chunk_number, freq_number = di.parse_corrfile_name(os.path.basename(path))
     f.close()
-    return {"start_time": start_time,
-            "finish_time": finish_time,
-            "chunk_number": chunk_number,
-            "freq_number": freq_number}
+    return {
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "chunk_number": chunk_number,
+        "freq_number": freq_number,
+    }
 
 
 def get_fileweatherinfo_keywords_from_h5(path):
@@ -261,9 +263,7 @@ def get_fileweatherinfo_keywords_from_h5(path):
     finish_time = f["/index_map/time"][-1]
     d = di.parse_weatherfile_name(os.path.basename(path))
     f.close()
-    return {"start_time": start_time,
-            "finish_time": finish_time,
-            "date": d}
+    return {"start_time": start_time, "finish_time": finish_time, "date": d}
 
 
 def get_filehkinfo_keywords_from_h5(path):
@@ -272,21 +272,25 @@ def get_filehkinfo_keywords_from_h5(path):
     finish_time = f["index_map/time"][-1]
     chunk_number, atmel_name = di.parse_hkfile_name(os.path.basename(path))
     f.close()
-    return {"start_time": start_time,
-            "finish_time": finish_time,
-            "atmel_name": atmel_name,
-            "chunk_number": chunk_number}
+    return {
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "atmel_name": atmel_name,
+        "chunk_number": chunk_number,
+    }
 
 
 def get_filerawinfo_keywords(rawinfo, size_b, file_name):
-    chunk_num = int(file_name[:file_name.find(".")])
+    chunk_num = int(file_name[: file_name.find(".")])
     log.debug("Rawinfo: %d %d %d" % (size_b, rawinfo.nframe, rawinfo.packet_len))
     dt = size_b * rawinfo.nframe * 2048 / (rawinfo.packet_len * 8e8)
     start_time = rawinfo.start_time + chunk_num * dt
     finish_time = rawinfo.start_time + (chunk_num + 1) * dt
-    return {"start_time": start_time,
-            "finish_time": finish_time,
-            "chunk_number": chunk_num}
+    return {
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "chunk_number": chunk_num,
+    }
 
 
 def import_file(node, root, acq_name, file_name):
@@ -296,8 +300,9 @@ def import_file(node, root, acq_name, file_name):
             _import_file(node, root, acq_name, file_name)
             done = True
         except pw.OperationalError:
-            log.error("MySQL connexion dropped. Will attempt to reconnect in "
-                      "five seconds.")
+            log.error(
+                "MySQL connexion dropped. Will attempt to reconnect in " "five seconds."
+            )
             time.sleep(5)
             di.connect_database(True)
 
@@ -320,7 +325,7 @@ def _import_file(node, root, acq_name, file_name):
 
     # Skip the file if ch_master.py still has a lock on it.
     if os.path.isfile("%s/%s/.%s.lock" % (root, acq_name, file_name)):
-        log.debug("Skipping \"%s\", which is locked by ch_master.py." % fullpath)
+        log.debug('Skipping "%s", which is locked by ch_master.py.' % fullpath)
         return
 
     # Parse the path
@@ -339,30 +344,35 @@ def _import_file(node, root, acq_name, file_name):
     # Figure out which acquisition this is; add if necessary.
     try:
         acq = di.ArchiveAcq.get(di.ArchiveAcq.name == acq_name)
-        log.debug("Acquisition \"%s\" already in DB. Skipping." % acq_name)
+        log.debug('Acquisition "%s" already in DB. Skipping.' % acq_name)
     except pw.DoesNotExist:
         acq = add_acq(acq_name)
         if acq is None:
             return
-        log.info("Acquisition \"%s\" added to DB." % acq_name)
+        log.info('Acquisition "%s" added to DB.' % acq_name)
 
     # What kind of file do we have?
     ftype = di.detect_file_type(file_name)
     if ftype is None:
-        log.info("Skipping unrecognised file \"%s/%s\"." % (acq_name, file_name))
+        log.info('Skipping unrecognised file "%s/%s".' % (acq_name, file_name))
         return
 
     # Make sure information about the acquisition exists in the DB.
     if atype == "corr" and ftype.name == "corr":
         if not acq.corrinfos.count():
             try:
-                di.CorrAcqInfo.create(acq=acq,
-                                      **get_acqcorrinfo_keywords_from_h5(fullpath))
-                log.info("Added information for correlator acquisition \"%s\" to "
-                         "DB." % acq_name)
+                di.CorrAcqInfo.create(
+                    acq=acq, **get_acqcorrinfo_keywords_from_h5(fullpath)
+                )
+                log.info(
+                    'Added information for correlator acquisition "%s" to '
+                    "DB." % acq_name
+                )
             except:
-                log.warning("Missing info for acquistion \"%s\": HDF5 datasets "
-                            "empty. Leaving fields NULL." % (acq_name))
+                log.warning(
+                    'Missing info for acquistion "%s": HDF5 datasets '
+                    "empty. Leaving fields NULL." % (acq_name)
+                )
                 di.CorrAcqInfo.create(acq=acq)
     elif atype == "hk" and ftype.name == "hk":
         try:
@@ -371,45 +381,55 @@ def _import_file(node, root, acq_name, file_name):
             log.warning("Could no open atmel_id.dat file. Skipping.")
             keywords = []
         for kw in keywords:
-            if not sum(1 for _ in di.HKAcqInfo.select().
-                       where(di.HKAcqInfo.acq == acq).
-                       where(di.HKAcqInfo.atmel_name == kw["atmel_name"])):
+            if not sum(
+                1
+                for _ in di.HKAcqInfo.select()
+                .where(di.HKAcqInfo.acq == acq)
+                .where(di.HKAcqInfo.atmel_name == kw["atmel_name"])
+            ):
                 try:
                     di.HKAcqInfo.create(acq=acq, **kw)
-                    log.info("Added information for housekeeping acquisition \"%s\", "
-                             "board %s to DB." % (acq_name, kw["atmel_name"]))
+                    log.info(
+                        'Added information for housekeeping acquisition "%s", '
+                        "board %s to DB." % (acq_name, kw["atmel_name"])
+                    )
                 except:
-                    log.warning("Missing info for acquisition \"%s\": atmel_id.dat "
-                                "file missing or corrupt. Skipping this acquisition." %
-                                acq_name)
+                    log.warning(
+                        'Missing info for acquisition "%s": atmel_id.dat '
+                        "file missing or corrupt. Skipping this acquisition." % acq_name
+                    )
                     return
     elif atype == "rawadc":
         if not acq.rawadcinfos.count():
-            di.RawadcAcqInfo.create(acq=acq,
-                                    **get_acqrawadcinfo_keywords_from_h5(acq_name))
-            log.info("Added information for raw ADC acquisition \"%s\" to "
-                     "DB." % acq_name)
+            di.RawadcAcqInfo.create(
+                acq=acq, **get_acqrawadcinfo_keywords_from_h5(acq_name)
+            )
+            log.info(
+                'Added information for raw ADC acquisition "%s" to ' "DB." % acq_name
+            )
     elif atype == "raw":
         try:
             raw_info = acq.rawinfos.get()
         except pw.DoesNotExist:
             try:
-                raw_info = di.RawAcqInfo.create(acq=acq,
-                                                **get_rawinfo_keywords("%s/%s" %
-                                                                       (root, acq_name)))
-                log.info("Added information for raw acquisition \"%s\" to DB." %
-                         acq_name)
+                raw_info = di.RawAcqInfo.create(
+                    acq=acq, **get_rawinfo_keywords("%s/%s" % (root, acq_name))
+                )
+                log.info('Added information for raw acquisition "%s" to DB.' % acq_name)
             except:
-                log.info("Missing info in settings.dat for acquisition \"%s\". "
-                         "Skipping this acquisition." % acq_name)
+                log.info(
+                    'Missing info in settings.dat for acquisition "%s". '
+                    "Skipping this acquisition." % acq_name
+                )
                 return
 
     # Add the file, if necessary.
     try:
-        file = di.ArchiveFile.get(di.ArchiveFile.name == file_name,
-                                  di.ArchiveFile.acq == acq)
+        file = di.ArchiveFile.get(
+            di.ArchiveFile.name == file_name, di.ArchiveFile.acq == acq
+        )
         size_b = file.size_b
-        log.debug("File \"%s/%s\" already in DB. Skipping." % (acq_name, file_name))
+        log.debug('File "%s/%s" already in DB. Skipping.' % (acq_name, file_name))
     except pw.DoesNotExist:
         log.debug("Computing md5sum.")
         md5sum = di.md5sum_file(fullpath, cmd_line=True)
@@ -417,134 +437,153 @@ def _import_file(node, root, acq_name, file_name):
         done = False
         while not done:
             try:
-                file = di.ArchiveFile.create(acq=acq, type=ftype, name=file_name,
-                                             size_b=size_b, md5sum=md5sum)
+                file = di.ArchiveFile.create(
+                    acq=acq, type=ftype, name=file_name, size_b=size_b, md5sum=md5sum
+                )
                 done = True
             except pw.OperationalError:
-                log.error("MySQL connexion dropped. Will attempt to reconnect in "
-                          "five seconds.")
+                log.error(
+                    "MySQL connexion dropped. Will attempt to reconnect in "
+                    "five seconds."
+                )
                 time.sleep(5)
                 di.connect_database(True)
-        log.info("File \"%s/%s\" added to DB." % (acq_name, file_name))
+        log.info('File "%s/%s" added to DB.' % (acq_name, file_name))
 
     # Register the copy of the file here on the collection server, if (1) it does
     # not exist, or (2) it does exist but has been labelled as corrupt. If (2),
     # check again.
     if not file.copies.where(di.ArchiveFileCopy.node == node).count():
-        copy = di.ArchiveFileCopy.create(file=file, node=node, has_file='Y',
-                                         wants_file='Y')
-        log.info("Registered file copy \"%s/%s\" to DB." % (acq_name, file_name))
+        copy = di.ArchiveFileCopy.create(
+            file=file, node=node, has_file="Y", wants_file="Y"
+        )
+        log.info('Registered file copy "%s/%s" to DB.' % (acq_name, file_name))
 
     # Make sure information about the file exists in the DB.
     if ftype.name == "corr":
         # Add if (1) there is no corrinfo or (2) the corrinfo is missing.
         if not file.corrinfos.count():
             try:
-                di.CorrFileInfo.create(file=file,
-                                       **get_filecorrinfo_keywords_from_h5(fullpath))
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                di.CorrFileInfo.create(
+                    file=file, **get_filecorrinfo_keywords_from_h5(fullpath)
+                )
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
             except:
                 if not file.corrinfos.count():
                     di.CorrFileInfo.create(file=file)
-                log.warning("Missing info for file \"%s/%s\": HDF5 datasets "
-                            "empty or unreadable. Leaving fields NULL." %
-                            (acq_name, file_name))
+                log.warning(
+                    'Missing info for file "%s/%s": HDF5 datasets '
+                    "empty or unreadable. Leaving fields NULL." % (acq_name, file_name)
+                )
         elif not file.corrinfos[0].start_time:
             try:
                 i = file.corrinfos[0]
                 k = get_filecorrinfo_keywords_from_h5(fullpath)
             except:
-                log.debug("Still missing info for file \"%s/%s\".")
+                log.debug('Still missing info for file "%s/%s".')
             else:
                 i.start_time = k["start_time"]
                 i.finish_time = k["finish_time"]
                 i.chunk_number = k["chunk_number"]
                 i.freq_number = k["freq_number"]
                 i.save()
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
     if ftype.name == "hk":
         # Add if (1) there is no hkinfo or (2) the hkinfo is missing.
         if not file.hkinfos.count():
             try:
-                di.HKFileInfo.create(file=file,
-                                     **get_filehkinfo_keywords_from_h5(fullpath))
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                di.HKFileInfo.create(
+                    file=file, **get_filehkinfo_keywords_from_h5(fullpath)
+                )
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
             except:
                 if not file.corrinfos.count():
                     di.HKFileInfo.create(file=file)
-                log.warning("Missing info for file \"%s/%s\": HDF5 datasets "
-                            "empty or unreadable. Leaving fields NULL." %
-                            (acq_name, file_name))
+                log.warning(
+                    'Missing info for file "%s/%s": HDF5 datasets '
+                    "empty or unreadable. Leaving fields NULL." % (acq_name, file_name)
+                )
         elif not file.hkinfos[0].start_time:
             try:
                 i = file.hkinfos[0]
                 k = get_filehkinfo_keywords_from_h5(fullpath)
             except:
-                log.debug("Still missing info for file \"%s/%s\".")
+                log.debug('Still missing info for file "%s/%s".')
             else:
                 i.start_time = k["start_time"]
                 i.finish_time = k["finish_time"]
                 i.atmel_name = k["atmel_name"]
                 i.chunk_number = k["chunk_number"]
                 i.save()
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
     if ftype.name == "weather":
         # Add if (1) there is no weatherinfo or (2) the weatherinfo is missing.
         if not file.weatherinfos.count():
             #      try:
-            di.WeatherFileInfo.create(file=file,
-                                      **get_fileweatherinfo_keywords_from_h5(fullpath))
-            log.info("Added information for file \"%s/%s\" to DB." %
-                     (acq_name, file_name))
-#      except:
-#        if not file.corrinfos.count():
-#          di.WeatherFileInfo.create(file=file)
-#        log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
-#                    "empty or unreadable. Leaving fields NULL." %
-#                    (acq_name, file_name))
+            di.WeatherFileInfo.create(
+                file=file, **get_fileweatherinfo_keywords_from_h5(fullpath)
+            )
+            log.info(
+                'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+            )
+        #      except:
+        #        if not file.corrinfos.count():
+        #          di.WeatherFileInfo.create(file=file)
+        #        log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
+        #                    "empty or unreadable. Leaving fields NULL." %
+        #                    (acq_name, file_name))
         elif not file.weatherinfos[0].start_time:
             try:
                 i = file.weatherinfos[0]
                 k = get_fileweatherinfo_keywords_from_h5(fullpath)
             except:
-                log.debug("Still missing info for file \"%s/%s\".")
+                log.debug('Still missing info for file "%s/%s".')
             else:
                 i.start_time = k["start_time"]
                 i.finish_time = k["finish_time"]
                 i.date = k["date"]
                 i.save()
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
     if ftype.name == "raw":
         # Add if (1) there is no rawinfo or (2) the rawinfo is missing.
         if not file.rawinfos.count():
             try:
-                di.RawFileInfo.create(file=file,
-                                      **get_filerawinfo_keywords(raw_info, size_b,
-                                                                 file_name))
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                di.RawFileInfo.create(
+                    file=file, **get_filerawinfo_keywords(raw_info, size_b, file_name)
+                )
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
             except:
                 if not file.corrinfos.count():
                     di.RawFileInfo.create(file=file)
-                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
-                            (acq_name, file_name))
+                log.warning(
+                    'Missing info for file "%s/%s". Leaving fields NULL.'
+                    % (acq_name, file_name)
+                )
         elif not file.rawinfos[0].start_time:
             try:
                 i = file.rawinfos[0]
                 k = get_filerawinfo_keywords(raw_info, size_b, file_name)
             except:
-                log.debug("Still missing info for file \"%s/%s\".")
+                log.debug('Still missing info for file "%s/%s".')
             else:
                 i.start_time = k["start_time"]
                 i.chunk_number = k["chunk_number"]
                 i.save()
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
 
     if import_done is not None:
         bisect.insort_left(import_done, fullpath)
@@ -555,10 +594,10 @@ def _import_file(node, root, acq_name, file_name):
 # Watchdog stuff
 # ==============
 
-class RegisterFile(FileSystemEventHandler):
 
+class RegisterFile(FileSystemEventHandler):
     def __init__(self, node):
-        log.info("Registering node \"%s\" for auto_import watchdog." % (node.name))
+        log.info('Registering node "%s" for auto_import watchdog.' % (node.name))
         self.node = node
         self.root = node.root
         if self.root[-1] == "/":

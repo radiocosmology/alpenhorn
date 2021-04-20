@@ -6,8 +6,7 @@ import logging
 
 import click
 
-from . import (extensions, db, config, logger,
-               auto_import, storage, update, util)
+from . import extensions, db, config, logger, auto_import, storage, update, util
 
 
 log = logging.getLogger(__name__)
@@ -15,6 +14,7 @@ log = logging.getLogger(__name__)
 
 # Register Hook to Log Exception
 # ==============================
+
 
 def log_exception(*args):
     log.error("Fatal error!", exc_info=args)
@@ -25,8 +25,7 @@ sys.excepthook = log_exception
 
 @click.command()
 def cli():
-    """Alpenhorn data management service.
-    """
+    """Alpenhorn data management service."""
 
     # Load the configuration for alpenhorn
     config.load_config()
@@ -47,15 +46,17 @@ def cli():
     host = util.get_short_hostname()
 
     # Get the list of currently nodes active
-    node_list = list(storage.StorageNode.select().where(
-        storage.StorageNode.host == host, storage.StorageNode.active
-    ))
+    node_list = list(
+        storage.StorageNode.select().where(
+            storage.StorageNode.host == host, storage.StorageNode.active
+        )
+    )
 
     # Warn if there are no active nodes. We used to exit here, but actually
     # it's useful to keep alpenhornd running for nodes where we exclusively use
     # transport disks (e.g. jingle)
     if len(node_list) == 0:
-        log.warn("No nodes on this host (\"%s\") registered in the DB!" % host)
+        log.warn('No nodes on this host ("%s") registered in the DB!' % host)
 
     # Setup the observers to watch the nodes for new files
     auto_import.setup_observers(node_list)
@@ -70,7 +71,7 @@ def cli():
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:
-        log.info('Exiting...')
+        log.info("Exiting...")
         auto_import.stop_observers()
 
     # Wait for watchdog threads to terminate

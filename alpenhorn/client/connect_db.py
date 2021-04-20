@@ -4,8 +4,7 @@ from alpenhorn import config, extensions, db
 
 
 def config_connect():
-    """Load the config, start the database and register extensions.
-    """
+    """Load the config, start the database and register extensions."""
     # Load the configuration and initialise the database connection
     config.load_config()
     extensions.load_extensions()

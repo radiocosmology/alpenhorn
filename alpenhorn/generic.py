@@ -9,9 +9,9 @@ class GenericAcqInfo(ac.AcqInfoBase):
     patterns, but doesn't keep track of any metadata.
     """
 
-    _acq_type = 'generic'
+    _acq_type = "generic"
 
-    _file_types = ['generic']
+    _file_types = ["generic"]
 
     patterns = None
     glob = True
@@ -37,23 +37,21 @@ class GenericAcqInfo(ac.AcqInfoBase):
         """
         # Extract patterns to process from a section of the config file
 
-        cls.patterns = configdict['patterns']
+        cls.patterns = configdict["patterns"]
 
-        if 'glob' in configdict:
-            cls.glob = configdict['glob']
+        if "glob" in configdict:
+            cls.glob = configdict["glob"]
 
-        if 'file_types' in configdict:
-            cls._file_types = configdict['file_types']
+        if "file_types" in configdict:
+            cls._file_types = configdict["file_types"]
 
     @classmethod
     def _is_type(cls, acqname, node_root):
-        """Check whether the acquisition path matches any patterns we can handle.
-        """
+        """Check whether the acquisition path matches any patterns we can handle."""
         return _check_match(acqname, cls.patterns, cls.glob)
 
     def set_info(self, acqname, node_root):
-        """Generic acquisition type has no metadata, so just return.
-        """
+        """Generic acquisition type has no metadata, so just return."""
         return
 
 
@@ -62,7 +60,7 @@ class GenericFileInfo(ac.FileInfoBase):
     metadata.
     """
 
-    _file_type = 'generic'
+    _file_type = "generic"
 
     patterns = None
     glob = True
@@ -87,29 +85,24 @@ class GenericFileInfo(ac.FileInfoBase):
         configdict : dict
             Dictionary of configuration options.
         """
-        cls.patterns = configdict['patterns']
+        cls.patterns = configdict["patterns"]
 
-        if 'glob' in configdict:
-            cls.glob = configdict['glob']
+        if "glob" in configdict:
+            cls.glob = configdict["glob"]
 
     @classmethod
     def _is_type(cls, filename, acq_root):
-        """Check whether the file matches any patterns we can handle.
-        """
+        """Check whether the file matches any patterns we can handle."""
         return _check_match(filename, cls.patterns, cls.glob)
 
     def set_info(self, filename, acq_root):
-        """This file type has no meta data so this method does nothing.
-        """
+        """This file type has no meta data so this method does nothing."""
         pass
 
 
 def register_extension():
 
-    ext_dict = {
-        'acq_types': [GenericAcqInfo],
-        'file_types': [GenericFileInfo]
-    }
+    ext_dict = {"acq_types": [GenericAcqInfo], "file_types": [GenericFileInfo]}
 
     return ext_dict
 
@@ -118,9 +111,11 @@ def _check_match(name, patterns, glob):
     # Get the match function to use depending on whether globbing is enabled.
     if glob:
         import globre
+
         matchfn = globre.match
     else:
         import re
+
         matchfn = re.match
 
     # Loop over patterns and check for matches

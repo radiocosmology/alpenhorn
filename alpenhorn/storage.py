@@ -1,4 +1,3 @@
-
 import peewee as pw
 from .db import base_model, EnumField
 
@@ -13,6 +12,7 @@ class StorageGroup(base_model):
     notes : string
         Any notes about this storage group.
     """
+
     name = pw.CharField(max_length=64)
     notes = pw.TextField(null=True)
 
@@ -57,16 +57,17 @@ class StorageNode(base_model):
     notes : string
         Any notes or comments about this node.
     """
+
     name = pw.CharField(max_length=64)
     root = pw.CharField(max_length=255, null=True)
     host = pw.CharField(max_length=64, null=True)
     username = pw.CharField(max_length=64, null=True)
     address = pw.CharField(max_length=255, null=True)
-    group = pw.ForeignKeyField(StorageGroup, backref='nodes')
+    group = pw.ForeignKeyField(StorageGroup, backref="nodes")
     active = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
     suspect = pw.BooleanField(default=False)
-    storage_type = EnumField(['A', 'T', 'F'], default='A')
+    storage_type = EnumField(["A", "T", "F"], default="A")
     max_total_gb = pw.FloatField(default=-1.0)
     min_avail_gb = pw.FloatField()
     avail_gb = pw.FloatField(null=True)

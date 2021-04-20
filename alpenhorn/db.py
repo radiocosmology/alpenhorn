@@ -1,4 +1,3 @@
-
 import logging
 import peewee as pw
 import playhouse.db_url as db_url
@@ -26,16 +25,15 @@ def config_connect():
     from . import config, extensions
 
     # Connect to the database
-    if 'database' in config.config and \
-       'url' in config.config['database']:
-        _connect(url=config.config['database']['url'])
+    if "database" in config.config and "url" in config.config["database"]:
+        _connect(url=config.config["database"]["url"])
     else:
         db_ext = extensions.database_extension()
 
         if db_ext is not None:
             _connect(db=db_ext)
         else:
-            raise RuntimeError('No way to connect to the database')
+            raise RuntimeError("No way to connect to the database")
 
 
 def _connect(url=None, db=None):
@@ -62,7 +60,7 @@ def _connect(url=None, db=None):
     global EnumField
 
     if url is None and db is None:
-        url = 'sqlite:///:memory:'
+        url = "sqlite:///:memory:"
 
     if url is not None:
         db = db_url.connect(url)
@@ -70,10 +68,10 @@ def _connect(url=None, db=None):
     # dynamically make the database instance also inherit from
     # `RetryOperationalError`, so that it retries operations in case of
     # transient database failures
-    db.__class__ = type('RetryableDatabase', (RetryOperationalError, type(db)), {})
+    db.__class__ = type("RetryableDatabase", (RetryOperationalError, type(db)), {})
 
     if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
-        db.field_types['enum'] = 'enum'
+        db.field_types["enum"] = "enum"
         EnumField.native = True
     else:
         EnumField.native = False
@@ -84,6 +82,7 @@ def _connect(url=None, db=None):
 # Helper classes for the peewee ORM
 # =================================
 
+
 class RetryOperationalError(object):
     """Updated rewrite of the former `peewee.shortcuts.RetryOperationalError` mixin
 
@@ -92,8 +91,7 @@ class RetryOperationalError(object):
 
     def execute_sql(self, sql, params=None, commit=True):
         try:
-            cursor = super(RetryOperationalError, self).execute_sql(
-                sql, params, commit)
+            cursor = super(RetryOperationalError, self).execute_sql(sql, params, commit)
         except pw.OperationalError:
             if not self.is_closed():
                 self.close()
@@ -103,7 +101,6 @@ class RetryOperationalError(object):
                 if commit and not self.in_transaction():
                     self.commit()
         return cursor
-
 
 
 class EnumField(pw.Field):
@@ -137,9 +134,9 @@ class EnumField(pw.Field):
     @property
     def field_type(self):
         if self.native:
-            return 'enum'
+            return "enum"
         else:
-            return 'string'
+            return "string"
 
     def __init__(self, enum_list, *args, **kwargs):
         self.enum_list = enum_list
@@ -154,8 +151,7 @@ class EnumField(pw.Field):
 
     def clone_base(self, **kwargs):
         # Add the extra parameter so the field is cloned properly
-        return super(EnumField, self).clone_base(
-            enum_list=self.enum_list, **kwargs)
+        return super(EnumField, self).clone_base(enum_list=self.enum_list, **kwargs)
 
     def get_modifiers(self):
         # This routine seems to be for setting the arguments for creating the
@@ -169,7 +165,7 @@ class EnumField(pw.Field):
         # Coerce the db/python value to the correct output. Also perform
         # validation for non native ENUMs.
         if self.native or val in self.enum_list:
-            return str(val or '')
+            return str(val or "")
         else:
             raise TypeError("Value %s not in ENUM(%s)" % str(self.value))
 

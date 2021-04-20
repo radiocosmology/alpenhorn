@@ -38,8 +38,9 @@ def run_command(cmd, **kwargs):
     log.debug('Running command "%s"', cmd)
 
     # Split the cmd string appropriately and then run using Popen
-    proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, **kwargs)
+    proc = subprocess.Popen(
+        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
+    )
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
 
@@ -48,13 +49,13 @@ def run_command(cmd, **kwargs):
 
 def is_md5_hash(h):
     """Is this the correct format to be an md5 hash."""
-    return re.match('[a-f0-9]{32}', h) is not None
+    return re.match("[a-f0-9]{32}", h) is not None
 
 
 def command_available(cmd):
-    """Is this command available on the system.
-    """
+    """Is this command available on the system."""
     from distutils import spawn
+
     return spawn.find_executable(cmd) is not None
 
 
@@ -78,7 +79,7 @@ def md5sum_file(filename, hr=True, cmd_line=False):
     python
     """
     if cmd_line:
-        ret, stdout, stderr = run_command('md5sum %s' % filename)
+        ret, stdout, stderr = run_command("md5sum %s" % filename)
         md5 = stdout.split()[0]
         assert len(md5) == 32
         return md5
@@ -88,8 +89,8 @@ def md5sum_file(filename, hr=True, cmd_line=False):
         block_size = 256 * 128
 
         md5 = hashlib.md5()
-        with open(filename, 'rb') as f:
-            for chunk in iter(lambda: f.read(block_size), b''):
+        with open(filename, "rb") as f:
+            for chunk in iter(lambda: f.read(block_size), b""):
                 md5.update(chunk)
         if hr:
             return md5.hexdigest()
@@ -114,9 +115,9 @@ def alpenhorn_node_check(node):
     `active` status.
     """
 
-    file_path = os.path.join(node.root, 'ALPENHORN_NODE')
+    file_path = os.path.join(node.root, "ALPENHORN_NODE")
     if os.path.isfile(file_path):
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             first_line = f.readline()
             # Check if the actual node name is in the textfile
             if node.name == first_line.rstrip():
