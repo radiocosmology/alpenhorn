@@ -67,23 +67,13 @@ log = logging.getLogger(__name__)
 config = None
 
 _default_config = {
-    'service': {
-        'update_interval': 60,
-        'auto_import_interval': 30
-    },
-
-    'logging': {
-        'level': 'warning',
-        'module_levels': {
-            'alpenhorn': 'info'
-        }
-    }
+    "service": {"update_interval": 60, "auto_import_interval": 30},
+    "logging": {"level": "warning", "module_levels": {"alpenhorn": "info"}},
 }
 
 
 def load_config():
-    """Find and load the configuration from a file.
-    """
+    """Find and load the configuration from a file."""
 
     global config
 
@@ -92,13 +82,13 @@ def load_config():
 
     # Construct the configuration file path
     config_files = [
-        '/etc/alpenhorn/alpenhorn.conf',
-        '/etc/xdg/alpenhorn/alpenhorn.conf',
-        '~/.config/alpenhorn/alpenhorn.conf',
+        "/etc/alpenhorn/alpenhorn.conf",
+        "/etc/xdg/alpenhorn/alpenhorn.conf",
+        "~/.config/alpenhorn/alpenhorn.conf",
     ]
 
-    if 'ALPENHORN_CONFIG_FILE' in os.environ:
-        config_files.append(os.environ['ALPENHORN_CONFIG_FILE'])
+    if "ALPENHORN_CONFIG_FILE" in os.environ:
+        config_files.append(os.environ["ALPENHORN_CONFIG_FILE"])
 
     any_exist = False
 
@@ -112,9 +102,9 @@ def load_config():
 
         any_exist = True
 
-        log.info('Loading config file %s', cfile)
+        log.info("Loading config file %s", cfile)
 
-        with open(absfile, 'r') as fh:
+        with open(absfile, "r") as fh:
             conf = yaml.safe_load(fh)
 
         config = merge_dict_tree(config, conf)
@@ -131,8 +121,7 @@ class ConfigClass(object):
 
     @classmethod
     def set_config(cls, configdict):
-        """Configure the class from the supplied `configdict`.
-        """
+        """Configure the class from the supplied `configdict`."""
         pass
 
 
@@ -174,15 +163,15 @@ def merge_dict_tree(a, b):
         c = {}
 
         # Add the keys only in a...
-        for k in (keys_a - keys_b):
+        for k in keys_a - keys_b:
             c[k] = a[k]
 
         # ... now the ones only in b
-        for k in (keys_b - keys_a):
+        for k in keys_b - keys_a:
             c[k] = b[k]
 
         # Recursively merge any common keys
-        for k in (keys_a & keys_b):
+        for k in keys_a & keys_b:
             c[k] = merge_dict_tree(a[k], b[k])
 
         return c

@@ -8,18 +8,17 @@ import alpenhorn.storage as st
 from .connect_db import config_connect
 
 
-@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on storage groups. Use to create, modify, and list groups."""
     pass
 
 
 @cli.command()
-@click.argument('group_name', metavar='GROUP')
-@click.option('--notes', metavar='NOTES')
+@click.argument("group_name", metavar="GROUP")
+@click.option("--notes", metavar="NOTES")
 def create(group_name, notes):
-    """Create a storage GROUP and add to database.
-    """
+    """Create a storage GROUP and add to database."""
     config_connect()
 
     try:
@@ -33,24 +32,19 @@ def create(group_name, notes):
 
 @cli.command()
 def list():
-    """List known storage groups.
-    """
+    """List known storage groups."""
     config_connect()
 
     import tabulate
 
-    data = (
-        st.StorageGroup.select(
-            st.StorageGroup.name,
-            st.StorageGroup.notes)
-        .tuples())
+    data = st.StorageGroup.select(st.StorageGroup.name, st.StorageGroup.notes).tuples()
     if data:
-        print(tabulate.tabulate(data, headers=['Name', 'Notes']))
+        print(tabulate.tabulate(data, headers=["Name", "Notes"]))
 
 
 @cli.command()
-@click.argument('group_name', metavar='GROUP')
-@click.argument('new_name', metavar='NEW-NAME')
+@click.argument("group_name", metavar="GROUP")
+@click.argument("new_name", metavar="NEW-NAME")
 def rename(group_name, new_name):
     """Change the name of a storage GROUP to NEW-NAME."""
     config_connect()
@@ -64,15 +58,15 @@ def rename(group_name, new_name):
         except pw.DoesNotExist:
             group.name = new_name
             group.save()
-            print('Updated.')
+            print("Updated.")
     except pw.DoesNotExist:
         print('Group "%s" does not exist!' % group_name)
         exit(1)
 
 
 @cli.command()
-@click.argument('group_name', metavar='GROUP')
-@click.option('--notes', help='Value for the notes field', metavar='NOTES')
+@click.argument("group_name", metavar="GROUP")
+@click.option("--notes", help="Value for the notes field", metavar="NOTES")
 def modify(group_name, notes):
     """Change the properties of a storage GROUP."""
     config_connect()
@@ -80,13 +74,13 @@ def modify(group_name, notes):
     try:
         group = st.StorageGroup.get(name=group_name)
         if notes is not None:
-            if notes == '':
+            if notes == "":
                 notes = None
             group.notes = notes
             group.save()
-            print('Updated.')
+            print("Updated.")
         else:
-            print('Nothing to do.')
+            print("Nothing to do.")
     except pw.DoesNotExist:
         print('Group "%s" does not exist!' % group_name)
         exit(1)

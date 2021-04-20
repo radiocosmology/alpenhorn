@@ -16,20 +16,19 @@ import alpenhorn.util as util
 
 from .connect_db import config_connect
 
-RE_LOCK_FILE = re.compile(r'^\..*\.lock$')
+RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
 
 
-@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on archival data products. Use to list acquisitions, their contents, and locations of copies."""
     pass
 
 
-@cli.command(name='list')
-@click.argument('node_name', required=False)
+@cli.command(name="list")
+@click.argument("node_name", required=False)
 def acq_list(node_name):
-    """List known acquisitions. With NODE specified, list acquisitions with files on NODE.
-    """
+    """List known acquisitions. With NODE specified, list acquisitions with files on NODE."""
     config_connect()
 
     import tabulate
@@ -43,8 +42,8 @@ def acq_list(node_name):
 
         query = (
             ar.ArchiveFileCopy.select(
-                ac.ArchiveAcq.name,
-                pw.fn.count(ar.ArchiveFileCopy.id))
+                ac.ArchiveAcq.name, pw.fn.count(ar.ArchiveFileCopy.id)
+            )
             .join(ac.ArchiveFile)
             .join(ac.ArchiveAcq)
             .where(ar.ArchiveFileCopy.node == node)
@@ -52,9 +51,7 @@ def acq_list(node_name):
         )
     else:
         query = (
-            ac.ArchiveAcq.select(
-                ac.ArchiveAcq.name,
-                pw.fn.COUNT(ac.ArchiveFile.id))
+            ac.ArchiveAcq.select(ac.ArchiveAcq.name, pw.fn.COUNT(ac.ArchiveFile.id))
             .join(ac.ArchiveFile, pw.JOIN.LEFT_OUTER)
             .group_by(ac.ArchiveAcq.name)
         )
@@ -62,16 +59,16 @@ def acq_list(node_name):
     data = query.tuples()
 
     if data:
-        print(tabulate.tabulate(data, headers=['Name', 'Files']))
+        print(tabulate.tabulate(data, headers=["Name", "Files"]))
     else:
         print("No matching acquisitions")
 
+
 @cli.command()
-@click.argument('acquisition')
-@click.argument('node_name', required=False)
+@click.argument("acquisition")
+@click.argument("node_name", required=False)
 def files(acquisition, node_name):
-    """List files that are in the ACQUISITION. With NODE specified, list acquisitions with files on NODE.
-    """
+    """List files that are in the ACQUISITION. With NODE specified, list acquisitions with files on NODE."""
     config_connect()
 
     import tabulate
@@ -102,16 +99,12 @@ def files(acquisition, node_name):
                 ar.ArchiveFileCopy.node == node,
             )
         )
-        headers = ['Name', 'Size', 'Has', 'Wants']
+        headers = ["Name", "Size", "Has", "Wants"]
     else:
-        query = (
-            ac.ArchiveFile.select(
-                ac.ArchiveFile.name,
-                ac.ArchiveFile.size_b,
-                ac.ArchiveFile.md5sum)
-            .where(ac.ArchiveFile.acq_id == acq.id)
-        )
-        headers = ['Name', 'Size', 'MD5']
+        query = ac.ArchiveFile.select(
+            ac.ArchiveFile.name, ac.ArchiveFile.size_b, ac.ArchiveFile.md5sum
+        ).where(ac.ArchiveFile.acq_id == acq.id)
+        headers = ["Name", "Size", "MD5"]
 
     data = query.tuples()
 
@@ -122,10 +115,9 @@ def files(acquisition, node_name):
 
 
 @cli.command()
-@click.argument('acquisition')
+@click.argument("acquisition")
 def where(acquisition):
-    """List locations of files that are in the ACQUISITION.
-    """
+    """List locations of files that are in the ACQUISITION."""
     config_connect()
 
     import tabulate
@@ -169,12 +161,11 @@ def where(acquisition):
 
 
 @cli.command()
-@click.argument('acquisition')
-@click.argument('source_node')
-@click.argument('destination_group')
+@click.argument("acquisition")
+@click.argument("source_node")
+@click.argument("destination_group")
 def syncable(acquisition, source_node, destination_group):
-    """List all files that are in the ACQUISITION that still need to be moved to DESTINATION_GROUP and are available on SOURCE_NODE.
-    """
+    """List all files that are in the ACQUISITION that still need to be moved to DESTINATION_GROUP and are available on SOURCE_NODE."""
     config_connect()
 
     import tabulate
@@ -200,10 +191,14 @@ def syncable(acquisition, source_node, destination_group):
     nodes_at_dest = st.StorageNode.select().where(st.StorageNode.group == dest)
 
     # Then use this to get a list of all files at the destination...
-    files_at_dest = ac.ArchiveFile.select().join(ar.ArchiveFileCopy).where(
-        ac.ArchiveFile.acq == acq,
-        ar.ArchiveFileCopy.node << nodes_at_dest,
-        ar.ArchiveFileCopy.has_file == 'Y',
+    files_at_dest = (
+        ac.ArchiveFile.select()
+        .join(ar.ArchiveFileCopy)
+        .where(
+            ac.ArchiveFile.acq == acq,
+            ar.ArchiveFileCopy.node << nodes_at_dest,
+            ar.ArchiveFileCopy.has_file == "Y",
+        )
     )
 
     # Then combine to get all file(copies) that are available at the source but
@@ -217,7 +212,7 @@ def syncable(acquisition, source_node, destination_group):
         .join(ar.ArchiveFileCopy)
         .where(
             ar.ArchiveFileCopy.node == src,
-            ar.ArchiveFileCopy.has_file == 'Y',
+            ar.ArchiveFileCopy.has_file == "Y",
             ~(ar.ArchiveFile.id << files_at_dest),
         )
     )
@@ -225,8 +220,13 @@ def syncable(acquisition, source_node, destination_group):
     data = query.tuples()
 
     if data:
-        print(tabulate.tabulate(data, headers=['Name', 'Size']))
+        print(tabulate.tabulate(data, headers=["Name", "Size"]))
     else:
-        print("No files to copy from node '", source_node,
-              "' to group '", destination_group, "'.", sep="")
-
+        print(
+            "No files to copy from node '",
+            source_node,
+            "' to group '",
+            destination_group,
+            "'.",
+            sep="",
+        )

@@ -17,7 +17,7 @@ from . import node
 MAX_E2LABEL_LEN = 16
 
 
-@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on transport nodes. Use to format, mount, etc."""
     pass
@@ -25,8 +25,7 @@ def cli():
 
 @cli.command()
 def list():
-    """List known transport nodes.
-    """
+    """List known transport nodes."""
     config_connect()
 
     import tabulate
@@ -34,15 +33,20 @@ def list():
     data = (
         st.StorageNode.select(
             st.StorageNode.name,
-            pw.Case(st.StorageNode.active, [(True, 'Y'), (False, '-')]),
+            pw.Case(st.StorageNode.active, [(True, "Y"), (False, "-")]),
             st.StorageNode.host,
             st.StorageNode.root,
-            st.StorageNode.notes)
-        .where(st.StorageNode.storage_type == 'T')
+            st.StorageNode.notes,
+        )
+        .where(st.StorageNode.storage_type == "T")
         .tuples()
     )
     if data:
-        print(tabulate.tabulate(data, headers=['Name', 'Mounted', 'Host', 'Root', 'Notes']))
+        print(
+            tabulate.tabulate(
+                data, headers=["Name", "Mounted", "Host", "Root", "Notes"]
+            )
+        )
 
 
 @cli.command()
@@ -81,10 +85,10 @@ def format(serial_num):
     formatted = False
     try:
         # check if the block device is partitioned
-        subprocess.check_output(['blkid', '-p', dev])
+        subprocess.check_output(["blkid", "-p", dev])
 
         # now check if the partition is formatted
-        if 'TYPE=' in subprocess.check_output(['blkid', '-p', dev_part]):
+        if "TYPE=" in subprocess.check_output(["blkid", "-p", dev_part]):
             formatted = True
     except subprocess.CalledProcessError:
         pass
@@ -94,12 +98,27 @@ def format(serial_num):
             return
         print("Creating partition. Please wait.")
         try:
-            subprocess.check_call(['parted', '-s', '-a', 'optimal', dev,
-                                   'mklabel', 'gpt',
-                                   '--',
-                                   'mkpart', 'primary', '0%', '100%'])
+            subprocess.check_call(
+                [
+                    "parted",
+                    "-s",
+                    "-a",
+                    "optimal",
+                    dev,
+                    "mklabel",
+                    "gpt",
+                    "--",
+                    "mkpart",
+                    "primary",
+                    "0%",
+                    "100%",
+                ]
+            )
         except subprocess.CalledProcessError as e:
-            print("Failed to create the partition! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+            print(
+                "Failed to create the partition! Stat = %s. I quit.\n%s"
+                % (e.returncode, e.output)
+            )
             exit(1)
 
         # pause to give udev rules time to get updated
@@ -107,10 +126,14 @@ def format(serial_num):
 
         print("Formatting disc. Please wait.")
         try:
-            subprocess.check_call(['mkfs.ext4', dev_part, '-m', '0',
-                                   '-L', 'CH-{}'.format(serial_num)])
+            subprocess.check_call(
+                ["mkfs.ext4", dev_part, "-m", "0", "-L", "CH-{}".format(serial_num)]
+            )
         except subprocess.CalledProcessError as e:
-            print("Failed to format the disk! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+            print(
+                "Failed to format the disk! Stat = %s. I quit.\n%s"
+                % (e.returncode, e.output)
+            )
             exit(1)
     else:
         print("Disc is already formatted.")
@@ -118,17 +141,21 @@ def format(serial_num):
     e2label = _get_e2label(dev_part)
     name = "CH-%s" % serial_num
     if e2label and e2label != name:
-        print("Disc label %s does not conform to labelling standard, "
-              "which is CH-<serialnum>.")
+        print(
+            "Disc label %s does not conform to labelling standard, "
+            "which is CH-<serialnum>."
+        )
         exit
     elif not e2label:
-        print("Labelling the disc as \"%s\" (using e2label) ..." % (name))
+        print('Labelling the disc as "%s" (using e2label) ...' % (name))
         assert dev_part is not None
         assert len(name) <= MAX_E2LABEL_LEN
         try:
-            subprocess.check_call(['/sbin/e2label', dev_part, name])
+            subprocess.check_call(["/sbin/e2label", dev_part, name])
         except subprocess.CalledProcessError as e:
-            print("Failed to e2label! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+            print(
+                "Failed to e2label! Stat = %s. I quit.\n%s" % (e.returncode, e.output)
+            )
             exit(1)
 
     # Ensure the mount path exists.
@@ -139,36 +166,44 @@ def format(serial_num):
 
     # Check to see if the disc is mounted.
     try:
-        output = subprocess.check_output(['df'])
+        output = subprocess.check_output(["df"])
         dev_part_abs = os.path.realpath(dev_part)
-        for l in output.split('\n'):
+        for l in output.split("\n"):
             if l.find(root) > 0:
-                if l[:len(dev_part)] == dev or l[:len(dev_part_abs)] == dev_part_abs:
-                    print("%s is already mounted at %s" %
-                          (l.split()[0], root))
+                if l[: len(dev_part)] == dev or l[: len(dev_part_abs)] == dev_part_abs:
+                    print("%s is already mounted at %s" % (l.split()[0], root))
                 else:
-                    print("%s is a mount point, but %s is already mounted there."
-                          (root, l.split()[0]))
+                    print(
+                        "%s is a mount point, but %s is already mounted there."(
+                            root, l.split()[0]
+                        )
+                    )
     except subprocess.CalledProcessError as e:
-        print("Failed to check the mountpoint! Stat = %s. I quit.\n%s" % (e.returncode, e.output))
+        print(
+            "Failed to check the mountpoint! Stat = %s. I quit.\n%s"
+            % (e.returncode, e.output)
+        )
         exit(1)
 
     try:
         node = st.StorageNode.get(name=name)
     except pw.DoesNotExist:
-        print("This disc has not been registered yet as a storage node. "
-              "Registering now.")
+        print(
+            "This disc has not been registered yet as a storage node. "
+            "Registering now."
+        )
         try:
             group = st.StorageGroup.get(name="transport")
         except pw.DoesNotExist:
-            print("Hmmm. Storage group \"transport\" does not exist. I quit.")
+            print('Hmmm. Storage group "transport" does not exist. I quit.')
             exit(1)
 
         # TODO: ensure write access to the database
         # # We need to write to the database.
         # di.connect_database(read_write=True)
-        node = st.StorageNode.create(name=name, root=root, group=group,
-                                     storage_type="T", min_avail_gb=1)
+        node = st.StorageNode.create(
+            name=name, root=root, group=group, storage_type="T", min_avail_gb=1
+        )
 
         print("Successfully created storage node.")
 
@@ -179,28 +214,34 @@ def format(serial_num):
 @click.pass_context
 @click.argument("node_name", metavar="NODE")
 @click.option("--user", help="username to access this node.", type=str, default=None)
-@click.option("--address", help="address for remote access to this node.", type=str, default=None)
+@click.option(
+    "--address", help="address for remote access to this node.", type=str, default=None
+)
 def mount(ctx, node_name, user, address):
-    """Mount a transport disk into the system and then make it available to alpenhorn.
-    """
+    """Mount a transport disk into the system and then make it available to alpenhorn."""
 
     mnt_point = "/mnt/%s" % node_name
 
     if os.path.ismount(mnt_point):
-        print('{} is already mounted in the filesystem. Proceeding to activate it.'.format(node_name))
+        print(
+            "{} is already mounted in the filesystem. Proceeding to activate it.".format(
+                node_name
+            )
+        )
     else:
         print("Mounting disc at %s" % mnt_point)
         os.system("mount %s" % mnt_point)
 
-    ctx.invoke(node.activate, name=node_name, path=mnt_point, user=user, address=address)
+    ctx.invoke(
+        node.activate, name=node_name, path=mnt_point, user=user, address=address
+    )
 
 
 @cli.command()
 @click.pass_context
 @click.argument("node_name", metavar="NODE")
 def unmount(ctx, node_name):
-    """Unmount a transport disk from the system and then remove it from alpenhorn.
-    """
+    """Unmount a transport disk from the system and then remove it from alpenhorn."""
 
     mnt_point = "/mnt/%s" % node_name
 

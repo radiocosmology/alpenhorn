@@ -5,9 +5,9 @@ from alpenhorn import generic as ge
 
 # Create handlers for the acquisition and file types
 class ZabInfo(ge.GenericAcqInfo):
-    _acq_type = 'zab'
-    _file_types = ['zxc', 'log']
-    patterns = ['**zab']
+    _acq_type = "zab"
+    _file_types = ["zxc", "log"]
+    patterns = ["**zab"]
 
     @classmethod
     def set_config(cls, configdict):
@@ -15,9 +15,9 @@ class ZabInfo(ge.GenericAcqInfo):
 
 
 class QuuxInfo(ge.GenericAcqInfo):
-    _acq_type = 'quux'
-    _file_types = ['zxc', 'log']
-    patterns = ['*quux', 'x']
+    _acq_type = "quux"
+    _file_types = ["zxc", "log"]
+    patterns = ["*quux", "x"]
 
     @classmethod
     def set_config(cls, configdict):
@@ -25,8 +25,8 @@ class QuuxInfo(ge.GenericAcqInfo):
 
 
 class ZxcInfo(ge.GenericFileInfo):
-    _file_type = 'zxc'
-    patterns = ['**.zxc', 'jim*', 'sheila']
+    _file_type = "zxc"
+    patterns = ["**.zxc", "jim*", "sheila"]
 
     @classmethod
     def set_config(cls, configdict):
@@ -34,8 +34,8 @@ class ZxcInfo(ge.GenericFileInfo):
 
 
 class LogInfo(ge.GenericFileInfo):
-    _file_type = 'log'
-    patterns = ['*.log']
+    _file_type = "log"
+    patterns = ["*.log"]
 
     @classmethod
     def set_config(cls, configdict):
@@ -44,9 +44,6 @@ class LogInfo(ge.GenericFileInfo):
 
 def register_extension():
 
-    ext_dict = {
-        'acq_types': [ZabInfo, QuuxInfo],
-        'file_types': [ZxcInfo, LogInfo]
-    }
+    ext_dict = {"acq_types": [ZabInfo, QuuxInfo], "file_types": [ZxcInfo, LogInfo]}
 
     return ext_dict

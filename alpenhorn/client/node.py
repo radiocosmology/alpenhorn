@@ -16,46 +16,97 @@ import alpenhorn.util as util
 
 from .connect_db import config_connect
 
-RE_LOCK_FILE = re.compile(r'^\..*\.lock$')
+RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
 
 
-@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on storage nodes. Use to create, modify, mount drives, etc."""
     pass
 
 
 @cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.argument('root', metavar='ROOT')
-@click.argument('hostname', metavar='HOSTNAME')
-@click.argument('group', metavar='GROUP', type=str, default=None)
-@click.option('--address', help="Domain name or IP address for the host \
-              (if network accessible).", metavar='ADDRESS',
-              type=str, default=None)
-@click.option('--active', help='Is the node active?', metavar="BOOL",
-              type=bool, default=False)
-@click.option('--auto_import', help='Should files that appear on this node be \
-              automatically added?', metavar='BOOL', type=bool, default=False)
-@click.option('--suspect', help='Is this node corrupted?',
-              metavar='BOOL', type=bool, default=False)
-@click.option('--storage_type', help='What is the type of storage? Options:\
+@click.argument("node_name", metavar="NODE")
+@click.argument("root", metavar="ROOT")
+@click.argument("hostname", metavar="HOSTNAME")
+@click.argument("group", metavar="GROUP", type=str, default=None)
+@click.option(
+    "--address",
+    help="Domain name or IP address for the host \
+              (if network accessible).",
+    metavar="ADDRESS",
+    type=str,
+    default=None,
+)
+@click.option(
+    "--active", help="Is the node active?", metavar="BOOL", type=bool, default=False
+)
+@click.option(
+    "--auto_import",
+    help="Should files that appear on this node be \
+              automatically added?",
+    metavar="BOOL",
+    type=bool,
+    default=False,
+)
+@click.option(
+    "--suspect",
+    help="Is this node corrupted?",
+    metavar="BOOL",
+    type=bool,
+    default=False,
+)
+@click.option(
+    "--storage_type",
+    help="What is the type of storage? Options:\
                 A - archive for the data, T - for transiting data \
-                F - for data in the field (i.e acquisition machines)',
-              type=click.Choice(['A', 'T', 'F']), default='A')
-@click.option('--max_total_gb', help='The maximum amount of storage we should \
-              use.', metavar='FLOAT', type=float, default=-1.)
-@click.option('--min_avail_gb', help='What is the minimum amount of free space \
-               we should leave on this node?', metavar='FLOAT',
-              type=float, default=-1.)
-@click.option('--min_delete_age_days', help='What is the minimum amount of time \
+                F - for data in the field (i.e acquisition machines)",
+    type=click.Choice(["A", "T", "F"]),
+    default="A",
+)
+@click.option(
+    "--max_total_gb",
+    help="The maximum amount of storage we should \
+              use.",
+    metavar="FLOAT",
+    type=float,
+    default=-1.0,
+)
+@click.option(
+    "--min_avail_gb",
+    help="What is the minimum amount of free space \
+               we should leave on this node?",
+    metavar="FLOAT",
+    type=float,
+    default=-1.0,
+)
+@click.option(
+    "--min_delete_age_days",
+    help="What is the minimum amount of time \
               a file must remain on the node before we are allowed to delete \
-              it?', metavar='FLOAT', type=float, default=30)
-@click.option('--notes', help='Any notes or comments about this node.',
-              type=str, default=None)
-def create(node_name, root, hostname, group, address, active, auto_import,
-           suspect, storage_type, max_total_gb, min_avail_gb,
-           min_delete_age_days, notes):
+              it?",
+    metavar="FLOAT",
+    type=float,
+    default=30,
+)
+@click.option(
+    "--notes", help="Any notes or comments about this node.", type=str, default=None
+)
+def create(
+    node_name,
+    root,
+    hostname,
+    group,
+    address,
+    active,
+    auto_import,
+    suspect,
+    storage_type,
+    max_total_gb,
+    min_avail_gb,
+    min_delete_age_days,
+    notes,
+):
     """Create a storage NODE within storage GROUP with a ROOT directory on
     HOSTNAME.
     """
@@ -73,26 +124,32 @@ def create(node_name, root, hostname, group, address, active, auto_import,
         exit(1)
 
     except pw.DoesNotExist:
-        st.StorageNode.create(name=node_name, root=root, host=hostname,
-                              address=address, group=this_group.id, active=active,
-                              auto_import=auto_import, suspect=suspect,
-                              storage_type=storage_type, max_total_gb=max_total_gb,
-                              min_avail_gb=min_avail_gb, min_delete_age_days=min_delete_age_days,
-                              notes=notes)
+        st.StorageNode.create(
+            name=node_name,
+            root=root,
+            host=hostname,
+            address=address,
+            group=this_group.id,
+            active=active,
+            auto_import=auto_import,
+            suspect=suspect,
+            storage_type=storage_type,
+            max_total_gb=max_total_gb,
+            min_avail_gb=min_avail_gb,
+            min_delete_age_days=min_delete_age_days,
+            notes=notes,
+        )
 
-        print('Added node "%(node)s" belonging to group "%(group)s" in the directory '
-              '"%(root)s" at host "%(host)s" to database.' % dict(
-                  node=node_name,
-                  root=root,
-                  group=group,
-                  host=hostname
-              ))
+        print(
+            'Added node "%(node)s" belonging to group "%(group)s" in the directory '
+            '"%(root)s" at host "%(host)s" to database.'
+            % dict(node=node_name, root=root, group=group, host=hostname)
+        )
 
 
-@cli.command(name='list')
+@cli.command(name="list")
 def node_list():
-    """List known storage nodes.
-    """
+    """List known storage nodes."""
     config_connect()
 
     import tabulate
@@ -104,17 +161,22 @@ def node_list():
             st.StorageNode.storage_type,
             st.StorageNode.host,
             st.StorageNode.root,
-            st.StorageNode.notes)
+            st.StorageNode.notes,
+        )
         .join(st.StorageGroup)
         .tuples()
     )
     if data:
-        print(tabulate.tabulate(data, headers=['Name', 'Group', 'Type', 'Host', 'Root', 'Notes']))
+        print(
+            tabulate.tabulate(
+                data, headers=["Name", "Group", "Type", "Host", "Root", "Notes"]
+            )
+        )
 
 
 @cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.argument('new_name', metavar='NEW-NAME')
+@click.argument("node_name", metavar="NODE")
+@click.argument("new_name", metavar="NEW-NAME")
 def rename(node_name, new_name):
     """Change the name of a storage NODE to NEW-NAME."""
     config_connect()
@@ -128,22 +190,35 @@ def rename(node_name, new_name):
         except pw.DoesNotExist:
             node.name = new_name
             node.save()
-            print('Updated.')
+            print("Updated.")
     except pw.DoesNotExist:
         print('Node "%s" does not exist!' % node_name)
         exit(1)
 
 
 @cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.option('--max_total_gb', help='New maximum amount of storage to use.',
-              metavar='FLOAT', type=float)
-@click.option('--min_avail_gb', help='New minimum amount of free space to '
-              'leave on the node', metavar='FLOAT', type=float)
-@click.option('--min_delete_age_days', help='New minimum amount of time '
-              'a file must remain on the node before we are allowed to delete '
-              'it.', metavar='FLOAT', type=float)
-@click.option('--notes', help='New value for the notes field', metavar='NOTES')
+@click.argument("node_name", metavar="NODE")
+@click.option(
+    "--max_total_gb",
+    help="New maximum amount of storage to use.",
+    metavar="FLOAT",
+    type=float,
+)
+@click.option(
+    "--min_avail_gb",
+    help="New minimum amount of free space to " "leave on the node",
+    metavar="FLOAT",
+    type=float,
+)
+@click.option(
+    "--min_delete_age_days",
+    help="New minimum amount of time "
+    "a file must remain on the node before we are allowed to delete "
+    "it.",
+    metavar="FLOAT",
+    type=float,
+)
+@click.option("--notes", help="New value for the notes field", metavar="NOTES")
 def modify(node_name, max_total_gb, min_avail_gb, min_delete_age_days, notes):
     """Change the properties of a storage NODE."""
     config_connect()
@@ -161,16 +236,16 @@ def modify(node_name, max_total_gb, min_avail_gb, min_delete_age_days, notes):
             node.min_delete_age_days = min_delete_age_days
             changed = True
         if notes is not None:
-            if notes == '':
+            if notes == "":
                 notes = None
             node.notes = notes
             changed = True
 
         if changed:
             node.save()
-            print('Updated.')
+            print("Updated.")
         else:
-            print('Nothing to do.')
+            print("Nothing to do.")
     except pw.DoesNotExist:
         print('Node "%s" does not exist!' % node_name)
         exit(1)
@@ -180,9 +255,15 @@ def modify(node_name, max_total_gb, min_avail_gb, min_delete_age_days, notes):
 @click.argument("name")
 @click.option("--path", help="Root path for this node", type=str, default=None)
 @click.option("--user", help="username to access this node.", type=str, default=None)
-@click.option("--address", help="address for remote access to this node.", type=str, default=None)
-@click.option("--hostname", type=str, default=None,
-              help="hostname running the alpenhornd instance for this node (set to this hostname by default).")
+@click.option(
+    "--address", help="address for remote access to this node.", type=str, default=None
+)
+@click.option(
+    "--hostname",
+    type=str,
+    default=None,
+    help="hostname running the alpenhornd instance for this node (set to this hostname by default).",
+)
 def activate(name, path, user, address, hostname):
     """Interactive routine for activating a storage node located at ROOT."""
 
@@ -236,16 +317,13 @@ def deactivate(root_or_name):
             root_or_name = root_or_name[: len(root_or_name) - 1]
 
         if not os.path.exists(root_or_name):
-            click.echo(
-                'That is neither a node name, nor a path on this host. I quit.'
-            )
+            click.echo("That is neither a node name, nor a path on this host. I quit.")
             exit(1)
         try:
-            node = st.StorageNode.get(root=root_or_name,
-                                      host=util.get_short_hostname())
+            node = st.StorageNode.get(root=root_or_name, host=util.get_short_hostname())
         except pw.DoesNotExist:
             click.echo(
-                'That is neither a node name, nor a root name that is known. I quit.'
+                "That is neither a node name, nor a root name that is known. I quit."
             )
             exit(1)
 
@@ -258,7 +336,13 @@ def deactivate(root_or_name):
 
 
 @cli.command()
-@click.option('--host', '-H', help='Use specified host rather than local machine', type=str, default=None)
+@click.option(
+    "--host",
+    "-H",
+    help="Use specified host rather than local machine",
+    type=str,
+    default=None,
+)
 def active(host):
     """List the nodes active on this, or another specified, machine"""
 
@@ -267,12 +351,16 @@ def active(host):
     if host is None:
         host = util.get_short_hostname()
     zero = True
-    for node in (st.StorageNode.select()
-                 .where(st.StorageNode.host == host, st.StorageNode.active)):
-        n_file = ar.ArchiveFileCopy \
-                   .select() \
-                   .where((ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == 'Y')) \
-                   .count()
+    for node in st.StorageNode.select().where(
+        st.StorageNode.host == host, st.StorageNode.active
+    ):
+        n_file = (
+            ar.ArchiveFileCopy.select()
+            .where(
+                (ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == "Y")
+            )
+            .count()
+        )
         print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
         zero = False
     if zero:
@@ -280,11 +368,18 @@ def active(host):
 
 
 @cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.option('-v', '--verbose', count=True)
-@click.option('--acq', help='Limit import to specified acquisition directories.', multiple=True, default=None)
-@click.option('--register-new', help='Register new files instead of ignoring them.', is_flag=True)
-@click.option('--dry', '-d', help='Dry run. Do not modify database.', is_flag=True)
+@click.argument("node_name", metavar="NODE")
+@click.option("-v", "--verbose", count=True)
+@click.option(
+    "--acq",
+    help="Limit import to specified acquisition directories.",
+    multiple=True,
+    default=None,
+)
+@click.option(
+    "--register-new", help="Register new files instead of ignoring them.", is_flag=True
+)
+@click.option("--dry", "-d", help="Dry run. Do not modify database.", is_flag=True)
 def scan(node_name, verbose, acq, register_new, dry):
     """Scan the current directory for known acquisition files and add them into the database for NODE.
 
@@ -299,13 +394,15 @@ def scan(node_name, verbose, acq, register_new, dry):
     registered_files = []  # Files already registered in the database
     unknown_files = []  # Files not known in the database
 
-    known_acqs = []      # Directories which are known acquisitions
-    new_acqs = []        # Directories which were newly registered acquisitions
-    not_acqs = []        # Directories which were not known acquisitions
+    known_acqs = []  # Directories which are known acquisitions
+    new_acqs = []  # Directories which were newly registered acquisitions
+    not_acqs = []  # Directories which were not known acquisitions
 
     # Fetch a reference to the node
     try:
-        this_node = st.StorageNode.select().where(st.StorageNode.name == node_name).get()
+        this_node = (
+            st.StorageNode.select().where(st.StorageNode.name == node_name).get()
+        )
     except pw.DoesNotExist:
         click.echo("Unknown node:", node_name)
         exit(1)
@@ -323,8 +420,10 @@ def scan(node_name, verbose, acq, register_new, dry):
         for acq_name in acq:
             acq_dir = os.path.join(this_node.root, acq_name)
             if not os.path.isdir(acq_dir):
-                print('Aquisition "%s" does not exist in this node. Ignoring.' % acq_name,
-                      file=sys.stderr)
+                print(
+                    'Aquisition "%s" does not exist in this node. Ignoring.' % acq_name,
+                    file=sys.stderr,
+                )
                 continue
             if acq_dir == cwd:
                 # the current directory is one of the limiting acquisitions, so
@@ -341,28 +440,41 @@ def scan(node_name, verbose, acq, register_new, dry):
                 # just walk its subtree
                 tops.append(acq_dir)
             else:
-                print('Acquisition "%s" is outside the current directory and will be ignored.' % acq_name,
-                      file=sys.stderr)
+                print(
+                    'Acquisition "%s" is outside the current directory and will be ignored.'
+                    % acq_name,
+                    file=sys.stderr,
+                )
 
     for top in tops:
         for d, ds, fs in os.walk(top):
             d = os.path.relpath(d, this_node.root)
-            if d == '.':            # skip the node root directory
+            if d == ".":  # skip the node root directory
                 continue
             acq_type_name = ac.AcqType.detect(d, this_node)
             if acq_type_name:
                 _, acq_name = acq_type_name
                 if d == acq_name:
                     # the directory is the acquisition
-                    acq_files[acq_name] += [f for f in fs if not RE_LOCK_FILE.match(f) and not os.path.isfile(os.path.join(d, '.{}.lock'.format(f)))]
+                    acq_files[acq_name] += [
+                        f
+                        for f in fs
+                        if not RE_LOCK_FILE.match(f)
+                        and not os.path.isfile(os.path.join(d, ".{}.lock".format(f)))
+                    ]
                 if d.startswith(acq_name + "/"):
                     # the directory is inside an acquisition
                     acq_dirname = os.path.relpath(d, acq_name)
-                    acq_files[acq_name] += [(acq_dirname + '/' + f) for f in fs if not RE_LOCK_FILE.match(f) and not os.path.isfile(os.path.join(d, '.{}.lock'.format(f)))]
+                    acq_files[acq_name] += [
+                        (acq_dirname + "/" + f)
+                        for f in fs
+                        if not RE_LOCK_FILE.match(f)
+                        and not os.path.isfile(os.path.join(d, ".{}.lock".format(f)))
+                    ]
             else:
                 not_acqs.append(d)
 
-    with click.progressbar(acq_files, label='Scanning acquisitions') as acq_iter:
+    with click.progressbar(acq_files, label="Scanning acquisitions") as acq_iter:
 
         for acq_name in acq_iter:
             try:
@@ -372,7 +484,12 @@ def scan(node_name, verbose, acq, register_new, dry):
                 # Fetch lists of all files in this acquisition, and all
                 # files in this acq with local copies
                 file_names = [f.name for f in acq.files]
-                local_file_names = [f.name for f in acq.files.join(ar.ArchiveFileCopy).where(ar.ArchiveFileCopy.node == this_node)]
+                local_file_names = [
+                    f.name
+                    for f in acq.files.join(ar.ArchiveFileCopy).where(
+                        ar.ArchiveFileCopy.node == this_node
+                    )
+                ]
             except pw.DoesNotExist:
                 if register_new:
                     acq_type, _ = ac.AcqType.detect(acq_name, this_node)
@@ -409,11 +526,17 @@ def scan(node_name, verbose, acq, register_new, dry):
                     abs_path = os.path.join(this_node.root, file_path)
                     if f_name in file_names:
                         # it is a known file
-                        archive_file = ac.ArchiveFile.select().where(ac.ArchiveFile.name == f_name, ac.ArchiveFile.acq == acq).get()
+                        archive_file = (
+                            ac.ArchiveFile.select()
+                            .where(
+                                ac.ArchiveFile.name == f_name, ac.ArchiveFile.acq == acq
+                            )
+                            .get()
+                        )
 
                         # TODO: decide if, when the file is corrupted, we still
                         # register the file as `has_file="X"` or just _continue_
-                        if (os.path.getsize(abs_path) != archive_file.size_b):
+                        if os.path.getsize(abs_path) != archive_file.size_b:
                             corrupt_files.append(file_path)
                             continue
                         else:
@@ -434,23 +557,33 @@ def scan(node_name, verbose, acq, register_new, dry):
                             print('Computing md5sum of "{}"'.format(f_name))
                         md5sum = util.md5sum_file(abs_path, cmd_line=False)
                         size_b = os.path.getsize(abs_path)
-                        archive_file = ac.ArchiveFile(name=f_name, acq=acq, type=file_type,
-                                                      size_b=size_b, md5sum=md5sum)
+                        archive_file = ac.ArchiveFile(
+                            name=f_name,
+                            acq=acq,
+                            type=file_type,
+                            size_b=size_b,
+                            md5sum=md5sum,
+                        )
                         if not dry:
                             archive_file.save()
 
                     added_files.append(file_path)
                     if not dry:
                         copy_size_b = os.stat(abs_path).st_blocks * 512
-                        ar.ArchiveFileCopy.create(file=archive_file, node=this_node, has_file='Y', wants_file='Y',
-                                                  size_b=copy_size_b)
+                        ar.ArchiveFileCopy.create(
+                            file=archive_file,
+                            node=this_node,
+                            has_file="Y",
+                            wants_file="Y",
+                            size_b=copy_size_b,
+                        )
 
     # now find the minimum unknown acqs paths that we can report
     not_acqs_roots = []
-    last_acq_root = ''
+    last_acq_root = ""
     for d in sorted(not_acqs):
         common = os.path.commonprefix([last_acq_root, d])
-        if common == '':
+        if common == "":
             for acq_name in known_acqs:
                 if acq_name.startswith(d):
                     break
@@ -505,11 +638,17 @@ def scan(node_name, verbose, acq, register_new, dry):
 
 
 @cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.option('--md5', help='perform full check against md5sum', is_flag=True)
-@click.option('--fixdb', help='fix up the database to be consistent with reality', is_flag=True)
-@click.option('--acq', metavar='ACQ', multiple=True,
-              help='Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.')
+@click.argument("node_name", metavar="NODE")
+@click.option("--md5", help="perform full check against md5sum", is_flag=True)
+@click.option(
+    "--fixdb", help="fix up the database to be consistent with reality", is_flag=True
+)
+@click.option(
+    "--acq",
+    metavar="ACQ",
+    multiple=True,
+    help="Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.",
+)
 def verify(node_name, md5, fixdb, acq):
     """Verify the archive on NODE against the database.
 
@@ -540,22 +679,29 @@ def verify(node_name, md5, fixdb, acq):
         click.echo('Node "{}" is not active.'.format(node_name))
         exit(1)
     if not util.alpenhorn_node_check(this_node):
-        click.echo('Node "{}" does not match ALPENHORN_NODE: {}'
-                   .format(node_name, this_node.root))
+        click.echo(
+            'Node "{}" does not match ALPENHORN_NODE: {}'.format(
+                node_name, this_node.root
+            )
+        )
         exit(1)
 
     # Use a complicated query with a tuples construct to fetch everything we
     # need in a single query. This massively speeds up the whole process versus
     # fetching all the FileCopy's then querying for Files and Acqs.
-    lfiles = ac.ArchiveFile\
-               .select(ac.ArchiveFile.name, ac.ArchiveAcq.name,
-                       ac.ArchiveFile.size_b, ac.ArchiveFile.md5sum,
-                       ar.ArchiveFileCopy.id)\
-               .join(ac.ArchiveAcq)\
-               .switch(ac.ArchiveFile)\
-               .join(ar.ArchiveFileCopy)\
-               .where(ar.ArchiveFileCopy.node == this_node,
-                      ar.ArchiveFileCopy.has_file == 'Y')
+    lfiles = (
+        ac.ArchiveFile.select(
+            ac.ArchiveFile.name,
+            ac.ArchiveAcq.name,
+            ac.ArchiveFile.size_b,
+            ac.ArchiveFile.md5sum,
+            ar.ArchiveFileCopy.id,
+        )
+        .join(ac.ArchiveAcq)
+        .switch(ac.ArchiveFile)
+        .join(ar.ArchiveFileCopy)
+        .where(ar.ArchiveFileCopy.node == this_node, ar.ArchiveFileCopy.has_file == "Y")
+    )
 
     if acq:
         lfiles = lfiles.where(ac.ArchiveAcq.name << acq)
@@ -568,12 +714,12 @@ def verify(node_name, md5, fixdb, acq):
 
     nfiles = 0
 
-    with click.progressbar(lfiles.tuples(), label='Scanning files') as lfiles_iter:
+    with click.progressbar(lfiles.tuples(), label="Scanning files") as lfiles_iter:
         for filename, acqname, filesize, md5sum, fc_id in lfiles_iter:
 
             nfiles += 1
 
-            filepath = this_node.root + '/' + acqname + '/' + filename
+            filepath = this_node.root + "/" + acqname + "/" + filename
 
             # Check if file is plain missing
             if not os.path.exists(filepath):
@@ -583,9 +729,9 @@ def verify(node_name, md5, fixdb, acq):
 
             if md5:
                 file_md5 = util.md5sum_file(filepath)
-                corrupt = (file_md5 != md5sum)
+                corrupt = file_md5 != md5sum
             else:
-                corrupt = (os.path.getsize(filepath) != filesize)
+                corrupt = os.path.getsize(filepath) != filesize
 
             if corrupt:
                 corrupt_files.append(filepath)
@@ -619,18 +765,20 @@ def verify(node_name, md5, fixdb, acq):
         # # We need to write to the database.
         # di.connect_database(read_write=True)
 
-        if (len(missing_files) > 0) and click.confirm('Fix missing files'):
-            missing_count = ar.ArchiveFileCopy\
-                              .update(has_file='N')\
-                              .where(ar.ArchiveFileCopy.id << missing_ids)\
-                              .execute()
+        if (len(missing_files) > 0) and click.confirm("Fix missing files"):
+            missing_count = (
+                ar.ArchiveFileCopy.update(has_file="N")
+                .where(ar.ArchiveFileCopy.id << missing_ids)
+                .execute()
+            )
             click.echo("  %i marked as missing" % missing_count)
 
-        if (len(corrupt_files) > 0) and click.confirm('Fix corrupt files'):
-            corrupt_count = ar.ArchiveFileCopy\
-                              .update(has_file='M')\
-                              .where(ar.ArchiveFileCopy.id << corrupt_ids)\
-                              .execute()
+        if (len(corrupt_files) > 0) and click.confirm("Fix corrupt files"):
+            corrupt_count = (
+                ar.ArchiveFileCopy.update(has_file="M")
+                .where(ar.ArchiveFileCopy.id << corrupt_ids)
+                .execute()
+            )
             click.echo("  %i corrupt files marked for verification" % corrupt_count)
     else:
         # Set the exit status
@@ -641,15 +789,23 @@ def verify(node_name, md5, fixdb, acq):
 
 
 @cli.command()
-@click.argument('node_name', metavar='NODE')
-@click.option('--days', '-d', help='Clean files older than <days>.', type=int, default=None)
-@click.option('--cancel', help='Cancel files marked for cleaning', is_flag=True)
-@click.option('--force', '-f', help='Force cleaning on an archive node.', is_flag=True)
-@click.option('--now', '-n', help='Force immediate removal.', is_flag=True)
-@click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
-              help='Only clean files already available in this group.')
-@click.option('--acq', metavar='ACQ', default=None, type=str,
-              help='Limit removal to acquisition.')
+@click.argument("node_name", metavar="NODE")
+@click.option(
+    "--days", "-d", help="Clean files older than <days>.", type=int, default=None
+)
+@click.option("--cancel", help="Cancel files marked for cleaning", is_flag=True)
+@click.option("--force", "-f", help="Force cleaning on an archive node.", is_flag=True)
+@click.option("--now", "-n", help="Force immediate removal.", is_flag=True)
+@click.option(
+    "--target",
+    metavar="TARGET_GROUP",
+    default=None,
+    type=str,
+    help="Only clean files already available in this group.",
+)
+@click.option(
+    "--acq", metavar="ACQ", default=None, type=str, help="Limit removal to acquisition."
+)
 def clean(node_name, days, cancel, force, now, target, acq):
     """Clean up NODE by marking older files as potentially removable.
 
@@ -676,7 +832,7 @@ def clean(node_name, days, cancel, force, now, target, acq):
     """
 
     if cancel and now:
-        print('Options --cancel and --now are mutually exclusive.')
+        print("Options --cancel and --now are mutually exclusive.")
         exit(1)
 
     config_connect()
@@ -688,8 +844,10 @@ def clean(node_name, days, cancel, force, now, target, acq):
         exit(1)
 
     # Check to see if we are on an archive node
-    if this_node.storage_type == 'A':
-        if force or click.confirm('DANGER: run clean on archive node "%s"?' % node_name):
+    if this_node.storage_type == "A":
+        if force or click.confirm(
+            'DANGER: run clean on archive node "%s"?' % node_name
+        ):
             print('"%s" is an archive node. Forcing clean.' % node_name)
         else:
             print('Cannot clean archive node "%s" without forcing.' % node_name)
@@ -697,21 +855,20 @@ def clean(node_name, days, cancel, force, now, target, acq):
 
     # Select FileCopys on this node.
     files = ar.ArchiveFileCopy.select(ar.ArchiveFileCopy.id).where(
-        ar.ArchiveFileCopy.node == this_node,
-        ar.ArchiveFileCopy.has_file == 'Y'
+        ar.ArchiveFileCopy.node == this_node, ar.ArchiveFileCopy.has_file == "Y"
     )
 
     if now:
         # In 'now' cleaning, every copy will be set to wants_file="No", if it
         # wasn't already
-        files = files.where(ar.ArchiveFileCopy.wants_file != 'N')
+        files = files.where(ar.ArchiveFileCopy.wants_file != "N")
     elif cancel:
         # Undo any "Maybe" and "No" want_files and reset them to "Yes"
-        files = files.where(ar.ArchiveFileCopy.wants_file != 'Y')
+        files = files.where(ar.ArchiveFileCopy.wants_file != "Y")
     else:
         # In regular cleaning, we only mark as "Maybe" want_files that are
         # currently "Yes", but leave "No" unchanged
-        files = files.where(ar.ArchiveFileCopy.wants_file == 'Y')
+        files = files.where(ar.ArchiveFileCopy.wants_file == "Y")
 
     # Limit to acquisition
     if acq is not None:
@@ -734,12 +891,18 @@ def clean(node_name, days, cancel, force, now, target, acq):
             raise RuntimeError('Target group "%s" does not exist in the DB.' % target)
 
         # First get the nodes at the destination...
-        nodes_at_target = st.StorageNode.select().where(st.StorageNode.group == target_group)
+        nodes_at_target = st.StorageNode.select().where(
+            st.StorageNode.group == target_group
+        )
 
         # Then use this to get a list of all files at the destination...
-        files_at_target = ac.ArchiveFile.select().join(ar.ArchiveFileCopy).where(
-            ar.ArchiveFileCopy.node << nodes_at_target,
-            ar.ArchiveFileCopy.has_file == 'Y'
+        files_at_target = (
+            ac.ArchiveFile.select()
+            .join(ar.ArchiveFileCopy)
+            .where(
+                ar.ArchiveFileCopy.node << nodes_at_target,
+                ar.ArchiveFileCopy.has_file == "Y",
+            )
         )
 
         # Only match files that are also available at the target
@@ -792,15 +955,25 @@ def clean(node_name, days, cancel, force, now, target, acq):
         count = files.count()
 
         if count > 0:
-            size_bytes = ar.ArchiveFileCopy.select().where(
-                ar.ArchiveFileCopy.id << file_ids
-            ).join(ac.ArchiveFile).select(pw.fn.Sum(ac.ArchiveFile.size_b)).scalar()
+            size_bytes = (
+                ar.ArchiveFileCopy.select()
+                .where(ar.ArchiveFileCopy.id << file_ids)
+                .join(ac.ArchiveFile)
+                .select(pw.fn.Sum(ac.ArchiveFile.size_b))
+                .scalar()
+            )
 
             size_gb = int(size_bytes) / 1073741824.0
 
-            print('Mark %i files (%.1f GB) from "%s" %s.' %
-                  (count, size_gb, node_name,
-                   'for keeping' if cancel else 'available for removal'))
+            print(
+                'Mark %i files (%.1f GB) from "%s" %s.'
+                % (
+                    count,
+                    size_gb,
+                    node_name,
+                    "for keeping" if cancel else "available for removal",
+                )
+            )
 
     # If there are any files to clean, ask for confirmation and the mark them in
     # the database for removal
@@ -809,22 +982,22 @@ def clean(node_name, days, cancel, force, now, target, acq):
             print("  Marking...")
 
             if cancel:
-                state = 'Y'
+                state = "Y"
             else:
-                state = 'N' if now else 'M'
+                state = "N" if now else "M"
 
-            update = ar.ArchiveFileCopy.update(wants_file=state)\
-                .where(ar.ArchiveFileCopy.id << file_ids)
+            update = ar.ArchiveFileCopy.update(wants_file=state).where(
+                ar.ArchiveFileCopy.id << file_ids
+            )
 
             n = update.execute()
 
             if cancel:
-                print('Marked %i files for keeping.' % n)
+                print("Marked %i files for keeping." % n)
             else:
-                print('Marked %i files available for removal.' % n)
+                print("Marked %i files available for removal." % n)
 
         else:
-            print('  Cancelled. Exit without changes.')
+            print("  Cancelled. Exit without changes.")
     else:
         print("No files selected for cleaning on %s." % node_name)
-

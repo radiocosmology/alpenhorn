@@ -1,4 +1,3 @@
-
 import peewee as pw
 
 from .db import base_model, EnumField
@@ -31,16 +30,15 @@ class ArchiveFileCopy(base_model):
         Allocated size of file in bytes (calculated as a multiple of 512-byte
         blocks).
     """
-    file = pw.ForeignKeyField(ArchiveFile, backref='copies')
-    node = pw.ForeignKeyField(StorageNode, backref='copies')
-    has_file = EnumField(['N', 'Y', 'M', 'X'], default='N')
-    wants_file = EnumField(['Y', 'M', 'N'], default='Y')
+
+    file = pw.ForeignKeyField(ArchiveFile, backref="copies")
+    node = pw.ForeignKeyField(StorageNode, backref="copies")
+    has_file = EnumField(["N", "Y", "M", "X"], default="N")
+    wants_file = EnumField(["Y", "M", "N"], default="Y")
     size_b = pw.BigIntegerField()
 
     class Meta:
-        indexes = (
-            (('file', 'node'), True),
-        )
+        indexes = ((("file", "node"), True),)
 
 
 class ArchiveFileCopyRequest(base_model):
@@ -67,9 +65,10 @@ class ArchiveFileCopyRequest(base_model):
     transfer_completed : datetime
         The time the transfer was completed.
     """
-    file = pw.ForeignKeyField(ArchiveFile, backref='requests')
-    group_to = pw.ForeignKeyField(StorageGroup, backref='requests_to')
-    node_from = pw.ForeignKeyField(StorageNode, backref='requests_from')
+
+    file = pw.ForeignKeyField(ArchiveFile, backref="requests")
+    group_to = pw.ForeignKeyField(StorageGroup, backref="requests_to")
+    node_from = pw.ForeignKeyField(StorageNode, backref="requests_from")
     nice = pw.IntegerField()
     completed = pw.BooleanField()
     cancelled = pw.BooleanField(default=False)
@@ -78,6 +77,4 @@ class ArchiveFileCopyRequest(base_model):
     transfer_completed = pw.DateTimeField(null=True)
 
     class Meta:
-        indexes = (
-            (('file', 'group_to', 'node_from'), False),        # non-unique index
-        )
+        indexes = ((("file", "group_to", "node_from"), False),)  # non-unique index

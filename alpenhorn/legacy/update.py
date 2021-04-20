@@ -13,11 +13,12 @@ from ch_util import data_index as di
 
 # Setup the logging
 from . import logger
+
 log = logger.get_log()
 
 # Parameters.
-max_time_per_node_operation = 300   # Don't let node operations hog time.
-min_loop_time = 60    # Main loop at most every 60 seconds.
+max_time_per_node_operation = 300  # Don't let node operations hog time.
+min_loop_time = 60  # Main loop at most every 60 seconds.
 
 RSYNC_FLAG = "qtspgoDL"
 
@@ -47,7 +48,9 @@ def run_command(cmd, **kwargs):
 
     import subprocess
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
+    )
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
 
@@ -63,18 +66,22 @@ def pbs_jobs():
     """
 
     def _parse_job(node):
-        return { cn.nodeName : cn.firstChild.data for cn in node.childNodes if hasattr(cn.firstChild, 'data')}
+        return {
+            cn.nodeName: cn.firstChild.data
+            for cn in node.childNodes
+            if hasattr(cn.firstChild, "data")
+        }
 
     from xml.dom import minidom
 
-    ret, out, err = run_command('qstat -x'.split())
+    ret, out, err = run_command("qstat -x".split())
 
     if len(out) == 0:
         return []
 
     qstat_xml = minidom.parseString(out)
 
-    return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
+    return [_parse_job(node) for node in qstat_xml.firstChild.childNodes]
 
 
 def queued_archive_jobs():
@@ -87,24 +94,27 @@ def queued_archive_jobs():
 
     jobs = pbs_jobs()
 
-    return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+    return [
+        job
+        for job in jobs
+        if (job["job_state"] == "Q" and job["queue"] == "archivelong")
+    ]
 
 
 def is_md5_hash(h):
     """Is this the correct format to be an md5 hash."""
-    return re.match('[a-f0-9]{32}', h) is not None
+    return re.match("[a-f0-9]{32}", h) is not None
 
 
 def command_available(cmd):
-    """Is this command available on the system.
-    """
+    """Is this command available on the system."""
     from distutils import spawn
+
     return spawn.find_executable(cmd) is not None
 
 
 def update_loop(host):
-    """Loop over nodes performing any updates needed.
-    """
+    """Loop over nodes performing any updates needed."""
     global done_transport_this_cycle
 
     while True:
@@ -129,43 +139,44 @@ def update_node_free_space(node):
 
     # Check with the OS how much free space there is
     x = os.statvfs(node.root)
-    avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
+    avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
 
     # Update the DB with the free space. Perform with an update query (rather
     # than save) to ensure we don't clobber changes made manually to the
     # database
     di.StorageNode.update(
-        avail_gb=avail_gb,
-        avail_gb_last_checked=datetime.datetime.now()
+        avail_gb=avail_gb, avail_gb_last_checked=datetime.datetime.now()
     ).where(di.StorageNode.id == node.id).execute()
 
-    log.info("Node \"%s\" has %.2f GB available." % (node.name, avail_gb))
+    log.info('Node "%s" has %.2f GB available.' % (node.name, avail_gb))
 
 
 def update_node_integrity(node):
     """Check the integrity of file copies on the node."""
 
     # Find suspect file copies in the database
-    fcopy_query = di.ArchiveFileCopy.select().where(
-        di.ArchiveFileCopy.node == node,
-        di.ArchiveFileCopy.has_file == 'M').limit(25)
+    fcopy_query = (
+        di.ArchiveFileCopy.select()
+        .where(di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file == "M")
+        .limit(25)
+    )
 
     # Loop over these file copies and check their md5sum
     for fcopy in fcopy_query:
         fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
-        log.info("Checking file \"%s\" on node \"%s\"." % (fullpath, node.name))
+        log.info('Checking file "%s" on node "%s".' % (fullpath, node.name))
 
         # If the file exists calculate its md5sum and check against the DB
         if os.path.exists(fullpath):
             if di.md5sum_file(fullpath) == fcopy.file.md5sum:
                 log.info("File is A-OK!")
-                fcopy.has_file = 'Y'
+                fcopy.has_file = "Y"
             else:
                 log.error("File is corrupted!")
-                fcopy.has_file = 'X'
+                fcopy.has_file = "X"
         else:
             log.error("File does not exist!")
-            fcopy.has_file = 'N'
+            fcopy.has_file = "N"
 
         # Update the copy status
         log.info("Updating file copy status [id=%i]." % fcopy.id)
@@ -179,18 +190,19 @@ def update_node_delete(node):
     # not explicitly wanted (wants_file != 'Y') as candidates for deletion,
     # otherwise only those explicitly marked (wants_file == 'N')
     # Also do not clean on archive type nodes.
-    if node.avail_gb < node.min_avail_gb and node.storage_type != 'A':
-        log.info("Hit minimum available space on %s -- considering all unwanted "
-                 "files for deletion!" % (node.name))
-        dfclause = di.ArchiveFileCopy.wants_file != 'Y'
+    if node.avail_gb < node.min_avail_gb and node.storage_type != "A":
+        log.info(
+            "Hit minimum available space on %s -- considering all unwanted "
+            "files for deletion!" % (node.name)
+        )
+        dfclause = di.ArchiveFileCopy.wants_file != "Y"
     else:
-        dfclause = di.ArchiveFileCopy.wants_file == 'N'
+        dfclause = di.ArchiveFileCopy.wants_file == "N"
 
     # Search db for candidates on this node to delete.
     del_files = di.ArchiveFileCopy.select().where(
-        dfclause,
-        di.ArchiveFileCopy.node == node,
-        di.ArchiveFileCopy.has_file == 'Y')
+        dfclause, di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file == "Y"
+    )
 
     # Process candidates for deletion
     del_count = 0  # Counter for no. of deletions (limits no. per node update)
@@ -204,8 +216,11 @@ def update_node_delete(node):
         other_copies = fcopy.file.copies.where(di.ArchiveFileCopy.id != fcopy.id)
 
         # Get the number of copies on archive nodes
-        ncopies = other_copies.join(di.StorageNode) \
-                              .where(di.StorageNode.storage_type == 'A').count()
+        ncopies = (
+            other_copies.join(di.StorageNode)
+            .where(di.StorageNode.storage_type == "A")
+            .count()
+        )
 
         shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
         fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
@@ -223,12 +238,14 @@ def update_node_delete(node):
                     # and remove if it is.
                     dirname = os.path.dirname(fullpath)
                     if not os.listdir(dirname):
-                        log.info("Removing acquisition directory %s on %s" %
-                                 (fcopy.file.acq.name, fcopy.node.name))
+                        log.info(
+                            "Removing acquisition directory %s on %s"
+                            % (fcopy.file.acq.name, fcopy.node.name)
+                        )
                         os.rmdir(dirname)
 
-                fcopy.has_file = 'N'
-                fcopy.wants_file = 'N'  # Set in case it was 'M' before
+                fcopy.has_file = "N"
+                fcopy.wants_file = "N"  # Set in case it was 'M' before
                 fcopy.save()  # Update the FileCopy in the database
 
                 log.info("Removed file copy: %s" % shortname)
@@ -257,20 +274,25 @@ def update_node_requests(node):
         return
 
     # Calculate the total archive size from the database
-    size_query = di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b)).join(di.ArchiveFileCopy).where(
-        di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file=='Y')
+    size_query = (
+        di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b))
+        .join(di.ArchiveFileCopy)
+        .where(di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file == "Y")
+    )
     size = size_query.scalar(as_tuple=True)[0]
-    current_size_gb = float(0.0 if size is None else size) / 2**30.0
+    current_size_gb = float(0.0 if size is None else size) / 2 ** 30.0
 
     # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
-    if (current_size_gb > node.max_total_gb and node.max_total_gb > 0.0):
-        log.info('Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)' %
-                 (node.name, current_size_gb, node.max_total_gb))
+    if current_size_gb > node.max_total_gb and node.max_total_gb > 0.0:
+        log.info(
+            "Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)"
+            % (node.name, current_size_gb, node.max_total_gb)
+        )
         return
 
     # ... OR if this is a transport node quit if the transport cycle is done.
-    if (node.storage_type == "T" and done_transport_this_cycle):
-        log.info('Ignoring transport node %s' % node.name)
+    if node.storage_type == "T" and done_transport_this_cycle:
+        log.info("Ignoring transport node %s" % node.name)
         return
 
     start_time = time.time()
@@ -279,11 +301,11 @@ def update_node_requests(node):
     requests = di.ArchiveFileCopyRequest.select().where(
         ~di.ArchiveFileCopyRequest.completed,
         ~di.ArchiveFileCopyRequest.cancelled,
-        di.ArchiveFileCopyRequest.group_to == node.group
+        di.ArchiveFileCopyRequest.group_to == node.group,
     )
 
     # Add in constraint that node_from cannot be an HPSS node
-    requests = requests.join(di.StorageNode).where(di.StorageNode.address != 'HPSS')
+    requests = requests.join(di.StorageNode).where(di.StorageNode.address != "HPSS")
 
     for req in requests:
 
@@ -295,60 +317,71 @@ def update_node_requests(node):
         # node if the from_node is local, this should prevent pointlessly
         # rsyncing across the network
         if node.storage_type == "T" and node.host != req.node_from.host:
-            log.debug("Skipping request for %s/%s from remote node [%s] onto local "
-                      "transport disks" % (req.file.acq.name, req.file.name,
-                                           req.node_from.name))
+            log.debug(
+                "Skipping request for %s/%s from remote node [%s] onto local "
+                "transport disks"
+                % (req.file.acq.name, req.file.name, req.node_from.name)
+            )
             continue
 
         # Only proceed if the source file actually exists (and is not corrupted).
         try:
-            di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
-                                   di.ArchiveFileCopy.node == req.node_from,
-                                   di.ArchiveFileCopy.has_file == 'Y')
+            di.ArchiveFileCopy.get(
+                di.ArchiveFileCopy.file == req.file,
+                di.ArchiveFileCopy.node == req.node_from,
+                di.ArchiveFileCopy.has_file == "Y",
+            )
         except pw.DoesNotExist:
-            log.error("Skipping request for %s/%s since it is not available on "
-                      "node \"%s\". [file_id=%i]" % (req.file.acq.name,
-                                                     req.file.name,
-                                                     req.node_from.name,
-                                                     req.file.id))
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
             continue
 
         # Only proceed if the destination file does not already exist.
         try:
-            di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
-                                   di.ArchiveFileCopy.node == node,
-                                   di.ArchiveFileCopy.has_file == 'Y')
-            log.info("Skipping request for %s/%s since it already exists on "
-                     "this node (\"%s\"), and updating DB to reflect this." %
-                     (req.file.acq.name, req.file.name, node.name))
+            di.ArchiveFileCopy.get(
+                di.ArchiveFileCopy.file == req.file,
+                di.ArchiveFileCopy.node == node,
+                di.ArchiveFileCopy.has_file == "Y",
+            )
+            log.info(
+                "Skipping request for %s/%s since it already exists on "
+                'this node ("%s"), and updating DB to reflect this.'
+                % (req.file.acq.name, req.file.name, node.name)
+            )
             di.ArchiveFileCopyRequest.update(completed=True).where(
-                di.ArchiveFileCopyRequest.file == req.file).where(
-                di.ArchiveFileCopyRequest.group_to ==
-                node.group).execute()
+                di.ArchiveFileCopyRequest.file == req.file
+            ).where(di.ArchiveFileCopyRequest.group_to == node.group).execute()
             continue
         except pw.DoesNotExist:
             pass
 
         # Check that there is enough space available.
         if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
-            log.warning("Node \"%s\" is full: not adding datafile \"%s/%s\"." %
-                        (node.name, req.file.acq.name, req.file.name))
+            log.warning(
+                'Node "%s" is full: not adding datafile "%s/%s".'
+                % (node.name, req.file.acq.name, req.file.name)
+            )
             continue
 
         # Constuct the origin and destination paths.
-        from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name,
-                                  req.file.name)
+        from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name, req.file.name)
         if req.node_from.host != node.host:
-            from_path = "%s@%s:%s" % (req.node_from.username,
-                                      req.node_from.address, from_path)
+            from_path = "%s@%s:%s" % (
+                req.node_from.username,
+                req.node_from.address,
+                from_path,
+            )
 
         to_path = "%s/%s/" % (node.root, req.file.acq.name)
         if not os.path.isdir(to_path):
-            log.info("Creating directory \"%s\"." % to_path)
+            log.info('Creating directory "%s".' % to_path)
             os.mkdir(to_path)
 
         # Giddy up!
-        log.info("Transferring file \"%s/%s\"." % (req.file.acq.name, req.file.name))
+        log.info('Transferring file "%s/%s".' % (req.file.acq.name, req.file.name))
         st = time.time()
 
         # Attempt to transfer the file. Each of the methods below needs to set a
@@ -360,15 +393,21 @@ def update_node_requests(node):
             # First try bbcp which is a fast multistream transfer tool. bbcp can
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
-            if command_available('bbcp'):
-                cmd = 'bbcp -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s' % (from_path, to_path)
+            if command_available("bbcp"):
+                cmd = "bbcp -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s" % (
+                    from_path,
+                    to_path,
+                )
                 ret, stdout, stderr = run_command(cmd.split())
 
                 # Attempt to parse STDERR for the md5 hash
                 if ret == 0:
-                    mo = re.search('md5 ([a-f0-9]{32})', stderr)
+                    mo = re.search("md5 ([a-f0-9]{32})", stderr)
                     if mo is None:
-                        log.error('BBCP transfer has gone awry. STDOUT: %s\n STDERR: %s' % (stdout, stderr))
+                        log.error(
+                            "BBCP transfer has gone awry. STDOUT: %s\n STDERR: %s"
+                            % (stdout, stderr)
+                        )
                         ret = -1
                     md5sum = mo.group(1)
                 else:
@@ -376,12 +415,18 @@ def update_node_requests(node):
 
             # Next try rsync over ssh. We need to explicitly calculate the md5
             # hash after the fact
-            elif command_available('rsync'):
-                cmd = ("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" -e \"ssh -q\" %s %s" %
-                       (RSYNC_FLAG, from_path, to_path))
+            elif command_available("rsync"):
+                cmd = (
+                    'rsync -z%s --rsync-path="ionice -c4 -n4 rsync" -e "ssh -q" %s %s'
+                    % (RSYNC_FLAG, from_path, to_path)
+                )
                 ret, stdout, stderr = run_command(cmd.split())
 
-                md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name)) if ret == 0 else None
+                md5sum = (
+                    di.md5sum_file("%s/%s" % (to_path, req.file.name))
+                    if ret == 0
+                    else None
+                )
 
             # If we get here then we have no idea how to transfer the file...
             else:
@@ -402,20 +447,26 @@ def update_node_requests(node):
                 # being unable to link will both raise OSError and get
                 # confused.
                 if os.path.exists(link_path):
-                    log.error('File %s already exists. Clean up manually.' % link_path)
+                    log.error("File %s already exists. Clean up manually." % link_path)
                     ret = -1
                 else:
                     os.link(from_path, link_path)
                     ret = 0
-                    md5sum = req.file.md5sum  # As we're linking the md5sum can't change. Skip the check here...
+                    md5sum = (
+                        req.file.md5sum
+                    )  # As we're linking the md5sum can't change. Skip the check here...
 
             # If we couldn't just link the file, try copying it with rsync.
             except OSError:
-                if command_available('rsync'):
+                if command_available("rsync"):
                     cmd = "rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path)
                     ret, stdout, stderr = run_command(cmd.split())
 
-                    md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name)) if ret == 0 else None
+                    md5sum = (
+                        di.md5sum_file("%s/%s" % (to_path, req.file.name))
+                        if ret == 0
+                        else None
+                    )
                 else:
                     log.warn("No commands available to complete this transfer.")
                     ret = -1
@@ -424,60 +475,71 @@ def update_node_requests(node):
         if ret:
             # If the copy didn't work, then the remote file may be corrupted.
             log.error("Rsync failed. Marking source file suspect.")
-            di.ArchiveFileCopy.update(has_file='M').where(
+            di.ArchiveFileCopy.update(has_file="M").where(
                 di.ArchiveFileCopy.file == req.file,
-                di.ArchiveFileCopy.node == req.node_from).execute()
+                di.ArchiveFileCopy.node == req.node_from,
+            ).execute()
             continue
         et = time.time()
 
         # Check integrity.
         if md5sum == req.file.md5sum:
-            size_mb = req.file.size_b / 2**20.0
+            size_mb = req.file.size_b / 2 ** 20.0
             trans_time = et - st
             rate = size_mb / trans_time
-            log.info("Pull complete (md5sum correct). Transferred %.1f MB in %i "
-                     "seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate))
+            log.info(
+                "Pull complete (md5sum correct). Transferred %.1f MB in %i "
+                "seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate)
+            )
 
             # Update the FileCopy (if exists), or insert a new FileCopy
             try:
                 done = False
                 while not done:
                     try:
-                        fcopy = di.ArchiveFileCopy\
-                                  .select()\
-                                  .where(di.ArchiveFileCopy.file == req.file,
-                                         di.ArchiveFileCopy.node == node)\
-                                  .get()
-                        fcopy.has_file = 'Y'
-                        fcopy.wants_file = 'Y'
+                        fcopy = (
+                            di.ArchiveFileCopy.select()
+                            .where(
+                                di.ArchiveFileCopy.file == req.file,
+                                di.ArchiveFileCopy.node == node,
+                            )
+                            .get()
+                        )
+                        fcopy.has_file = "Y"
+                        fcopy.wants_file = "Y"
                         fcopy.save()
                         done = True
                     except pw.OperationalError:
-                        log.error("MySQL connexion dropped. Will attempt to reconnect in "
-                                  "five seconds.")
+                        log.error(
+                            "MySQL connexion dropped. Will attempt to reconnect in "
+                            "five seconds."
+                        )
                         time.sleep(5)
                         di.connect_database(True)
             except pw.DoesNotExist:
-                di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
-                                          wants_file='Y').execute()
+                di.ArchiveFileCopy.insert(
+                    file=req.file, node=node, has_file="Y", wants_file="Y"
+                ).execute()
 
             # Mark any FileCopyRequest for this file as completed
             di.ArchiveFileCopyRequest.update(completed=True).where(
-                di.ArchiveFileCopyRequest.file == req.file).where(
-                di.ArchiveFileCopyRequest.group_to == node.group).execute()
+                di.ArchiveFileCopyRequest.file == req.file
+            ).where(di.ArchiveFileCopyRequest.group_to == node.group).execute()
 
             if node.storage_type == "T":
                 # This node is getting the transport king.
                 done_transport_this_cycle = True
 
             # Update local estimate of available space
-            avail_gb = avail_gb - req.file.size_b / 2**30.0
+            avail_gb = avail_gb - req.file.size_b / 2 ** 30.0
 
         else:
-            log.error("Error with md5sum check: %s on node \"%s\", but %s on "
-                      "this node, \"%s\"." % (req.file.md5sum, req.node_from.name,
-                                              md5sum, node.name))
-            log.error("Removing file \"%s/%s\"." % (to_path, req.file.name))
+            log.error(
+                'Error with md5sum check: %s on node "%s", but %s on '
+                'this node, "%s".'
+                % (req.file.md5sum, req.node_from.name, md5sum, node.name)
+            )
+            log.error('Removing file "%s/%s".' % (to_path, req.file.name))
             try:
                 os.remove("%s/%s" % (to_path, req.file.name))
             except:
@@ -485,17 +547,17 @@ def update_node_requests(node):
 
             # Since the md5sum failed, the remote file may be corrupted.
             log.error("Marking source file suspect.")
-            di.ArchiveFileCopy.update(has_file='M').where(
+            di.ArchiveFileCopy.update(has_file="M").where(
                 di.ArchiveFileCopy.file == req.file,
-                di.ArchiveFileCopy.node == req.node_from).execute()
+                di.ArchiveFileCopy.node == req.node_from,
+            ).execute()
 
         if time.time() - start_time > max_time_per_node_operation:
             break  # Don't hog all the time.
 
 
 def update_node(node):
-    """Update the status of the node, and process eligible transfers onto it.
-    """
+    """Update the status of the node, and process eligible transfers onto it."""
 
     # Check if this is an HPSS node, and if so call the special handler
     if is_hpss_node(node):
@@ -504,12 +566,12 @@ def update_node(node):
 
     # Make sure this node is usable.
     if not node.mounted:
-        log.debug("Skipping unmounted node \"%s\"." % node.name)
+        log.debug('Skipping unmounted node "%s".' % node.name)
         return
     if node.suspect:
-        log.debug("Skipping suspected node \"%s\"." % node.name)
+        log.debug('Skipping suspected node "%s".' % node.name)
 
-    log.info("Updating node \"%s\"." % (node.name))
+    log.info('Updating node "%s".' % (node.name))
 
     # Check and update the amount of free space
     update_node_free_space(node)
@@ -529,7 +591,7 @@ def update_node(node):
 
 def is_hpss_node(node):
     """Test if a node is an HPSS tape node or not."""
-    return (node.address == 'HPSS')
+    return node.address == "HPSS"
 
 
 def _check_and_bundle_requests(requests, node):
@@ -537,7 +599,7 @@ def _check_and_bundle_requests(requests, node):
     some maximum size."""
 
     # Size to bundle transfers into (in bytes)
-    max_bundle_size = 800.0 * 2**30.0
+    max_bundle_size = 800.0 * 2 ** 30.0
 
     bundle_size = 0.0
     requests_to_process = []
@@ -548,40 +610,58 @@ def _check_and_bundle_requests(requests, node):
 
         # Check to ensure both source and dest nodes are on the same host
         if req.node_from.host != node.host:
-            log.error('Source file is not on this host [request_id=%i].' % req.id)
+            log.error("Source file is not on this host [request_id=%i]." % req.id)
             continue
 
         # Check that there is actually a copy of the file at the source
-        filecopy_src = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
-                                                         di.ArchiveFileCopy.node == req.node_from,
-                                                         di.ArchiveFileCopy.has_file == 'Y')
+        filecopy_src = di.ArchiveFileCopy.select().where(
+            di.ArchiveFileCopy.file == req.file,
+            di.ArchiveFileCopy.node == req.node_from,
+            di.ArchiveFileCopy.has_file == "Y",
+        )
         if not filecopy_src.exists():
-            log.error("Skipping request for %s/%s since it is not available on "
-                      "node \"%s\". [file_id=%i]" % (req.file.acq.name,
-                                                     req.file.name,
-                                                     req.node_from.name,
-                                                     req.file.id))
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
             continue
 
         # Check if there is already a copy at the destination, and skip the request if there is
-        filecopy_dst = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
-                                                         di.ArchiveFileCopy.node == node,
-                                                         di.ArchiveFileCopy.has_file == 'Y')
+        filecopy_dst = di.ArchiveFileCopy.select().where(
+            di.ArchiveFileCopy.file == req.file,
+            di.ArchiveFileCopy.node == node,
+            di.ArchiveFileCopy.has_file == "Y",
+        )
         if filecopy_dst.exists():
 
-            log.info("Skipping request for %s/%s since it already exists on "
-                     "this node (\"%s\"), and updating DB to reflect this." %
-                     (req.file.acq.name, req.file.name, node.name))
+            log.info(
+                "Skipping request for %s/%s since it already exists on "
+                'this node ("%s"), and updating DB to reflect this.'
+                % (req.file.acq.name, req.file.name, node.name)
+            )
             di.ArchiveFileCopyRequest.update(completed=True).where(
                 di.ArchiveFileCopyRequest.file == req.file,
-                di.ArchiveFileCopyRequest.group_to == node.group).execute()
+                di.ArchiveFileCopyRequest.group_to == node.group,
+            ).execute()
             continue
 
         # Ensure that we only attempt to transfer into HPSS online from an HPSS offline node
-        if node.group.name == 'hpss_online' and req.node_from.group.name != 'hpss_offline':
-            log.error("Can only transfer into hpss_online group from hpss_offline." +
-                      "Skipping request of %s/%s from node \"%s\" to node \"%s\" [file_id=%i]" %
-                      (req.file.acq.name, req.file.name, req.node_from.name, node.name, req.file.id))
+        if (
+            node.group.name == "hpss_online"
+            and req.node_from.group.name != "hpss_offline"
+        ):
+            log.error(
+                "Can only transfer into hpss_online group from hpss_offline."
+                + 'Skipping request of %s/%s from node "%s" to node "%s" [file_id=%i]'
+                % (
+                    req.file.acq.name,
+                    req.file.name,
+                    req.node_from.name,
+                    node.name,
+                    req.file.id,
+                )
+            )
             continue
 
         # Add the request into the list to process (provided we haven't hit the maximum transfer size)
@@ -595,19 +675,18 @@ def _check_and_bundle_requests(requests, node):
 
 
 def update_node_hpss_inbound(node):
-    """Process transfers into an HPSS node.
-    """
+    """Process transfers into an HPSS node."""
 
     if not is_hpss_node(node):
-        log.error('This is not an HPSS node.')
+        log.error("This is not an HPSS node.")
 
-    log.info('Processing HPSS inbound transfers (%s)' % node.name)
+    log.info("Processing HPSS inbound transfers (%s)" % node.name)
 
     # Fetch requests for transfer onto this node
     requests = di.ArchiveFileCopyRequest.select().where(
         ~di.ArchiveFileCopyRequest.completed,
         ~di.ArchiveFileCopyRequest.cancelled,
-        di.ArchiveFileCopyRequest.group_to == node.group
+        di.ArchiveFileCopyRequest.group_to == node.group,
     )
 
     # Get the requests we should actually process
@@ -618,38 +697,37 @@ def update_node_hpss_inbound(node):
         return
 
     if len(queued_archive_jobs()) > 1:
-        log.info('Skipping HPSS inbound as queue full.')
+        log.info("Skipping HPSS inbound as queue full.")
         return
 
     # Construct final list of requests to process
     for req in requests_to_process:
-        log.info('Pushing file %s/%s into HPSS' % (req.file.acq.name, req.file.name))
+        log.info("Pushing file %s/%s into HPSS" % (req.file.acq.name, req.file.name))
 
         # Mark any FileCopyRequest for this file as completed
         di.ArchiveFileCopyRequest.update(completed=True).where(
-            di.ArchiveFileCopyRequest.file == req.file).where(
-            di.ArchiveFileCopyRequest.group_to == node.group).execute()
+            di.ArchiveFileCopyRequest.file == req.file
+        ).where(di.ArchiveFileCopyRequest.group_to == node.group).execute()
 
     script_name = _create_hpss_push_script(requests_to_process, node)
-    log.info('Submitting HPSS job %s' % script_name)
+    log.info("Submitting HPSS job %s" % script_name)
     _submit_hpss_script(script_name)
 
 
 def update_node_hpss_outbound(node):
-    """Process transfers out of an HPSS tape node.
-    """
+    """Process transfers out of an HPSS tape node."""
 
-    log.info('Processing HPSS outbound transfers (%s)' % node.name)
+    log.info("Processing HPSS outbound transfers (%s)" % node.name)
 
     # Fetch requests for transfer onto this node
     requests = di.ArchiveFileCopyRequest.select().where(
         ~di.ArchiveFileCopyRequest.completed,
         ~di.ArchiveFileCopyRequest.cancelled,
-        di.ArchiveFileCopyRequest.group_to == node.group
+        di.ArchiveFileCopyRequest.group_to == node.group,
     )
 
     # Add constraint that transfers must be from an HPSS node
-    requests = requests.join(di.StorageNode).where(di.StorageNode.address == 'HPSS')
+    requests = requests.join(di.StorageNode).where(di.StorageNode.address == "HPSS")
 
     # Get the requests we should actually process
     requests_to_process = _check_and_bundle_requests(requests, node)
@@ -659,21 +737,21 @@ def update_node_hpss_outbound(node):
         return
 
     if len(queued_archive_jobs()) > 1:
-        log.info('Skipping HPSS outbound as queue full.')
+        log.info("Skipping HPSS outbound as queue full.")
         return
 
     # Construct final list of requests to process
     for req in requests_to_process:
 
-        log.info('Pulling file %s/%s from HPSS' % (req.file.acq.name, req.file.name))
+        log.info("Pulling file %s/%s from HPSS" % (req.file.acq.name, req.file.name))
 
         # Mark any FileCopyRequest for this file as completed
         di.ArchiveFileCopyRequest.update(completed=True).where(
-            di.ArchiveFileCopyRequest.file == req.file).where(
-            di.ArchiveFileCopyRequest.group_to == node.group).execute()
+            di.ArchiveFileCopyRequest.file == req.file
+        ).where(di.ArchiveFileCopyRequest.group_to == node.group).execute()
 
     script_name = _create_hpss_pull_script(requests_to_process, node)
-    log.info('Submitting HPSS job %s' % script_name)
+    log.info("Submitting HPSS job %s" % script_name)
     _submit_hpss_script(script_name)
 
 
@@ -731,32 +809,30 @@ fi
 """
 
     dtnow = datetime.datetime.now()
-    dtstring = dtnow.strftime('%Y%m%dT%H%M%S')
+    dtstring = dtnow.strftime("%Y%m%dT%H%M%S")
 
-    script = start % {'offline_node_root': node.root, 'jobname': dtstring}
-
-
+    script = start % {"offline_node_root": node.root, "jobname": dtstring}
 
     # Loop over files to construct push script
     for req in requests:
 
         req_dict = {
-            'file': req.file.name,
-            'acq': req.file.acq.name,
-            'node_root': req.node_from.root,
-            'file_hash': req.file.md5sum,
-            'host': socket.gethostname(),
-            'file_id': req.file.id,
-            'node_id': node.id
+            "file": req.file.name,
+            "acq": req.file.acq.name,
+            "node_root": req.node_from.root,
+            "file_hash": req.file.md5sum,
+            "host": socket.gethostname(),
+            "file_id": req.file.id,
+            "node_id": node.id,
         }
 
         script += loop % req_dict
 
-    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
+    HPSS_SCRIPT_DIR = os.environ["ALPENHORN_HPSS_SCRIPT_DIR"]
 
-    script_name = HPSS_SCRIPT_DIR + '/push_%s.sh' % dtstring
+    script_name = HPSS_SCRIPT_DIR + "/push_%s.sh" % dtstring
 
-    with open(script_name, 'w') as f:
+    with open(script_name, "w") as f:
         f.write(script)
 
     return script_name
@@ -818,30 +894,30 @@ fi
 """
 
     dtnow = datetime.datetime.now()
-    dtstring = dtnow.strftime('%Y%m%dT%H%M%S')
+    dtstring = dtnow.strftime("%Y%m%dT%H%M%S")
 
-    script = start % {'online_node_root': node.root, 'jobname': dtstring}
+    script = start % {"online_node_root": node.root, "jobname": dtstring}
 
     # Loop over files to construct push script
     for req in requests:
 
         req_dict = {
-            'file': req.file.name,
-            'acq': req.file.acq.name,
-            'node_root': req.node_from.root,
-            'file_hash': req.file.md5sum,
-            'host': socket.gethostname(),
-            'file_id': req.file.id,
-            'node_id': node.id
+            "file": req.file.name,
+            "acq": req.file.acq.name,
+            "node_root": req.node_from.root,
+            "file_hash": req.file.md5sum,
+            "host": socket.gethostname(),
+            "file_id": req.file.id,
+            "node_id": node.id,
         }
 
         script += loop % req_dict
 
-    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
+    HPSS_SCRIPT_DIR = os.environ["ALPENHORN_HPSS_SCRIPT_DIR"]
 
-    script_name = HPSS_SCRIPT_DIR + '/pull_%s.sh' % dtstring
+    script_name = HPSS_SCRIPT_DIR + "/pull_%s.sh" % dtstring
 
-    with open(script_name, 'w') as f:
+    with open(script_name, "w") as f:
         f.write(script)
 
     return script_name

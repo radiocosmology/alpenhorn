@@ -1,4 +1,3 @@
-
 import datetime
 import logging
 from os import path
@@ -19,6 +18,7 @@ class AcqType(base_model):
     name : string
         Short name of type. e.g. `raw`, `vis`
     """
+
     name = pw.CharField(max_length=64)
     notes = pw.TextField(null=True)
 
@@ -41,7 +41,7 @@ class AcqType(base_model):
         try:
             cls.get(name=acq_info._acq_type)
         except pw.DoesNotExist:
-            log.info("Create AcqType entry for \"%s\"" % acq_info._acq_type)
+            log.info('Create AcqType entry for "%s"' % acq_info._acq_type)
             cls.create(name=acq_info._acq_type)
 
         # Add to registry
@@ -63,8 +63,9 @@ class AcqType(base_model):
         missing_acq_types = set(db_acq_types) - set(reg_acq_types)
 
         if len(missing_acq_types):
-            raise RuntimeError('AcqTypes %s have no registered handler.' %
-                               repr(missing_acq_types))
+            raise RuntimeError(
+                "AcqTypes %s have no registered handler." % repr(missing_acq_types)
+            )
 
     def is_type(self, acqname, node):
         """Does this acquisition type understand this directory?
@@ -111,14 +112,16 @@ class AcqType(base_model):
 
         # Paths must be relative, otherwise we enter an infinite loop below
         if path.isabs(acqname):
-            log.error("acqname (%s) is absolute path. Must be relative to node root.", acqname)
+            log.error(
+                "acqname (%s) is absolute path. Must be relative to node root.", acqname
+            )
             return None
 
         # Iterate over all known acquisition types to try and find one that
         # can handle the acqname path. If nothing is found, repeat
         # the process with the parent directory of acqname, until we run out of
         # directory segment
-        while acqname != '':
+        while acqname != "":
             for acq_type in cls.select():
                 if acq_type.is_type(acqname, node):
                     return acq_type, acqname
@@ -128,14 +131,12 @@ class AcqType(base_model):
 
     @property
     def acq_info(self):
-        """The AcqInfo table for this AcqType.
-        """
+        """The AcqInfo table for this AcqType."""
         return self.__class__._registered_acq_types[self.name]
 
     @property
     def file_types(self):
-        """The FileTypes supported by this AcqType.
-        """
+        """The FileTypes supported by this AcqType."""
 
         def _resolve(x):
             if isinstance(x, str):
@@ -168,8 +169,9 @@ class ArchiveAcq(base_model):
     timed_files
     n_timed_files
     """
+
     name = pw.CharField(max_length=64)
-    type = pw.ForeignKeyField(AcqType, backref='acqs')
+    type = pw.ForeignKeyField(AcqType, backref="acqs")
     comment = pw.TextField(null=True)
 
 
@@ -183,6 +185,7 @@ class FileType(base_model):
     notes: string
         Any notes or comments about this file type.
     """
+
     name = pw.CharField(max_length=64)
     notes = pw.TextField(null=True)
 
@@ -205,7 +208,7 @@ class FileType(base_model):
         try:
             cls.get(name=file_info._file_type)
         except pw.DoesNotExist:
-            log.info("Create FileType entry for \"%s\"" % file_info._file_type)
+            log.info('Create FileType entry for "%s"' % file_info._file_type)
             cls.create(name=file_info._file_type)
 
         # Add to registry
@@ -227,8 +230,9 @@ class FileType(base_model):
         missing_file_types = set(db_file_types) - set(reg_file_types)
 
         if len(missing_file_types):
-            raise RuntimeError('FileTypes %s have no registered handler.' %
-                               repr(missing_file_types))
+            raise RuntimeError(
+                "FileTypes %s have no registered handler." % repr(missing_file_types)
+            )
 
     def is_type(self, filename, acq, node):
         """Check if this file can be handled by this file type.
@@ -275,8 +279,7 @@ class FileType(base_model):
 
     @property
     def file_info(self):
-        """The FileInfo table for this FileType.
-        """
+        """The FileInfo table for this FileType."""
         return self.__class__._registered_file_types[self.name]
 
 
@@ -298,8 +301,9 @@ class ArchiveFile(base_model):
     registered : datetime
         The time the file was registered in the database.
     """
-    acq = pw.ForeignKeyField(ArchiveAcq, backref='files')
-    type = pw.ForeignKeyField(FileType, backref='files')
+
+    acq = pw.ForeignKeyField(ArchiveAcq, backref="files")
+    type = pw.ForeignKeyField(FileType, backref="files")
     name = pw.CharField(max_length=255)
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
@@ -368,8 +372,7 @@ class AcqInfoBase(base_model, ConfigClass):
 
     @classmethod
     def get_acq_type(cls):
-        """Get an instance of the AcqType row corresponding to this AcqInfo.
-        """
+        """Get an instance of the AcqType row corresponding to this AcqInfo."""
         return AcqType.get(name=cls._acq_type)
 
     def set_info(self, acqpath, node_root):
@@ -434,8 +437,7 @@ class FileInfoBase(base_model, ConfigClass):
 
     @classmethod
     def get_file_type(cls):
-        """Get an instance of the FileType row corresponding to this FileInfo.
-        """
+        """Get an instance of the FileType row corresponding to this FileInfo."""
         return FileType.get(name=cls._file_type)
 
     @classmethod

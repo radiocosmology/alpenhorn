@@ -45,11 +45,11 @@ def load_extensions():
 
     _ext = []
 
-    if 'extensions' not in config.config:
-        log.info('No extensions to load.')
+    if "extensions" not in config.config:
+        log.info("No extensions to load.")
         return
 
-    extension_list = list(config.config['extensions'])
+    extension_list = list(config.config["extensions"])
 
     for name in extension_list:
 
@@ -58,15 +58,18 @@ def load_extensions():
         try:
             ext_module = importlib.import_module(name)
         except ImportError:
-            raise ImportError('Extension module %s not found', name)
+            raise ImportError("Extension module %s not found", name)
 
         try:
             extension_dict = ext_module.register_extension()
         except AttributeError:
-            raise RuntimeError('Module %s is not a valid alpenhorn extension (no register_extension hook).', name)
+            raise RuntimeError(
+                "Module %s is not a valid alpenhorn extension (no register_extension hook).",
+                name,
+            )
 
-        extension_dict['name'] = name
-        extension_dict['module'] = ext_module
+        extension_dict["name"] = name
+        extension_dict["module"] = ext_module
 
         _ext.append(extension_dict)
 
@@ -85,13 +88,13 @@ def connect_database_extension():
 
     for ext_dict in _ext:
 
-        if 'database' in ext_dict:
-            log.debug('Found database helper in extension %s', ext_dict['name'])
-            dbconnect = ext_dict['database']
+        if "database" in ext_dict:
+            log.debug("Found database helper in extension %s", ext_dict["name"])
+            dbconnect = ext_dict["database"]
 
     if dbconnect is not None:
-        log.info('Using external database helper')
-        conf = config.config.get('database', {})
+        log.info("Using external database helper")
+        conf = config.config.get("database", {})
         return dbconnect(conf)
     else:
         return None
@@ -106,11 +109,11 @@ def register_type_extensions():
 
     for ext_dict in _ext:
 
-        if 'acq_types' in ext_dict:
-            _register_acq_extensions(ext_dict['acq_types'])
+        if "acq_types" in ext_dict:
+            _register_acq_extensions(ext_dict["acq_types"])
 
-        if 'file_types' in ext_dict:
-            _register_file_extensions(ext_dict['file_types'])
+        if "file_types" in ext_dict:
+            _register_file_extensions(ext_dict["file_types"])
 
 
 def _register_acq_extensions(acq_types):
@@ -121,7 +124,7 @@ def _register_acq_extensions(acq_types):
         acquisition.AcqType.register_type(acq_type)
 
         try:
-            conf = config.config['acq_types'][name]
+            conf = config.config["acq_types"][name]
         except KeyError:
             conf = {}
 
@@ -136,7 +139,7 @@ def _register_file_extensions(file_types):
         acquisition.FileType.register_type(file_type)
 
         try:
-            conf = config.config['file_types'][name]
+            conf = config.config["file_types"][name]
         except KeyError:
             conf = {}
 
