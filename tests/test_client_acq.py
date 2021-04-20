@@ -15,7 +15,6 @@ import alpenhorn.archive as ar
 import alpenhorn.client as cli
 import alpenhorn.db as db
 import alpenhorn.storage as st
-import alpenhorn.util as util
 
 
 @pytest.fixture

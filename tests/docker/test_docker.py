@@ -591,8 +591,4 @@ $ docker exec container_0 alpenhorn status
 When you are finished playing, press enter to close the docker containers and
 clean up everything."""
     )
-
-    try:
-        raw_input("")
-    except:
-        input("")
+    input("")

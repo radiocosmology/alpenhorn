@@ -22,7 +22,6 @@ RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on storage nodes. Use to create, modify, mount drives, etc."""
-    pass
 
 
 @cli.command()

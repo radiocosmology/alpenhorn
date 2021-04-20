@@ -1,9 +1,7 @@
 """Alpenhorn client interface for operations on `ArchiveAcq`s."""
 
-import os
 import re
 import sys
-from collections import defaultdict
 
 import click
 import peewee as pw
@@ -11,8 +9,6 @@ import peewee as pw
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
-import alpenhorn.util as util
-from alpenhorn import db
 
 from .connect_db import config_connect
 
@@ -22,7 +18,6 @@ RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on archival data products. Use to list acquisitions, their contents, and locations of copies."""
-    pass
 
 
 @cli.command(name="list")

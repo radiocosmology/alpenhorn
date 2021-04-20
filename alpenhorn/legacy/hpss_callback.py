@@ -20,7 +20,6 @@ di.connect_database(read_write=True)
 def cli():
     """Call back commands for updating the database from a shell script after an
     HPSS transfer."""
-    pass
 
 
 @cli.command()

@@ -10,11 +10,6 @@ import re
 import pytest
 from click.testing import CliRunner
 
-try:
-    from unittest.mock import call, patch
-except ImportError:
-    from mock import patch, call
-
 import alpenhorn.client as cli
 import alpenhorn.db as db
 import alpenhorn.storage as st

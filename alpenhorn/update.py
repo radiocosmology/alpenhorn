@@ -551,7 +551,7 @@ def update_node_requests(node):
             log.error('Removing file "%s".' % to_file)
             try:
                 os.remove(to_file)
-            except:
+            except Exception:
                 log.error("Could not remove file.")
 
             # Since the md5sum failed, the remote file may be corrupted.

@@ -11,9 +11,9 @@ import pytest
 from click.testing import CliRunner
 
 try:
-    from unittest.mock import call, patch
+    pass
 except ImportError:
-    from mock import patch, call
+    pass
 
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar

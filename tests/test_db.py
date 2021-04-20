@@ -10,7 +10,6 @@ import pytest
 
 import alpenhorn.db as db
 import test_import as ti
-import test_storage_model as ts
 
 # try:
 #     from unittest.mock import patch, call
@@ -30,9 +29,6 @@ class FailingSqliteDatabase(pw.SqliteDatabase):
     def close(self):
         if not self.fail:
             return super(FailingSqliteDatabase, self).close()
-
-
-from alpenhorn.storage import StorageGroup, StorageNode
 
 
 @pytest.fixture

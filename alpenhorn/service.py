@@ -1,7 +1,6 @@
 """Alpenhorn service."""
 
 import logging
-import socket
 import sys
 
 import click
