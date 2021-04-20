@@ -1,5 +1,6 @@
 import peewee as pw
-from .db import base_model, EnumField
+
+from .db import EnumField, base_model
 
 
 class StorageGroup(base_model):

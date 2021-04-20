@@ -1,15 +1,14 @@
 """Routines for updating the state of a node.
 """
-import os
-import time
 import datetime
+import os
 import re
 import socket
+import time
 
 import peewee as pw
-from peewee import fn
-
 from ch_util import data_index as di
+from peewee import fn
 
 # Setup the logging
 from . import logger

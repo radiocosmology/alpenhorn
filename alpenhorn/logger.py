@@ -5,7 +5,6 @@ import logging
 
 from . import config
 
-
 root_logger = logging.getLogger()
 
 log_stream = logging.StreamHandler()

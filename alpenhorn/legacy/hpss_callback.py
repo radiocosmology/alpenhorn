@@ -1,9 +1,8 @@
 """Call backs for the HPSS interface.
 """
 
-import peewee as pw
 import click
-
+import peewee as pw
 from ch_util import data_index as di
 
 from . import logger  # Import logger here to avoid connection

@@ -1,13 +1,12 @@
 """Alpenhorn service."""
 
-import sys
-import socket
 import logging
+import socket
+import sys
 
 import click
 
-from . import extensions, db, config, logger, auto_import, storage, update, util
-
+from . import auto_import, config, db, extensions, logger, storage, update, util
 
 log = logging.getLogger(__name__)
 

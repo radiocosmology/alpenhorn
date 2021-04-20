@@ -5,20 +5,19 @@ test_client_group
 Tests for `alpenhorn.client.group` module.
 """
 
-import pytest
-from click.testing import CliRunner
 import re
 
+import pytest
+from click.testing import CliRunner
+
 try:
-    from unittest.mock import patch, call
+    from unittest.mock import call, patch
 except ImportError:
     from mock import patch, call
 
-
-import alpenhorn.db as db
 import alpenhorn.client as cli
+import alpenhorn.db as db
 import alpenhorn.storage as st
-
 import test_import as ti
 
 

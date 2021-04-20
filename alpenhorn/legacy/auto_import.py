@@ -1,23 +1,20 @@
 """Routines for the importing of new files on a node."""
 
-import time
-import os
-import datetime
-
 import bisect
-import bitshuffle.h5
 import calendar
+import datetime
+import os
+import time
+
+import bitshuffle.h5
 import configobj
-
-import peewee as pw
-import numpy as np
 import h5py
-
+import numpy as np
+import peewee as pw
+from ch_util import data_index as di
+from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.polling import PollingObserver
-from watchdog.events import FileSystemEventHandler
-
-from ch_util import data_index as di
 
 # Setup the logging
 from . import logger

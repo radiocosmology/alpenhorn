@@ -6,17 +6,13 @@ import logging
 import click
 import peewee as pw
 
-from alpenhorn import config, extensions, db, util
+import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
-import alpenhorn.acquisition as ac
+from alpenhorn import config, db, extensions, util
 
+from . import acq, group, node, transport
 from .connect_db import config_connect
-from . import acq
-from . import group
-from . import node
-from . import transport
-
 
 log = logging.getLogger(__name__)
 

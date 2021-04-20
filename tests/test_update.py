@@ -5,25 +5,24 @@ test_update
 Tests for `alpenhorn.update` module.
 """
 
+import os
 from datetime import datetime
+
 import pytest
 import yaml
-import os
 
 try:
     from unittest.mock import patch
 except ImportError:
     from mock import patch
 
-import alpenhorn.db as db
-import alpenhorn.archive as ar
-import alpenhorn.storage as st
 import alpenhorn.acquisition as ac
-import alpenhorn.update as update
+import alpenhorn.archive as ar
+import alpenhorn.db as db
 import alpenhorn.generic as ge
-
+import alpenhorn.storage as st
+import alpenhorn.update as update
 import test_import as ti
-
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
 

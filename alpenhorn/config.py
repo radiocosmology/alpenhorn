@@ -59,8 +59,8 @@ Example config:
 
 import logging
 import os
-import yaml
 
+import yaml
 
 log = logging.getLogger(__name__)
 

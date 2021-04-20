@@ -2,12 +2,11 @@
 """
 
 
+import logging
 import os.path
 import re
 import shlex
-import logging
 import socket
-
 
 log = logging.getLogger(__name__)
 

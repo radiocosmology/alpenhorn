@@ -1,6 +1,6 @@
 """Alpenhorn client database initialization functions"""
 
-from alpenhorn import config, extensions, db
+from alpenhorn import config, db, extensions
 
 
 def config_connect():

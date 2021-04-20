@@ -5,13 +5,13 @@ test_storage_model
 Tests for `alpenhorn.storage` module.
 """
 
-import pytest
-import yaml
 from os import path
 
-import alpenhorn.db as db
-from alpenhorn.storage import *
+import pytest
+import yaml
 
+import alpenhorn.db as db
+from alpenhorn.storage import StorageGroup, StorageNode
 
 tests_path = path.abspath(path.dirname(__file__))
 

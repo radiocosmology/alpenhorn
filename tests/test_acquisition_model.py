@@ -6,13 +6,14 @@ Tests for `alpenhorn.acquisition` module.
 """
 
 import datetime as dt
+from os import path
+
+import peewee as pw
 import pytest
 import yaml
-from os import path
-import peewee as pw
 
 import alpenhorn.db as db
-from alpenhorn.acquisition import ArchiveAcq, AcqType, FileType, ArchiveFile
+from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 tests_path = path.abspath(path.dirname(__file__))
 

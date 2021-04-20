@@ -1,10 +1,9 @@
-import time
 import os
-from os.path import join, dirname, exists
 import re
+import time
+from os.path import dirname, exists, join
 
 import pytest
-
 
 pytestmark = pytest.mark.skipif(
     (("RUN_DOCKER_TESTS" not in os.environ) and ("PLAYGROUND" not in os.environ)),
@@ -19,7 +18,6 @@ import yaml
 from alpenhorn import acquisition as ac
 from alpenhorn import archive as ar
 from alpenhorn import storage as st
-
 
 # Try and import docker.
 try:

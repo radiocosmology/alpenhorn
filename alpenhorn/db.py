@@ -1,4 +1,5 @@
 import logging
+
 import peewee as pw
 import playhouse.db_url as db_url
 
