@@ -4,9 +4,6 @@ test_storage_model
 
 Tests for `alpenhorn.storage` module.
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
 
 import pytest
 import yaml

@@ -4,9 +4,6 @@ test_import
 
 Tests for `alpenhorn.auto_import` module.
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
 
 import pytest
 import yaml

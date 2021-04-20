@@ -4,9 +4,6 @@ test_client_group
 
 Tests for `alpenhorn.client.group` module.
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
 
 import pytest
 from click.testing import CliRunner

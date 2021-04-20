@@ -19,9 +19,6 @@ seen by the `._acq_type` or `._file_type` properties), only the last one is
 used. Similarly, only the last `database` specification matters.
 """
 
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
 
 import importlib
 import logging
