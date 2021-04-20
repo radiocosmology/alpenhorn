@@ -55,27 +55,27 @@ jobs:
     - name: Run serial tests
       run: pytest tests/
 
-  run-docker-tests:
+  # run-docker-tests:
 
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v2
 
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v1
-      with:
-        python-version: 3.9
+  #   - name: Set up Python 3.9
+  #     uses: actions/setup-python@v1
+  #     with:
+  #       python-version: 3.9
 
-    - name: Install pip dependencies
-      run: |
-        pip install -r requirements.txt
-        pip install -r test-requirements.txt
-        python setup.py develop
+  #   - name: Install pip dependencies
+  #     run: |
+  #       pip install -r requirements.txt
+  #       pip install -r test-requirements.txt
+  #       python setup.py develop
 
-    - name: Build docker image
-      run: docker build -f tests/docker/Dockerfile.alpenhorn -t alpenhorn .
+  #   - name: Build docker image
+  #     run: docker build -f tests/docker/Dockerfile.alpenhorn -t alpenhorn .
 
-    - name: Run docker tests
-      run: pytest tests/docker/test_docker.py
-      env:
-        RUN_DOCKER_TESTS: true
+  #   - name: Run docker tests
+  #     run: pytest tests/docker/test_docker.py
+  #     env:
+  #       RUN_DOCKER_TESTS: true
