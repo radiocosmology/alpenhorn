@@ -6,7 +6,6 @@ import datetime
 import os
 import time
 
-import bitshuffle.h5
 import configobj
 import h5py
 import numpy as np

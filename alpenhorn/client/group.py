@@ -11,7 +11,6 @@ from .connect_db import config_connect
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on storage groups. Use to create, modify, and list groups."""
-    pass
 
 
 @cli.command()

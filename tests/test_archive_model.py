@@ -5,15 +5,12 @@ test_archive_model
 Tests for `alpenhorn.archive` module.
 """
 
-import os
 from os import path
 
 import pytest
 import yaml
 
-import alpenhorn.acquisition as acquisition
 import alpenhorn.db as db
-import alpenhorn.storage as storage
 import test_acquisition_model as ta
 import test_storage_model as ts
 from alpenhorn.archive import (

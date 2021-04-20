@@ -6,10 +6,8 @@ Tests for `alpenhorn.update` module.
 """
 
 import os
-from datetime import datetime
 
 import pytest
-import yaml
 
 try:
     from unittest.mock import patch
@@ -19,7 +17,6 @@ except ImportError:
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.db as db
-import alpenhorn.generic as ge
 import alpenhorn.storage as st
 import alpenhorn.update as update
 import test_import as ti

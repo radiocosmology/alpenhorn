@@ -97,7 +97,6 @@ class GenericFileInfo(ac.FileInfoBase):
 
     def set_info(self, filename, acq_root):
         """This file type has no meta data so this method does nothing."""
-        pass
 
 
 def register_extension():

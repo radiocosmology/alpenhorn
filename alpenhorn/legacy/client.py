@@ -14,7 +14,6 @@ from ch_util import ephemeris
 def cli():
     """Client interface for alpenhorn. Use to request transfers, mount drives,
     check status etc."""
-    pass
 
 
 @cli.command()

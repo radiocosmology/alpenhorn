@@ -1,4 +1,4 @@
-"""For configuring alpenhorn from the config file.
+r"""For configuring alpenhorn from the config file.
 
 Configuration file search order:
 
@@ -7,7 +7,7 @@ Configuration file search order:
 - `~/.config/alpenhorn/alpenhorn.conf`
 - `ALPENHORN_CONFIG_FILE` environment variable
 
-This is in order of increasing precendence, with options in later files
+This is in order of increasing precedence, with options in later files
 overriding those in earlier entries. Configuration is merged recursively by
 `merge_dict_tree`.
 
@@ -19,7 +19,8 @@ Example config:
     database:
         url: peewee_url
 
-    # Specify extensions as a list of fully qualified references to python packages or modules
+    # Specify extensions as a list of fully qualified references to python packages or
+    # modules
     extensions:
         - alpenhorn.generic
         - alpenhorn_chime
@@ -122,7 +123,6 @@ class ConfigClass(object):
     @classmethod
     def set_config(cls, configdict):
         """Configure the class from the supplied `configdict`."""
-        pass
 
 
 def merge_dict_tree(a, b):

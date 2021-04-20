@@ -19,7 +19,6 @@ MAX_E2LABEL_LEN = 16
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Commands operating on transport nodes. Use to format, mount, etc."""
-    pass
 
 
 @cli.command()
