@@ -1,20 +1,20 @@
 """Routines for updating the state of a node.
 """
 
-import os
-import time
 import datetime as dt
-import re
 import logging
+import os
+import re
+import time
 
 import peewee as pw
 from peewee import fn
 
 from . import acquisition as ac
 from . import archive as ar
+from . import config, db
 from . import storage as st
-from . import util, config, db
-
+from . import util
 
 log = logging.getLogger(__name__)
 

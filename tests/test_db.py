@@ -8,14 +8,14 @@ Tests for `alpenhorn.db` module.
 import peewee as pw
 import pytest
 
+import alpenhorn.db as db
+import test_import as ti
+import test_storage_model as ts
+
 # try:
 #     from unittest.mock import patch, call
 # except ImportError:
 #     from mock import patch, call
-
-import alpenhorn.db as db
-import test_storage_model as ts
-import test_import as ti
 
 
 class FailingSqliteDatabase(pw.SqliteDatabase):

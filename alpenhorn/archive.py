@@ -1,8 +1,9 @@
 import peewee as pw
 
-from .db import base_model, EnumField
-from alpenhorn.storage import *
-from alpenhorn.acquisition import *
+from alpenhorn.acquisition import ArchiveFile
+from alpenhorn.storage import StorageGroup, StorageNode
+
+from .db import EnumField, base_model
 
 
 class ArchiveFileCopy(base_model):

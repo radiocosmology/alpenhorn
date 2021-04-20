@@ -1,20 +1,16 @@
 """Routines for the importing of new files on a node."""
 
-import time
-import os
 import logging
+import os
+import time
 
 import peewee as pw
-
-from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers.polling import PollingObserver
 
-from . import db
-from . import archive as ar
 from . import acquisition as ac
-from . import util
-from . import config
-
+from . import archive as ar
+from . import config, db, util
 
 log = logging.getLogger(__name__)
 

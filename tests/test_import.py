@@ -5,19 +5,18 @@ test_import
 Tests for `alpenhorn.auto_import` module.
 """
 
-import pytest
-import yaml
 import os
 
-import alpenhorn.db as db
-import alpenhorn.archive as ar
-import alpenhorn.storage as st
+import pytest
+import yaml
+
 import alpenhorn.acquisition as ac
+import alpenhorn.archive as ar
 import alpenhorn.auto_import as auto_import
+import alpenhorn.db as db
 import alpenhorn.generic as ge
-
+import alpenhorn.storage as st
 import test_archive_model as ta
-
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
 

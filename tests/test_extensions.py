@@ -7,7 +7,7 @@ try:
 except ImportError:
     from mock import patch
 
-from alpenhorn import extensions, acquisition, generic
+from alpenhorn import acquisition, extensions, generic
 
 
 @pytest.fixture

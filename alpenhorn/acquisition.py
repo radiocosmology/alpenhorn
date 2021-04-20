@@ -3,9 +3,9 @@ import logging
 from os import path
 
 import peewee as pw
-from .db import base_model
-from .config import ConfigClass
 
+from .config import ConfigClass
+from .db import base_model
 
 log = logging.getLogger(__name__)
 

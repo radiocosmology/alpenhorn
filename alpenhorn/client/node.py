@@ -1,18 +1,18 @@
 """Alpenhorn client interface for operations on `StorageNode`s."""
 
-import click
-from collections import defaultdict
 import os
-import peewee as pw
 import re
 import sys
+from collections import defaultdict
 
-from alpenhorn import db
+import click
+import peewee as pw
 
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.storage as st
 import alpenhorn.util as util
+from alpenhorn import db
 
 from .connect_db import config_connect
 

@@ -23,8 +23,7 @@ used. Similarly, only the last `database` specification matters.
 import importlib
 import logging
 
-from . import config, acquisition
-
+from . import acquisition, config
 
 log = logging.getLogger(__name__)
 

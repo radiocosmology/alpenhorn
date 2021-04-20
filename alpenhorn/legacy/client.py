@@ -1,12 +1,11 @@
 """Alpenhorn client interface."""
 
-import sys
-import os
 import datetime
+import os
+import sys
 
 import click
 import peewee as pw
-
 from ch_util import data_index as di
 from ch_util import ephemeris
 
@@ -633,8 +632,8 @@ def format_transport(serial_num):
     database. The disk is specified using the manufacturers
     SERIAL_NUM, which is printed on the disk.
     """
-    import os
     import glob
+    import os
 
     if os.getuid() != 0:
         print("You must be root to run mount on a transport disc. I quit.")
@@ -880,6 +879,7 @@ def import_files(node_name, verbose, acq, dry):
     alpenhornd in the usual manner.
     """
     import glob
+
     from ch_util import data_index as di
 
     di.connect_database(read_write=True)

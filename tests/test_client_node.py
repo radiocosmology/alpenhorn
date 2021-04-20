@@ -5,14 +5,15 @@ test_client_node
 Tests for `alpenhorn.client.node` module.
 """
 
-import pytest
-from click.testing import CliRunner
 import re
 
-import alpenhorn.db as db
+import pytest
+from click.testing import CliRunner
+
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.client as cli
+import alpenhorn.db as db
 import alpenhorn.storage as st
 import alpenhorn.util as util
 

@@ -1,17 +1,16 @@
 """Alpenhorn client interface for operations on transport disks."""
 
-import click
-import peewee as pw
-
 import os
 import subprocess
 import time
 
+import click
+import peewee as pw
 
 import alpenhorn.storage as st
 
-from .connect_db import config_connect
 from . import node
+from .connect_db import config_connect
 
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16
@@ -57,8 +56,8 @@ def format(serial_num):
     database. The disk is specified using the manufacturers
     SERIAL_NUM, which is printed on the disk.
     """
-    import os
     import glob
+    import os
 
     config_connect()
 
