@@ -407,7 +407,7 @@ def test_status(workers, network):
         detach=False,
         network_mode=network,
         command="alpenhorn status",
-    )
+    ).decode()
     assert re.search(
         r"^node_0\s+9\s+0.0\s+100\.0\s+100\.0\s+container-0:/data$",
         status,
@@ -463,9 +463,11 @@ def test_sync_acq(workers, network, test_files):
 
 
 def _verify_clean(acqs, worker, unclean=False, check_empty=False):
-    """Check the clean command has been executed as expected on the node associated with 'worker'.
-    If 'unclean' is set to True, check that files are not wanted but still present (until
-    additional copies on other archive nodes are found).
+    """Test the clean command.
+
+    Check the comand has been executed as expected on the node associated with
+    'worker'. If 'unclean' is set to True, check that files are not wanted but still
+    present (until additional copies on other archive nodes are found).
     """
     # Check files are set to deleted / not deleted but not wanted in database
     for acq in acqs:
