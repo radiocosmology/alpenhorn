@@ -5,27 +5,33 @@ from os.path import dirname, exists, join
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    (("RUN_DOCKER_TESTS" not in os.environ) and ("PLAYGROUND" not in os.environ)),
-    reason=(
-        "Docker tests must be enabled by setting the RUN_DOCKER_TESTS environment variable"
-    ),
-)
-
-
 import yaml
 
 from alpenhorn import acquisition as ac
 from alpenhorn import archive as ar
 from alpenhorn import storage as st
 
-# Try and import docker.
-try:
-    import docker
 
-    client = docker.from_env()
-except (ImportError, AttributeError):
-    pass
+if ("RUN_DOCKER_TESTS" not in os.environ) and ("PLAYGROUND" not in os.environ):
+    pytestmark = pytest.mark.skip(
+        reason=(
+            "Docker tests must be enabled by setting the RUN_DOCKER_TESTS environment "
+            "variable"
+        ),
+    )
+else:
+    # Try and import docker.
+    try:
+        import docker
+
+        client = docker.from_env()
+    except Exception:
+        pytestmark = pytest.mark.skip(
+            reason=(
+                "Docker tests are enabled, but docker doesn't seem to be installed, or"
+                "running."
+            ),
+        )
 
 
 # ====== Fixtures for controlling Docker ======
