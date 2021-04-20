@@ -1,7 +1,4 @@
 """Alpenhorn client interface for operations on `StorageNode`s."""
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
 
 import click
 from collections import defaultdict
