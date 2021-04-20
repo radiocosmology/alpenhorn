@@ -115,12 +115,17 @@ def alpenhorn_node_check(node):
     """
 
     file_path = os.path.join(node.root, "ALPENHORN_NODE")
-    if os.path.isfile(file_path):
+    try:
         with open(file_path, "r") as f:
             first_line = f.readline()
             # Check if the actual node name is in the textfile
             if node.name == first_line.rstrip():
                 # Great! Everything is as expected.
                 return True
+            log.debug(
+                f"Node name in file {file_path} does not match expected {node.name}."
+            )
+    except IOError:
+        log.debug(f"Node file {file_path} could not be read.")
 
     return False
