@@ -5,10 +5,13 @@ import sys
 
 import click
 
-from . import auto_import, config, db, extensions, logger, storage, update, util
+from . import auto_import, config, db, extensions, logger, storage, update, util, Task
 
 log = logging.getLogger(__name__)
 
+# Parameters.
+max_queue_size = 2048
+num_task_threads = 4
 
 # Register Hook to Log Exception
 # ==============================
@@ -20,6 +23,12 @@ def log_exception(*args):
 
 sys.excepthook = log_exception
 
+
+def run_tasks(task_queue):
+    """ Loop and run tasks from queue."""
+    while True:
+        task = task_queue.getTask()
+        task.run()
 
 @click.command()
 def cli():
@@ -63,9 +72,17 @@ def cli():
     # that should be imported
     auto_import.catchup(node_list)
 
+    # Setup the task queue
+    task_queue = TaskQueue(max_queue_size)
+    
     # Enter main loop performing node updates
     try:
-        update.update_loop(host)
+        update.update_loop(host, task_queue)
+
+    task_threads = []
+    for i in range(num_task_threads):
+        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+        task_threads[i].start()
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:
