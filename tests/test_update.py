@@ -6,6 +6,8 @@ Tests for `alpenhorn.update` module.
 """
 
 import os
+import threading
+import time
 
 import pytest
 
@@ -20,14 +22,27 @@ import alpenhorn.db as db
 import alpenhorn.storage as st
 import alpenhorn.update as update
 import test_import as ti
+from alpenhorn.Task import Task
+from alpenhorn.Task import TaskQueue
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
+
+# Parameters.
+max_queue_size = 2048
+num_task_threads = 1
+
+def run_tasks(task_queue):
+    """ Loop and run tasks from queue."""
+    #while True:
+    task = task_queue.getTask()
+    print("Thread got task {} and is going to call run()...".format(type(task).__name__))
+    task.run()
 
 
 @pytest.fixture
 def fixtures(tmpdir):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db._connect()
+    db._connect("sqlite:///james_db.dat")
 
     fixtures = ti.load_fixtures(tmpdir)
 
@@ -39,6 +54,7 @@ def fixtures(tmpdir):
     yield fixtures
 
     db.database_proxy.close()
+    os.unlink("james_db.dat")
 
 
 def test_update_node_active(fixtures):
@@ -125,9 +141,21 @@ def test_update_node_integrity(fixtures):
     )
     sheila.has_file = "M"
     sheila.save(only=sheila.dirty_fields)
+    
+    # Setup the task queue
+    task_queue = TaskQueue(max_queue_size)
 
     # update_node_integrity should make 'jim' good, 'fred' corrupted, and 'sheila' missing
-    update.update_node_integrity(node)
+    update.update_node_integrity(node, task_queue)
+
+    task_threads = []
+    for i in range(num_task_threads):
+        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+        task_threads[i].start()
+
+    for i in range(num_task_threads):
+        task_threads[i].join()
+
     jim = ar.ArchiveFileCopy.get(id=jim.id)
     assert jim.has_file == "Y"
     fred = ar.ArchiveFileCopy.get(id=fred.id)
@@ -177,9 +205,21 @@ def test_update_node_delete(fixtures):
             file=c.file, node=node3, has_file="Y", size_b=512
         ).save()
 
+    # Setup the task queue
+    task_queue = TaskQueue(max_queue_size)
+
     # update_node_delete should mark these files not present or wanted on the
     # node, and delete them from the filesystem
-    update.update_node_delete(node)
+    update.update_node_delete(node, task_queue)
+
+    task_threads = []
+    for i in range(num_task_threads):
+        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+        task_threads[i].start()
+
+    for i in range(num_task_threads):
+        task_threads[i].join()
+
     for c in copies:
         x = ar.ArchiveFileCopy.get(id=c.id)
         assert x.has_file == "N"
@@ -214,10 +254,22 @@ def test_update_node_requests(tmpdir, fixtures):
     z.avail_gb = 300
     z.host = x.host
     z.save()
+    
+    # Setup the task queue
+    task_queue = TaskQueue(max_queue_size)
 
     # after catching up with file requests, check that the file has been
     # created and the request marked completed
-    update.update_node_requests(z)
+    update.update_node_requests(z, task_queue)
+
+    task_threads = []
+    for i in range(num_task_threads):
+        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+        task_threads[i].start()
+
+    for i in range(num_task_threads):
+        task_threads[i].join()
+
     req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
     assert req.completed
     assert req.transfer_started

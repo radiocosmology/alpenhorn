@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import time
+import queue
 
 import peewee as pw
 from peewee import fn
@@ -18,6 +19,9 @@ from . import util
 
 log = logging.getLogger(__name__)
 
+# Parameters.
+max_time_per_node_operation = 300  # Don't let node operations hog time.
+
 class TaskQueue:
   def __init__(self, maxsize):
     self.queue = queue.Queue(maxsize=maxsize)
@@ -28,7 +32,7 @@ class TaskQueue:
     self.queue.put(task)
 
   def getTask(self):
-    print("Running {}...".format(__name__)
+    print("Running {}...".format(__name__))
     return self.queue.get()
 
 class Task:
@@ -42,19 +46,19 @@ class IntegrityTask(Task):
   def run(self):
     """Check the integrity of file copies on the node."""
 
-    print("{} run()...".format(type(self).__name__))
+    print("{} run() with node: {}".format(type(self).__name__, self.node.name))
 
     # Find suspect file copies in the database
     fcopy_query = (
         ar.ArchiveFileCopy.select()
-        .where(ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "M")
+        .where(ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "M")
         .limit(25)
     )
 
     # Loop over these file copies and check their md5sum
     for fcopy in fcopy_query:
-        fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
-        log.info('Checking file "%s" on node "%s".' % (fullpath, node.name))
+        fullpath = "%s/%s/%s" % (self.node.root, fcopy.file.acq.name, fcopy.file.name)
+        log.info('Checking file "%s" on node "%s".' % (fullpath, self.node.name))
 
         # If the file exists calculate its md5sum and check against the DB
         if os.path.exists(fullpath):
@@ -87,10 +91,10 @@ class DeletionTask(Task):
     # will be removed.
     #
     # A file will never be removed if there exist less than two copies available elsewhere.
-    if node.avail_gb < node.min_avail_gb and node.storage_type != "A":
+    if self.node.avail_gb < self.node.min_avail_gb and self.node.storage_type != "A":
         log.info(
             "Hit minimum available space on %s -- considering all unwanted "
-            "files for deletion!" % (node.name)
+            "files for deletion!" % (self.node.name)
         )
         dfclause = ar.ArchiveFileCopy.wants_file != "Y"
     else:
@@ -98,7 +102,7 @@ class DeletionTask(Task):
 
     # Search db for candidates on this node to delete.
     del_files = ar.ArchiveFileCopy.select().where(
-        dfclause, ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y"
+        dfclause, ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "Y"
     )
 
     # Process candidates for deletion
@@ -122,7 +126,7 @@ class DeletionTask(Task):
         )
 
         shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
-        fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
+        fullpath = "%s/%s/%s" % (self.node.root, fcopy.file.acq.name, fcopy.file.name)
 
         # If at least two other copies we can delete the file.
         if ncopies >= 2:
@@ -136,7 +140,7 @@ class DeletionTask(Task):
                     # Check if the acquisition directory or containing directories are now empty,
                     # and remove if they are.
                     dirname = os.path.dirname(fullpath)
-                    while dirname != node.root:
+                    while dirname != self.node.root:
                         if not os.listdir(dirname):
                             log.info(
                                 "Removing acquisition directory %s on %s"
@@ -170,34 +174,34 @@ class RegularTransferTask(Task):
 
     global done_transport_this_cycle
 
-    avail_gb = node.avail_gb
+    avail_gb = self.node.avail_gb
 
     # Skip if node is too full
-    if avail_gb < (node.min_avail_gb + 10):
-        log.info("Node %s is nearly full. Skip transfers." % node.name)
+    if avail_gb < (self.node.min_avail_gb + 10):
+        log.info("Node %s is nearly full. Skip transfers." % self.node.name)
         return
 
     # Calculate the total archive size from the database
     size_query = (
         ac.ArchiveFile.select(fn.Sum(ac.ArchiveFile.size_b))
         .join(ar.ArchiveFileCopy)
-        .where(ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y")
+        .where(ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "Y")
     )
 
     size = size_query.scalar(as_tuple=True)[0]
     current_size_gb = float(0.0 if size is None else size) / 2 ** 30.0
 
     # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
-    if current_size_gb > node.max_total_gb and node.max_total_gb > 0.0:
+    if current_size_gb > self.node.max_total_gb and self.node.max_total_gb > 0.0:
         log.info(
             "Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)"
-            % (node.name, current_size_gb, node.max_total_gb)
+            % (self.node.name, current_size_gb, self.node.max_total_gb)
         )
         return
 
     # ... OR if this is a transport node quit if the transport cycle is done.
-    if node.storage_type == "T" and done_transport_this_cycle:
-        log.info("Ignoring transport node %s" % node.name)
+    if self.node.storage_type == "T" and done_transport_this_cycle:
+        log.info("Ignoring transport node %s" % self.node.name)
         return
 
     start_time = time.time()
@@ -206,7 +210,7 @@ class RegularTransferTask(Task):
     requests = ar.ArchiveFileCopyRequest.select().where(
         ~ar.ArchiveFileCopyRequest.completed,
         ~ar.ArchiveFileCopyRequest.cancelled,
-        ar.ArchiveFileCopyRequest.group_to == node.group,
+        ar.ArchiveFileCopyRequest.group_to == self.node.group,
     )
 
     # Add in constraint that node_from cannot be an HPSS node
@@ -224,7 +228,7 @@ class RegularTransferTask(Task):
         # For transport disks we should only copy onto the transport
         # node if the from_node is local, this should prevent pointlessly
         # rsyncing across the network
-        if node.storage_type == "T" and node.host != req.node_from.host:
+        if self.node.storage_type == "T" and self.node.host != req.node_from.host:
             log.debug(
                 "Skipping request for %s/%s from remote node [%s] onto local "
                 "transport disks"
@@ -251,32 +255,32 @@ class RegularTransferTask(Task):
         try:
             ar.ArchiveFileCopy.get(
                 ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == node,
+                ar.ArchiveFileCopy.node == self.node,
                 ar.ArchiveFileCopy.has_file == "Y",
             )
             log.info(
                 "Skipping request for %s/%s since it already exists on "
                 'this node ("%s"), and updating DB to reflect this.'
-                % (req.file.acq.name, req.file.name, node.name)
+                % (req.file.acq.name, req.file.name, self.node.name)
             )
             ar.ArchiveFileCopyRequest.update(completed=True).where(
                 ar.ArchiveFileCopyRequest.file == req.file
-            ).where(ar.ArchiveFileCopyRequest.group_to == node.group).execute()
+            ).where(ar.ArchiveFileCopyRequest.group_to == self.node.group).execute()
             continue
         except pw.DoesNotExist:
             pass
 
         # Check that there is enough space available.
-        if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
+        if self.node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
             log.warning(
                 'Node "%s" is full: not adding datafile "%s/%s".'
-                % (node.name, req.file.acq.name, req.file.name)
+                % (self.node.name, req.file.acq.name, req.file.name)
             )
             continue
 
         # Constuct the origin and destination paths.
         from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name, req.file.name)
-        if req.node_from.host != node.host:
+        if req.node_from.host != self.node.host:
 
             if req.node_from.username is None or req.node_from.address is None:
                 log.error(
@@ -293,7 +297,7 @@ class RegularTransferTask(Task):
                 from_path,
             )
 
-        to_file = os.path.join(node.root, req.file.acq.name, req.file.name)
+        to_file = os.path.join(self.node.root, req.file.acq.name, req.file.name)
         to_dir = os.path.dirname(to_file)
         if not os.path.isdir(to_dir):
             log.info('Creating directory "%s".' % to_dir)
@@ -309,7 +313,7 @@ class RegularTransferTask(Task):
         # return code `ret` and give an `md5sum` of the transferred file.
 
         # First we need to check if we are copying over the network
-        if req.node_from.host != node.host:
+        if req.node_from.host != self.node.host:
 
             # First try bbcp which is a fast multistream transfer tool. bbcp can
             # calculate the md5 hash as it goes, so we'll do that to save doing
@@ -358,7 +362,7 @@ class RegularTransferTask(Task):
             # probably unecessary to calculate the md5 check sum, so we'll just
             # fake it.
             try:
-                link_path = os.path.join(node.root, req.file.acq.name, req.file.name)
+                link_path = os.path.join(self.node.root, req.file.acq.name, req.file.name)
 
                 # Check explicitly if link already exists as this and
                 # being unable to link will both raise OSError and get
@@ -415,7 +419,7 @@ class RegularTransferTask(Task):
                             ar.ArchiveFileCopy.select()
                             .where(
                                 ar.ArchiveFileCopy.file == req.file,
-                                ar.ArchiveFileCopy.node == node,
+                                ar.ArchiveFileCopy.node == self.node,
                             )
                             .get()
                         )
@@ -434,7 +438,7 @@ class RegularTransferTask(Task):
             except pw.DoesNotExist:
                 ar.ArchiveFileCopy.insert(
                     file=req.file,
-                    node=node,
+                    node=self.node,
                     has_file="Y",
                     wants_file="Y",
                     size_b=copy_size_b,
@@ -444,12 +448,12 @@ class RegularTransferTask(Task):
             ar.ArchiveFileCopyRequest.update(
                 completed=True, transfer_completed=dt.datetime.fromtimestamp(end_time)
             ).where(ar.ArchiveFileCopyRequest.file == req.file).where(
-                ar.ArchiveFileCopyRequest.group_to == node.group,
+                ar.ArchiveFileCopyRequest.group_to == self.node.group,
                 ~ar.ArchiveFileCopyRequest.completed,
                 ~ar.ArchiveFileCopyRequest.cancelled,
             ).execute()
 
-            if node.storage_type == "T":
+            if self.node.storage_type == "T":
                 # This node is getting the transport king.
                 done_transport_this_cycle = True
 
@@ -460,7 +464,7 @@ class RegularTransferTask(Task):
             log.error(
                 'Error with md5sum check: %s on node "%s", but %s on '
                 'this node, "%s".'
-                % (req.file.md5sum, req.node_from.name, md5sum, node.name)
+                % (req.file.md5sum, req.node_from.name, md5sum, self.node.name)
             )
             log.error('Removing file "%s".' % to_file)
             try:
@@ -482,9 +486,3 @@ class HPSSTransferTask(Task):
 class NearlineTransferTask(Task):
   def run(self):
     print("{} run()...".format(type(self).__name__))
-
-
-task1 = RegularTransferTask("/home/willis")
-
-print("{} has node: {}".format(type(task1).__name__, task1.node))
-task1.run()

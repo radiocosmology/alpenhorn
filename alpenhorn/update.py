@@ -15,12 +15,12 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
+from . import Task
+from .Task import *
 
 log = logging.getLogger(__name__)
 
 # Parameters.
-max_time_per_node_operation = 300  # Don't let node operations hog time.
-
 RSYNC_OPTS = (
     "--quiet --times --protect-args --perms --group --owner " + "--copy-links --sparse"
 )
@@ -147,7 +147,7 @@ def update_node_requests(node, task_queue):
     # Check which type of node this is and create an appropriate task
     if node.address == "HPSS":
         task_queue.addTask(HPSSTransferTask(node))
-    else if node.address == "NEARLINE":
+    elif node.address == "NEARLINE":
         task_queue.addTask(NearlineTransferTask(node))
-    else
+    else:
         task_queue.addTask(RegularTransferTask(node))
