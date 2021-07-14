@@ -41,8 +41,8 @@ def run_tasks(task_queue):
 
 @pytest.fixture
 def fixtures(tmpdir):
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db._connect("sqlite:///james_db.dat")
+    """Initializes an Sqlite database on disk with data in tests/fixtures"""
+    db._connect("sqlite:///" + str(tmpdir.join("database.sql")))
 
     fixtures = ti.load_fixtures(tmpdir)
 
@@ -54,7 +54,6 @@ def fixtures(tmpdir):
     yield fixtures
 
     db.database_proxy.close()
-    os.unlink("james_db.dat")
 
 
 def test_update_node_active(fixtures):
