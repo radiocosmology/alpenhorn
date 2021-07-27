@@ -32,11 +32,9 @@ class TaskQueue:
     self.queue.put(task)
 
   def getTask(self):
-    print("Get {}...".format(__name__))
-    return self.queue.get(timeout=1)
+    return self.queue.get()
 
   def markTaskDone(self):
-    print("Task done")
     self.queue.task_done()
 
 class Task:
@@ -273,12 +271,12 @@ class DiskTransferTask(Task):
             continue
         except pw.DoesNotExist:
             # Only proceed if the source node is ready
-            if not req.prepared:
-                log.debug(
-                    "Skipping request for %s/%s, it doesn't exist on source node [%s]"
-                    % (req.file.acq.name, req.file.name, req.node_from.name)
-                )
-                continue
+            #if not req.prepared:
+            #    log.debug(
+            #        "Skipping request for %s/%s, it doesn't exist on source node [%s]"
+            #        % (req.file.acq.name, req.file.name, req.node_from.name)
+            #    )
+            pass 
 
         # Check that there is enough space available.
         if self.node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
@@ -451,6 +449,7 @@ class DiskTransferTask(Task):
                     node=self.node,
                     has_file="Y",
                     wants_file="Y",
+                    prepared=False,
                     size_b=copy_size_b,
                 ).execute()
 
