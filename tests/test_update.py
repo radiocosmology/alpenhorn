@@ -6,7 +6,7 @@ Tests for `alpenhorn.update` module.
 """
 
 import os
-import threading
+import threading, queue
 import time
 
 import pytest
@@ -36,13 +36,15 @@ num_task_threads = 1
 def run_tasks(task_queue):
     """ Loop and run tasks from queue."""
     while True:
-    #for i in range(0,1):
-        print("Thread going to get a task...")
-        task = task_queue.getTask()
-        print("Thread got task {} and is going to call run()...".format(type(task).__name__))
-        task.run()
-        task_queue.markTaskDone()
-        print("Thread finished calling run() on task: {}".format(type(task).__name__))
+        try:
+            task = task_queue.getTask()
+        except queue.Empty:
+            pass
+        else:
+            print("Thread got task {} and is going to call run()...".format(type(task).__name__))
+            task.run()
+            task_queue.markTaskDone()
+            print("Thread finished calling run() on task: {}".format(type(task).__name__))
 
 
 @pytest.fixture
@@ -123,7 +125,7 @@ def test_update_node_integrity(fixtures):
     jim_file.md5sum = fixtures["files"]["x"]["jim"]["md5"]
     jim_file.save(only=jim_file.dirty_fields)
 
-    jim = ar.ArchiveFileCopy(file=jim_file, node=node, has_file="M", size_b=512)
+    jim = ar.ArchiveFileCopy(file=jim_file, node=node, has_file="M", prepared=False, size_b=512)
     jim.save()
 
     # create a local copy of 'fred', but with a corrupt contents
@@ -158,8 +160,7 @@ def test_update_node_integrity(fixtures):
         task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
         task_threads[i].start()
 
-    for i in range(num_task_threads):
-        task_threads[i].join()
+    task_queue.queue.join()
 
     jim = ar.ArchiveFileCopy.get(id=jim.id)
     assert jim.has_file == "Y"
@@ -204,10 +205,10 @@ def test_update_node_delete(fixtures):
 
         # add copies of the file on the archival nodes
         ar.ArchiveFileCopy.create(
-            file=c.file, node=node2, has_file="Y", size_b=512
+            file=c.file, node=node2, has_file="Y", prepared=False, size_b=512
         ).save()
         ar.ArchiveFileCopy.create(
-            file=c.file, node=node3, has_file="Y", size_b=512
+            file=c.file, node=node3, has_file="Y", prepared=False, size_b=512
         ).save()
 
     # Setup the task queue
@@ -222,8 +223,7 @@ def test_update_node_delete(fixtures):
         task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
         task_threads[i].start()
 
-    for i in range(num_task_threads):
-        task_threads[i].join()
+    task_queue.queue.join()
 
     for c in copies:
         x = ar.ArchiveFileCopy.get(id=c.id)
@@ -242,6 +242,7 @@ def test_update_node_requests(tmpdir, fixtures):
     # various joins break if 'address' is NULL
     x = st.StorageNode.get(name="x")
     x.address = "foo"
+    x.fs_type = "Disk"
     x.save()
 
     # register a copy of 'jim' on 'x' in the database
@@ -249,7 +250,7 @@ def test_update_node_requests(tmpdir, fixtures):
     jim.size_b = 0
     jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
     jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(file=jim, node=x, has_file="Y", size_b=512).save()
+    ar.ArchiveFileCopy(file=jim, node=x, has_file="Y", prepared=False, size_b=512).save()
 
     # make the 'z' node available locally
     root_z = tmpdir.join("ROOT_z")
@@ -258,6 +259,7 @@ def test_update_node_requests(tmpdir, fixtures):
     z.root = str(root_z)
     z.avail_gb = 300
     z.host = x.host
+    z.fs_type = "Disk"
     z.save()
 
     # Setup the task queue
@@ -265,25 +267,17 @@ def test_update_node_requests(tmpdir, fixtures):
 
     # after catching up with file requests, check that the file has been
     # created and the request marked completed
-    #update.update_node_requests(z, task_queue)
+    update.update_node_requests(z, task_queue)
 
-    #task_threads = []
-    #for i in range(num_task_threads):
-    #    task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-    #    task_threads[i].start()
+    task_threads = []
+    for i in range(num_task_threads):
+        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+        task_threads[i].start()
 
-    #for i in range(num_task_threads):
-    #    task_threads[i].join()
-
-    task1 = SourceTransferTask(x)
-    task1.run()
-    task2 = RegularTransferTask(z)
-    task2.run()
-
+    task_queue.queue.join()
 
     req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
 
-    assert req.ready_source
     assert req.completed
     assert req.transfer_started
     assert req.transfer_completed > req.transfer_started
