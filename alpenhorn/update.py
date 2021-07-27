@@ -145,9 +145,11 @@ def update_node_requests(node, task_queue):
     """Process file copy requests onto this node."""
 
     # Check which type of node this is and create an appropriate task
-    if node.address == "HPSS":
+    if node.fs_type == "HPSS":
+        task_queue.addTask(SourceTransferTask(node))
         task_queue.addTask(HPSSTransferTask(node))
-    elif node.address == "NEARLINE":
+    elif node.fs_type == "Nearline":
+        task_queue.addTask(SourceTransferTask(node))
         task_queue.addTask(NearlineTransferTask(node))
-    else:
-        task_queue.addTask(RegularTransferTask(node))
+    elif node.fs_type == "Disk":
+        task_queue.addTask(DiskTransferTask(node))

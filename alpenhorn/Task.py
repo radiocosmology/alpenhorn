@@ -32,8 +32,12 @@ class TaskQueue:
     self.queue.put(task)
 
   def getTask(self):
-    print("Running {}...".format(__name__))
-    return self.queue.get()
+    print("Get {}...".format(__name__))
+    return self.queue.get(timeout=1)
+
+  def markTaskDone(self):
+    print("Task done")
+    self.queue.task_done()
 
 class Task:
   def __init__(self, node):
@@ -166,7 +170,7 @@ class TransferTask(Task):
   def run(self):
     print("{} run()...".format(type(self).__name__))
 
-class RegularTransferTask(Task):
+class DiskTransferTask(Task):
   def run(self):
     """Process file copy requests onto this node."""
     
@@ -213,8 +217,8 @@ class RegularTransferTask(Task):
         ar.ArchiveFileCopyRequest.group_to == self.node.group,
     )
 
-    # Add in constraint that node_from cannot be an HPSS node
-    requests = requests.join(st.StorageNode).where(st.StorageNode.address != "HPSS")
+    # Add in constraint to only process Disk nodes
+    requests = requests.join(st.StorageNode).where(st.StorageNode.fs_type == "Disk")
 
     for req in requests:
 
@@ -268,7 +272,13 @@ class RegularTransferTask(Task):
             ).where(ar.ArchiveFileCopyRequest.group_to == self.node.group).execute()
             continue
         except pw.DoesNotExist:
-            pass
+            # Only proceed if the source node is ready
+            if not req.prepared:
+                log.debug(
+                    "Skipping request for %s/%s, it doesn't exist on source node [%s]"
+                    % (req.file.acq.name, req.file.name, req.node_from.name)
+                )
+                continue
 
         # Check that there is enough space available.
         if self.node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
@@ -483,6 +493,49 @@ class HPSSTransferTask(Task):
   def run(self):
     print("{} run()...".format(type(self).__name__))
 
-class NearlineTransferTask(Task):
+class SourceTransferTask(Task):
   def run(self):
+    
+    start_time = time.time()
+
+    # Fetch requests to process from the database
+    requests = ar.ArchiveFileCopyRequest.select().where(
+        ~ar.ArchiveFileCopyRequest.completed,
+        ~ar.ArchiveFileCopyRequest.cancelled,
+        ar.ArchiveFileCopyRequest.node_from == self.node,
+    )
+    
+    print("Requests: {}".format(requests))
+    print("node_from: {}".format(ar.ArchiveFileCopyRequest.node_from))
+
+    # Add in constraint that node_from cannot be an HPSS node
+    requests = requests.join(st.StorageNode).where(st.StorageNode.fs_type != "HPSS")
+
+    for req in requests:
+    
+        print("Request: {}".format(req.node_from))
+
+        if time.time() - start_time > max_time_per_node_operation:
+            break  # Don't hog all the time.
+
+        # Only proceed if the source file actually exists (and is not corrupted).
+        try:
+            ar.ArchiveFileCopy.get(
+                ar.ArchiveFileCopy.file == req.file,
+                ar.ArchiveFileCopy.node == req.node_from,
+                ar.ArchiveFileCopy.has_file == "Y",
+            )
+        except pw.DoesNotExist:
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
+            continue
+
+        print("Mark source as ready")
+        # Notify destination that transfer can proceed.
+        ar.ArchiveFileCopyRequest.update(
+            prepared=True).where(ar.ArchiveFileCopyRequest.file == req.file).execute()
+
     print("{} run()...".format(type(self).__name__))

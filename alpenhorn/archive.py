@@ -27,6 +27,8 @@ class ArchiveFileCopy(base_model):
         - 'M': maybe, can delete if we need space
         - 'N': no, attempt to delete
         In all cases we try to keep at least two copies of the file around.
+    prepared : bool
+        Set to true when the source node has prepared the file for transfer.
     size_b : integer
         Allocated size of file in bytes (calculated as a multiple of 512-byte
         blocks).
@@ -36,6 +38,7 @@ class ArchiveFileCopy(base_model):
     node = pw.ForeignKeyField(StorageNode, backref="copies")
     has_file = EnumField(["N", "Y", "M", "X"], default="N")
     wants_file = EnumField(["Y", "M", "N"], default="Y")
+    prepared = pw.BooleanField()
     size_b = pw.BigIntegerField()
 
     class Meta:

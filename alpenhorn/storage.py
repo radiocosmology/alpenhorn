@@ -31,6 +31,8 @@ class StorageNode(base_model):
         The hostname that this node lives on.
     address : string
         The internet address for the host (e.g., mistaya.phas.ubc.ca)
+    fs_type : string
+        The file transfer type (e.g., Disk, HPSS, Nearline)
     group : foreign key
         The group to which this node belongs.
     active : bool

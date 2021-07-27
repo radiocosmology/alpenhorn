@@ -23,6 +23,8 @@ import alpenhorn.storage as st
 import alpenhorn.update as update
 import test_import as ti
 from alpenhorn.Task import Task
+from alpenhorn.Task import SourceTransferTask
+from alpenhorn.Task import DiskTransferTask
 from alpenhorn.Task import TaskQueue
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
@@ -33,10 +35,14 @@ num_task_threads = 1
 
 def run_tasks(task_queue):
     """ Loop and run tasks from queue."""
-    #while True:
-    task = task_queue.getTask()
-    print("Thread got task {} and is going to call run()...".format(type(task).__name__))
-    task.run()
+    while True:
+    #for i in range(0,1):
+        print("Thread going to get a task...")
+        task = task_queue.getTask()
+        print("Thread got task {} and is going to call run()...".format(type(task).__name__))
+        task.run()
+        task_queue.markTaskDone()
+        print("Thread finished calling run() on task: {}".format(type(task).__name__))
 
 
 @pytest.fixture
@@ -253,23 +259,31 @@ def test_update_node_requests(tmpdir, fixtures):
     z.avail_gb = 300
     z.host = x.host
     z.save()
-    
+
     # Setup the task queue
     task_queue = TaskQueue(max_queue_size)
 
     # after catching up with file requests, check that the file has been
     # created and the request marked completed
-    update.update_node_requests(z, task_queue)
+    #update.update_node_requests(z, task_queue)
 
-    task_threads = []
-    for i in range(num_task_threads):
-        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-        task_threads[i].start()
+    #task_threads = []
+    #for i in range(num_task_threads):
+    #    task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+    #    task_threads[i].start()
 
-    for i in range(num_task_threads):
-        task_threads[i].join()
+    #for i in range(num_task_threads):
+    #    task_threads[i].join()
+
+    task1 = SourceTransferTask(x)
+    task1.run()
+    task2 = RegularTransferTask(z)
+    task2.run()
+
 
     req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
+
+    assert req.ready_source
     assert req.completed
     assert req.transfer_started
     assert req.transfer_completed > req.transfer_started

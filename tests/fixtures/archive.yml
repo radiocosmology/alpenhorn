@@ -11,5 +11,6 @@ copy_requests:
     node_from: x
     group_to: bar
     nice: 3
+    ready_source: False
     completed: False
     timestamp: '2017-03-03T15:02:43'
