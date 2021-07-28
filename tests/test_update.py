@@ -41,10 +41,8 @@ def run_tasks(task_queue):
         except queue.Empty:
             pass
         else:
-            print("Thread got task {} and is going to call run()...".format(type(task).__name__))
             task.run()
             task_queue.markTaskDone()
-            print("Thread finished calling run() on task: {}".format(type(task).__name__))
 
 
 @pytest.fixture
@@ -267,7 +265,55 @@ def test_update_node_requests(tmpdir, fixtures):
 
     # after catching up with file requests, check that the file has been
     # created and the request marked completed
-    update.update_node_requests(z, task_queue)
+    update.update_node_dest_requests(z, task_queue)
+
+    task_threads = []
+    for i in range(num_task_threads):
+        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
+        task_threads[i].start()
+
+    task_queue.queue.join()
+
+    req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
+
+    assert req.completed
+    assert req.transfer_started
+    assert req.transfer_completed > req.transfer_started
+
+    assert root_z.join("x", "jim").check()
+    assert root_z.join("x", "jim").read() == fixtures["root"].join("x", "jim").read()
+
+def test_update_node_requests_nearline(tmpdir, fixtures):
+    # various joins break if 'address' is NULL
+    x = st.StorageNode.get(name="x")
+    x.address = "foo"
+    x.fs_type = "Nearline"
+    x.save()
+
+    # register a copy of 'jim' on 'x' in the database
+    jim = ac.ArchiveFile.get(name="jim")
+    jim.size_b = 0
+    jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
+    jim.save(only=jim.dirty_fields)
+    ar.ArchiveFileCopy(file=jim, node=x, has_file="Y", prepared=False, size_b=512).save()
+
+    # make the 'z' node available locally
+    root_z = tmpdir.join("ROOT_z")
+    root_z.mkdir()
+    z = st.StorageNode.get(name="z")
+    z.root = str(root_z)
+    z.avail_gb = 300
+    z.host = x.host
+    z.fs_type = "Nearline"
+    z.save()
+
+    # Setup the task queue
+    task_queue = TaskQueue(max_queue_size)
+
+    # after catching up with file requests, check that the file has been
+    # created and the request marked completed
+    update.update_node_src_requests(x, task_queue)
+    update.update_node_dest_requests(z, task_queue)
 
     task_threads = []
     for i in range(num_task_threads):
