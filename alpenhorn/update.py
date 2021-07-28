@@ -135,13 +135,13 @@ def update_node_free_space(node):
 def update_node_integrity(node, task_queue):
     """Check the integrity of file copies on the node."""
 
-    task_queue.addTask(IntegrityTask(node))
+    task_queue.add_task(IntegrityTask(node))
 
 
 def update_node_delete(node, task_queue):
     """Process this node for files to delete."""
 
-    task_queue.addTask(DeletionTask(node))
+    task_queue.add_task(DeletionTask(node))
 
 
 def update_node_src_requests(node, task_queue):
@@ -149,9 +149,9 @@ def update_node_src_requests(node, task_queue):
 
     # Check which type of node this is and create an appropriate task
     if node.fs_type == "HPSS":
-        task_queue.addTask(SourceTransferTask(node))
+        task_queue.add_task(SourceTransferTask(node))
     elif node.fs_type == "Nearline":
-        task_queue.addTask(SourceTransferTask(node))
+        task_queue.add_task(SourceTransferTask(node))
 
 
 def update_node_dest_requests(node, task_queue):
@@ -159,8 +159,8 @@ def update_node_dest_requests(node, task_queue):
 
     # Check which type of node this is and create an appropriate task
     if node.fs_type == "HPSS":
-        task_queue.addTask(HPSSTransferTask(node))
+        task_queue.add_task(HPSSTransferTask(node))
     elif node.fs_type == "Nearline":
-        task_queue.addTask(NearlineTransferTask(node))
+        task_queue.add_task(NearlineTransferTask(node))
     elif node.fs_type == "Disk":
-        task_queue.addTask(DiskTransferTask(node))
+        task_queue.add_task(DiskTransferTask(node))

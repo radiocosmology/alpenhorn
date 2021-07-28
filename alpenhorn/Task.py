@@ -7,6 +7,7 @@ import os
 import re
 import time
 import queue
+import threading
 
 import peewee as pw
 from peewee import fn
@@ -23,19 +24,31 @@ log = logging.getLogger(__name__)
 max_time_per_node_operation = 300  # Don't let node operations hog time.
 
 class TaskQueue:
-  def __init__(self, maxsize):
-    self.queue = queue.Queue(maxsize=maxsize)
-
-  def addTask(self, task):
+  def add_task(self, task):
+    """Add task to queue."""
     if self.queue.full():
         log.warning("Task queue is full ({:d} tasks)".format(self.queue.qsize()))
     self.queue.put(task)
 
-  def getTask(self):
-    return self.queue.get()
+  def run_tasks(self):
+    """Loop and run tasks from queue."""
+    while True:
+        try:
+            task = self.queue.get()
+        except queue.Empty:
+            pass
+        else:
+            task.run()
+            self.queue.task_done()
 
-  def markTaskDone(self):
-    self.queue.task_done()
+  def __init__(self, max_size, num_threads):
+    """Create queue and setup thread pool."""
+    self.queue = queue.Queue(maxsize=max_size)
+
+    threads = []
+    for t in range(num_threads):
+        threads.append(threading.Thread(target=self.run_tasks, daemon=True))
+        threads[t].start()
 
 class Task:
   def __init__(self, node):

@@ -23,13 +23,6 @@ def log_exception(*args):
 
 sys.excepthook = log_exception
 
-
-def run_tasks(task_queue):
-    """ Loop and run tasks from queue."""
-    while True:
-        task = task_queue.getTask()
-        task.run()
-
 @click.command()
 def cli():
     """Alpenhorn data management service."""
@@ -73,16 +66,11 @@ def cli():
     auto_import.catchup(node_list)
 
     # Setup the task queue
-    task_queue = TaskQueue(max_queue_size)
+    task_queue = TaskQueue(max_queue_size, num_task_threads)
     
     # Enter main loop performing node updates
     try:
         update.update_loop(host, task_queue)
-
-    task_threads = []
-    for i in range(num_task_threads):
-        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-        task_threads[i].start()
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:

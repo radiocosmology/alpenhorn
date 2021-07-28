@@ -6,7 +6,7 @@ Tests for `alpenhorn.update` module.
 """
 
 import os
-import threading, queue
+import queue
 import time
 
 import pytest
@@ -31,19 +31,7 @@ tests_path = os.path.abspath(os.path.dirname(__file__))
 
 # Parameters.
 max_queue_size = 2048
-num_task_threads = 1
-
-def run_tasks(task_queue):
-    """ Loop and run tasks from queue."""
-    while True:
-        try:
-            task = task_queue.getTask()
-        except queue.Empty:
-            pass
-        else:
-            task.run()
-            task_queue.markTaskDone()
-
+num_task_threads = 4
 
 @pytest.fixture
 def fixtures(tmpdir):
@@ -148,15 +136,10 @@ def test_update_node_integrity(fixtures):
     sheila.save(only=sheila.dirty_fields)
     
     # Setup the task queue
-    task_queue = TaskQueue(max_queue_size)
+    task_queue = TaskQueue(max_queue_size, num_task_threads)
 
     # update_node_integrity should make 'jim' good, 'fred' corrupted, and 'sheila' missing
     update.update_node_integrity(node, task_queue)
-
-    task_threads = []
-    for i in range(num_task_threads):
-        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-        task_threads[i].start()
 
     task_queue.queue.join()
 
@@ -210,16 +193,11 @@ def test_update_node_delete(fixtures):
         ).save()
 
     # Setup the task queue
-    task_queue = TaskQueue(max_queue_size)
+    task_queue = TaskQueue(max_queue_size, num_task_threads)
 
     # update_node_delete should mark these files not present or wanted on the
     # node, and delete them from the filesystem
     update.update_node_delete(node, task_queue)
-
-    task_threads = []
-    for i in range(num_task_threads):
-        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-        task_threads[i].start()
 
     task_queue.queue.join()
 
@@ -261,16 +239,11 @@ def test_update_node_requests(tmpdir, fixtures):
     z.save()
 
     # Setup the task queue
-    task_queue = TaskQueue(max_queue_size)
+    task_queue = TaskQueue(max_queue_size, num_task_threads)
 
     # after catching up with file requests, check that the file has been
     # created and the request marked completed
     update.update_node_dest_requests(z, task_queue)
-
-    task_threads = []
-    for i in range(num_task_threads):
-        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-        task_threads[i].start()
 
     task_queue.queue.join()
 
@@ -308,17 +281,12 @@ def test_update_node_requests_nearline(tmpdir, fixtures):
     z.save()
 
     # Setup the task queue
-    task_queue = TaskQueue(max_queue_size)
+    task_queue = TaskQueue(max_queue_size, num_task_threads)
 
     # after catching up with file requests, check that the file has been
     # created and the request marked completed
     update.update_node_src_requests(x, task_queue)
     update.update_node_dest_requests(z, task_queue)
-
-    task_threads = []
-    for i in range(num_task_threads):
-        task_threads.append(threading.Thread(target=run_tasks, args=(task_queue,), daemon=True))
-        task_threads[i].start()
 
     task_queue.queue.join()
 
