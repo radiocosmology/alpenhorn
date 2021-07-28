@@ -33,6 +33,7 @@ tests_path = os.path.abspath(os.path.dirname(__file__))
 max_queue_size = 2048
 num_task_threads = 4
 
+
 @pytest.fixture
 def fixtures(tmpdir):
     """Initializes an Sqlite database on disk with data in tests/fixtures"""
@@ -111,7 +112,9 @@ def test_update_node_integrity(fixtures):
     jim_file.md5sum = fixtures["files"]["x"]["jim"]["md5"]
     jim_file.save(only=jim_file.dirty_fields)
 
-    jim = ar.ArchiveFileCopy(file=jim_file, node=node, has_file="M", prepared=False, size_b=512)
+    jim = ar.ArchiveFileCopy(
+        file=jim_file, node=node, has_file="M", prepared=False, size_b=512
+    )
     jim.save()
 
     # create a local copy of 'fred', but with a corrupt contents
@@ -134,7 +137,7 @@ def test_update_node_integrity(fixtures):
     )
     sheila.has_file = "M"
     sheila.save(only=sheila.dirty_fields)
-    
+
     # Setup the task queue
     task_queue = TaskQueue(max_queue_size, num_task_threads)
 
@@ -226,7 +229,9 @@ def test_update_node_requests(tmpdir, fixtures):
     jim.size_b = 0
     jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
     jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(file=jim, node=x, has_file="Y", prepared=False, size_b=512).save()
+    ar.ArchiveFileCopy(
+        file=jim, node=x, has_file="Y", prepared=False, size_b=512
+    ).save()
 
     # make the 'z' node available locally
     root_z = tmpdir.join("ROOT_z")
@@ -256,6 +261,7 @@ def test_update_node_requests(tmpdir, fixtures):
     assert root_z.join("x", "jim").check()
     assert root_z.join("x", "jim").read() == fixtures["root"].join("x", "jim").read()
 
+
 def test_update_node_requests_nearline(tmpdir, fixtures):
     # various joins break if 'address' is NULL
     x = st.StorageNode.get(name="x")
@@ -268,7 +274,9 @@ def test_update_node_requests_nearline(tmpdir, fixtures):
     jim.size_b = 0
     jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
     jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(file=jim, node=x, has_file="Y", prepared=False, size_b=512).save()
+    ar.ArchiveFileCopy(
+        file=jim, node=x, has_file="Y", prepared=False, size_b=512
+    ).save()
 
     # make the 'z' node available locally
     root_z = tmpdir.join("ROOT_z")

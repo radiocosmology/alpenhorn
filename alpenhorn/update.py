@@ -86,7 +86,7 @@ def update_node(node, task_queue):
 
     # Process any regular transfers requests from this node
     update_node_src_requests(node, task_queue)
-    
+
     # Process any regular transfers requests onto this node
     update_node_dest_requests(node, task_queue)
 

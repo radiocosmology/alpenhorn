@@ -23,6 +23,7 @@ def log_exception(*args):
 
 sys.excepthook = log_exception
 
+
 @click.command()
 def cli():
     """Alpenhorn data management service."""
@@ -67,7 +68,7 @@ def cli():
 
     # Setup the task queue
     task_queue = TaskQueue(max_queue_size, num_task_threads)
-    
+
     # Enter main loop performing node updates
     try:
         update.update_loop(host, task_queue)
