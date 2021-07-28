@@ -84,8 +84,11 @@ def update_node(node, task_queue):
     # Delete any upwanted files to cleanup space
     update_node_delete(node, task_queue)
 
+    # Process any regular transfers requests from this node
+    update_node_src_requests(node, task_queue)
+    
     # Process any regular transfers requests onto this node
-    update_node_requests(node, task_queue)
+    update_node_dest_requests(node, task_queue)
 
     # TODO: bring back HPSS support
     # Process any tranfers out of HPSS onto this node
@@ -141,15 +144,23 @@ def update_node_delete(node, task_queue):
     task_queue.addTask(DeletionTask(node))
 
 
-def update_node_requests(node, task_queue):
-    """Process file copy requests onto this node."""
+def update_node_src_requests(node, task_queue):
+    """Process file copy requests from this node."""
 
     # Check which type of node this is and create an appropriate task
     if node.fs_type == "HPSS":
         task_queue.addTask(SourceTransferTask(node))
-        task_queue.addTask(HPSSTransferTask(node))
     elif node.fs_type == "Nearline":
         task_queue.addTask(SourceTransferTask(node))
+
+
+def update_node_dest_requests(node, task_queue):
+    """Process file copy requests onto this node."""
+
+    # Check which type of node this is and create an appropriate task
+    if node.fs_type == "HPSS":
+        task_queue.addTask(HPSSTransferTask(node))
+    elif node.fs_type == "Nearline":
         task_queue.addTask(NearlineTransferTask(node))
     elif node.fs_type == "Disk":
         task_queue.addTask(DiskTransferTask(node))
