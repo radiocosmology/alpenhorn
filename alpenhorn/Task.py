@@ -890,25 +890,70 @@ class SourceTransferTask(Task):
             if time.time() - start_time > max_time_per_node_operation:
                 break  # Don't hog all the time.
 
-            # Only proceed if the source file actually exists (and is not corrupted).
-            try:
-                ar.ArchiveFileCopy.get(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == req.node_from,
-                    ar.ArchiveFileCopy.has_file == "Y",
-                )
-            except pw.DoesNotExist:
-                log.error(
-                    "Skipping request for %s/%s since it is not available on "
-                    'node "%s". [file_id=%i]'
-                    % (
-                        req.file.acq.name,
-                        req.file.name,
-                        req.node_from.name,
-                        req.file.id,
+            # Use lfs to check if file is on disk
+            if util.command_available("lfs"):
+                file_path = "%s/%s" % (req.file.acq.name, req.file.name)
+                cmd = "lfs hsm_state %s" % file_path
+                ret, stdout, stderr = util.run_command(cmd)
+
+                # Parse STDERR
+                if ret == 0:
+                    on_disk = re.search("0x00000000|exists archived", stderr)
+                    on_tape = re.search("released archived", stderr)
+
+                    # Only proceed if the source file actually exists (and is not corrupted).
+                    if on_disk:
+                        try:
+                            ar.ArchiveFileCopy.get(
+                                ar.ArchiveFileCopy.file == req.file,
+                                ar.ArchiveFileCopy.node == req.node_from,
+                                ar.ArchiveFileCopy.has_file == "Y",
+                            )
+                        except pw.DoesNotExist:
+                            log.error(
+                                "Skipping request for %s/%s since it is not available on "
+                                'node "%s". [file_id=%i]'
+                                % (
+                                    req.file.acq.name,
+                                    req.file.name,
+                                    req.node_from.name,
+                                    req.file.id,
+                                )
+                            )
+                            continue
+
+                    # If the file is on tape, force an asynchronous recall of the file
+                    elif on_tape:
+                        restore_cmd = "lfs hsm_restore %s" % file_path
+                        ret, stdout, stderr = util.run_command(restore_cmd)
+                        if ret == 0:
+                            log.info(
+                                "Skipping request for %s since it is being recalled from tape."
+                                % file_path
+                            )
+                            continue
+                        else:
+                            log.error(
+                                "lfs hsm_restore command has gone awry. STDOUT: %s\n STDERR: %s"
+                                % (stdout, stderr)
+                            )
+
+                    else:
+                        log.error(
+                            "lfs hsm_state command has gone awry. STDOUT: %s\n STDERR: %s"
+                            % (stdout, stderr)
+                        )
+
+                else:
+                    log.error(
+                        "lfs hsm_state command has returned an error. STDOUT: %s\n STDERR: %s"
+                        % (stdout, stderr)
                     )
+
+            else:
+                log.error(
+                    "lfs command unavailable, so unable to complete this transfer."
                 )
-                continue
 
             # Notify destination that transfer can proceed.
             ar.ArchiveFileCopy.update(prepared=True).where(
