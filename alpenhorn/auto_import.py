@@ -162,7 +162,12 @@ def _import_file(node, file_path):
     if not file_.copies.where(ar.ArchiveFileCopy.node == node).count():
         copy_size_b = os.stat(abspath).st_blocks * 512
         copy = ar.ArchiveFileCopy.create(
-            file=file_, node=node, has_file="Y", wants_file="Y", prepared=False, size_b=copy_size_b
+            file=file_,
+            node=node,
+            has_file="Y",
+            wants_file="Y",
+            prepared=False,
+            size_b=copy_size_b,
         )
         log.info('Registered file copy "%s/%s" to DB.', acq_name, file_name)
     else:
