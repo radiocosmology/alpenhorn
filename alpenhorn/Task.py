@@ -15,6 +15,7 @@ from peewee import fn
 from . import acquisition as ac
 from . import archive as ar
 from . import config, db
+from . import update
 from . import storage as st
 from . import util
 
@@ -505,8 +506,8 @@ class DiskTransferTask(Task):
                     # This node is getting the transport king.
                     done_transport_this_cycle = True
 
-                # Update local estimate of available space
-                avail_gb = avail_gb - req.file.size_b / 2 ** 30.0
+                # Update node available space
+                update.update_node_free_space(self.node)
 
             else:
                 log.error(

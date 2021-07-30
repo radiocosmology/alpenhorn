@@ -119,17 +119,48 @@ def update_node_active(node):
 def update_node_free_space(node):
     """Calculate the free space on the node and update the database with it."""
 
-    # Check with the OS how much free space there is
-    x = os.statvfs(node.root)
-    avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
+    # Special case for cedar
+    if node.host == "cedar5" and (
+        node.name == "cedar_online" or node.name == "cedar_nearline"
+    ):
+        import re
 
-    # Update the DB with the free space. Save only the dirty fields to ensure we
-    # don't clobber changes made manually to the database
-    node.avail_gb = avail_gb
-    node.avail_gb_last_checked = dt.datetime.now()
-    node.save(only=node.dirty_fields)
+        # Strip non-numeric things
+        regexp = re.compile(b"[^\d ]+")
 
-    log.info('Node "%s" has %.2f GB available.' % (node.name, avail_gb))
+        ret, stdout, stderr = run_command(
+            [
+                "/usr/bin/lfs",
+                "quota",
+                "-q",
+                "-g",
+                "rpp-chime",
+                "/nearline" if node.name == "cedar_nearline" else "/project",
+            ]
+        )
+        lfs_quota = regexp.sub(b"", stdout).split()
+
+        # The quota for nearline is fixed at 300 quota-TB
+        if node.name == "cedar_nearline":
+            quota = 300000000000  # 300 billion 1024-byte blocks
+        else:
+            quota = int(lfs_quota[1])
+
+        # lfs quota reports values in kByte blocks
+        node.avail_gb = (quota - int(lfs_quota[0])) / 2 ** 20.0
+    else:
+        # Check with the OS how much free space there is
+        x = os.statvfs(node.root)
+        node.avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
+
+    # Update the DB with the free space. Perform with an update query (rather
+    # than save) to ensure we don't clobber changes made manually to the
+    # database
+    st.StorageNode.update(
+        avail_gb=node.avail_gb, avail_gb_last_checked=dt.datetime.now()
+    ).where(st.StorageNode.id == node.id).execute()
+
+    log.info('Node "%s" has %.2f GB available.' % (node.name, node.avail_gb))
 
 
 def update_node_integrity(node, task_queue):
