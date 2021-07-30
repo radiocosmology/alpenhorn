@@ -574,6 +574,7 @@ def scan(node_name, verbose, acq, register_new, dry):
                             node=this_node,
                             has_file="Y",
                             wants_file="Y",
+                            prepared=False,
                             size_b=copy_size_b,
                         )
 

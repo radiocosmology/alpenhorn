@@ -143,7 +143,7 @@ def test_where(fixtures):
     z_node = st.StorageNode.get(name="z")
     fred_file = ar.ArchiveFile.get(name="fred")
     fred2_copy = ar.ArchiveFileCopy.create(
-        file=fred_file, node=z_node, has_file="Y", wants_file="Y", size_b=123
+        file=fred_file, node=z_node, has_file="Y", wants_file="Y", prepared=True, size_b=123
     )
     result = runner.invoke(cli.cli, ["acq", "where", "x"], catch_exceptions=False)
     assert result.exit_code == 0
@@ -235,7 +235,7 @@ def test_syncable(fixtures):
     # Now pretend node 'z' also has a copy of 'fred'
     z_node = st.StorageNode.get(name="z")
     fred2_copy = ar.ArchiveFileCopy.create(
-        file=fred_file, node=z_node, has_file="Y", wants_file="Y", size_b=123
+        file=fred_file, node=z_node, has_file="Y", wants_file="Y", prepared=True, size_b=123
     )
 
     # And so only 'sheila' should be syncable from 'x' to 'bar'
