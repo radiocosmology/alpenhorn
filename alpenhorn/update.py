@@ -192,6 +192,7 @@ def update_node_dest_requests(node, task_queue):
     if node.fs_type == "HPSS":
         task_queue.add_task(HPSSTransferTask(node))
     elif node.fs_type == "Nearline":
+        task_queue.add_task(NearlineReleaseTask(node))
         task_queue.add_task(NearlineTransferTask(node))
     elif node.fs_type == "Disk":
         task_queue.add_task(DiskTransferTask(node))

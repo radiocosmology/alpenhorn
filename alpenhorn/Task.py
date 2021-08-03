@@ -807,6 +807,7 @@ class NearlineTransferTask(Task):
                             fcopy.has_file = "Y"
                             fcopy.wants_file = "Y"
                             fcopy.size_b = copy_size_b
+                            fcopy.prepared = True
                             fcopy.save()
                             done = True
                         except pw.OperationalError:
@@ -861,6 +862,64 @@ class NearlineTransferTask(Task):
                     ar.ArchiveFileCopy.file == req.file,
                     ar.ArchiveFileCopy.node == req.node_from,
                 ).execute()
+
+
+class NearlineReleaseTask(Task):
+    def run(self):
+        """Release files to tape to conserve quota on this node."""
+
+        print("{} run()...".format(type(self).__name__))
+
+        # Fetch completed requests to release files from
+        requests = ar.ArchiveFileCopyRequest.select().where(
+            ar.ArchiveFileCopyRequest.completed,
+            ~ar.ArchiveFileCopyRequest.cancelled,
+        )
+
+        # Add in constraint to only process Nearline nodes
+        requests = requests.join(st.StorageNode).where(
+            st.StorageNode.fs_type == "Nearline"
+        )
+
+        for req in requests:
+
+            if time.time() - start_time > max_time_per_node_operation:
+                break  # Don't hog all the time.
+
+            # Use lfs to check if file is on disk
+            if util.command_available("lfs"):
+                file_path = "%s/%s" % (req.file.acq.name, req.file.name)
+                cmd = "lfs hsm_state %s" % file_path
+                ret, stdout, stderr = util.run_command(cmd)
+
+                # Parse STDERR
+                if ret == 0:
+                    on_disk_and_tape = re.search("exists archived", stderr)
+
+                    # Only proceed if the file is on disk and tape.
+                    if on_disk_and_tape:
+                        # Release file (synchronous)
+                        release_cmd = "lfs hsm_release %s" % file_path
+                        ret, stdout, stderr = util.run_command(release_cmd)
+                        if ret == 0:
+                            log.info("File: %s has been released to tape." % file_path)
+                            continue
+                        else:
+                            log.error(
+                                "lfs hsm_release command has gone awry. STDOUT: %s\n STDERR: %s"
+                                % (stdout, stderr)
+                            )
+
+                else:
+                    log.error(
+                        "lfs hsm_state command has returned an error. STDOUT: %s\n STDERR: %s"
+                        % (stdout, stderr)
+                    )
+
+            else:
+                log.error(
+                    "lfs command unavailable, so unable to complete this transfer."
+                )
 
 
 class HPSSTransferTask(Task):
