@@ -958,8 +958,8 @@ class SourceTransferTask(Task):
 
                 # Parse STDERR
                 if ret == 0:
-                    on_disk = re.search("0x00000000|exists archived", stderr)
-                    on_tape = re.search("released archived", stderr)
+                    on_disk = re.search("(0x00000000)|exists archived", stdout)
+                    on_tape = re.search("released archived", stdout)
 
                     # Only proceed if the source file actually exists (and is not corrupted).
                     if on_disk:
