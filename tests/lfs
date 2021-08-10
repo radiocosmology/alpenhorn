@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+
+""" Script to alias lfs when testing.
+"""
+
+import os, sys
+
+# States
+disk_only = 0
+disk_and_tape = 1
+tape_only = 2
+state = tape_only
+
+cwd = os.getcwd()
+filename = sys.argv[2].replace("/", ".")
+hsm_cmd = sys.argv[1]
+state_file = "%s/.%s.lfs_state" % (cwd, filename)
+
+# Read state from file if it exists
+if os.path.isfile(state_file):
+    with open(state_file, 'r') as f:
+        for line in f:
+            state = int(line) 
+
+if state == disk_only:
+    print("{}:  (0x00000000)".format(filename))
+    state = disk_and_tape
+elif state == disk_and_tape:
+    print("{}: [...]: exists archived, [...]".format(filename))
+    state = tape_only
+elif state == tape_only:
+    print("{}: [...]: released archived, [...]".format(filename))
+
+    # Only move file to disk if restore cmd used
+    if "hsm_restore" in hsm_cmd:
+        state = disk_and_tape
+else:
+    print("Unknown state: {}".format(state))
+
+# Update state file
+with open(state_file, 'w') as f:
+    f.write('%d' % state)
