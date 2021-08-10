@@ -293,7 +293,7 @@ def test_update_node_requests_nearline(tmpdir, fixtures):
 
     # Try and complete the request when the source file is not prepared
     update.update_node_src_requests(x, task_queue)
-    
+
     # Wait for source node task to run
     task_queue.queue.join()
 
@@ -308,7 +308,7 @@ def test_update_node_requests_nearline(tmpdir, fixtures):
 
     # Complete the request after the source file is ready
     update.update_node_src_requests(x, task_queue)
-    
+
     # Wait for source node to mark file copy as prepared
     task_queue.queue.join()
 

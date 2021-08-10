@@ -43,7 +43,11 @@ def run_command(cmd, **kwargs):
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
 
-    return retval, stdout_val.decode(errors="replace"), stderr_val.decode(errors="replace")
+    return (
+        retval,
+        stdout_val.decode(errors="replace"),
+        stderr_val.decode(errors="replace"),
+    )
 
 
 def is_md5_hash(h):
