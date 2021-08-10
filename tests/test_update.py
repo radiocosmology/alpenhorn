@@ -262,7 +262,6 @@ def test_update_node_requests(tmpdir, fixtures):
     assert root_z.join("x", "jim").read() == fixtures["root"].join("x", "jim").read()
 
 
-@pytest.mark.skip(reason="Still need to fix this test.")
 def test_update_node_requests_nearline(tmpdir, fixtures):
     # various joins break if 'address' is NULL
     x = st.StorageNode.get(name="x")
@@ -292,9 +291,27 @@ def test_update_node_requests_nearline(tmpdir, fixtures):
     # Setup the task queue
     task_queue = TaskQueue(max_queue_size, num_task_threads)
 
-    # after catching up with file requests, check that the file has been
-    # created and the request marked completed
+    # Try and complete the request when the source file is not prepared
     update.update_node_src_requests(x, task_queue)
+    
+    # Wait for source node task to run
+    task_queue.queue.join()
+
+    update.update_node_dest_requests(z, task_queue)
+
+    task_queue.queue.join()
+
+    req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
+
+    # Make sure the transfer has not been completed yet
+    assert req.completed == False
+
+    # Complete the request after the source file is ready
+    update.update_node_src_requests(x, task_queue)
+    
+    # Wait for source node to mark file copy as prepared
+    task_queue.queue.join()
+
     update.update_node_dest_requests(z, task_queue)
 
     task_queue.queue.join()
