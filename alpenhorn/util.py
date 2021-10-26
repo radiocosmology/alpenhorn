@@ -5,7 +5,6 @@
 import logging
 import os.path
 import re
-import shlex
 import socket
 
 log = logging.getLogger(__name__)
@@ -16,9 +15,8 @@ def run_command(cmd, **kwargs):
 
     Parameters
     ----------
-    cmd : string
-        A command as a string including all arguments. These must be quoted as
-        if called from a shell.
+    cmd : array
+        A command as an array of strings including all arguments.
     kwargs : dict
         Passed directly onto `subprocess.Popen.`
 
@@ -36,14 +34,18 @@ def run_command(cmd, **kwargs):
 
     log.debug('Running command "%s"', cmd)
 
-    # Split the cmd string appropriately and then run using Popen
+    # run using Popen
     proc = subprocess.Popen(
-        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
     )
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
 
-    return retval, stdout_val, stderr_val
+    return (
+        retval,
+        stdout_val.decode(errors="replace"),
+        stderr_val.decode(errors="replace"),
+    )
 
 
 def is_md5_hash(h):
@@ -78,7 +80,7 @@ def md5sum_file(filename, hr=True, cmd_line=False):
     python
     """
     if cmd_line:
-        ret, stdout, stderr = run_command("md5sum %s" % filename)
+        ret, stdout, stderr = run_command(["md5sum", filename])
         md5 = stdout.split()[0]
         assert len(md5) == 32
         return md5
