@@ -415,7 +415,7 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if util.command_available("bbcp"):
-                ret, stdout, stderr = run_command(
+                ret, stdout, stderr = util.run_command(
                     [
                         "bbcp",
                         "-V",
