@@ -16,7 +16,7 @@ def run_command(cmd, **kwargs):
     Parameters
     ----------
     cmd : array
-        A command as an array of strings including all arguments.
+        A command as a list of strings including all arguments.
     kwargs : dict
         Passed directly onto `subprocess.Popen.`
 
@@ -32,7 +32,7 @@ def run_command(cmd, **kwargs):
 
     import subprocess
 
-    log.debug('Running command "%s"', cmd)
+    log.debug('Running command "%s"', " ".join(cmd))
 
     # run using Popen
     proc = subprocess.Popen(
