@@ -1029,7 +1029,10 @@ def test_scan_with_limiting(fixtures):
     node = st.StorageNode.get(name="x")
     result = runner.invoke(cli.cli, args=["node", "scan", "-vv", "--acq", "x", "x"])
     assert result.exit_code == 0
-    assert 'Acquisition "x" is outside the current directory and will be ignored.' in result.output
+    assert (
+        'Acquisition "x" is outside the current directory and will be ignored.'
+        in result.output
+    )
     assert (
         acq_file.copies.join(st.StorageNode).where(st.StorageNode.name == "x").count()
         == 0
