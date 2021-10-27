@@ -479,6 +479,7 @@ def update_node_requests(node):
             # If we get here then we have no idea how to transfer the file...
             else:
                 log.warn("No commands available to complete this transfer.")
+                check_source_on_err = False
                 ret = -1
 
         # Okay, great we're just doing a local transfer.
@@ -496,6 +497,7 @@ def update_node_requests(node):
                 # confused.
                 if os.path.exists(link_path):
                     log.error("File %s already exists. Clean up manually." % link_path)
+                    check_source_on_err = False
                     ret = -1
                 else:
                     os.link(from_path, link_path)
@@ -526,8 +528,10 @@ def update_node_requests(node):
                                 node.name, stderr[stderr.rfind(":") + 2 :].strip()
                             )
                         )
+                        check_source_on_err = False
                 else:
                     log.warn("No commands available to complete this transfer.")
+                    check_source_on_err = False
                     ret = -1
 
         # Check the return code...
