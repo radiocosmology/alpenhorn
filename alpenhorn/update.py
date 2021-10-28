@@ -416,18 +416,57 @@ def update_node_requests(node):
             # it at the end.
             if util.command_available("bbcp"):
                 ret, stdout, stderr = util.run_command(
-                    [
+                    [  # See: https://www.slac.stanford.edu/~abh/bbcp/
                         "bbcp",
+                        #
+                        #
+                        # -V (AKA --vverbose, with two v's) is here because bbcp
+                        # bbcp is weirdly broken.
+                        #
+                        # I have discovered a truly marvelous proof of this
+                        # which this comment is too narrow to contain.
                         "-V",
+                        #
+                        #
+                        # force: delete an existing destination file before
+                        # transfer
                         "-f",
+                        #
+                        #
+                        # Use a reverse connection to get through a firewall
+                        # (This may not be appropriate everywhere -- more reason
+                        # we need an edge table in the database.)
                         "-z",
+                        #
+                        #
+                        # Port to use
                         "--port",
                         "4200",
+                        #
+                        #
+                        # TCP window size.  4M is what Linux typically limits
+                        # you to (cf. /proc/sys/net/ipv4/tcp_wmem)
                         "-W",
                         "4M",
+                        #
+                        #
+                        # Number of streams
                         "-s",
                         "16",
+                        #
+                        #
+                        # Do block-level checksumming to detect transmission
+                        # errors
                         "-e",
+                        #
+                        #
+                        # Calculate _and print_ a MD5 checksum of the whole file
+                        # on the source.  MD5ing is done on the source to avoid
+                        # the need for the file transfer to occur in order
+                        # (which can cause bbcp to lock up).
+                        #
+                        # See https://www.slac.stanford.edu/~abh/bbcp/#_Toc392015140
+                        # and https://github.com/chime-experiment/alpenhorn/pull/15
                         "-E",
                         "%md5=",
                         from_path,
