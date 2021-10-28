@@ -172,9 +172,8 @@ def format(serial_num):
                     print("%s is already mounted at %s" % (l.split()[0], root))
                 else:
                     print(
-                        "%s is a mount point, but %s is already mounted there."(
-                            root, l.split()[0]
-                        )
+                        "%s is a mount point, but %s is already mounted there."
+                        % (root, l.split()[0])
                     )
     except subprocess.CalledProcessError as e:
         print(
