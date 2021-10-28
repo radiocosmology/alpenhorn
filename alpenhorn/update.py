@@ -431,7 +431,7 @@ def update_node_requests(node):
                         "-E",
                         "%md5=",
                         from_path,
-                        to_path,
+                        to_dir,
                     ]
                 )
 
@@ -457,7 +457,7 @@ def update_node_requests(node):
                         "--rsync-path=ionice -c2 -n4 rsync",
                         "--rsh=ssh -q",
                         from_path,
-                        to_path,
+                        to_dir,
                     ]
                 )
 
