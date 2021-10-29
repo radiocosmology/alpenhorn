@@ -21,9 +21,16 @@ log = logging.getLogger(__name__)
 # Parameters.
 max_time_per_node_operation = 300  # Don't let node operations hog time.
 
-RSYNC_OPTS = (
-    "--quiet --times --protect-args --perms --group --owner " + "--copy-links --sparse"
-)
+RSYNC_OPTS = [
+    "--quiet",
+    "--times",
+    "--protect-args",
+    "--perms",
+    "--group",
+    "--owner",
+    "--copy-links",
+    "--sparse",
+]
 
 # Globals.
 done_transport_this_cycle = False
@@ -303,6 +310,10 @@ def update_node_requests(node):
         if time.time() - start_time > max_time_per_node_operation:
             break  # Don't hog all the time.
 
+        # By default, if a copy fails, we mark the source file as suspect
+        # so it gets re-MD5'd on the source node.
+        check_source_on_err = True
+
         # Only continue if the node is actually active
         if not req.node_from.active:
             continue
@@ -315,21 +326,6 @@ def update_node_requests(node):
                 "Skipping request for %s/%s from remote node [%s] onto local "
                 "transport disks"
                 % (req.file.acq.name, req.file.name, req.node_from.name)
-            )
-            continue
-
-        # Only proceed if the source file actually exists (and is not corrupted).
-        try:
-            ar.ArchiveFileCopy.get(
-                ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == req.node_from,
-                ar.ArchiveFileCopy.has_file == "Y",
-            )
-        except pw.DoesNotExist:
-            log.error(
-                "Skipping request for %s/%s since it is not available on "
-                'node "%s". [file_id=%i]'
-                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
             )
             continue
 
@@ -351,6 +347,21 @@ def update_node_requests(node):
             continue
         except pw.DoesNotExist:
             pass
+
+        # Only proceed if the source file actually exists (and is not corrupted).
+        try:
+            ar.ArchiveFileCopy.get(
+                ar.ArchiveFileCopy.file == req.file,
+                ar.ArchiveFileCopy.node == req.node_from,
+                ar.ArchiveFileCopy.has_file == "Y",
+            )
+        except pw.DoesNotExist:
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
+            continue
 
         # Check that there is enough space available.
         if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
@@ -385,6 +396,9 @@ def update_node_requests(node):
             log.info('Creating directory "%s".' % to_dir)
             os.makedirs(to_dir)
 
+        # For the potential error message later
+        stderr = None
+
         # Giddy up!
         log.info('Transferring file "%s/%s".' % (req.file.acq.name, req.file.name))
         start_time = time.time()
@@ -401,11 +415,64 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if util.command_available("bbcp"):
-                cmd = "bbcp -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s" % (
-                    from_path,
-                    to_dir,
+                ret, stdout, stderr = util.run_command(
+                    [  # See: https://www.slac.stanford.edu/~abh/bbcp/
+                        "bbcp",
+                        #
+                        #
+                        # -V (AKA --vverbose, with two v's) is here because bbcp
+                        # bbcp is weirdly broken.
+                        #
+                        # I have discovered a truly marvelous proof of this
+                        # which this comment is too narrow to contain.
+                        "-V",
+                        #
+                        #
+                        # force: delete an existing destination file before
+                        # transfer
+                        "-f",
+                        #
+                        #
+                        # Use a reverse connection to get through a firewall
+                        # (This may not be appropriate everywhere -- more reason
+                        # we need an edge table in the database.)
+                        "-z",
+                        #
+                        #
+                        # Port to use
+                        "--port",
+                        "4200",
+                        #
+                        #
+                        # TCP window size.  4M is what Linux typically limits
+                        # you to (cf. /proc/sys/net/ipv4/tcp_wmem)
+                        "-W",
+                        "4M",
+                        #
+                        #
+                        # Number of streams
+                        "-s",
+                        "16",
+                        #
+                        #
+                        # Do block-level checksumming to detect transmission
+                        # errors
+                        "-e",
+                        #
+                        #
+                        # Calculate _and print_ a MD5 checksum of the whole file
+                        # on the source.  MD5ing is done on the source to avoid
+                        # the need for the file transfer to occur in order
+                        # (which can cause bbcp to lock up).
+                        #
+                        # See https://www.slac.stanford.edu/~abh/bbcp/#_Toc392015140
+                        # and https://github.com/chime-experiment/alpenhorn/pull/15
+                        "-E",
+                        "%md5=",
+                        from_path,
+                        to_dir,
+                    ]
                 )
-                ret, stdout, stderr = util.run_command(cmd)
 
                 # Attempt to parse STDERR for the md5 hash
                 if ret == 0:
@@ -422,18 +489,36 @@ def update_node_requests(node):
 
             # Next try rsync over ssh.
             elif util.command_available("rsync"):
-                cmd = (
-                    "rsync --compress {0} "
-                    '--rsync-path="ionice -c2 -n4 rsync" '
-                    '--rsh="ssh -q" {1} {2}'
-                ).format(RSYNC_OPTS, from_path, to_dir)
-                ret, stdout, stderr = util.run_command(cmd)
+                ret, stdout, stderr = util.run_command(
+                    ["rsync", "--compress"]
+                    + RSYNC_OPTS
+                    + [
+                        "--rsync-path=ionice -c2 -n4 rsync",
+                        "--rsh=ssh -q",
+                        from_path,
+                        to_dir,
+                    ]
+                )
 
                 md5sum = util.md5sum_file(to_file) if ret == 0 else None
+
+                # If the rsync error occured during `mkstemp` this is a
+                # problem on the destination, not the source
+                if ret and "mkstemp" in stderr:
+                    log.warn('rsync file creation failed on "{0}"'.format(node.name))
+                    check_source_on_err = False
+                elif "write failed on" in stderr:
+                    log.warn(
+                        'rsync failed to write to "{0}": {1}'.format(
+                            node.name, stderr[stderr.rfind(":") + 2 :].strip()
+                        )
+                    )
+                    check_source_on_err = False
 
             # If we get here then we have no idea how to transfer the file...
             else:
                 log.warn("No commands available to complete this transfer.")
+                check_source_on_err = False
                 ret = -1
 
         # Okay, great we're just doing a local transfer.
@@ -451,6 +536,7 @@ def update_node_requests(node):
                 # confused.
                 if os.path.exists(link_path):
                     log.error("File %s already exists. Clean up manually." % link_path)
+                    check_source_on_err = False
                     ret = -1
                 else:
                     os.link(from_path, link_path)
@@ -462,22 +548,48 @@ def update_node_requests(node):
             # If we couldn't just link the file, try copying it with rsync.
             except OSError:
                 if util.command_available("rsync"):
-                    cmd = "rsync {0} {1} {2}".format(RSYNC_OPTS, from_path, to_dir)
-                    ret, stdout, stderr = util.run_command(cmd)
+                    ret, stdout, stderr = util.run_command(
+                        ["rsync"] + RSYNC_OPTS + [from_path, to_dir]
+                    )
 
                     md5sum = util.md5sum_file(to_file) if ret == 0 else None
+
+                    # If the rsync error occured during `mkstemp` this is a
+                    # problem on the destination, not the source
+                    if ret and "mkstemp" in stderr:
+                        log.warn(
+                            'rsync file creation failed on "{0}"'.format(node.name)
+                        )
+                        check_source_on_err = False
+                    elif "write failed on" in stderr:
+                        log.warn(
+                            'rsync failed to write to "{0}": {1}'.format(
+                                node.name, stderr[stderr.rfind(":") + 2 :].strip()
+                            )
+                        )
+                        check_source_on_err = False
                 else:
                     log.warn("No commands available to complete this transfer.")
+                    check_source_on_err = False
                     ret = -1
 
         # Check the return code...
         if ret:
-            # If the copy didn't work, then the remote file may be corrupted.
-            log.error("Rsync failed. Marking source file suspect.")
-            ar.ArchiveFileCopy.update(has_file="M").where(
-                ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == req.node_from,
-            ).execute()
+            if check_source_on_err:
+                # If the copy didn't work, then the remote file may be corrupted.
+                log.error(
+                    "Copy failed: {0}. Marking source file suspect.".format(
+                        stderr if stderr is not None else "Unspecified error."
+                    )
+                )
+                ar.ArchiveFileCopy.update(has_file="M").where(
+                    ar.ArchiveFileCopy.file == req.file,
+                    ar.ArchiveFileCopy.node == req.node_from,
+                ).execute()
+            else:
+                # An error occurred that can't be due to the source
+                # being corrupt
+                log.error("Copy failed.")
             continue
         end_time = time.time()
 
