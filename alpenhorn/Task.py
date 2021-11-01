@@ -16,6 +16,9 @@ from . import acquisition as ac
 from . import archive as ar
 from . import config, db
 from . import update
+# TODO this is probably going to result in a circular import; i also want to adjust how this works
+# can Task.py and update.py go into the same place?
+from .update import done_transport_this_cycle
 from . import storage as st
 from . import util
 
@@ -197,18 +200,29 @@ class DeletionTask(Task):
             else:
                 log.info("Too few backups to delete %s" % shortname)
 
+class TransferTask(Task):
 
-class DiskTransferTask(Task):
+    def __init__(self, node):
+        # how do the double inits work?
+        super().__init__(node)
+        self.fs_type = None
+
     def run(self):
-        """Process file copy requests onto this node."""
+        if self.fs_type is None:
+            self.log.error("Use appropriate transfer task for file system (i.e. DiskTransferTask or NearlineTransferTask).")
 
+        # TODO log.info?
         print("{} run()...".format(type(self).__name__))
 
+        # TODO we may want to do something better
         global done_transport_this_cycle
 
         avail_gb = self.node.avail_gb
 
         # Skip if node is too full
+        # TODO figure out if this test is helpful, and if not just delete it
+        # TODO if it is useful, what is the right threshold (is it 10 GB?) if it is
+        # TODO document the justification for the particular threshold chosen
         if avail_gb < (self.node.min_avail_gb + 10):
             log.info("Node %s is nearly full. Skip transfers." % self.node.name)
             return
@@ -247,8 +261,8 @@ class DiskTransferTask(Task):
             ar.ArchiveFileCopyRequest.group_to == self.node.group,
         )
 
-        # Add in constraint to only process Disk nodes
-        requests = requests.join(st.StorageNode).where(st.StorageNode.fs_type == "Disk")
+        # Add in constraint to only process fs_type nodes
+        requests = requests.join(st.StorageNode).where(st.StorageNode.fs_type == self.fs_type)
 
         for req in requests:
 
@@ -290,15 +304,24 @@ class DiskTransferTask(Task):
                 pass
 
             # Only proceed if the source file actually exists (and is not corrupted).
+            # On nearline, additionally only proceed if source file is prepared
             try:
-                ar.ArchiveFileCopy.get(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == req.node_from,
-                    ar.ArchiveFileCopy.has_file == "Y",
-                )
+                if self.fs_type == "Disk":
+                    ar.ArchiveFileCopy.get(
+                        ar.ArchiveFileCopy.file == req.file,
+                        ar.ArchiveFileCopy.node == req.node_from,
+                        ar.ArchiveFileCopy.has_file == "Y",
+                    )
+                elif self.fs_type == "Nearline":
+                    ar.ArchiveFileCopy.get(
+                        ar.ArchiveFileCopy.file == req.file,
+                        ar.ArchiveFileCopy.node == req.node_from,
+                        ar.ArchiveFileCopy.has_file == "Y",
+                        ar.ArchiveFileCopy.prepared == True,
+                    )
             except pw.DoesNotExist:
                 log.error(
-                    "Skipping request for %s/%s since it is not available on "
+                    "Skipping request for %s/%s since it is not available on or is not prepared on"
                     'node "%s". [file_id=%i]'
                     % (
                         req.file.acq.name,
@@ -473,6 +496,9 @@ class DiskTransferTask(Task):
                             fcopy.has_file = "Y"
                             fcopy.wants_file = "Y"
                             fcopy.size_b = copy_size_b
+                            # Prepared attribute only applies to nearline
+                            if self.fs_type == "Nearline":
+                                fcopy.prepared = True
                             fcopy.save()
                             done = True
                         except pw.OperationalError:
@@ -506,8 +532,14 @@ class DiskTransferTask(Task):
                     # This node is getting the transport king.
                     done_transport_this_cycle = True
 
-                # Update node available space
-                update.update_node_free_space(self.node)
+                # TODO why are these different?
+                # TODO why does nearline not use update_node_free_space?
+                if self.fs_type == "Disk":
+                    # Update node available space
+                    update.update_node_free_space(self.node)
+                elif self.fs_type == "Nearline":
+                    # Update local estimate of available space
+                    avail_gb = avail_gb - req.file.size_b / 2 ** 30.0
 
             else:
                 log.error(
@@ -515,353 +547,32 @@ class DiskTransferTask(Task):
                     'this node, "%s".'
                     % (req.file.md5sum, req.node_from.name, md5sum, self.node.name)
                 )
-                log.error('Removing file "%s".' % to_file)
+                log.error('Removing file "%s" on node %s.' % (to_file, self.node.name))
                 try:
                     os.remove(to_file)
                 except Exception:
-                    log.error("Could not remove file.")
+                    log.error("Could not remove file %s on node %s." % (to_file, self.node.name))
 
                 # Since the md5sum failed, the remote file may be corrupted.
-                log.error("Marking source file suspect.")
+                log.error("Marking source file %s on node %s suspect ." % (req.file, req.node_from))
                 ar.ArchiveFileCopy.update(has_file="M").where(
                     ar.ArchiveFileCopy.file == req.file,
                     ar.ArchiveFileCopy.node == req.node_from,
                 ).execute()
 
 
-class NearlineTransferTask(Task):
-    def run(self):
-        """Process file copy requests onto this node."""
+class DiskTransferTask(TransferTask):
 
-        print("{} run()...".format(type(self).__name__))
+    def __init__(self, node):
+        super().__init__(node)
+        self.fs_type = "Disk"
 
-        global done_transport_this_cycle
 
-        avail_gb = self.node.avail_gb
+class NearlineTransferTask(TransferTask):
 
-        # Skip if node is too full
-        if avail_gb < (self.node.min_avail_gb + 10):
-            log.info("Node %s is nearly full. Skip transfers." % self.node.name)
-            return
-
-        # Calculate the total archive size from the database
-        size_query = (
-            ac.ArchiveFile.select(fn.Sum(ac.ArchiveFile.size_b))
-            .join(ar.ArchiveFileCopy)
-            .where(
-                ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "Y"
-            )
-        )
-
-        size = size_query.scalar(as_tuple=True)[0]
-        current_size_gb = float(0.0 if size is None else size) / 2 ** 30.0
-
-        # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
-        if current_size_gb > self.node.max_total_gb and self.node.max_total_gb > 0.0:
-            log.info(
-                "Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)"
-                % (self.node.name, current_size_gb, self.node.max_total_gb)
-            )
-            return
-
-        # ... OR if this is a transport node quit if the transport cycle is done.
-        if self.node.storage_type == "T" and done_transport_this_cycle:
-            log.info("Ignoring transport node %s" % self.node.name)
-            return
-
-        start_time = time.time()
-
-        # Fetch requests to process from the database
-        requests = ar.ArchiveFileCopyRequest.select().where(
-            ~ar.ArchiveFileCopyRequest.completed,
-            ~ar.ArchiveFileCopyRequest.cancelled,
-            ar.ArchiveFileCopyRequest.group_to == self.node.group,
-        )
-
-        # Add in constraint to only process Nearline nodes
-        requests = requests.join(st.StorageNode).where(
-            st.StorageNode.fs_type == "Nearline"
-        )
-
-        for req in requests:
-
-            if time.time() - start_time > max_time_per_node_operation:
-                break  # Don't hog all the time.
-
-            # Only continue if the node is actually active
-            if not req.node_from.active:
-                continue
-
-            # For transport disks we should only copy onto the transport
-            # node if the from_node is local, this should prevent pointlessly
-            # rsyncing across the network
-            if self.node.storage_type == "T" and self.node.host != req.node_from.host:
-                log.debug(
-                    "Skipping request for %s/%s from remote node [%s] onto local "
-                    "transport disks"
-                    % (req.file.acq.name, req.file.name, req.node_from.name)
-                )
-                continue
-
-            # Only proceed if the destination file does not already exist.
-            try:
-                ar.ArchiveFileCopy.get(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == self.node,
-                    ar.ArchiveFileCopy.has_file == "Y",
-                )
-                log.info(
-                    "Skipping request for %s/%s since it already exists on "
-                    'this node ("%s"), and updating DB to reflect this.'
-                    % (req.file.acq.name, req.file.name, self.node.name)
-                )
-                ar.ArchiveFileCopyRequest.update(completed=True).where(
-                    ar.ArchiveFileCopyRequest.file == req.file
-                ).where(ar.ArchiveFileCopyRequest.group_to == self.node.group).execute()
-                continue
-            except pw.DoesNotExist:
-                pass
-
-            # Only proceed if the source file actually exists and is prepared (and is not corrupted).
-            try:
-                ar.ArchiveFileCopy.get(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == req.node_from,
-                    ar.ArchiveFileCopy.has_file == "Y",
-                    ar.ArchiveFileCopy.prepared == True,
-                )
-            except pw.DoesNotExist:
-                log.error(
-                    "Skipping request for %s/%s since it is not available or is not prepared on "
-                    'node "%s". [file_id=%i]'
-                    % (
-                        req.file.acq.name,
-                        req.file.name,
-                        req.node_from.name,
-                        req.file.id,
-                    )
-                )
-                continue
-
-            # Check that there is enough space available.
-            if self.node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
-                log.warning(
-                    'Node "%s" is full: not adding datafile "%s/%s".'
-                    % (self.node.name, req.file.acq.name, req.file.name)
-                )
-                continue
-
-            # Constuct the origin and destination paths.
-            from_path = "%s/%s/%s" % (
-                req.node_from.root,
-                req.file.acq.name,
-                req.file.name,
-            )
-            if req.node_from.host != self.node.host:
-
-                if req.node_from.username is None or req.node_from.address is None:
-                    log.error(
-                        "Source node (%s) not properly configured (username=%s, address=%s)",
-                        req.node_from.name,
-                        req.node_from.username,
-                        req.node_from.address,
-                    )
-                    continue
-
-                from_path = "%s@%s:%s" % (
-                    req.node_from.username,
-                    req.node_from.address,
-                    from_path,
-                )
-
-            to_file = os.path.join(self.node.root, req.file.acq.name, req.file.name)
-            to_dir = os.path.dirname(to_file)
-            if not os.path.isdir(to_dir):
-                log.info('Creating directory "%s".' % to_dir)
-                os.makedirs(to_dir)
-
-            # Giddy up!
-            log.info('Transferring file "%s/%s".' % (req.file.acq.name, req.file.name))
-            start_time = time.time()
-            req.transfer_started = dt.datetime.fromtimestamp(start_time)
-            req.save(only=req.dirty_fields)
-
-            # Attempt to transfer the file. Each of the methods below needs to set a
-            # return code `ret` and give an `md5sum` of the transferred file.
-
-            # First we need to check if we are copying over the network
-            if req.node_from.host != self.node.host:
-
-                # First try bbcp which is a fast multistream transfer tool. bbcp can
-                # calculate the md5 hash as it goes, so we'll do that to save doing
-                # it at the end.
-                if util.command_available("bbcp"):
-                    cmd = "bbcp -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s" % (
-                        from_path,
-                        to_dir,
-                    )
-                    ret, stdout, stderr = util.run_command(cmd)
-
-                    # Attempt to parse STDERR for the md5 hash
-                    if ret == 0:
-                        mo = re.search("md5 ([a-f0-9]{32})", stderr)
-                        if mo is None:
-                            log.error(
-                                "BBCP transfer has gone awry. STDOUT: %s\n STDERR: %s"
-                                % (stdout, stderr)
-                            )
-                            ret = -1
-                        md5sum = mo.group(1)
-                    else:
-                        md5sum = None
-
-                # Next try rsync over ssh.
-                elif util.command_available("rsync"):
-                    cmd = (
-                        "rsync --compress {0} "
-                        '--rsync-path="ionice -c2 -n4 rsync" '
-                        '--rsh="ssh -q" {1} {2}'
-                    ).format(RSYNC_OPTS, from_path, to_dir)
-                    ret, stdout, stderr = util.run_command(cmd)
-
-                    md5sum = util.md5sum_file(to_file) if ret == 0 else None
-
-                # If we get here then we have no idea how to transfer the file...
-                else:
-                    log.warn("No commands available to complete this transfer.")
-                    ret = -1
-
-            # Okay, great we're just doing a local transfer.
-            else:
-
-                # First try to just hard link the file. This will only work if we
-                # are on the same filesystem. As there's no actual copying it's
-                # probably unecessary to calculate the md5 check sum, so we'll just
-                # fake it.
-                try:
-                    link_path = os.path.join(
-                        self.node.root, req.file.acq.name, req.file.name
-                    )
-
-                    # Check explicitly if link already exists as this and
-                    # being unable to link will both raise OSError and get
-                    # confused.
-                    if os.path.exists(link_path):
-                        log.error(
-                            "File %s already exists. Clean up manually." % link_path
-                        )
-                        ret = -1
-                    else:
-                        os.link(from_path, link_path)
-                        ret = 0
-                        md5sum = (
-                            req.file.md5sum
-                        )  # As we're linking the md5sum can't change. Skip the check here...
-
-                # If we couldn't just link the file, try copying it with rsync.
-                except OSError:
-                    if util.command_available("rsync"):
-                        cmd = "rsync {0} {1} {2}".format(RSYNC_OPTS, from_path, to_dir)
-                        ret, stdout, stderr = util.run_command(cmd)
-
-                        md5sum = util.md5sum_file(to_file) if ret == 0 else None
-                    else:
-                        log.warn("No commands available to complete this transfer.")
-                        ret = -1
-
-            # Check the return code...
-            if ret:
-                # If the copy didn't work, then the remote file may be corrupted.
-                log.error("Rsync failed. Marking source file suspect.")
-                ar.ArchiveFileCopy.update(has_file="M").where(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == req.node_from,
-                ).execute()
-                continue
-            end_time = time.time()
-
-            # Check integrity.
-            if md5sum == req.file.md5sum:
-                size_mb = req.file.size_b / 2 ** 20.0
-                copy_size_b = os.stat(to_file).st_blocks * 512
-                trans_time = end_time - start_time
-                rate = size_mb / trans_time
-                log.info(
-                    "Pull complete (md5sum correct). Transferred %.1f MB in %i "
-                    "seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate)
-                )
-
-                # Update the FileCopy (if exists), or insert a new FileCopy
-                try:
-                    done = False
-                    while not done:
-                        try:
-                            fcopy = (
-                                ar.ArchiveFileCopy.select()
-                                .where(
-                                    ar.ArchiveFileCopy.file == req.file,
-                                    ar.ArchiveFileCopy.node == self.node,
-                                )
-                                .get()
-                            )
-                            fcopy.has_file = "Y"
-                            fcopy.wants_file = "Y"
-                            fcopy.size_b = copy_size_b
-                            fcopy.prepared = True
-                            fcopy.save()
-                            done = True
-                        except pw.OperationalError:
-                            log.error(
-                                "MySQL connexion dropped. Will attempt to reconnect in "
-                                "five seconds."
-                            )
-                            time.sleep(5)
-                            db.config_connect()
-                except pw.DoesNotExist:
-                    ar.ArchiveFileCopy.insert(
-                        file=req.file,
-                        node=self.node,
-                        has_file="Y",
-                        wants_file="Y",
-                        prepared=False,
-                        size_b=copy_size_b,
-                    ).execute()
-
-                # Mark any FileCopyRequest for this file as completed
-                ar.ArchiveFileCopyRequest.update(
-                    completed=True,
-                    transfer_completed=dt.datetime.fromtimestamp(end_time),
-                ).where(ar.ArchiveFileCopyRequest.file == req.file).where(
-                    ar.ArchiveFileCopyRequest.group_to == self.node.group,
-                    ~ar.ArchiveFileCopyRequest.completed,
-                    ~ar.ArchiveFileCopyRequest.cancelled,
-                ).execute()
-
-                if self.node.storage_type == "T":
-                    # This node is getting the transport king.
-                    done_transport_this_cycle = True
-
-                # Update local estimate of available space
-                avail_gb = avail_gb - req.file.size_b / 2 ** 30.0
-
-            else:
-                log.error(
-                    'Error with md5sum check: %s on node "%s", but %s on '
-                    'this node, "%s".'
-                    % (req.file.md5sum, req.node_from.name, md5sum, self.node.name)
-                )
-                log.error('Removing file "%s".' % to_file)
-                try:
-                    os.remove(to_file)
-                except Exception:
-                    log.error("Could not remove file.")
-
-                # Since the md5sum failed, the remote file may be corrupted.
-                log.error("Marking source file suspect.")
-                ar.ArchiveFileCopy.update(has_file="M").where(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == req.node_from,
-                ).execute()
+    def __init__(self, node):
+        super().__init__(node)
+        self.fs_type = "Nearline"
 
 
 class NearlineReleaseTask(Task):
