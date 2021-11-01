@@ -38,7 +38,7 @@ class ArchiveFileCopy(base_model):
     node = pw.ForeignKeyField(StorageNode, backref="copies")
     has_file = EnumField(["N", "Y", "M", "X"], default="N")
     wants_file = EnumField(["Y", "M", "N"], default="Y")
-    prepared = pw.BooleanField()
+    prepared = pw.BooleanField(default=False)
     size_b = pw.BigIntegerField()
 
     class Meta:

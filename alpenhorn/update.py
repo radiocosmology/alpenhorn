@@ -15,8 +15,7 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
-from . import Task
-from .Task import *
+from .Task import IntegrityTask, DeletionTask, DiskTransferTask, NearlineTransferTask, NearlineReleaseTask, HPSSTransferTask, SourceTransferTask
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ done_transport_this_cycle = False
 
 
 def update_loop(host, task_queue):
-    """Loop over nodes performing any updates needed."""
+    """Loop over nodes performing any updates needed, adding tasks to Task.TaskQueue *task_queue*"""
     global done_transport_this_cycle
 
     while True:
@@ -51,7 +50,7 @@ def update_loop(host, task_queue):
 
 
 def update_node(node, task_queue):
-    """Update the status of the node, and process eligible transfers onto it."""
+    """Update the status of the node, and process eligible transfers onto Task.TaskQueue."""
 
     # TODO: bring back HPSS support
     # Check if this is an HPSS node, and if so call the special handler
@@ -138,7 +137,7 @@ def update_node_free_space(node):
                 "/nearline" if node.name == "cedar_nearline" else "/project",
             ]
         )
-        lfs_quota = regexp.sub(b"", stdout).split()
+        lfs_quota = regexp.sub("", stdout).split()
 
         # The quota for nearline is fixed at 300 quota-TB
         if node.name == "cedar_nearline":
@@ -180,9 +179,13 @@ def update_node_src_requests(node, task_queue):
 
     # Check which type of node this is and create an appropriate task
     if node.fs_type == "HPSS":
+        # TODO what gets called here?
         task_queue.add_task(SourceTransferTask(node))
     elif node.fs_type == "Nearline":
         task_queue.add_task(SourceTransferTask(node))
+    else:
+        # TODO Raise Exception
+        pass
 
 
 def update_node_dest_requests(node, task_queue):

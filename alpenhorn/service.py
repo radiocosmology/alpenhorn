@@ -67,7 +67,7 @@ def cli():
     auto_import.catchup(node_list)
 
     # Setup the task queue
-    task_queue = TaskQueue(max_queue_size, num_task_threads)
+    task_queue = Task.TaskQueue(max_queue_size, num_task_threads)
 
     # Enter main loop performing node updates
     try:
