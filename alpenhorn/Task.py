@@ -26,20 +26,26 @@ log = logging.getLogger(__name__)
 
 # Parameters.
 max_time_per_node_operation = 300  # Don't let node operations hog time.
+max_time_per_task_queue = 30 # seconds
 
 
 class TaskQueue:
     def add_task(self, task):
         """Add task to queue."""
         if self.queue.full():
-            log.warning("Task queue is full ({:d} tasks)".format(self.queue.qsize()))
+            # TODO should we add a TIMEOUT to queue.put, and raise an exception if TIMEOUT exceeded?
+            # or should we add to log that this thread is blocked
+            log.warning("Task queue is full ({:d} tasks). Blocking.".format(self.queue.qsize()))
         self.queue.put(task)
 
     def run_tasks(self):
         """Loop and run tasks from queue."""
         while True:
             try:
-                task = self.queue.get()
+                # TODO queue.get is blocked if queue is empty
+                # so we should add a Timeout, otherwise queue.Empty will not raise
+                # for queue, block = True, timeout = None by default
+                task = self.queue.get(timeout=max_time_per_task_queue)
             except queue.Empty:
                 pass
             else:
@@ -61,13 +67,18 @@ class Task:
         self.node = node
 
     def run(self):
-        print("{} run()...".format(type(self).__name__))
+        raise NotImplementedError
 
 
 class IntegrityTask(Task):
+
+    def __init__(self, node):
+        super().__init__(node)
+
     def run(self):
         """Check the integrity of file copies on the node."""
 
+        # TODO should these be log.info?
         print("{} run() with node: {}".format(type(self).__name__, self.node.name))
 
         # Find suspect file copies in the database
@@ -91,26 +102,31 @@ class IntegrityTask(Task):
             # If the file exists calculate its md5sum and check against the DB
             if os.path.exists(fullpath):
                 if util.md5sum_file(fullpath) == fcopy.file.md5sum:
-                    log.info("File is A-OK!")
+                    log.info("File %s on node %s is A-OK!" % (fullpath, self.node.name))
                     fcopy.has_file = "Y"
                     copy_size_b = os.stat(fullpath).st_blocks * 512
                     fcopy.size_b = copy_size_b
                 else:
-                    log.error("File is corrupted!")
+                    log.error("File %s on node %s is corrupted!" % (fullpath, self.node.name))
                     fcopy.has_file = "X"
             else:
-                log.error("File does not exist!")
+                log.error("File %s on node %s does not exist!" % (fullpath, self.node.name))
                 fcopy.has_file = "N"
 
             # Update the copy status
-            log.info("Updating file copy status [id=%i]." % fcopy.id)
+            log.info("Updating file copy status for file %s on node %s[id=%i]." % (fullpath, self.node.name, fcopy.id))
             fcopy.save()
 
 
 class DeletionTask(Task):
+
+    def __init__(self, node):
+        super().__init__(node)
+
     def run(self):
         """Process this node for files to delete."""
 
+        # TODO log.info?
         print("{} run()...".format(type(self).__name__))
 
         # If we have less than the minimum available space, we should consider all files
@@ -193,12 +209,12 @@ class DeletionTask(Task):
                     fcopy.wants_file = "N"  # Set in case it was 'M' before
                     fcopy.save()  # Update the FileCopy in the database
 
-                    log.info("Removed file copy: %s" % shortname)
+                    log.info("Removed file copy: %s on %s" % (shortname, self.node.name))
 
                 del_count += 1
 
             else:
-                log.info("Too few backups to delete %s" % shortname)
+                log.info("Too few backups to delete %s on %s" % (shortname, self.node.name))
 
 class TransferTask(Task):
 
@@ -635,7 +651,7 @@ class NearlineReleaseTask(Task):
 
 class HPSSTransferTask(Task):
     def run(self):
-        print("{} run()...".format(type(self).__name__))
+        raise NotImplementedError
 
 
 class SourceTransferTask(Task):
@@ -705,25 +721,26 @@ class SourceTransferTask(Task):
                             continue
                         else:
                             log.error(
-                                "lfs hsm_restore command has gone awry. STDOUT: %s\n STDERR: %s"
-                                % (stdout, stderr)
+                                "lfs hsm_restore %s command has gone awry. STDOUT: %s\n STDERR: %s"
+                                % (file_path, stdout, stderr)
                             )
 
                     else:
                         log.error(
-                            "lfs hsm_state command has gone awry. STDOUT: %s\n STDERR: %s"
-                            % (stdout, stderr)
+                            "lfs hsm_state %s command has gone awry. STDOUT: %s\n STDERR: %s"
+                            % (file_path, stdout, stderr)
                         )
 
                 else:
                     log.error(
-                        "lfs hsm_state command has returned an error. STDOUT: %s\n STDERR: %s"
-                        % (stdout, stderr)
+                        "lfs hsm_state %s command has returned an error. STDOUT: %s\n STDERR: %s"
+                        % (file_path, stdout, stderr)
                     )
 
             else:
                 log.error(
-                    "lfs command unavailable, so unable to complete this transfer."
+                    "lfs command unavailable on node %s, so unable to complete this transfer."
+                    % self.node.name
                 )
 
             # Notify destination that transfer can proceed.
