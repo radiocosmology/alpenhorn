@@ -16,6 +16,7 @@ from . import acquisition as ac
 from . import archive as ar
 from . import config, db
 from . import update
+
 # TODO this is probably going to result in a circular import; i also want to adjust how this works
 # can Task.py and update.py go into the same place?
 from .update import done_transport_this_cycle, RSYNC_OPTS
@@ -26,7 +27,7 @@ log = logging.getLogger(__name__)
 
 # Parameters.
 max_time_per_node_operation = 300  # Don't let node operations hog time.
-max_time_per_task_queue = 30 # seconds
+max_time_per_task_queue = 30  # seconds
 
 
 class TaskQueue:
@@ -35,7 +36,9 @@ class TaskQueue:
         if self.queue.full():
             # TODO should we add a TIMEOUT to queue.put, and raise an exception if TIMEOUT exceeded?
             # or should we add to log that this thread is blocked
-            log.warning("Task queue is full ({:d} tasks). Blocking.".format(self.queue.qsize()))
+            log.warning(
+                "Task queue is full ({:d} tasks). Blocking.".format(self.queue.qsize())
+            )
         self.queue.put(task)
 
     def run_tasks(self):
@@ -71,7 +74,6 @@ class Task:
 
 
 class IntegrityTask(Task):
-
     def __init__(self, node):
         super().__init__(node)
 
@@ -107,19 +109,25 @@ class IntegrityTask(Task):
                     copy_size_b = os.stat(fullpath).st_blocks * 512
                     fcopy.size_b = copy_size_b
                 else:
-                    log.error("File %s on node %s is corrupted!" % (fullpath, self.node.name))
+                    log.error(
+                        "File %s on node %s is corrupted!" % (fullpath, self.node.name)
+                    )
                     fcopy.has_file = "X"
             else:
-                log.error("File %s on node %s does not exist!" % (fullpath, self.node.name))
+                log.error(
+                    "File %s on node %s does not exist!" % (fullpath, self.node.name)
+                )
                 fcopy.has_file = "N"
 
             # Update the copy status
-            log.info("Updating file copy status for file %s on node %s[id=%i]." % (fullpath, self.node.name, fcopy.id))
+            log.info(
+                "Updating file copy status for file %s on node %s[id=%i]."
+                % (fullpath, self.node.name, fcopy.id)
+            )
             fcopy.save()
 
 
 class DeletionTask(Task):
-
     def __init__(self, node):
         super().__init__(node)
 
@@ -209,15 +217,19 @@ class DeletionTask(Task):
                     fcopy.wants_file = "N"  # Set in case it was 'M' before
                     fcopy.save()  # Update the FileCopy in the database
 
-                    log.info("Removed file copy: %s on %s" % (shortname, self.node.name))
+                    log.info(
+                        "Removed file copy: %s on %s" % (shortname, self.node.name)
+                    )
 
                 del_count += 1
 
             else:
-                log.info("Too few backups to delete %s on %s" % (shortname, self.node.name))
+                log.info(
+                    "Too few backups to delete %s on %s" % (shortname, self.node.name)
+                )
+
 
 class TransferTask(Task):
-
     def __init__(self, node):
         # how do the double inits work?
         super().__init__(node)
@@ -225,7 +237,9 @@ class TransferTask(Task):
 
     def run(self):
         if self.fs_type is None:
-            self.log.error("Use appropriate transfer task for file system (i.e. DiskTransferTask or NearlineTransferTask).")
+            self.log.error(
+                "Use appropriate transfer task for file system (i.e. DiskTransferTask or NearlineTransferTask)."
+            )
 
         # TODO log.info?
         print("{} run()...".format(type(self).__name__))
@@ -278,7 +292,9 @@ class TransferTask(Task):
         )
 
         # Add in constraint to only process fs_type nodes
-        requests = requests.join(st.StorageNode).where(st.StorageNode.fs_type == self.fs_type)
+        requests = requests.join(st.StorageNode).where(
+            st.StorageNode.fs_type == self.fs_type
+        )
 
         for req in requests:
 
@@ -409,7 +425,7 @@ class TransferTask(Task):
                 # it at the end.
                 if util.command_available("bbcp"):
                     ret, stdout, stderr = util.run_command(
-                        [   # See: https://www.slac.stanford.edu/~abh/bbcp/
+                        [  # See: https://www.slac.stanford.edu/~abh/bbcp/
                             "bbcp",
                             #
                             #
@@ -498,7 +514,9 @@ class TransferTask(Task):
                     # If the rsync error occured during `mkstemp` this is a
                     # problem on the destination, not the source
                     if ret and "mkstemp" in stderr:
-                        log.warn('rsync file creation failed on "{0}"'.format(self.node.name))
+                        log.warn(
+                            'rsync file creation failed on "{0}"'.format(self.node.name)
+                        )
                         check_source_on_err = False
                     elif "write failed on" in stderr:
                         log.warn(
@@ -555,13 +573,16 @@ class TransferTask(Task):
                         # problem on the destination, not the source
                         if ret and "mkstemp" in stderr:
                             log.warn(
-                                'rsync file creation failed on "{0}"'.format(self.node.name)
+                                'rsync file creation failed on "{0}"'.format(
+                                    self.node.name
+                                )
                             )
                             check_source_on_err = False
                         elif "write failed on" in stderr:
                             log.warn(
                                 'rsync failed to write to "{0}": {1}'.format(
-                                    self.node.name, stderr[stderr.rfind(":") + 2 :].strip()
+                                    self.node.name,
+                                    stderr[stderr.rfind(":") + 2 :].strip(),
                                 )
                             )
                             check_source_on_err = False
@@ -672,10 +693,16 @@ class TransferTask(Task):
                 try:
                     os.remove(to_file)
                 except Exception:
-                    log.error("Could not remove file %s on node %s." % (to_file, self.node.name))
+                    log.error(
+                        "Could not remove file %s on node %s."
+                        % (to_file, self.node.name)
+                    )
 
                 # Since the md5sum failed, the remote file may be corrupted.
-                log.error("Marking source file %s on node %s suspect ." % (req.file, req.node_from))
+                log.error(
+                    "Marking source file %s on node %s suspect ."
+                    % (req.file, req.node_from)
+                )
                 ar.ArchiveFileCopy.update(has_file="M").where(
                     ar.ArchiveFileCopy.file == req.file,
                     ar.ArchiveFileCopy.node == req.node_from,
@@ -683,14 +710,12 @@ class TransferTask(Task):
 
 
 class DiskTransferTask(TransferTask):
-
     def __init__(self, node):
         super().__init__(node)
         self.fs_type = "Disk"
 
 
 class NearlineTransferTask(TransferTask):
-
     def __init__(self, node):
         super().__init__(node)
         self.fs_type = "Nearline"

@@ -15,7 +15,15 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
-from .Task import IntegrityTask, DeletionTask, DiskTransferTask, NearlineTransferTask, NearlineReleaseTask, HPSSTransferTask, SourceTransferTask
+from .Task import (
+    IntegrityTask,
+    DeletionTask,
+    DiskTransferTask,
+    NearlineTransferTask,
+    NearlineReleaseTask,
+    HPSSTransferTask,
+    SourceTransferTask,
+)
 
 log = logging.getLogger(__name__)
 
