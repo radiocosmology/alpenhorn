@@ -20,9 +20,16 @@ from .Task import IntegrityTask, DeletionTask, DiskTransferTask, NearlineTransfe
 log = logging.getLogger(__name__)
 
 # Parameters.
-RSYNC_OPTS = (
-    "--quiet --times --protect-args --perms --group --owner " + "--copy-links --sparse"
-)
+RSYNC_OPTS = [
+    "--quiet",
+    "--times",
+    "--protect-args",
+    "--perms",
+    "--group",
+    "--owner",
+    "--copy-links",
+    "--sparse",
+]
 
 # Globals.
 done_transport_this_cycle = False
