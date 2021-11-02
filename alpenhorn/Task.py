@@ -19,15 +19,27 @@ from . import update
 
 # TODO this is probably going to result in a circular import; i also want to adjust how this works
 # can Task.py and update.py go into the same place?
-from .update import done_transport_this_cycle, RSYNC_OPTS
 from . import storage as st
 from . import util
 
 log = logging.getLogger(__name__)
 
-# Parameters.
+# Parameters and Globals.
+RSYNC_OPTS = [
+    "--quiet",
+    "--times",
+    "--protect-args",
+    "--perms",
+    "--group",
+    "--owner",
+    "--copy-links",
+    "--sparse",
+]
+
 max_time_per_node_operation = 300  # Don't let node operations hog time.
 max_time_per_task_queue = 30  # seconds
+
+done_transport_this_cycle = False
 
 
 class TaskQueue:

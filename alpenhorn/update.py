@@ -16,6 +16,7 @@ from . import config, db
 from . import storage as st
 from . import util
 from .Task import (
+    done_transport_this_cycle,
     IntegrityTask,
     DeletionTask,
     DiskTransferTask,
@@ -26,21 +27,6 @@ from .Task import (
 )
 
 log = logging.getLogger(__name__)
-
-# Parameters.
-RSYNC_OPTS = [
-    "--quiet",
-    "--times",
-    "--protect-args",
-    "--perms",
-    "--group",
-    "--owner",
-    "--copy-links",
-    "--sparse",
-]
-
-# Globals.
-done_transport_this_cycle = False
 
 
 def update_loop(host, task_queue):
