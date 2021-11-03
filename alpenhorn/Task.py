@@ -249,7 +249,7 @@ class TransferTask(Task):
 
     def run(self):
         if self.fs_type is None:
-            self.log.error(
+            log.error(
                 "Use appropriate transfer task for file system (i.e. DiskTransferTask or NearlineTransferTask)."
             )
 
