@@ -56,7 +56,7 @@ jobs:
       run: chmod +x tests/lfs; cp tests/lfs /usr/local/bin
 
     - name: Run serial tests
-      run: pytest tests/
+      run: pytest -sv tests/
 
   # run-docker-tests:
 
