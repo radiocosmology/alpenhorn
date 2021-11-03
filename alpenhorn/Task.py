@@ -242,10 +242,10 @@ class DeletionTask(Task):
 
 
 class TransferTask(Task):
+    fs_type = None
     def __init__(self, node):
         # how do the double inits work?
         super().__init__(node)
-        self.fs_type = None
 
     def run(self):
         if self.fs_type is None:
