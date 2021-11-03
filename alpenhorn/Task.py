@@ -722,15 +722,17 @@ class TransferTask(Task):
 
 
 class DiskTransferTask(TransferTask):
+    fs_type = "Disk"
+
     def __init__(self, node):
         super().__init__(node)
-        self.fs_type = "Disk"
 
 
 class NearlineTransferTask(TransferTask):
+    fs_type = "Nearline"
+
     def __init__(self, node):
         super().__init__(node)
-        self.fs_type = "Nearline"
 
 
 class NearlineReleaseTask(Task):
