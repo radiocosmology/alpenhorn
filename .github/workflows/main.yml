@@ -53,7 +53,7 @@ jobs:
         python setup.py develop
 
     - name: Run serial tests
-      run: pytest tests/
+      run: pytest -sv tests/
 
   # run-docker-tests:
 
