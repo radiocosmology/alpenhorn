@@ -5,7 +5,7 @@ import sys
 
 import click
 
-from . import auto_import, config, db, extensions, logger, storage, update, util, Task
+from . import auto_import, config, db, extensions, logger, storage, update, util, task
 
 log = logging.getLogger(__name__)
 

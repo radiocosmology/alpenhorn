@@ -18,7 +18,7 @@ from . import config, db
 from . import update
 
 # TODO this is probably going to result in a circular import; i also want to adjust how this works
-# can Task.py and update.py go into the same place?
+# can task.py and update.py go into the same place?
 from . import storage as st
 from . import util
 

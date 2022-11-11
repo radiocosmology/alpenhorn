@@ -15,7 +15,7 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
-from .Task import (
+from .task import (
     done_transport_this_cycle,
     IntegrityTask,
     DeletionTask,
