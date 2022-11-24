@@ -1,83 +1,180 @@
-import logging
+"""Database connection.
 
+This module implements a minimally-functional database connector for alpenhorn
+(the "fallback" database).
+
+More capable database connectors may be provided by a database extension module.
+The dict returned by the register_extension() call to a database extension module
+must contain a "database" key whose value is a second dict with keys providing the
+database extensions capabilities.
+
+The following keys are allowed in the "database" dict, all of which are optional:
+    - "reentrant": boolean.  If True, the database extension is re-entrant
+                (threadsafe), and simultaneous independant connections to the
+                database will be made to it.  False is assumed if not given.
+    - "connect": a callable.  Invoked to create a database connection.  Will be
+                passed a dict containing the contents of the "database" section
+                of the alpenhorn config as the keyword parameter "config".
+                If not given, the _connect() function in this module will be
+                called instead.
+    - "proxy": a peewee database proxy.  Should be initialised by the "connect"
+                call.  If not given, this module will use a pw.Proxy() instance.
+    - "base_model": a peewee.Model subclass used for all table models in alpenhorn.
+                If not given, a simple base model is created using the above proxy.
+    - "enum": a peewee.Field subclass to represent Enum fields in the database.
+                If not given, a suitable class is provided.
+
+Before access the attributes of this module, init() must be called to set up
+the database.  After that function is called, the following attributes are available:
+
+- base_model: a peewee.Model to use as the base class for all tabel models in the ORM.
+- proxy: a peewee.Proxy object for database access
+- threadsafe: a boolean indicating whether the database can be concurrently accessed
+            from multiple threads.
+
+Also after calling init(), a connection to the database can be initialised by
+calling the connect() function.
+"""
+import sys
 import peewee as pw
 import playhouse.db_url as db_url
 
+from . import config, extensions
+
 # All peewee-generated logs are logged to this namespace.
+import logging
+
 logger = logging.getLogger(__name__)
 
+# We store the chosen database extension here
+_db_ext = None
 
-# Global variables and constants.
-# ================================
+# Module attributes
+# =================
+# These are all initialised by init()
 
-# _property = property  # Do this because we want a class named "property".
+base_model = None
+proxy = None
+EnumField = None
+threadsafe = None
 
-database_proxy = pw.Proxy()
 
+def _capability(key):
+    """Returns the value of the capability specified key for the
+    loaded database extension, or the default value, if appropriate.
 
-def config_connect():
-    """Initiate the database connection from alpenhorns config.
-
-    If an `'url'` entry is present in the `'database'` section of the
-    configuration, use this, otherwise try and start the connection using an
-    extension.
+    Raises KeyError on unknown keys and RuntimeError if called before
+    database initialisation
     """
+    # capability defaults (these implement the fallback database
+    # module).
+    default_cap = {
+        "base_model": None,
+        "enum": None,
+        "connect": None,
+        "proxy": None,
+        "reentrant": False,
+    }
 
-    from . import config, extensions
+    try:
+        return _db_ext[key]
+    except TypeError:
+        raise RuntimeError("database not initialised")
+    except KeyError:
+        try:
+            return default_cap[key]
+        except KeyError:
+            raise KeyError(f"unknown database capability: {key}")
 
-    # Connect to the database
-    if "database" in config.config and "url" in config.config["database"]:
-        _connect(url=config.config["database"]["url"])
+
+def init():
+    """Initiate the database connection framework.
+
+    This must be called once, after extensions are loaded, but
+    before attempting to use connect() to create a database connection.
+    """
+    # attempt to load a database extension
+    global _db_ext
+    _db_ext = extensions.database_extension()
+    if _db_ext is None:
+        # The fallback gets implemented via the default_cap
+        # dict defined in _capability()
+        log.info("Using internal fallback database module.")
+        _db_ext = dict()
+
+    # Tell everyone whether we're threadsafe
+    global threadsafe
+    threadsafe = _capability("reentrant")
+
+    # Set up proxy
+    global proxy
+    proxy = _capability("proxy")
+    if proxy is None:
+        proxy = pw.Proxy()
+
+    # Set up fields
+    global EnumField
+    EnumField = _capability("enum")
+    if EnumField is None:
+        EnumField = _EnumField
+
+    # Set up models
+    global base_model
+    base_model = _capability("base_model")
+    if base_model is None:
+        base_model = _base_model
+
+
+def connect():
+    """Connect to the database.
+
+    Should be called per-thread before any database operations are attempted.
+    """
+    # If fetch the database config, if present
+    if "database" in config.config:
+        database_config = config.config["database"]
     else:
-        db_ext = extensions.database_extension()
+        database_config = dict()
 
-        if db_ext is not None:
-            _connect(db=db_ext)
+    # Call the connect function from the database extension (or fallback)
+    func = _capability("connect")
+    if func is None:
+        func = _connect
+    func(config=database_config)
+
+    # If we're using the local _EnumField, initialise it:
+    global EnumField
+    if EnumField is _EnumField:
+        if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
+            db.field_types["enum"] = "enum"
+            _EnumField.native = True
         else:
-            raise RuntimeError("No way to connect to the database")
+            _EnumField.native = False
 
 
-def _connect(url=None, db=None):
-    """Set up the database connection from an explicit peewee url, or
-    `peewee.Database`.
+def _connect(config=dict()):
+    """Set up the fallback database connection from an explicit peewee url
 
-    If neither argument is specified create and in-memory Sqlite database. If
-    both are given, initialisation by `url` is chosen. This routine also adds an
-    `EnumField` type to peewee. For databases that support it, this is a native
-    implemenation in the database, for those that don't (Sqlite), this is simply
-    a `VARCHAR` type with the validation done in Python.
+    If no URL is provided in the config, an in-memory Sqlite database is created.
 
-    Generally the database connection should be initiated using the
-    `config_connect` routine.
+    This function should never be called directly use the db.connect() function
+    instead.
 
     Parameters
     ----------
-    url : str, optional
-        Database url using the scheme from `playhouse.db_url`.
-    db : `peewee.Database`, optional
-        Peewee database instance to connect alpenhorn to.
+    config : dict, optional
+        If present, the value of the key "url" is passed as the URL to
+        `playhouse.db_url`.
     """
 
-    global EnumField
-
-    if url is None and db is None:
-        url = "sqlite:///:memory:"
-
-    if url is not None:
-        db = db_url.connect(url)
+    db = db_url.connect(config.get("url", "sqlite:///:memory:"))
 
     # dynamically make the database instance also inherit from
     # `RetryOperationalError`, so that it retries operations in case of
     # transient database failures
     db.__class__ = type("RetryableDatabase", (RetryOperationalError, type(db)), {})
 
-    if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
-        db.field_types["enum"] = "enum"
-        EnumField.native = True
-    else:
-        EnumField.native = False
-
-    database_proxy.initialize(db)
+    proxy.initialize(db)
 
 
 # Helper classes for the peewee ORM
@@ -104,12 +201,15 @@ class RetryOperationalError(object):
         return cursor
 
 
-class EnumField(pw.Field):
+class _EnumField(pw.Field):
     """Implements an ENUM field for peewee.
 
     Only MySQL and PostgreSQL support `ENUM` types natively in the database. For
     Sqlite (and others), the `ENUM` is implemented as an appropriately sized
     `VARCHAR` and the validation is done at the Python level.
+
+    Used by default if no database extension module povides another EnumField
+    class.
 
     .. warning::
         For the *native* ``ENUM`` to work you *must* register it with peewee by
@@ -148,11 +248,11 @@ class EnumField(pw.Field):
 
         self.maxlen = max([len(val) for val in self.enum_list])
 
-        super(EnumField, self).__init__(*args, **kwargs)
+        super(_EnumField, self).__init__(*args, **kwargs)
 
     def clone_base(self, **kwargs):
         # Add the extra parameter so the field is cloned properly
-        return super(EnumField, self).clone_base(enum_list=self.enum_list, **kwargs)
+        return super(_EnumField, self).clone_base(enum_list=self.enum_list, **kwargs)
 
     def get_modifiers(self):
         # This routine seems to be for setting the arguments for creating the
@@ -171,10 +271,10 @@ class EnumField(pw.Field):
             raise TypeError("Value %s not in ENUM(%s)" % str(self.value))
 
 
-class base_model(pw.Model):
-    """Baseclass for all models."""
+class _base_model(pw.Model):
+    """Fallback base class for all peewee models."""
 
     class Meta(object):
-        database = database_proxy
+        database = proxy
 
         # TODO: consider whether to use only_save_dirty = True here
