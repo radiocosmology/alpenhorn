@@ -10,7 +10,7 @@ root_logger = logging.getLogger()
 log_stream = logging.StreamHandler()
 
 log_fmt = logging.Formatter(
-    "%(asctime)s %(levelname)s >> %(message)s", "%b %d %H:%M:%S"
+    "%(asctime)s %(levelname)s >> [%(threadName)s] %(message)s", "%b %d %H:%M:%S"
 )
 
 log_stream.setFormatter(log_fmt)
