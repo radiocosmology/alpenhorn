@@ -285,7 +285,7 @@ def status(all):
         [
             node[0],
             int(node[1]),
-            int(node[2]) / 2 ** 40.0,
+            int(node[2]) / 2**40.0,
             100.0 * int(node[1]) / int(tot[0]),
             100.0 * int(node[2]) / int(tot[1]),
             "%s:%s" % (node[3], node[4]),
@@ -545,7 +545,7 @@ def clean(node_name, days, force, now, target, acq):
                     .aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
                 )
 
-                size_gb = int(size_bytes) / 2 ** 30.0
+                size_gb = int(size_bytes) / 2**30.0
 
                 print(
                     "Cleaning up %i %s files (%.1f GB) from %s "
