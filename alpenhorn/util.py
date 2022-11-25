@@ -10,36 +10,49 @@ import socket
 log = logging.getLogger(__name__)
 
 
-def run_command(cmd, **kwargs):
+def run_command(cmd, timeout=None, **kwargs):
     """Run a command.
 
     Parameters
     ----------
     cmd : array
         A command as a list of strings including all arguments.
-    kwargs : dict
-        Passed directly onto `subprocess.Popen.`
+    timeout : number or None
+        Number of seconds to wait before forceably killing the process,
+        or None to wait forever.
+
+    Other keyword args are passed directly on to subprocess.Popen
 
     Returns
     -------
-    retval : int
-        Return code.
-    stdout_val : string
-        Value of stdout.
-    stderr_val : string
-        Value of stderr.
+    Returns a three-element tuple containing:
+        retval : int or None
+            Return code, or None if the process was killed after timing out.
+        stdout : string
+            Value of stdout.
+        stderr : string
+            Value of stderr.
     """
 
     import subprocess
 
-    log.debug('Running command "%s"', " ".join(cmd))
+    log.debug(f"Running command [timeout={timeout}]: " + " ".join(cmd))
 
     # run using Popen
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
     )
-    stdout_val, stderr_val = proc.communicate()
-    retval = proc.returncode
+    if timeout is None:
+        stdout_val, stderr_val = proc.communicate()
+        retval = proc.returncode
+    else:
+        try:
+            stdout_val, stderr_val = proc.communicate(timeout=timeout)
+            retval = proc.returncode
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout_val, stderr_val = proc.communicate()
+            retval = None
 
     return (
         retval,
@@ -49,15 +62,8 @@ def run_command(cmd, **kwargs):
 
 
 def is_md5_hash(h):
-    """Is this the correct format to be an md5 hash."""
+    """Is this the correct format to be an md5 hash?"""
     return re.match("[a-f0-9]{32}", h) is not None
-
-
-def command_available(cmd):
-    """Is this command available on the system."""
-    from distutils import spawn
-
-    return spawn.find_executable(cmd) is not None
 
 
 def md5sum_file(filename, hr=True, cmd_line=False):
@@ -76,8 +82,7 @@ def md5sum_file(filename, hr=True, cmd_line=False):
 
     See Also
     --------
-    http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-
-    python
+    http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-python
     """
     if cmd_line:
         ret, stdout, stderr = run_command(["md5sum", filename])
@@ -101,33 +106,3 @@ def md5sum_file(filename, hr=True, cmd_line=False):
 def get_short_hostname():
     """Returns the short hostname (up to the first '.')"""
     return socket.gethostname().split(".")[0]
-
-
-def alpenhorn_node_check(node):
-    """Check for valid ALPENHORN_NODE file contents
-
-    Return
-    ------
-
-    True if ALPENHORN_NODE is present in `node.root` directory and contains the
-    contains node name as its first line, False otherwise.
-
-    .. Note:: The caller needs to ensure the StorageNode has the appropriate
-    `active` status.
-    """
-
-    file_path = os.path.join(node.root, "ALPENHORN_NODE")
-    try:
-        with open(file_path, "r") as f:
-            first_line = f.readline()
-            # Check if the actual node name is in the textfile
-            if node.name == first_line.rstrip():
-                # Great! Everything is as expected.
-                return True
-            log.debug(
-                f"Node name in file {file_path} does not match expected {node.name}."
-            )
-    except IOError:
-        log.debug(f"Node file {file_path} could not be read.")
-
-    return False

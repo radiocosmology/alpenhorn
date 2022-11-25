@@ -15,188 +15,294 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
-from .task import (
-    done_transport_this_cycle,
-    IntegrityTask,
-    DeletionTask,
-    DiskTransferTask,
-    NearlineTransferTask,
-    NearlineReleaseTask,
-    HPSSTransferTask,
-    SourceTransferTask,
-)
+from .task import Task
+from .workers import global_abort
 
 log = logging.getLogger(__name__)
 
 
-def update_loop(host, task_queue):
-    """Loop over nodes performing any updates needed, adding tasks to Task.TaskQueue *task_queue*"""
-    global done_transport_this_cycle
+def update_loop(host, queue, pool):
+    """Loop over nodes performing any updates needed.
 
-    while True:
+    Asynchronous I/O tasks may be executed by putting them on the queue.  The
+    will be performed by workers in the pool."""
+    while not global_abort.is_set():
         loop_start = time.time()
-        done_transport_this_cycle = False
 
-        # Iterate over nodes and perform each update (perform a new query
-        # each time in case we get a new node, e.g. transport disk)
+        # Iterate over nodes and groups and perform I/O updates.
+        #
+        # nodes and groups are re-queried every loop iteration so we can
+        # detect changes in available storage media
         for node in st.StorageNode.select().where(st.StorageNode.host == host):
-            update_node(node, task_queue)
+            update_node(node, queue)
 
-        # Check the time spent so far, and wait if needed
+        for group in (
+            st.StorageGroup.join(st.StorageGroup)
+            .select()
+            .where(st.StorageNode.host == host)
+        ):
+            update_group(group, queue)
+
+        # If we have no workers, handle some queued I/O tasks
+        if len(pool) == 0:
+            serial_io()
+
+        # Check the time spent so far
         loop_time = time.time() - loop_start
-        log.info("Main loop execution was %d sec.", loop_time)
+        log.info(f"Main loop execution was {loop_time} sec.")
+
+        # Pool and queue info
+        log.info(
+            f"Tasks: {queue.qsize()} queued, {queue.inprogress_size()} in-progress on {len(pool)} workers"
+        )
+
+        # Respawn workers that have exited (due to DB error)
+
+        # Avoid looping too fast.
         remaining = config.config["service"]["update_interval"] - loop_time
-        if remaining > 1:
-            time.sleep(remaining)
+        if remaining > 0:
+            global_abort.wait(remaining)  # Stops waiting if a global abort is triggered
 
 
-def update_node(node, task_queue):
-    """Update the status of the node, and process eligible transfers onto Task.TaskQueue."""
+def serial_io(queue):
+    """Execute I/O tasks from the queue
 
-    # TODO: bring back HPSS support
-    # Check if this is an HPSS node, and if so call the special handler
-    # if is_hpss_node(node):
-    #     update_node_hpss_inbound(node)
-    #     return
+    This function is only called when alpenhorn has no worker threads.  It runs
+    I/O tasks in the main loop for a limited period of time.
+    """
+    start_time = time.time()
+
+    # Handle tasks for, say, 15 minutes at most
+    while time.time() - start_time < 900:
+        # Get a task
+        item = queue.get(timeout=1)
+
+        # Out of things to do
+        if item is None:
+            break
+
+        # Run the task
+        key, task = item
+
+        log.debug(f"Beginning task {task}")
+        task()
+        queue.task_done(key)
+        log.debug(f"Finished task {task}")
+
+
+def update_group(group, queue):
+    """Perform I/O updates on a StorageGroup"""
+
+    # Find all active nodes in this group on this host
+    nodes_in_group = list(
+        st.StorageNode.select().where(
+            st.StorageNode.active == True,
+            st.StorageNode.host == host,
+            st.StorageNode.group == group,
+        )
+    )
+
+    # Skip groups for which there are no active nodes
+    if len(nodes_in_group) < 1:
+        log.debug("No active nodes in group f{group.name} during update.")
+        return
+
+    # Skip groups which have ongoing asynchronous I/O tasks
+    for node in nodes_in_group:
+        if queue.fifo_size(node.name) > 0:
+            log.info(
+                "Skipping update for StorageGroup f{group.name} due to on-going I/O for constituent node f{node.name}"
+            )
+            return
+
+    log.info(f'Updating group "{group.name}".')
+
+    # Check whether the set of available nodes are sufficient to continue the update.
+    if not group.io.check_available_nodes(nodes_in_group):
+        return
+
+    group.io.set_queue(queue)
+
+    # Process pulls into this group
+    for req in ar.ArchiveFileCopyRequest.select().where(
+        ar.ArchiveFileCopyRequest.completed == 0,
+        ar.ArchiveFileCopyRequest.cancelled == 0,
+        ar.ArchiveFileCopyRequest.group_to == self.group,
+    ):
+        # If the destination file is already present in this group, cancel the request.
+        if self.group.copy_present(req.file):
+            log.info(
+                f"Cancelling pull request for {req.file.acq.name}/{req.file.name}: "
+                f"already present in group {group.name}."
+            )
+            ar.ArchiveFileCopyRequest.update(cancelled=True).where(
+                ar.ArchiveFileCopyRequest.id == req.id
+            ).execute()
+            continue
+
+        # Skip request unless the source node is active
+        if not req.node_from.active:
+            log.error(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                f"source node {req.node_from.name} is not active."
+            )
+            continue
+
+        # If the source file doesn't exist, skip the request.
+        #
+        # XXX Cancel instead?
+        if not req.node_from.copy_present(req.file):
+            log.error(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                f"not available on node {req.node_from.name}. [file_id={req.file.id}]"
+            )
+            continue
+
+        # If the source file is not ready, skip the request.
+        if not req.node_from.remote.pull_ready(req.file):
+            log.info(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                f"not ready on node {req.node_from.name}."
+            )
+            continue
+
+        # Early checks passed: dispatch this request to the Group I/O layer
+        group.io.pull(req)
+
+
+def update_node(node, queue):
+    """Perform I/O updates on a StorageNode"""
 
     # Make sure this node is usable.
     if not node.active:
-        log.debug('Skipping inactive node "%s".', node.name)
+        log.debug(f'Skipping inactive node "{node.name}".')
         return
-    if node.suspect:
-        log.debug('Skipping suspected node "%s".', node.name)
 
-    log.info('Updating node "%s".', node.name)
+    log.info(f'Updating node "{node.name}".')
+
+    node.io.set_queue(queue)
 
     # Check if the node is actually active
-    check_node = update_node_active(node)
-
-    if not check_node:
+    if not update_node_active(node):
         return
 
-    # Check and update the amount of free space then reload the instance for use
-    # in later routines
+    # Check and update the amount of free space
     update_node_free_space(node)
 
     # Check the integrity of any questionable files (has_file=M)
-    update_node_integrity(node, task_queue)
+    for copy in ar.ArchiveFileCopy.select().where(
+        ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "M"
+    ):
+        log.info(
+            f'Checking copy "{copy.file.acq.name}/{copy.file.name}" on node {node.name}.'
+        )
 
-    # Delete any upwanted files to cleanup space
-    update_node_delete(node, task_queue)
+        # Dispatch integrity check to I/O layer
+        node.io.check(copy)
+
+    # Delete any unwanted files to cleanup space
+    update_node_delete(node)
 
     # Process any regular transfers requests from this node
-    update_node_src_requests(node, task_queue)
-
-    # Process any regular transfers requests onto this node
-    update_node_dest_requests(node, task_queue)
-
-    # TODO: bring back HPSS support
-    # Process any tranfers out of HPSS onto this node
-    # update_node_hpss_outbound(node)
+    update_node_src_requests(node, queue)
 
 
 def update_node_active(node):
-    """Check if a node is actually active in the filesystem"""
+    """Check if the node is actually active in the system.  Returns True if it is."""
 
     if node.active:
-        if util.alpenhorn_node_check(node):
+        if node.io.check_active():
             return True
         else:
-            log.error(
-                'Node "%s" does not have the expected ALPENHORN_NODE file', node.name
+            # Mark the node as inactive in the database
+            node.active = False
+            node.save(only=node.dirty_fields)  # save only fields that have been updated
+            log.info(
+                f'Correcting the database: node "f{node.name}" is now set to inactive.'
             )
     else:
-        log.error('Node "%s" is not active', node.name)
-
-    # Mark the node as inactive in the database
-    node.active = False
-    node.save(only=node.dirty_fields)  # save only fields that have been updated
-    log.info('Correcting the database: node "%s" is now set to inactive.', node.name)
+        log.warning(f'Attempted to update inactive node "f{node.name}"')
 
     return False
 
 
-def update_node_free_space(node):
-    """Calculate the free space on the node and update the database with it."""
+def update_node_free_space(node, fast=False):
+    """Calculate the free space on the node and update the database with it.
 
-    # Special case for cedar
-    if node.host == "cedar5" and (
-        node.name == "cedar_online" or node.name == "cedar_nearline"
-    ):
-        import re
+    If fast is True, then this is a fast call, and I/O classes for which checking
+    available space is expensive may skip it.
 
-        # Strip non-numeric things
-        regexp = re.compile(b"[^\d ]+")
+    """
 
-        ret, stdout, stderr = run_command(
-            [
-                "/usr/bin/lfs",
-                "quota",
-                "-q",
-                "-g",
-                "rpp-chime",
-                "/nearline" if node.name == "cedar_nearline" else "/project",
-            ]
-        )
-        lfs_quota = regexp.sub("", stdout).split()
+    new_avail = node.io.bytes_avail(fast)
 
-        # The quota for nearline is fixed at 300 quota-TB
-        if node.name == "cedar_nearline":
-            quota = 300000000000  # 300 billion 1024-byte blocks
-        else:
-            quota = int(lfs_quota[1])
+    # If this was a fast call and the result was None, ignore it.  (On a slow call,
+    # None is honoured and written to the database.)
+    if fast and new_avail is None:
+        return
 
-        # lfs quota reports values in kByte blocks
-        node.avail_gb = (quota - int(lfs_quota[0])) / 2 ** 20.0
+    # The value in the database is in GiB (2**30 bytes)
+    if new_avail is None:
+        node.avail_gb = None
     else:
-        # Check with the OS how much free space there is
-        x = os.statvfs(node.root)
-        node.avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
+        node.avail_gb = new_avail / 2**30
 
-    # Update the DB with the free space. Perform with an update query (rather
-    # than save) to ensure we don't clobber changes made manually to the
+    # Update the DB with the free space but don't clobber changes made manually to the
     # database
-    st.StorageNode.update(
-        avail_gb=node.avail_gb, avail_gb_last_checked=dt.datetime.now()
-    ).where(st.StorageNode.id == node.id).execute()
+    node.save(only=[st.StorageNode.avail_gb])
 
-    log.info('Node "%s" has %.2f GB available.' % (node.name, node.avail_gb))
-
-
-def update_node_integrity(node, task_queue):
-    """Check the integrity of file copies on the node."""
-
-    task_queue.add_task(IntegrityTask(node))
+    if new_avail is None:
+        log.info(f'Unable to determine available space for "{node.name}".')
+    else:
+        log.info(f'Node "{node.name}" has {node.avail_gb:.2f} GiB available.')
 
 
-def update_node_delete(node, task_queue):
+def update_node_delete(node):
     """Process this node for files to delete."""
 
-    task_queue.add_task(DeletionTask(node))
+    # Find all file copies needing deletion on this node
+    #
+    # If we have less than the minimum available space, we should consider all files
+    # not explicitly wanted (i.e. wants_file != 'Y') as candidates for deletion, provided
+    # the copy is not on an archive node. If we have more than the minimum space, or
+    # we are on archive node then only those explicitly marked (wants_file == 'N')
+    # will be removed.
+    if self.node.avail_gb < self.node.min_avail_gb and not self.node.archive:
+        log.info(
+            f"Hit minimum available space on {node.name} -- considering all unwanted "
+            "files for deletion!"
+        )
+        dfclause = ar.ArchiveFileCopy.wants_file != "Y"
+    else:
+        dfclause = ar.ArchiveFileCopy.wants_file == "N"
+
+    del_copies = list()
+
+    # Search db for candidates on this node to delete.
+    for copy in ar.ArchiveFileCopy.select().where(
+        dfclause,
+        ar.ArchiveFileCopy.node == self.node,
+        ar.ArchiveFileCopy.has_file == "Y",
+    ):
+        pass
+
+    # Nothing to delete
+    if len(del_copies) < 1:
+        return
+
+    # Pass the list of files to the I/O layer.  It will return a list of files
+    # which were actually deleted
 
 
-def update_node_src_requests(node, task_queue):
+def update_node_src_requests(node, queue):
     """Process file copy requests from this node."""
 
     # Check which type of node this is and create an appropriate task
     if node.fs_type == "HPSS":
         # TODO what gets called here?
-        task_queue.add_task(SourceTransferTask(node))
+        queue.add_task(SourceTransferTask(node))
     elif node.fs_type == "Nearline":
-        task_queue.add_task(SourceTransferTask(node))
+        queue.add_task(SourceTransferTask(node))
     else:
         # TODO Raise Exception
         pass
-
-
-def update_node_dest_requests(node, task_queue):
-    """Process file copy requests onto this node."""
-
-    # Check which type of node this is and create an appropriate task
-    if node.fs_type == "HPSS":
-        task_queue.add_task(HPSSTransferTask(node))
-    elif node.fs_type == "Nearline":
-        task_queue.add_task(NearlineReleaseTask(node))
-        task_queue.add_task(NearlineTransferTask(node))
-    elif node.fs_type == "Disk":
-        task_queue.add_task(DiskTransferTask(node))
