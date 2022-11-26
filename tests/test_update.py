@@ -92,7 +92,7 @@ def test_update_node_free_space(mock_statvfs, fixtures):
     assert node.avail_gb is None
 
     mock_statvfs.return_value.f_bavail = 42
-    mock_statvfs.return_value.f_bsize = 2 ** 30
+    mock_statvfs.return_value.f_bsize = 2**30
     update.update_node_free_space(node)
     node = st.StorageNode.get(name="x")
     assert node.avail_gb == 42

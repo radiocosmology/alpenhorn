@@ -109,19 +109,19 @@ def fixtures(tmpdir):
 def test_schema(fixtures):
     """Basic sanity test of fixtures used"""
     assert set(db.database_proxy.get_tables()) == {
-        u"storagegroup",
-        u"storagenode",
-        u"acqtype",
-        u"archiveacq",
-        u"filetype",
-        u"archivefile",
-        u"archivefilecopyrequest",
-        u"archivefilecopy",
-        u"zabinfo",
-        u"quuxinfo",
-        u"zxcinfo",
-        u"spqrinfo",
-        u"loginfo",
+        "storagegroup",
+        "storagenode",
+        "acqtype",
+        "archiveacq",
+        "filetype",
+        "archivefile",
+        "archivefilecopyrequest",
+        "archivefilecopy",
+        "zabinfo",
+        "quuxinfo",
+        "zxcinfo",
+        "spqrinfo",
+        "loginfo",
     }
     assert fixtures["root"].basename == "ROOT"
     assert st.StorageNode.get(st.StorageNode.name == "x").root == fixtures["root"]
