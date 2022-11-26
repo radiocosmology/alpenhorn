@@ -123,6 +123,10 @@ class StorageNode(base_model):
         - 'A': archival storage
         - 'T': transiting storage
         - 'F': all other storage (i.e acquisition machines)
+    max_total_gb : float
+        The maximum amout of storage we should use.
+    min_avail_gb : float
+        What is the minimum amount of free space we should leave on this node?
     avail_gb : float
         How much free space is there on this node?
     avail_gb_last_checked : datetime
