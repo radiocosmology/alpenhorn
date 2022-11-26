@@ -10,136 +10,157 @@ from watchdog.events import FileSystemEventHandler
 from . import acquisition as ac
 from . import archive as ar
 from . import config, db, util
+from task import Task
 
 import logging
 
 log = logging.getLogger(__name__)
 
 
-def import_file(node, file_path, filename=None):
-    """Import a file into the DB.
+def import_file(node, queue, path):
+    """Queue a task to import path into node.
+
+    Parameters
+    ----------
+    node : StorageNode
+    queue : FairMultiFIFOQueue
+    path : pathlib.PurePath
+    """
+
+    # Occasionally the watchdog sends events on the node root directory itself. Skip these.
+    if path == pathlib.PurePath(node.root):
+        log.debug("Skipping import request of node root")
+        return
+
+    # Strip node root, if path is absolute
+    if path.is_absolute():
+        try:
+            path = path.relative_to(node.root)
+        except ValueError:
+            # Not rooted under node.root
+            log.debug(
+                "skipping import of {file_path}: not rooted under node {node.root}"
+            )
+            return
+
+    # New import task.  It's better to do this in a worker
+    # because the worker pool will take care of DB connection loss.
+    Task(
+        func=_import_file,
+        queue=queue,
+        key=node.name,
+        args=(node, path),
+        name=f"Import {path} into {node.name}",
+        # If the job fails due to DB connection loss, re-start the
+        # task because unlike tasks made in the main loop, we're
+        # never going to revisit this.
+        requeue=True,
+    )
+
+
+def _import_file(node, path):
+    """Import a file into the DB.  This is run by a worker.
 
     Parameters
     ----------
     node : storage.StorageNode
         The node we are processing.
-    file_path : string
-        If filename is None, the path of the file on the node to import.
-        If is is an absolute path it must be within the node root,
-        otherwise is is assumed to be relative to the node root.
-        If filename is not None, this is the acqname
-    filename : if not None, the name of the file.
+    path : pathlib.PurePath
+        The path should be relative to node.root
     """
 
-    log.debug(f'Considering "{file_path}" for import to node {node.name}.')
+    log.debug(f'Considering "{path}" for import to node {node.name}.')
 
-    # Occasionally the watchdog sends events on the node root directory itself. Skip these.
-    if file_path == node.root:
-        log.debug("Skipping import request on node root")
+    # Check if we can handle this acquisition, and skip if we can't
+    acq_type_and_name = ac.AcqType.detect(path, node)
+    if acq_type_and_name is None:
+        log.info(f'Skipping non-acquisition path "{path}".')
         return
 
-    # Sort out acqname and filename.
-    #
-    # This function is either called by catchup(), which provides acqname (in
-    # file_path) and filename directly, or else by the observer, which is going to
-    # (at least in the DefaultIO case) return an absolute path to a file
-    if filename is None:
-        path = PurePath(file_path)
-
-        # Try to strip node.root if this is an absolute path
-        if path.is_absolute():
-            try:
-                path = path.relative_to(node.root)
-            except ValueError:
-                # Not rooted under node.root
-                log.debug(
-                    "skipping import of {file_path}: not rooted under node {node.root}"
-                )
-                return
-        acqname = str(path.parent)
-        filename = str(path.name)
-
-        # i.e. a single element path was specified:
-        if acqname == ".":
-            log.debug(
-                "skipping import of {file_path}: unable to separate acq and file names"
-            )
-            return
-    else:
-        acqname = file_path
+    acqtype, acqname = acq_type_and_name
+    filename = path.relative_to(acqname)
 
     # If a copy already exists, we're done
     if node.named_copy_present(acqname, filename):
-        log.debug(f"Skipping import {file_path}: already present")
+        log.debug(f"Skipping import of {path}: already present")
         return
 
-    # Hand off to the I/O layer
-    node.io.import_file(acqname, filename)
+    # What kind of file do we have?
+    filetype = ac.FileType.detect(filename, acqtype, acqname, node)
 
+    if filetype is None:
+        log.info('Skipping unrecognised file "{path}".')
+        return
 
-# Routines for registering files, acquisitions, copies and info in the DB.
-# ========================================================================
+    # Double check that this file doesn't already exist on this node.
+    # Could happen if the task was requeued at the end.
+    if node.named_copy_present(acqname, filename):
+        log.debug(f"Skipping import of {path}: already present")
+        return
 
+    # Skip a file if there is still a lock on it.
+    if node.io.lockfile_present(acqname, filename):
+        log.debug('Skipping "{path}": locked.', file_path)
+        return
 
-def add_acq(acq_type, name, node, comment=""):
-    """Add an aquisition to the database.
+    # Begin a transaction
+    with db.proxy.atomic():
+        # Add the acqusition, if necessary
+        try:
+            acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
+            log.debug(f'Acquisition "{acqname}" already in DB. Skipping.')
+        except pw.DoesNotExist:
+            # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition.
 
-    This looks for an appropriate acquisition type, and if successful creates
-    the ArchiveAcq and AcqInfo entries for the acquisition.
+            # Insert the archive record
+            acq = ac.ArchiveAcq.create(name=acqname, type=acqtype)
 
-    Parameters
-    ----------
-    acq_type : AcqType
-        Type of the acquisition
-    name : string
-        Name of the acquisition directory.
-    node : StorageNode
-        Node that the acquisition is on.
-    comment : string, optional
-        An optional comment.
+            # Generate the metadata table
+            acqtype.acq_info.new(acq, node)
+            log.info(f'Acquisition "{acqname}" added to DB.')
 
-    Returns
-    -------
-    acq : ArchiveAcq
-        The ArchiveAcq entry.
-    acqinfo : AcqInfoBase
-        The AcqInfo entry.
-    """
+        # Add the file, if necessary.
+        path = path.PurePath(acqname, filename)
+        try:
+            file_ = ac.ArchiveFile.get(
+                ac.ArchiveFile.name == file_name, ac.ArchiveFile.acq == acq
+            )
+            log.debug(f'File "{path}" already in DB. Skipping.')
+        except pw.DoesNotExist:
+            log.debug('Computing md5sum of "{path}".')
+            md5sum = node.io.md5sum_file(path)
+            size_b = node.io.filesize(path)
 
-    # Is the acquisition already in the database?
-    if ac.ArchiveAcq.select(ac.ArchiveAcq.id).where(ac.ArchiveAcq.name == name).count():
-        raise AlreadyExists('Acquisition "%s" already exists in DB.' % name)
+            file_ = ac.ArchiveFile.create(
+                acq=acq,
+                type=ftype,
+                name=file_name,
+                size_b=size_b,
+                md5sum=md5sum,
+            )
 
-    # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition. Run
-    # in a transaction so we don't end up with inconsistency.
-    with db.database_proxy.atomic():
-        # Insert the archive record
-        acq = ac.ArchiveAcq.create(name=name, type=acq_type, comment=comment)
+            filetype.file_info.new(file_, node)
+            log.info(f'File "{path}" added to DB.')
 
-        # Generate the metadata table
-        acq_type.acq_info.new(acq, node)
-
-    return acq
-
-
-# Exceptions
-# ==========
-
-
-class Validation(Exception):
-    """Raise when validation of a name or field fails."""
-
-
-class DataBaseError(Exception):
-    """Raise when there is some internal inconsistency with the database."""
-
-
-class AlreadyExists(Exception):
-    """Raise when a record already exists in the database."""
-
-
-class DataFlagged(Exception):
-    """Raised when data is affected by a global flag."""
+        # If we're importing a file that used to exist on this node, set has_file='M'
+        # to trigger a integrity check.  (In this case, we can't have md5'ed it
+        # above, because the ArchiveFile must have existed.)
+        try:
+            ar.ArcvhieFile.update(has_file="M").where(
+                ar.ArchiveFile.file == file_, ar.ArchiveFile.node == node
+            ).execute()
+        except pw.DoesNotExist:
+            # No existing file copy; create a new one.
+            copy_size_b = node.io.filesize(path, actual=True)
+            copy = ar.ArchiveFile.replace(
+                file=file_,
+                node=node,
+                has_file="Y",
+                wants_file="Y",
+                prepared=True,
+                size_b=copy_size_b,
+            )
+            log.info('Registered file copy "{path}" to DB.')
 
 
 # Watchdog stuff
@@ -148,7 +169,6 @@ class DataFlagged(Exception):
 
 class RegisterFile(FileSystemEventHandler):
     def __init__(self, node, queue):
-        log.info(f'Registering node "{node.name}" for auto_import watchdog.')
         self.node = node
         self.queue = queue
         self.root = node.root
@@ -157,15 +177,15 @@ class RegisterFile(FileSystemEventHandler):
         super(RegisterFile, self).__init__()
 
     def on_created(self, event):
-        import_file(self.node, self.queue, event.src_path)
+        import_file(self.node, self.queue, pathlib.PurePath(event.src_path))
         return
 
     def on_modified(self, event):
-        import_file(self.node, self.queue, event.src_path)
+        import_file(self.node, self.queue, pathlib.PurePath(event.src_path))
         return
 
     def on_moved(self, event):
-        import_file(self.node, self.queue, os.path.split(event.src_path))
+        import_file(self.node, self.queue, pathlib.PurePath(event.src_path))
         return
 
     def on_deleted(self, event):
@@ -175,64 +195,90 @@ class RegisterFile(FileSystemEventHandler):
         dirname, basename = os.path.split(event.src_path)
         if basename[0] == "." and basename[-5:] == ".lock":
             basename = basename[1:-5]
-            import_file(self.node, self.queue, dirname, basename)
+            import_file(self.node, self.queue, pathlib.PurePath(dirname, basename))
 
 
 # Routines to control the filesystem watchdogs.
 # =============================================
 
-obs_list = None
+# Observer threads.  One per node I/O class.
+_observers = dict()
+
+# Event watchers.  One per watched node.
+_watchers = dict()
 
 
-def setup_observers(node_list, queue):
-    """Setup the watchdogs to look for new files in the nodes."""
+def update_observer(node, queue):
+    """Start or stop auto-importing of a node"""
 
-    global obs_list
+    global _observers
 
-    # If any node has auto_import set, look for new files and add them to the
-    # DB. Then set up a watchdog for it.
-    obs_list = []
-    for node in node_list:
-        if not node.auto_import:
-            continue
+    io_class = "Default" if node.io_class is None else node.io_class
 
-        obs_list.append(
-            node.io.observer(timeout=config.config["service"]["auto_import_interval"])
+    if not node.auto_import:
+        # If this node isn't being auto-imported, delete a watcher
+        # if one was previously scheduled
+        if node.name in _watchers:
+            _observers[io_class].unschedule(_watchers[node.name])
+            del _watchers[node.name]
+    else:
+        # If there's already a watcher for this node, do nothing
+        if node.name in _watchers:
+            return
+
+        # Otherwise, if there is no existing observer for this node's
+        # io_class, create a new one and start it.
+        #
+        # Different I/O classes may provide different observer classes to change
+        # how notification happens.  One observer runs for each I/O class.
+        if io_class not in _observers:
+            _observers[io_class] = node.io.observer(
+                timeout=config.config["service"]["auto_import_interval"]
+            ).start()
+
+        # Schedule a new watcher for our observer
+        log.info(f'Watching node "{node.name}" root "{node.root}" for auto import.')
+        _watchers[node.name] = _observers[io_class].schedule(
+            RegisterFile(node, queue), node.root, recursive=True
         )
-        obs_list[-1].schedule(RegisterFile(node), node.root, recursive=True)
-
-    # Start up the watchdog threads
-    for obs in obs_list:
-        obs.start()
 
 
-def catchup(node_list, queue):
-    """Traverse the node directory for new files and importem"""
-    for node in node_list:
-        if not node.auto_import:
-            continue
+def stop():
+    """Stop all auto_import watchdogs."""
 
-        # Get list of all files that exist on the node
-        already_imported_files = node.all_files()
-
-        log.info(f'Crawling base directory "{node.root}" for new files.')
-
-        for acqdir in node.io.acq_walk():
-            log.info(f'Crawling "{acqdir}".')
-            for file_name in node.io.file_walk(acqdir):
-                if (acqdir, file_name) in already_imported_files:
-                    log.debug(f'Skipping already-registered file "{file_name}".')
-                else:
-                    import_file(node, queue, acqdir, file_name)
-
-
-def stop_observers():
-    """Stop watchidog threads."""
-    for obs in obs_list:
+    # Stop
+    for obs in _observers.values():
         obs.stop()
 
-
-def join_observers():
-    """Wait for watchdog threads to terminate."""
-    for obs in obs_list:
+    # Wait for termination
+    for obs in _observers.values():
         obs.join()
+
+
+def catchup(node):
+    """Traverse the node directory for new files and importem"""
+
+    # Get list of all files that exist on the node
+    already_imported_files = node.all_files()
+
+    log.info(f'Crawling node "{node.name}" root "{node.root}" for new files.')
+
+    lastparent = None
+    for file in node.io.file_walk():
+        # Try to remove node.root
+        try:
+            file = file.relative_to(node.root)
+        except ValueError:
+            pass
+
+        # Print directory as we pass through them
+        parent = file.parent
+        if parent != lastparent:
+            log.info(f'Crawling "{parent}".')
+            lastparent = parent
+
+        # Skip files already imported
+        if str(file) in already_imported_files:
+            log.debug(f'Skipping already-registered file "{file}".')
+        else:
+            import_file(node, file)
