@@ -82,7 +82,7 @@ class AcqType(base_model):
         -------
         is_type : boolean
         """
-        return self.acq_info._is_type(acqname, node.root)
+        return self.acq_info.is_type(acqname, node)
 
     @classmethod
     def detect(cls, acqname, node):
@@ -234,15 +234,15 @@ class FileType(base_model):
                 "FileTypes %s have no registered handler." % repr(missing_file_types)
             )
 
-    def is_type(self, filename, acq, node):
+    def is_type(self, filename, acq_name, node):
         """Check if this file can be handled by this file type.
 
         Parameters
         ----------
         filename : string
             Name of the file.
-        acq : ArchiveAcq
-            The acquisition the file is in.
+        acq_name : string
+            The name of the acquisition the file is in.
         node : StorageNode
             The node we are importing from. Needed so we can inspect the actual
             acquisition.
@@ -251,28 +251,31 @@ class FileType(base_model):
         -------
         is_type : boolean
         """
-        return self.file_info._is_type(filename, path.join(node.root, acq.name))
+        return self.file_info.is_type(filename, node, acq_name)
 
     @classmethod
-    def detect(cls, filename, acq, node):
-        """Try and find an acquisition type that understands this directory.
+    def detect(cls, filename, acqtype, acqname, node):
+        """Try to find a file type that understands this file.
 
         Parameters
         ----------
         filename : string
             Name of the file we are trying to find the type of.
-        acq : ArchiveAcq
-            The acquisition hosting the file.
+        acqtype : AcqType
+            The type of the acquisition hosting the file.
+        acqname : string
+            The name of the acquisition hosting the file.
         node : StorageNode
             The node we are importing from. Needed so we can inspect the actual
             file.
+
+        Returns the found FileType or None if no FileType understood the file.
         """
 
         # Iterate over all known acquisition types to try and find one that matches
         # the directory being processed
-        for file_type in acq.type.file_types:
-
-            if file_type.is_type(filename, acq, node):
+        for file_type in acqtype.file_types:
+            if file_type.is_type(filename, acqname, node):
                 return file_type
 
         return None
@@ -316,7 +319,7 @@ class AcqInfoBase(base_model, ConfigClass):
     To make a working AcqInfo type you must at a minimum set `_acq_type` to be
     the name of this acquisition type (this is what is used in the `AcqType`
     table), and set `_file_types` to be a list of the file types supported by
-    this Acquisition type, as well as provide implementations for `_is_type` and
+    this Acquisition type, as well as provide implementations for `is_type` and
     `set_info`. Additionally you might want to implement `set_config` to receive
     configuration information.
     """
@@ -358,15 +361,15 @@ class AcqInfoBase(base_model, ConfigClass):
         return acq_info
 
     @classmethod
-    def _is_type(cls, acq_name, node_root):
+    def is_type(cls, acq_name, node):
         """Check if this acqusition path can be handled by this acquisition type.
 
         Parameters
         ----------
         acq_name : string
             Path to the acquisition directory.
-        node_root : string
-            Path to the root of the node containing the acquisition.
+        node : StorageNode
+            The node containing the acquisition.
         """
         raise NotImplementedError()
 
@@ -395,7 +398,7 @@ class FileInfoBase(base_model, ConfigClass):
 
     To make a working FileInfo type you must at a minimum set `_file_type` to be
     the name of this file type (this is what is used in the `FileType` table),
-    as well as provide implementations for `_is_type` and `set_info`.
+    as well as provide implementations for `is_type` and `set_info`.
     Additionally you might want to implement `set_config` to receive
     configuration information.
     """
@@ -441,15 +444,17 @@ class FileInfoBase(base_model, ConfigClass):
         return FileType.get(name=cls._file_type)
 
     @classmethod
-    def _is_type(cls, filename, acq_root):
+    def is_type(cls, filename, node, acq_name):
         """Check if this file can be handled by this file type.
 
         Parameters
         ----------
         filename : string
             Name of the file.
-        acq_root : string
-            Path to the root of the the acquisition on the node.
+        node : StorageNode
+            The node containing the file.
+        acq_name : string
+            Name of the acquisition.
         """
         raise NotImplementedError()
 
