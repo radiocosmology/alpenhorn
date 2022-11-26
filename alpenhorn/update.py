@@ -14,7 +14,7 @@ from . import acquisition as ac
 from . import archive as ar
 from . import config, db
 from . import storage as st
-from . import util
+from . import auto_import, util
 from .task import Task
 from .workers import global_abort
 
@@ -180,11 +180,15 @@ def update_node(node, queue):
 
     log.info(f'Updating node "{node.name}".')
 
+    # Init I/O, if necessary.
     node.io.set_queue(queue)
 
     # Check if the node is actually active
     if not update_node_active(node):
         return
+
+    # Update (start or stop) an auto-import observer for this node if needed
+    auto_import.update_observer(node, queue)
 
     # Check and update the amount of free space
     update_node_free_space(node)

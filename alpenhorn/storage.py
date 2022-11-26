@@ -231,16 +231,18 @@ class StorageNode(base_model):
     def all_files(self):
         """all_files: a list of all files on node
 
-        Returns (ArchiveAcq.name, ArchiveFile.name) tuples for all file copies
-        exsiting on the node.
+        Returns paths relative to root for all file copies exsiting on the node.
         """
-        return list(
-            (
-                ar.ArchiveFileCopy.select(ac.ArchiveFile.name, ac.ArchiveAcq.name)
-                .join(ac.ArchiveFile)
+        return [
+            os.path.join(*copy)
+            for copy in (
+                ar.ArchiveFileCopy.join(ac.ArchiveFile)
                 .join(ac.ArchiveAcq)
+                .select(ac.ArchiveFile.name, ac.ArchiveAcq.name)
                 .where(
                     ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y"
                 )
             ).tuples()
-        )
+        ]
+
+        return files

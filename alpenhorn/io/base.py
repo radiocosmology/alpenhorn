@@ -1,6 +1,10 @@
 """BaseIO classes.
 
 All IO classes must sublcass from these base classes to be recognised as valid.
+
+These are very low-level classes.  Any module implementing the I/O class for
+something even remotely resembling a POSIX filesystem would be better served
+by subclassing from DefaultIO instead of from here directly.
 """
 import json
 import os.path
@@ -52,10 +56,9 @@ class BaseNodeRemote:
 
 
 class BaseNodeIO:
-    """alpenhorn.io.BaseNodeIO is the base class for StorageNode IO modules in alpenhorn.
-
-    When subclassing BaseNodeIO, don't forget to set the class variable remote_class to
-    an appropriate remote-I/O class."""
+    """alpenhorn.io.BaseNodeIO is the base class for StorageNode I/O modules in
+    alpenhorn.
+    """
 
     # Subclasses should set this to a BaseNodeRemote-derived class.
     remote_class = BaseNodeRemote
@@ -127,14 +130,30 @@ class BaseNodeIO:
         Pull req.file from req.node onto the local storage system."""
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def acq_walk(self):
-        """Returns an iterator which returns the name of all acq-like directories
-        on the storage system."""
+    def file_walk(self):
+        """Iterate over file copies
+
+        Should successively yield a pathlib.PurePath for each file copy on the
+        node.  The returned path may either be absolute (i.e have node.root
+        pre-pended) or else be relative to node.root.  The former is preferred.
+        """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def file_walk(self, acqdir):
-        """Returns an iterator which returns the name of all files in the acq-like
-        directory called acq_name on the storage system.
+    def lockfile_present(self, acqname, filename):
+        """Is file `acqname`/`filename` locked by the presence of a lockfile called
+        `acqname`/.`filename`.lock.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def md5sum_file(self, path):
+        """Return the MD5 sum of file acqname/filename"""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def filesize(self, path, actual=False):
+        """Return size in bytes of the file given by path.
+
+        If acutal is True, return the amount of space the file actually takes
+        up on the storage system.  Otherwise return apparent size.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 

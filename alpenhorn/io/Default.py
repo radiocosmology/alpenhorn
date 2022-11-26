@@ -8,6 +8,7 @@ and StorageGroups which do not explicitly specify io_class.
 
 import os
 import threading
+from pathlib import PurePath
 
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
@@ -102,17 +103,35 @@ def DefaultNodeIO(BaseNodeIO):
         x = os.statvfs(node.root)
         return float(x.f_bavail) * x.f_bsize
 
-    def acq_walk(self):
-        """An iterator over all directory names in node.root"""
-        for entry in os.scandir(node.root):
-            if entry.is_dir():
-                yield entry.name
+    def _walk(self, path):
+        """Recurse through directory path, yielding files"""
 
-    def file_walk(self, acqdir):
-        """An iterator over all regular files in node.root/acqdir"""
-        for entry in os.scandir(os.path.join(node.root, acqdir)):
-            if entry.is_file():
-                yield entry.name
+        # We use os.scandir instead of os.walk because it gives
+        # us DirEntry objects which have useful metadata in them
+        for entry in os.scandir(path):
+            if entry.is_dir():
+                # Recurse
+                for entry in self._walk(entry):
+                    yield PurePath(entry)
+            # is_file() on a symlink to a file returns true, so we need both
+            elif entry.is_file() and not entry.is_link():
+                yield PurePath(entry)
+
+    def file_walk(self):
+        """An iterator over all regular files under node.root
+
+        path.PurePaths returned by the iterator are absolute
+        """
+        return self._walk(self, self.node.root)
+
+    def lock_present(self, acqname, filename):
+        """Returns true if "acqname/.filename.lock" exists."""
+        path = pathlib.Path(self.node.root, acqname, "." + filename + ".lock")
+        return path.is_file()
+
+    def md5sum_file(self, acqname, filename):
+        """Return the MD5 sum of file acqname/filename"""
+        return util.md5sum_file(pathlib.PurePath(self.node.root, acqname, filename))
 
     def reserve_bytes(self, size):
         """Attempt to reserve <size> bytes of space on the filesystem.
@@ -126,6 +145,20 @@ def DefaultNodeIO(BaseNodeIO):
 
             self.reserved_bytes += size
             return True
+
+    def filesize(self, path, actual=False):
+        """Return size in bytes of the file given by path.
+
+        If acutal is True, returns the amount of space the file actually takes
+        up on the storage system.  Otherwise returns apparent size.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+        if actual:
+            # Per POSIX, blocksize for st_blocks is always 512 bytes
+            return os.stat(path).st_blocks * 512
+
+        # Apparent size
+        return os.path.getsize(path)
 
     def release_bytes(self, size):
         """Release space previously reserved with reserve_bytes()."""
@@ -162,53 +195,4 @@ def DefaultNodeIO(BaseNodeIO):
             key=self.node_name,
             args=(self.node, copy),
             name=f"Check copy#{copy.id} on {self.node.name}",
-        )
-
-    def import_file(self, acqname, filename):
-        """Queue an asynchronous I/O task to import a newly discovered file.
-
-        The file is called "filename" and is in the directory "acqname".
-
-        Generally, this is called by the auto_import watchdog."""
-
-        file_path = os.path.join(self.node.root, acqname, filename)
-
-        # Skip requests to import non-files. These are occasionally sent by
-        # the polling observer.  Calling isfile on a symlink to a file
-        # returns true, so we need both calls to distinguish.
-        if os.path.islink(file_path) or not os.path.isfile(file_path):
-            log.debug(f"Skipping import of non-file {file_path}")
-            return
-
-        # Skip a file if there is still a lock on it.
-        if os.path.isfile(os.path.join(dir_name, ".%s.lock" % base_name)):
-            log.debug('Skipping "{file_path}": locked.', file_path)
-            return
-
-        # Check if we can handle this acquisition, and skip if we can't
-        acq_type_name = ac.AcqType.detect(acqname, self.node)
-        if acq_type_name is None:
-            log.info(f'Skipping non-acquisition path "{file_path}".')
-            return
-
-        # Figure out which acquisition this is; add if necessary.
-        acq_type, acq_name = acq_type_name
-        with db.proxy.atomic():
-            try:
-                acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
-                log.debug(f'Acquisition "%s" already in DB. Skipping.', acq_name)
-            except pw.DoesNotExist:
-                acq = add_acq(acq_type, acq_name, node)
-                log.info(f'Acquisition "{acqname}" added to DB.', acq_name)
-
-        Task(
-            func=import_async,
-            queue=self.queue,
-            key=self.node_name,
-            args=(self.node, acqname, filename),
-            name=f"Import {acqname}/{filename} on {self.node.name}",
-            # If the job fails due to DB connection loss, re-start the
-            # task because unlike tasks made in the main loop, we're
-            # never going to revisit this.
-            requeue=True,
         )

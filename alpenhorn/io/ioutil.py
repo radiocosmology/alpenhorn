@@ -274,6 +274,27 @@ def copy_request_done(
 ):
     """Update the database after attempting a copy request.
 
+    Parameters
+    ----------
+    req : ArchiveFileCopyRequest
+        The copy request that was attempted
+    node : StorageNode
+        The destination node
+    success : boolean
+        True unless the file transfer failed.
+    md5sum : boolean or str
+        Either a boolean indicating if the MD5 sum was correct or
+        else a string MD5 sum which we need to verify.  Ignored if
+        success is not True.
+    start_time : float
+        time.time() when the transfer was started
+    check_src : boolean
+        if success is False, should the source file be marked suspect?
+    stderr : str or None
+        if success is False, this will be copied into the log
+    copy_size_b : int
+        the size of the file copy, in blocks
+
     Returns True if the caller should keep the file or False if the
     file should be deleted."""
 
