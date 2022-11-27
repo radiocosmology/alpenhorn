@@ -9,6 +9,7 @@ and StorageGroups which do not explicitly specify io_class.
 import os
 import threading
 from pathlib import PurePath
+from watchdog.observers.inotify import InotifyObserver
 
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
@@ -57,6 +58,8 @@ def DefaultGroupIO(BaseGroupIO):
 def DefaultNodeIO(BaseNodeIO):
     """DefaultNodeIO implements a simple StorageNode backed by a regular POSIX filesystem."""
     remote_class = DefaultNodeRemote
+
+    observer = InotifyObserver  # Only works on local filesystems.
 
     def __init__(self, node):
         super().__init__(node)
