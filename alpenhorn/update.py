@@ -103,72 +103,75 @@ def update_group(group, queue):
         )
     )
 
-    # Skip groups for which there are no active nodes
-    if len(nodes_in_group) < 1:
-        log.debug("No active nodes in group f{group.name} during update.")
-        return
-
-    # Skip groups which have ongoing asynchronous I/O tasks
-    for node in nodes_in_group:
-        if queue.fifo_size(node.name) > 0:
-            log.info(
-                "Skipping update for StorageGroup f{group.name} due to on-going I/O for constituent node f{node.name}"
-            )
-            return
-
-    log.info(f'Updating group "{group.name}".')
-
-    # Check whether the set of available nodes are sufficient to continue the update.
-    if not group.io.check_available_nodes(nodes_in_group):
-        return
-
     group.io.set_queue(queue)
 
-    # Process pulls into this group
-    for req in ar.ArchiveFileCopyRequest.select().where(
-        ar.ArchiveFileCopyRequest.completed == 0,
-        ar.ArchiveFileCopyRequest.cancelled == 0,
-        ar.ArchiveFileCopyRequest.group_to == self.group,
-    ):
-        # If the destination file is already present in this group, cancel the request.
-        if self.group.copy_present(req.file):
-            log.info(
-                f"Cancelling pull request for {req.file.acq.name}/{req.file.name}: "
-                f"already present in group {group.name}."
-            )
-            ar.ArchiveFileCopyRequest.update(cancelled=True).where(
-                ar.ArchiveFileCopyRequest.id == req.id
-            ).execute()
-            continue
+    # Is the queue empty for this group?
+    queue_empty = True
+    for node in nodes_in_group:
+        if queue.fifo_size(node.name) > 0:
+            queue_empty = False
+            break
 
-        # Skip request unless the source node is active
-        if not req.node_from.active:
-            log.error(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-                f"source node {req.node_from.name} is not active."
-            )
-            continue
+    # Call the before update hook
+    cancelled = group.io.before_update(nodes_in_group, queue_empty)
 
-        # If the source file doesn't exist, skip the request.
-        #
-        # XXX Cancel instead?
-        if not req.node_from.copy_present(req.file):
-            log.error(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-                f"not available on node {req.node_from.name}. [file_id={req.file.id}]"
-            )
-            continue
+    # Update only happens if the queue is empty and the I/O layer hasn't cancelled the update
+    if queue_empty and not cancelled:
+        log.info(f'Updating group "{group.name}".')
 
-        # If the source file is not ready, skip the request.
-        if not req.node_from.remote.pull_ready(req.file):
-            log.info(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-                f"not ready on node {req.node_from.name}."
-            )
-            continue
+        # Process pulls into this group
+        for req in ar.ArchiveFileCopyRequest.select().where(
+            ar.ArchiveFileCopyRequest.completed == 0,
+            ar.ArchiveFileCopyRequest.cancelled == 0,
+            ar.ArchiveFileCopyRequest.group_to == self.group,
+        ):
+            # If the destination file is already present in this group, cancel the request.
+            if self.group.copy_present(req.file):
+                log.info(
+                    f"Cancelling pull request for {req.file.acq.name}/{req.file.name}: "
+                    f"already present in group {group.name}."
+                )
+                ar.ArchiveFileCopyRequest.update(cancelled=True).where(
+                    ar.ArchiveFileCopyRequest.id == req.id
+                ).execute()
+                continue
 
-        # Early checks passed: dispatch this request to the Group I/O layer
-        group.io.pull(req)
+            # Skip request unless the source node is active
+            if not req.node_from.active:
+                log.error(
+                    f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                    f"source node {req.node_from.name} is not active."
+                )
+                continue
+
+            # If the source file doesn't exist, skip the request.
+            #
+            # XXX Cancel instead?
+            if not req.node_from.copy_present(req.file):
+                log.error(
+                    f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                    f"not available on node {req.node_from.name}. [file_id={req.file.id}]"
+                )
+                continue
+
+            # If the source file is not ready, skip the request.
+            if not req.node_from.remote.pull_ready(req.file):
+                log.info(
+                    f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                    f"not ready on node {req.node_from.name}."
+                )
+                continue
+
+            # Early checks passed: dispatch this request to the Group I/O layer
+            group.io.pull(req)
+    else:
+        log.info(
+            f"Skipping update for group {group.name}:"
+            f"queue_empty={queue_empty} cancelled={cancelled}"
+        )
+
+    # Whether or not we did the update, call the post-update hook
+    group.io.after_update(queue_empty, cancelled)
 
 
 def update_node(node, queue):
@@ -179,37 +182,57 @@ def update_node(node, queue):
         log.debug(f'Skipping inactive node "{node.name}".')
         return
 
-    log.info(f'Updating node "{node.name}".')
-
     # Init I/O, if necessary.
     node.io.set_queue(queue)
 
-    # Check if the node is actually active
-    if not update_node_active(node):
-        return
+    # Is this node's FIFO empty?  If not, we'll skip this
+    # update since we can't know whether we'd duplicate tasks
+    # or not
+    queue_empty = queue.fifo_size(node.name) == 0
 
     # Update (start or stop) an auto-import observer for this node if needed
     auto_import.update_observer(node, queue)
 
-    # Check and update the amount of free space
-    update_node_free_space(node)
+    # Pre-update hook
+    cancelled = node.io.before_update(queue_empty)
 
-    # Check the integrity of any questionable files (has_file=M)
-    for copy in ar.ArchiveFileCopy.select().where(
-        ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "M"
-    ):
+    if queue_empty and not cancelled:
+        log.info(f'Updating node "{node.name}".')
+
+        # Check if the node is actually active
+        if not update_node_active(node):
+            return
+
+        # Check and update the amount of free space
+        update_node_free_space(node)
+
+        # Check the integrity of any questionable files (has_file=M)
+        for copy in ar.ArchiveFileCopy.select().where(
+            ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "M"
+        ):
+            log.info(
+                f'Checking copy "{copy.file.acq.name}/{copy.file.name}" on node {node.name}.'
+            )
+
+            # Dispatch integrity check to I/O layer
+            node.io.check(copy)
+
+        # Delete any unwanted files to cleanup space
+        update_node_delete(node)
+
+        # Process any regular transfers requests from this node
+        update_node_ready_copies(node, queue)
+    else:
         log.info(
-            f'Checking copy "{copy.file.acq.name}/{copy.file.name}" on node {node.name}.'
+            f"Skipping update for node {node.name}:"
+            f"queue_empty={queue_empty} cancelled={cancelled}"
         )
 
-        # Dispatch integrity check to I/O layer
-        node.io.check(copy)
+    # Update the amount of free space, again; this is always done
+    update_node_free_space(node)
 
-    # Delete any unwanted files to cleanup space
-    update_node_delete(node)
-
-    # Process any regular transfers requests from this node
-    update_node_ready_copies(node, queue)
+    # Post-update hook
+    node.io.after_update(queue_empty, cancelled)
 
 
 def update_node_active(node):

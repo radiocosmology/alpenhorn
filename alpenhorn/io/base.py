@@ -84,7 +84,12 @@ class BaseNodeIO:
         self.config = merge_dict_tree(self.base_config, self.io_config)
 
     def get_remote(self):
-        """Returns an instance of the remote-I/O class for this node."""
+        """Returns an instance of the remote-I/O class for this node.
+
+        In general, this function should not be called outside of the
+        StorageNode class internals.  Access the remote-I/O class via
+        node.remote instead.
+        """
 
         if issubclass(self.remote_class, BaseNodeRemote):
             return self.remote_class(self.node, self.config)
@@ -95,8 +100,45 @@ class BaseNodeIO:
         )
 
     def set_queue(self, queue):
-        """Use queue for asynchronous I/O tasks."""
+        """Set the queue used for asynchronous I/O tasks."""
         self._queue = queue
+
+    def before_update(self, queue_empty):
+        """Pre-update hook.
+
+        Called each update loop before node updates happen.
+
+        If queue_empty is False, updates for this node are going to be skipped
+        loop cycle.
+
+        This method should return a boolean indicating whether to cancel (skip) the update
+        or not.  If this method returns True, the update is skipped.
+
+        Whether or not the update occurs, the after_update() will be called.
+        """
+        # By default, we do nothing and allow the update to continue
+        return False
+
+    def after_update(self, queue_empty, cancelled):
+        """Post-update hook.
+
+        Parameters
+        ----------
+        - queue_empty : boolean
+                If False, the update was skipped because the queue was not empty.
+        - cancelled : boolean
+                The value returned by before_update().  If True, the update was skipped.
+
+        This method is called once per update loop, after all other processing has happened
+        on the node.
+
+        If queue_empty is True and cancelled is False, then the update occurred.  Otherwise
+        it was skipped.
+
+        The value returned by this function is ignored.
+        """
+        # Do nothing
+        pass
 
     def check_active(self):
         """check_active: Check whether a node is active.
@@ -193,21 +235,54 @@ class BaseGroupIO:
         else:
             self.config = json.loads(group.io_config)
 
-    def check_available_nodes(self, nodes):
-        """Check whether the provided list of nodes is good enough to perform an update.
+    def before_update(self, nodes, queue_empty):
+        """Pre-update hook
 
-        The alpenhorn daemon will pass in the list of local active nodes.  This function may
-        return True to indicate an update should proceed, or else False if the update should
-        be skipped based on the provided list of available nodes.
+        Parameters
+        ----------
+        - nodes : list of StorageNodes
+                The list of local active nodes.  Will never be empty.
+        - queue_empty : boolean
+                If False, the update loop is going to be skipped.
 
-        The nodes list will never be empty.
+        This method is called once per update loop, before any other processing happens
+        on this group.
 
-        This method is called once per update loop.  After each call of this method, I/O should
-        may occur on the nodes passed in.  So, the GroupIO class should remember the nodes passed
-        to this function, assuming they are needed.
+        If queue_empty is True, after each call of this method, I/O may occur on the
+        nodes passed in.  So, the GroupIO class should remember the nodes passed to this
+        function, if they are needed.
+
+        If queue_emtpy is False, the update will be skipped and the after_update() hook
+        will be immediately called next.
+
+        This method should return a boolean indicating whether to cancel (skip) the update
+        or not.  If this method returns True, the update is skipped and the after_update()
+        hook is immediately called.
+
         """
-        # By default, we remember nothing and cancel updating
+        # By default, we do nothing and allow the update to continue
         return False
+
+    def after_update(self, queue_empty, cancelled):
+        """Post-update hook.
+
+        Parameters
+        ----------
+        - queue_empty : boolean
+                If False, the update was skipped because the queue was not empty.
+        - cancelled : boolean
+                The value returned by before_update().  If True, the update was skipped.
+
+        This method is called once per update loop, after all other processing has happened
+        on the group.
+
+        If queue_empty is True and cancelled is False, then the update occurred.  Otherwise
+        it was skipped.
+
+        The value returned by this function is ignored.
+        """
+        # Do nothing
+        pass
 
     def set_queue(self, queue):
         """Use queue for asynchronous I/O tasks.
