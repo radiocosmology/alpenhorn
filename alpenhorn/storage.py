@@ -95,7 +95,7 @@ class StorageGroup(base_model):
 
 
 class StorageNode(base_model):
-    """A place on a host where files copies are stored.
+    """A place on a host where file copies are stored.
 
     Attributes
     ----------
@@ -208,7 +208,7 @@ class StorageNode(base_model):
         """Is a copy of ArchiveFile file present on this node?"""
         try:
             ar.ArchiveFileCopy.get(
-                ar.ArchiveFileCopy.file == req.file,
+                ar.ArchiveFileCopy.file == file,
                 ar.ArchiveFileCopy.node == self,
                 ar.ArchiveFileCopy.has_file == "Y",
             )
@@ -248,5 +248,3 @@ class StorageNode(base_model):
                 )
             )
         ]
-
-        return files
