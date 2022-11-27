@@ -1,11 +1,13 @@
+import os
+import pathlib
 import datetime
-import logging
-from os import path
 
 import peewee as pw
 
 from .config import ConfigClass
 from .db import base_model
+
+import logging
 
 log = logging.getLogger(__name__)
 
@@ -111,7 +113,7 @@ class AcqType(base_model):
         """
 
         # Paths must be relative, otherwise we enter an infinite loop below
-        if path.isabs(acqname):
+        if os.path.isabs(acqname):
             log.error(
                 "acqname (%s) is absolute path. Must be relative to node root.", acqname
             )
@@ -125,7 +127,7 @@ class AcqType(base_model):
             for acq_type in cls.select():
                 if acq_type.is_type(acqname, node):
                     return acq_type, acqname
-            acqname = path.dirname(acqname)
+            acqname = os.path.dirname(acqname)
 
         return None
 
@@ -311,6 +313,29 @@ class ArchiveFile(base_model):
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
     registered = pw.DateTimeField(default=datetime.datetime.now)
+
+    @property
+    def path(self):
+        """The relative path to the file copy.
+
+        Simply the path contcatenation of acq.name and name.
+        """
+        return pathlib.PurePath(self.acq.name, self.name)
+
+    def archive_count(self):
+        """Return the total number of archived copies of this file"""
+        from .archive import ArchiveFileCopy
+        from .storage import StorageNode
+
+        return (
+            self.copies.join(StorageNode)
+            .select()
+            .where(
+                StorageNode.storage_type == "A",
+                ArchiveFileCopy.has_file == "Y",
+            )
+            .count()
+        )
 
 
 class AcqInfoBase(base_model, ConfigClass):

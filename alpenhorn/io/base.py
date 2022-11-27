@@ -35,11 +35,11 @@ class BaseNodeRemote:
         # By default, nothing is ready.
         return False
 
-    def file_path(self, file):
-        """Return a path on the remote system pointing to a file.
+    def file_path(self, copy):
+        """Return a path on the remote system pointing to a file copy.
 
-        By default, just path.joins the node root with the acq name and file name."""
-        return os.path.join(self.node.root, file.acq.name, file.name)
+        By default, just returns copy.path."""
+        return copy.path
 
     def file_addr(self, file):
         """Return a file address suitable for use as an rsync source or destination
@@ -194,4 +194,15 @@ class BaseGroupIO:
 
     def pull(self, req):
         """Handle ArchiveFileCopyRequest req whose destination is this group."""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def check(self, copy):
+        """Check whether ArchiveFileCopy `copy` is corrupt."""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def delete(self, copies):
+        """Delete the ArchiveFileCopy list `copies` from the node.
+
+        len(copies) may be zero.
+        """
         raise NotImplementedError("method must be re-implemented in subclass.")

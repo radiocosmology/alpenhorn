@@ -128,12 +128,8 @@ def pull_async(task, node, req):
 def check_async(task, node, copy):
     """Check the MD5 sum of a file copy.  This is asynchronous."""
 
-    copyname = os.path.join(
-        copy.file.acq.name,
-        copy.file.name,
-    )
-
-    fullpath = os.path.join(node.root, copyname)
+    copyname = copy.file.path
+    fullpath = copy.path
 
     # Does the copy exist?
     if os.path.exists(fullpath):
@@ -152,3 +148,55 @@ def check_async(task, node, copy):
     # Update the copy status
     log.info(f"Updating file copy #{copy.id} for file {copyname} on node {node.name}.")
     copy.save()
+
+
+def delete_async(task, node, copies):
+    """Delete some file copies, if possible."""
+
+    # Process candidates for deletion
+    for fcopy in del_files:
+        # Archived count
+        ncopies = fcopy.file.archive_count()
+
+        shortname = fcopy.file.path
+        fullpath = fcopy.path
+
+        # If at least two _other_ copies exist, we can delete the file.
+        if ncopies >= (3 if copy.node.archive else 2):
+            if os.path.exists(fullpath):
+                try:
+                    os.remove(fullpath)  # Remove the actual file
+                except OSError as e:
+                    log.warning(f"Error deleting {shortname}: {e}")
+                    continue  # Welp, that didn't work
+
+                log.info(f"Removed file copy {shortname} on {node.name}")
+
+            # Check if any containing directory is now empty
+            # and remove if they are.
+            dirname = shortname.parent
+
+            while dirname != ".":
+                if any(os.scandir(dirname)):
+                    break  # There was something in the directory
+
+                # dirname is empty; delete it.
+                try:
+                    os.rmdir(dirname)
+                    log.info("Removed directory {dirname} on {node.name}")
+                except OSError as e:
+                    log.warning(
+                        f"Error deleting directory {dirname} on {node.name}: {e}"
+                    )
+                    # Maybe it failed because it didn't exist; so we'll try to soldier on
+
+                dirname = dirname.parent
+
+            # Update the DB
+            ar.ArchiveFileCopy.update(has_file="N", wants_file="N").where(
+                ar.ArchiveFileCopy.id == fcopy.id
+            ).execute()
+        else:
+            log.warning(
+                f"Too few archive copies ({ncopies}) to delete {shortname} on {node.name}."
+            )

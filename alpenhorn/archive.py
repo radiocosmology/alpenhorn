@@ -1,3 +1,4 @@
+import pathlib
 import peewee as pw
 
 from alpenhorn.acquisition import ArchiveFile
@@ -40,6 +41,17 @@ class ArchiveFileCopy(base_model):
     wants_file = EnumField(["Y", "M", "N"], default="Y")
     prepared = pw.BooleanField(default=False)
     size_b = pw.BigIntegerField()
+
+    @property
+    def path(self):
+        """The absolute path to the file copy.
+
+        For a relative path (one omitting node.root), use copy.file.path
+        """
+
+        # It's a PurePath and not a Path because it's not guaranteed to exist
+        # because this property is defined even when has_file!=Y
+        return pathlib.PurePath(node.root, file.path)
 
     class Meta:
         indexes = ((("file", "node"), True),)

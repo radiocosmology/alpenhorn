@@ -181,7 +181,7 @@ def DefaultNodeIO(BaseNodeIO):
         Task(
             func=pull_async,
             queue=self.queue,
-            key=self.node_name,
+            key=self.node.name,
             args=(self.node, req),
             name=f"AFCR#{req.id}: {req.node.name} -> {self.node.name}",
         )
@@ -192,7 +192,24 @@ def DefaultNodeIO(BaseNodeIO):
         Task(
             func=check_async,
             queue=self.queue,
-            key=self.node_name,
+            key=self.node.name,
             args=(self.node, copy),
             name=f"Check copy#{copy.id} on {self.node.name}",
+        )
+
+    def delete(self, copies):
+        """Queue a single asynchronous I/O task to delete the list of file copies."""
+
+        # Nothing to do
+        if len(copies) == 0:
+            return
+
+        Task(
+            func=del_async,
+            queue=self.queue,
+            key=self.node.name,
+            args=(self.nodem, copies),
+            name=f"Delete copies "
+            + str([copy.id for copy in copies])
+            + " on {self.node.name}",
         )

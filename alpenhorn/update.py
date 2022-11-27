@@ -43,6 +43,9 @@ def update_loop(host, queue, pool):
         ):
             update_group(group, queue)
 
+        # Respawn workers that have exited (due to DB error)
+        pool.check()
+
         # If we have no workers, handle some queued I/O tasks
         if len(pool) == 0:
             serial_io()
@@ -55,8 +58,6 @@ def update_loop(host, queue, pool):
         log.info(
             f"Tasks: {queue.qsize()} queued, {queue.inprogress_size()} in-progress on {len(pool)} workers"
         )
-
-        # Respawn workers that have exited (due to DB error)
 
         # Avoid looping too fast.
         remaining = config.config["service"]["update_interval"] - loop_time
@@ -280,22 +281,29 @@ def update_node_delete(node):
     else:
         dfclause = ar.ArchiveFileCopy.wants_file == "N"
 
-    del_copies = list()
-
     # Search db for candidates on this node to delete.
-    for copy in ar.ArchiveFileCopy.select().where(
-        dfclause,
-        ar.ArchiveFileCopy.node == self.node,
-        ar.ArchiveFileCopy.has_file == "Y",
+    del_copies = list()
+    for copy in (
+        ar.ArchiveFileCopy.select()
+        .where(
+            dfclause,
+            ar.ArchiveFileCopy.node == self.node,
+            ar.ArchiveFileCopy.has_file == "Y",
+        )
+        .order_by(ar.ArchiveFileCopy.id)
     ):
-        pass
+        # Group a bunch of these together to reduce the number of I/O Tasks
+        # created
+        #
+        # TODO figure out if this actually helps
+        if len(del_copies) >= 10:
+            node.io.delete(del_copies)
+            del_copies = [copy]
+        else:
+            del_copies.append(copy)
 
-    # Nothing to delete
-    if len(del_copies) < 1:
-        return
-
-    # Pass the list of files to the I/O layer.  It will return a list of files
-    # which were actually deleted
+    # Handle the partial group at the end (which may be empty)
+    node.io.delete(del_copies)
 
 
 def update_node_src_requests(node, queue):

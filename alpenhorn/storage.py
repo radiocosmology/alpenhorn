@@ -238,7 +238,7 @@ class StorageNode(base_model):
         Returns paths relative to root for all file copies exsiting on the node.
         """
         return [
-            os.path.join(*copy)
+            copy.file.path
             for copy in (
                 ar.ArchiveFileCopy.join(ac.ArchiveFile)
                 .join(ac.ArchiveAcq)
@@ -246,7 +246,7 @@ class StorageNode(base_model):
                 .where(
                     ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y"
                 )
-            ).tuples()
+            )
         ]
 
         return files
