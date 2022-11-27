@@ -209,7 +209,7 @@ def update_node(node, queue):
     update_node_delete(node)
 
     # Process any regular transfers requests from this node
-    update_node_src_requests(node, queue)
+    update_node_ready_copies(node, queue)
 
 
 def update_node_active(node):
@@ -306,15 +306,12 @@ def update_node_delete(node):
     node.io.delete(del_copies)
 
 
-def update_node_src_requests(node, queue):
+def update_node_ready_copies(node, queue):
     """Process file copy requests from this node."""
 
-    # Check which type of node this is and create an appropriate task
-    if node.fs_type == "HPSS":
-        # TODO what gets called here?
-        queue.add_task(SourceTransferTask(node))
-    elif node.fs_type == "Nearline":
-        queue.add_task(SourceTransferTask(node))
-    else:
-        # TODO Raise Exception
-        pass
+    for req in ar.ArchiveFileCopyRequest.select().where(
+        ar.ArchiveFileCopyRequest.completed == 0,
+        ar.ArchiveFileCopyRequest.cancelled == 0,
+        ar.ArchiveFileCopyRequest.node_from == self.node,
+    ):
+        node.io.ready(req)

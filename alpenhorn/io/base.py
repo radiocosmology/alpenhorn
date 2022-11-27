@@ -35,16 +35,16 @@ class BaseNodeRemote:
         # By default, nothing is ready.
         return False
 
-    def file_path(self, copy):
-        """Return a path on the remote system pointing to a file copy.
+    def file_path(self, file):
+        """Return a path on the remote system pointing to ArchiveFile file.
 
-        By default, just returns copy.path."""
-        return copy.path
+        By default, returns the path contcatenation of node.root and file.path."""
+        return pathlib.PurePath(self.node.root, file.path)
 
     def file_addr(self, file):
         """Return a file address suitable for use as an rsync source or destination
 
-        i.e., a string of the form <user>@<address>:<path>.
+        i.e., a string of the form: <user>@<address>:<path>
 
         Raises ValueError if username or address are not set."""
         if self.node.username is None:
@@ -124,12 +124,6 @@ class BaseNodeIO:
         """
         return None
 
-    def pull_file(self, req, queue):
-        """Perform ArchiveFileCopyRequest req.
-
-        Pull req.file from req.node onto the local storage system."""
-        raise NotImplementedError("method must be re-implemented in subclass.")
-
     def file_walk(self):
         """Iterate over file copies
 
@@ -154,6 +148,37 @@ class BaseNodeIO:
 
         If acutal is True, return the amount of space the file actually takes
         up on the storage system.  Otherwise return apparent size.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def pull(self, req):
+        """Perform ArchiveFileCopyRequest req.
+
+        Pull req.file from req.node onto the local storage system."""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def check(self, copy):
+        """Check whether ArchiveFileCopy `copy` is corrupt."""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def delete(self, copies):
+        """Delete the ArchiveFileCopy list `copies` from the node.
+
+        len(copies) may be zero.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def ready(self, req):
+        """Ready a remote pull specified by req on the source node.
+
+        Passed the ArchiveFileCopyRequest req for the transfier
+        (so req.node_from == self.node).
+
+        This method is called for all pending requests, even ones that are
+        impossible due to the file being corrupt, missing, or some other calamity.
+        If such an impossibility arises, this method _may_ cancel the request,
+        but that's not required.  (It's the responsibility of the pulling node
+        to resolve the request.)
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -194,15 +219,4 @@ class BaseGroupIO:
 
     def pull(self, req):
         """Handle ArchiveFileCopyRequest req whose destination is this group."""
-        raise NotImplementedError("method must be re-implemented in subclass.")
-
-    def check(self, copy):
-        """Check whether ArchiveFileCopy `copy` is corrupt."""
-        raise NotImplementedError("method must be re-implemented in subclass.")
-
-    def delete(self, copies):
-        """Delete the ArchiveFileCopy list `copies` from the node.
-
-        len(copies) may be zero.
-        """
         raise NotImplementedError("method must be re-implemented in subclass.")

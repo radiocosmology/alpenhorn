@@ -24,7 +24,7 @@ def DefaultNodeRemote(BaseNodeRemote):
     """DefaultNodeRemote: information about a DefaultIO remote StorageNode."""
 
     def pull_ready(self, file):
-        """Returns True: Default nodes need to do nothing to ready files."""
+        """Returns True: DefaultIO nodes need to do nothing to ready files."""
         return True
 
 
@@ -213,3 +213,7 @@ def DefaultNodeIO(BaseNodeIO):
             + str([copy.id for copy in copies])
             + " on {self.node.name}",
         )
+
+    def ready(self, req):
+        """Does nothing: DefaultIO file copies are always ready."""
+        pass
