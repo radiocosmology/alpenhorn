@@ -10,9 +10,7 @@ import json
 import os.path
 from peewee import fn
 
-from watchdog.observers.polling import PollingObserver
-
-import alpenhorn.archive as ar
+from .. import archive as ar
 from ..config import merge_dict_tree
 from ..storage import StorageNode, StorageGroup
 
@@ -63,8 +61,13 @@ class BaseNodeIO:
     # Subclasses should set this to a BaseNodeRemote-derived class.
     remote_class = BaseNodeRemote
 
-    # Subclasses may redefine this to change how the auto_import observer works
-    observer = PollingObserver  # The safe choice
+    # A class compatible with watchdog.observers.api.BaseObserver which will
+    # be used as the auto import observer.
+    #
+    # This can be set to None if no observation is possible, though the
+    # platform-independent watchdog.observers.polling.PollingObserver
+    # will work in the vast majority of cases, if others do not.
+    observer = None
 
     def __init__(self, node):
         self.node = node

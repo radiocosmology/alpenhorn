@@ -232,7 +232,15 @@ def update_observer(node, queue):
         # Different I/O classes may provide different observer classes to change
         # how notification happens.  One observer runs for each I/O class.
         if io_class not in _observers:
-            _observers[io_class] = node.io.observer(
+            observer = node.io.observer
+            if observer is None:
+                log.warning(
+                    f'Unable to start auto import on node "{node.name}": '
+                    f"no observer for I/O class {node.io_class}."
+                )
+                return
+
+            _observers[io_class] = observer(
                 timeout=config.config["service"]["auto_import_interval"]
             ).start()
 
