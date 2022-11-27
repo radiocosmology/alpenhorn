@@ -7,8 +7,8 @@ subclassed from that.
 
 Each task in the Fair Multi-FIFO Queue is part of a FIFO specified by a key.
 The Fair Multi-FIFO Queue may have many such FIFOs, and it will try to ensure
-that tasks are removed from the queue in a fair manner which prioritises
-popping items off FIFOs with fewer in-progress tasks.
+that tasks are removed from the queue in a fair manner which tries to keep
+the same number of tasks from each FIFO in progress at all times.
 
 The queue is unbounded.
 """
@@ -27,15 +27,15 @@ class FairMultiFIFOQueue:
 
         # Total number of queued tasks
         self._total_queued = 0
-        # Total number of queued and in-progress tasks
+        # Total number of in-progress tasks
         self._total_inprogress = 0
         # Counts of in-progress tasks by FIFO
         self._inprogress_counts = {}
-        # A list of sets of FIFO keys ordered by number of in-progress tasks
+        # A list of sets of FIFO keys, ordered by number of in-progress tasks
         #
         # We initialise element 0 to the empty set to simplify creating new
-        # FIFOs (which will always get added to that set)
-        self._fifos_by_inprogress = [set()]
+        # FIFOs, which will always get added to that set.
+        self._keys_by_inprogress = [set()]
 
         # The thread lock (mutex) and the conditionals (see queue.py for details, which
         # this implementation broadly follows)
@@ -46,29 +46,32 @@ class FairMultiFIFOQueue:
     def task_done(self, key):
         """Report that a task from the FIFO indexed by key is done.
 
-        After a task retreived with get(), the key provided by that get()
-        must be passed back into this function to report the completion
-        of that task."""
+        After a consumer has finished processing a task provided to it by
+        a get(), the key provided by that get() must be passed back into
+        this function to report the completion of that task.
+
+        Raises ValueError if the FIFO indexed by key has no tasks in progress.
+        """
 
         with self._all_tasks_done:
             # The number of currently in-progress tasks (including the one that's finishing now)
-            count = self._inprogress_counts[key]
+            count = self._inprogress_counts.get(key, 0)
 
             # If the specified FIFO has no in-progress tasks, raise value error
             if count <= 0:
                 raise ValueError("no unfinished tasks for FIFO {key}")
 
             # Remove the FIFO from the ordered list
-            self._fifos_by_inprogress[count].remove(key)
+            self._keys_by_inprogress[count].remove(key)
 
             # Decrement counts
             count -= 1
             self._inprogress_counts[key] = count
-            self._total_unfinished -= 1
+            self._total_inprogress -= 1
 
             # Put the fifo back in the ordered list.
             #
-            # XXX Could just delete a FIFO which is now empty (count == 0) here.
+            # XXX Could just delete a FIFO which is now empty here.
             #
             # In general, there's no reason to expect an empty FIFO to be reused,
             # by the caller, and numerous empty FIFOs will slow down get() over time,
@@ -76,10 +79,10 @@ class FairMultiFIFOQueue:
             #
             # However, in our particular case (alpenhornd), the maximum number
             # of FIFOs is sum of nodes and groups ever active on this host, which is
-            # generally small enough not to have to worry about it.
-            self._fifos_by_inprogress[count].add(key)
+            # generally small and static enough not to have to worry about it.
+            self._keys_by_inprogress[count].add(key)
 
-            # XXX Could trim _fifos_by_inprogress here.
+            # XXX Could trim _keys_by_inprogress here.
             #
             # In general, it's potentially useful: it's possible for a bunch
             # of unnecessary empty sets to accumulate at the tail of this list,
@@ -88,17 +91,16 @@ class FairMultiFIFOQueue:
             #
             # However, in our particular case (alpenhornd), at most, the list will
             # have as many elements as the maximum number of worker threads that
-            # have existed, so it's probably not worth the trouble.
+            # have ever existed at one time, so it's probably not worth the trouble.
 
             # Notify waiters when there are no pending tasks
-            if self._total_unfinished == 0:
+            if self._total_queued == 0 and self._total_inprogress == 0:
                 self._all_tasks_done.notify_all()  # wakes up all waiting threads
 
     def join(self):
         """Blocks until there's nothing left in the queue, including in-progress tasks."""
-        # Wait until self._total_unfinished drops to zero
         with self._all_tasks_done:
-            while self._total_unfinished:
+            while self._total_inprogress > 0 and self._total_queued > 0:
                 self._all_tasks_done.wait()  # woken up by the notify_all() in task_done()
 
     def qsize(self):
@@ -109,21 +111,21 @@ class FairMultiFIFOQueue:
     def inprogress_size(self):
         """Total number of in-progress tasks.  Not to be relied on."""
         with self._lock:
-            return self._total_unfinished - self._total_queued
+            return self._total_inprogress
 
     def fifo_size(self, key):
-        """Total number of tasks queued or in progress for the FIFO specified by key.
+        """Total number of tasks queued or in progress for the FIFO indexed by key.
 
-        Returns 0 for any key not previously used."""
+        Returns 0 for any non-existent FIFO (i.e for any key not previously used)."""
         with self._lock:
             if key not in self._fifos:
                 return 0
             return len(self._fifos[key]) + self._inprogress_counts[key]
 
     def put(self, item, key):
-        """Put an item into the queue by pushing it onto the FIFO specified by key.
+        """Put an item into the queue by pushing it onto the FIFO indexed by key.
 
-        If the FIFO specified by the key doesn't exist, it is created."""
+        If the FIFO indexed by key doesn't exist, it is created."""
         with self._not_empty:
             # Create the FIFO, if necessary
             if key not in self._fifos:
@@ -133,7 +135,6 @@ class FairMultiFIFOQueue:
 
             # push the task onto the fifo (right-most end)
             fifo.append(item)
-            self._total_unfinished += 1
             self._total_queued += 1
             self._not_empty.notify()  # wakes up a single waiting thread
 
@@ -162,12 +163,13 @@ class FairMultiFIFOQueue:
                         return None
                     self._not_empty.wait(remaining)  # woken up by the notify() in put()
 
-            # Choose a FIFO by walking _fifos_by_inprogress
+            # Choose a FIFO by walking _keys_by_inprogress: find the lowest non-empty
+            # set and
             key = None
-            for fifo_set in self._fifos_by_inprogress:
-                if len(fifo_set) > 0:
+            for key_set in self._keys_by_inprogress:
+                if len(key_set) > 0:
                     # This removes and returns an arbitrary element in the set
-                    key = fifo_set.pop()
+                    key = key_set.pop()
                     break
 
             fifo = self._fifos[key]
@@ -175,14 +177,15 @@ class FairMultiFIFOQueue:
             # Pop the first (left-most) item from this FIFO
             item = fifo.popleft()
             self._total_queued -= 1
+            self._total_inprogress += 1
 
-            # Increment the in-progress count and re-add the key to in _fifos_by_inprogress
+            # Increment the in-progress count and re-add the key to in _keys_by_inprogress
             count = self._inprogress_counts[key] + 1
             self._inprogress_counts[key] = count
-            if len(self._fifos_by_inprogress) == count - 1:
-                self._fifos_by_inprogress[count] = set([key])
+            if len(self._keys_by_inprogress) == count:
+                self._keys_by_inprogress[count] = set([key])
             else:
-                self._fifos_by_inprogress[count].add(key)
+                self._keys_by_inprogress[count].add(key)
 
             return (key, item)
 
@@ -191,5 +194,5 @@ class FairMultiFIFOQueue:
         fifo = deque()
         self._fifos[key] = fifo
         self._inprogress_counts[key] = 0
-        self._fifos_by_inprogress[0].append(key)
+        self._keys_by_inprogress[0].append(key)
         return fifo
