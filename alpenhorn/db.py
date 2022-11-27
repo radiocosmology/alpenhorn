@@ -3,34 +3,41 @@
 This module implements a minimally-functional database connector for alpenhorn
 (the "fallback" database).
 
-More capable database connectors may be provided by a database extension module.
-The dict returned by the register_extension() call to a database extension module
-must contain a "database" key whose value is a second dict with keys providing the
-database extensions capabilities.
+More capable database connectors may be provided by a database extension
+module.  The dict returned by the register_extension() call to a database
+extension module must contain a "database" key whose value is a second dict
+with keys providing the database extensions capabilities.
 
-The following keys are allowed in the "database" dict, all of which are optional:
+The following keys are allowed in the "database" dict, all of which are
+optional:
     - "reentrant": boolean.  If True, the database extension is re-entrant
                 (threadsafe), and simultaneous independant connections to the
                 database will be made to it.  False is assumed if not given.
     - "connect": a callable.  Invoked to create a database connection.  Will be
                 passed a dict containing the contents of the "database" section
                 of the alpenhorn config as the keyword parameter "config".
-                If not given, the _connect() function in this module will be
-                called instead.
-    - "proxy": a peewee database proxy.  Should be initialised by the "connect"
-                call.  If not given, this module will use a pw.Proxy() instance.
-    - "base_model": a peewee.Model subclass used for all table models in alpenhorn.
-                If not given, a simple base model is created using the above proxy.
+                Should raise pw.OperationalError if a connection could not
+                be returned.  If not given, the _connect() function in this
+                module will be called instead.
+    - "proxy": a peewee database proxy.  Will be initialised by connector
+                returned from the "connect" call.  If not given, a new pw.Proxy()
+                instance is created.
+    - "base_model": a peewee.Model subclass used for all table models in
+                alpenhorn.  If not given, a simple base model is created using
+                the above proxy.
     - "enum": a peewee.Field subclass to represent Enum fields in the database.
                 If not given, a suitable class is provided.
 
 Before access the attributes of this module, init() must be called to set up
-the database.  After that function is called, the following attributes are available:
+the database.  After that function is called, the following attributes are
+available:
 
-- base_model: a peewee.Model to use as the base class for all tabel models in the ORM.
+- base_model: a peewee.Model to use as the base class for all tabel models in
+            the ORM.
+- EnumField: a peewee.Field representing an enum field in the database.
 - proxy: a peewee.Proxy object for database access
-- threadsafe: a boolean indicating whether the database can be concurrently accessed
-            from multiple threads.
+- threadsafe: a boolean indicating whether the database can be concurrently
+            accessed from multiple threads.
 
 Also after calling init(), a connection to the database can be initialised by
 calling the connect() function.
@@ -46,7 +53,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# We store the chosen database extension here
+# We store the database extension here
 _db_ext = None
 
 # Module attributes
@@ -140,7 +147,9 @@ def connect():
     func = _capability("connect")
     if func is None:
         func = _connect
-    func(config=database_config)
+    db = func(config=database_config)
+
+    proxy.initialize(db)
 
     # If we're using the local _EnumField, initialise it:
     global EnumField
@@ -152,7 +161,7 @@ def connect():
             _EnumField.native = False
 
 
-def _connect(config=dict()):
+def _connect(config):
     """Set up the fallback database connection from an explicit peewee url
 
     If no URL is provided in the config, an in-memory Sqlite database is created.
@@ -167,14 +176,17 @@ def _connect(config=dict()):
         `playhouse.db_url`.
     """
 
-    db = db_url.connect(config.get("url", "sqlite:///:memory:"))
+    try:
+        db = db_url.connect(config.get("url", "sqlite:///:memory:"))
+    except RuntimeError as e:
+        raise pw.OperationalError("Database connect failed") from e
 
     # dynamically make the database instance also inherit from
     # `RetryOperationalError`, so that it retries operations in case of
     # transient database failures
     db.__class__ = type("RetryableDatabase", (RetryOperationalError, type(db)), {})
 
-    proxy.initialize(db)
+    return db
 
 
 # Helper classes for the peewee ORM

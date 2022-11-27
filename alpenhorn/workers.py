@@ -60,20 +60,19 @@ def _worker(self, stop, queue):
      - stop: the stop event for this worker
      - queue: the task queue
 
-    Starts by creating a database connection, which
-    is assumed to be thread-safe (re-entrant).
+    Starts by creating a database connection, which is assumed to be
+    thread-safe (re-entrant).
 
-    Waits and executes tasks from "queue" as they become
-    available.  Runs until its stop event fires.
+    Waits and executes tasks from "queue" as they become available.
+    Runs until its stop event fires.
 
-    A database error (pw.OperationalError), will result
-    in this worker cleanly abandonning its current task and
-    exiting.  The main thread will restart it when it to
-    recover the connection.
+    A database error (pw.OperationalError), will result in this worker
+    cleanly abandonning its current task and exiting.  The main thread
+    will restart it to recover the connection.
 
-    Any other exception will result in this thread firing
-    the global_abort event which will result in a
-    clean-as-possible exit of all of alpenhornd.
+    Any other exception will result in this thread firing the
+    global_abort event which will result in a clean-as-possible exit of
+    all of alpenhornd.
     """
 
     log.info(f"Worker started.")

@@ -15,17 +15,16 @@ class Task:
 
     Arguments:
     - func : callable
-            the code executed by the worker.  The first
-            positional argument to func is always the task
-            itself.
+            the code executed by the worker.  The first positional
+            argument to func is always the task itself.
     - queue : FairMultiFIFOQueue
             the task is automatically put on this queue
     - key : hashable
             the FIFO key used when put on the queue
     - requeue : boolean
-            should the task be requeued if the worker aborts
-            due to a DB error?  Typically True for auto_import
-            tasks and False for main update loop tasks
+            should the task be requeued if the worker aborts due to a DB
+            error?  Typically True for auto_import tasks and False for
+            main update loop tasks
     - name : string
             the name of the task.  Used in log messages
     - args : list or tuple
@@ -36,8 +35,23 @@ class Task:
     While executing, the provided Task object can be used in
     func to register cleanup functions.
 
-    The return value of func is ignored.  Uncaught exceptions
-    from func will result in a global abort of alpenhornd.
+    The value returned from calling func() is ignored.
+
+    If func raises pw.OperationalError, and the task is running in a
+    worker, the worker will terminate (and be respawned by the main
+    loop).  In this case, the value of `requeue` indicates how to handle
+    re-running this task:
+     - If requeue is True, the task will put a copy of itself back into
+         the queue before exiting.  This is appropriate for Tasks
+         produced by the auto_import watchers, which aren't going to
+         fire again.
+     - If requeue is false, the task is not requeued, but simply
+         abandonned.  This is appropriate for Tasks produced by the main
+         loop, since a subsequeunt update loop will determine whether
+         the task needs to be performed again.
+
+    All other uncaught exceptions from func will result in a global
+    abort of alpenhornd.
     """
 
     def __init__(
@@ -88,10 +102,10 @@ class Task:
         Add func (with tuple args and dict kwargs) to the list of
         functions to run after the task finishes.
 
-        If first is True, the function is pushed to the start
-        of the list (as if the list were a stack); otherwise it
-        is pushed to the end of the list (as if the list were a
-        FIFO). Both methods of pushing may be freely mixed.
+        If first is True, the function is pushed to the start of the
+        list (as if the list were a stack); otherwise it is pushed to
+        the end of the list (as if the list were a FIFO). Both methods
+        of pushing may be freely mixed.
 
         This method is expected to be called from within the task.
         """
