@@ -1,8 +1,8 @@
 """Transport Group I/O."""
-from .Default import DefaultGroupIO
+from .base import BaseGroupIO
 
 
-class TransportGroupIO(DefaultGroupIO):
+class TransportGroupIO(BaseGroupIO):
     """Transport Group I/O.
 
     This implements (the formerly special-cased) transport disk logic.
