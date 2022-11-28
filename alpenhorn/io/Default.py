@@ -36,19 +36,15 @@ def DefaultGroupIO(BaseGroupIO):
     one to be active on a given host at any time.
     """
 
-    def check_available_nodes(self, nodes):
+    def before_update(self, nodes, queue_empty):
         """DefaultGroupIO only accepts a single node to operate on."""
 
-        if len(nodes) != 1:
+        if len(nodes) > 1:
             log.warning(f"Too many active nodes in group f{self.group.name}.")
-            return False
+            return True
 
         self.node = nodes[0]
-        return True
-
-    def set_queue(self, queue):
-        """Set the I/O queue for the active storage node."""
-        self.node.set_queue(queue)
+        return False
 
     def pull(self, req):
         """Fulfill a copy request pull into this group by passing the request to the node."""
@@ -106,6 +102,13 @@ def DefaultNodeIO(BaseNodeIO):
         x = os.statvfs(node.root)
         return float(x.f_bavail) * x.f_bsize
 
+    def fits(self, size_b):
+        """Returns True if there's enough space for size_b bytes.
+
+        Takes into account reserved space.
+        """
+        return reserve_bytes(self, size_b, check_only=True)
+
     def _walk(self, path):
         """Recurse through directory path, yielding files"""
 
@@ -136,26 +139,12 @@ def DefaultNodeIO(BaseNodeIO):
         """Return the MD5 sum of file acqname/filename"""
         return util.md5sum_file(pathlib.PurePath(self.node.root, acqname, filename))
 
-    def reserve_bytes(self, size):
-        """Attempt to reserve <size> bytes of space on the filesystem.
-
-        Returns a boolean indicating whether sufficient free space was available
-        to make the reservation."""
-        with self.mutex:
-            bavail = self.bytes_avail()
-            if bavail - self.reserved_bytes > size:
-                return False  # Insufficient space
-
-            self.reserved_bytes += size
-            return True
-
     def filesize(self, path, actual=False):
         """Return size in bytes of the file given by path.
 
         If acutal is True, returns the amount of space the file actually takes
         up on the storage system.  Otherwise returns apparent size.
         """
-        raise NotImplementedError("method must be re-implemented in subclass.")
         if actual:
             # Per POSIX, blocksize for st_blocks is always 512 bytes
             return os.stat(path).st_blocks * 512
@@ -163,8 +152,32 @@ def DefaultNodeIO(BaseNodeIO):
         # Apparent size
         return os.path.getsize(path)
 
+    # This is the reservation fudge factor.  XXX Is it correct?
+    reserve_factor = 2
+
+    def reserve_bytes(self, size, check_only=False):
+        """Attempt to reserve <size> bytes of space on the filesystem.
+
+        Returns a boolean indicating whether sufficient free space was available
+        to make the reservation.
+
+        If check_only is True, no reservation is made and the only result is the
+        return value.
+        """
+        size *= reserve_factor
+        with self.mutex:
+            bavail = self.bytes_avail()
+            if bavail - self.reserved_bytes > size:
+                return False  # Insufficient space
+
+            if not check_only:
+                self.reserved_bytes += size
+
+            return True
+
     def release_bytes(self, size):
         """Release space previously reserved with reserve_bytes()."""
+        size *= reserve_factor
         with self.mutex:
             if self.reserved_bytes < size:
                 raise ValueError(
@@ -174,10 +187,25 @@ def DefaultNodeIO(BaseNodeIO):
 
     def pull(self, req):
         """Queue an asynchronous I/O task to pull req.file from req.node onto the local filesystem."""
-        if self.node.full():
+        if self.node.under_min():
+            log.info(
+                f"Skipping pull for StorageNode f{self.name}: hit minimum free space: "
+                f"({self.node.avail_gb:.2f} GiB < {self.node.min_total_gb}:.2f GiB)"
+            )
+            return
+
+        if self.node.over_max():
             log.info(
                 f"Skipping pull for StorageNode f{self.name}: node full. "
                 f"({self.node.total_gb():.2f} GiB >= {self.node.max_total_gb}:.2f GiB)"
+            )
+            return
+
+        # Check that there is enough space available (and reserve what we need)
+        if not self.node.io.reserve_bytes(req.file.size_b):
+            log.warning(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                f"insufficient space on node {self.node.name}."
             )
             return
 

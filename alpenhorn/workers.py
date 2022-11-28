@@ -103,7 +103,26 @@ def _worker(self, stop, queue):
             log.debug(f"Beginning task {task}")
             try:
                 task()
-            except OperationalError as e:
+            except OperationalError:
+                # Try to clean up. This runs task.do_cleanup()
+                # until it raises something other than pw.OperationalError
+                # or finishes.  Each time it is run, at least one cleanup
+                # function will be shifted out of the queue, so at most
+                # we'll call it once per registered cleanup function
+                try:
+                    while True:
+                        try:
+                            task.do_cleanup()
+                            break  # Clean exit, so we're done
+                        except pw.OperationalError:
+                            pass  # Yeah, we know already; try again
+                except Exception as e:
+                    # Errors upon errors: just crash and burn
+                    global_abort.set()
+                    raise RuntimeError(
+                        "Aborting due to uncaught exception in task cleanup"
+                    ) from e
+
                 log.debug(f"Finished task {task}")
                 queue.task_done(key)  # Keep the queue sanitised
 

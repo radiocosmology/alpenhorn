@@ -249,7 +249,8 @@ class BaseGroupIO:
                 If False, the update loop is going to be skipped.
 
         This method is called once per update loop, before any other processing happens
-        on this group.
+        on this group.  Before this function is called, node.io.set_queue(), has been
+        called on every StorageNode in the nodes to initialise their I/O layer.
 
         If queue_empty is True, after each call of this method, I/O may occur on the
         nodes passed in.  So, the GroupIO class should remember the nodes passed to this
@@ -285,14 +286,6 @@ class BaseGroupIO:
         The value returned by this function is ignored.
         """
         # Do nothing
-        pass
-
-    def set_queue(self, queue):
-        """Use queue for asynchronous I/O tasks.
-
-        Called after check_available_nodes() each update loop.  This method should call
-        node.io.set_queue on any nodes which are going to perform I/O for the group during the
-        current update loop."""
         pass
 
     def pull(self, req):

@@ -103,14 +103,12 @@ def update_group(group, queue):
         )
     )
 
-    group.io.set_queue(queue)
-
-    # Is the queue empty for this group?
+    # Set the queue for all nodes and chewck if the queue is empty
     queue_empty = True
     for node in nodes_in_group:
-        if queue.fifo_size(node.name) > 0:
+        node.io.set_queue(queue)
+        if queue_empty and queue.fifo_size(node.name) > 0:
             queue_empty = False
-            break
 
     # Call the before update hook
     cancelled = group.io.before_update(nodes_in_group, queue_empty)
@@ -295,7 +293,7 @@ def update_node_delete(node):
     # the copy is not on an archive node. If we have more than the minimum space, or
     # we are on archive node then only those explicitly marked (wants_file == 'N')
     # will be removed.
-    if self.node.avail_gb < self.node.min_avail_gb and not self.node.archive:
+    if self.node.under_min() and not self.node.archive:
         log.info(
             f"Hit minimum available space on {node.name} -- considering all unwanted "
             "files for deletion!"

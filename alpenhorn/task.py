@@ -72,8 +72,21 @@ class Task:
 
     def __call__(self):
         """This method is invoked by the worker thread to run the task."""
-        # Run through the cleanup stack
-        for func, args, kwargs in self._cleanup:
+        self._func(*self._args, **self._kwargs)
+
+        # Now clean up
+        self.do_cleanup()
+
+    def do_cleanup(self, internal=True):
+        """Run through the cleanup stack."""
+
+        # We pop here to handle the case where a pw.OperationalError
+        # in a cleanup function causes the worker to cancel.  If that
+        # happens it will call this function on it's way out the door.
+        #
+        # If that happens, we don't want to re-reun clean-up functions
+        # we've already tried.
+        for func, args, kwargs in self._cleanup.popleft():
             func(*args, **kwargs)
 
     def __str__(self):
@@ -96,7 +109,7 @@ class Task:
                 kwargs=self._kwargs,
             )
 
-    def cleanup(self, func, args=tuple(), kwargs=dict(), first=True):
+    def on_cleanup(self, func, args=tuple(), kwargs=dict(), first=True):
         """Register a cleanup function.
 
         Add func (with tuple args and dict kwargs) to the list of

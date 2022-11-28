@@ -20,6 +20,10 @@ def pull_async(task, node, req):
         - rsync if all else fails
     """
 
+    # Before we were queued, NodeIO reserved space for this file.
+    # Automatically release bytes on task completion
+    task.cleanup(node.io.release_bytes, args=(req.file.size_b,))
+
     # Is source and dest on the same host?
     local = req.node_from.host == node.host
 
@@ -34,21 +38,7 @@ def pull_async(task, node, req):
                 f"Skipping request for {req.file.acq.name}/{req.file.name} "
                 f"due to unconfigured route to host for node {req.node_from.name}."
             )
-            continue
-
-    # Check that there is enough space available.
-    #
-    # XXX Is 2.0 the correct fudge factor here?
-    reserved_space = 2 * req.file.size_b
-    if node.io.reserve_bytes(reserved_space):
-        # Automatically release bytes on task completion
-        task.cleanup(node.io.release_bytes, args=(reserved_space,))
-    else:
-        log.warning(
-            f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-            f"insufficient space on node {req.node_from.name}."
-        )
-        return
+            return
 
     to_dir = os.path.join(node.root, req.file.acq.name)
     if not os.path.exists(to_dir):

@@ -182,12 +182,23 @@ class StorageNode(base_model):
         """Is this node an archival node?"""
         return self.storage_type == "A"
 
-    def full(self):
-        """Is the total size of file copies on the node greater than the value of max_total_gb?
+    def under_min(self):
+        """Is the amount of free space below the minimum allowed?
 
-        If max_total_gb is None, returns False.
+        Returns False if avail_gb is None or if min_avail_gb is zero or None.
         """
-        return self.max_total_gb is not None and self.total_gb() >= self.max_total_gb
+        if self.avail_gb is None or not self.min_avail_gb:
+            return False
+        return self.avail_gb < self.min_avail_gb
+
+    def over_max(self):
+        """Is the total size of file copies on the node greater than allowed?
+
+        If max_total_gb is zero or None, returns False.
+        """
+        if not self.max_total_gb:
+            return False
+        return self.total_gb() >= self.max_total_gb
 
     def named_copy_present(self, acqname, filename):
         """Is a copy of a file called filename in acqname present
