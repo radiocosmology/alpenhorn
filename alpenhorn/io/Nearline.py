@@ -10,6 +10,7 @@ import alpenhorn.archive as ar
 from alpenhorn.io.base import BaseGroupIO
 from alpenhorn.io.LFSQuota import LFSQuotaNodeIO
 from . import lfs
+from .ioutil import pretty_bytes
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,61 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         # 25% of 1 kiB == 2**8 bytes
         self._headroom = self.config.get(
             "headroom", self.config["fixed_quota"] * 2**8
+        )
+
+    def before_update(self, queue_empty):
+        """Before node update check.
+
+        If queue_empty is True, call self.release_files to potentiallyr
+        free up space."""
+        # If the update is going to happen, clear up headroom, if necessary
+        if queue_empty:
+            self.release_files()
+
+        # Continue with the update
+        return True
+
+    def release_files(self):
+        """Release files from the nearline disk to keep the headroom clear."""
+        headroom_needed = self._headroom - self._lfs.quota_remaining(
+            self._nearline.root
+        )
+
+        # Nothing to do
+        if headroom_needed <= 0:
+            return
+
+        total_files = 0
+        total_bytes = 0
+
+        # loop through file copies until we've released enough
+        for copy in (
+            ar.ArchiveFileCopy.select()
+            .where(
+                ar.ArchiveFileCopy.node == self.node,
+                ar.ArchiveFileCopy.has_file == "Y",
+                ar.ArchiveFileCopy.ready == True,
+            )
+            .order_by(ar.ArchiveFile.last_updated)
+        ):
+            # Skip unarchived files
+            if not self._lfs.hsm_archived(copy.file.path):
+                continue
+
+            log.debug(
+                "releasing file copy {copy.path} [={pretty_bytes(copy.size_b)}] on node {self.node.name}"
+            )
+            self._lfs.hsm_release(copy.file.path)
+            # Update copy record
+            ar.ArchiveFileCopy.update(ready=False).where(
+                ar.ArchiveFileCopy.id == copy.id
+            ).execute()
+            total_files += 1
+            total_bytes += copy.size_b
+            if total_bytes >= headroom_needed:
+                break
+        log.info(
+            f"released {pretty_bytes(total_bytes)} in {total_files} files on node {self.node.name}"
         )
 
     def check_active(self):
@@ -138,7 +194,7 @@ class NearlineGroupIO(BaseGroupIO):
             log.error(
                 f"need exactly two nodes in Nearline group {self.group.name} (have {len(node)})"
             )
-            return True
+            return False
 
         if nodes[0].name == self.group.name:
             self._nearline = nodes[0]
@@ -148,9 +204,9 @@ class NearlineGroupIO(BaseGroupIO):
             self._smallfile = nodes[0]
         else:
             log.error(f"no node in Nearline group named {self.group.name}")
-            return True
+            return False
 
-        return False
+        return True
 
     def pull(self, req):
         """Pass ArchiveFileCopyRequest to the correct node."""

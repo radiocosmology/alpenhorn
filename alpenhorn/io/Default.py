@@ -248,10 +248,10 @@ def DefaultGroupIO(BaseGroupIO):
 
         if len(nodes) > 1:
             log.warning(f"Too many active nodes in group f{self.group.name}.")
-            return True
+            return False
 
         self.node = nodes[0]
-        return False
+        return True
 
     def pull(self, req):
         """Fulfill a copy request pull into this group by passing the request to the node."""

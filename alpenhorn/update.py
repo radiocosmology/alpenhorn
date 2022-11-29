@@ -111,10 +111,10 @@ def update_group(group, queue):
             queue_empty = False
 
     # Call the before update hook
-    cancelled = group.io.before_update(nodes_in_group, queue_empty)
+    do_update = group.io.before_update(nodes_in_group, queue_empty)
 
     # Update only happens if the queue is empty and the I/O layer hasn't cancelled the update
-    if queue_empty and not cancelled:
+    if queue_empty and do_update:
         log.info(f'Updating group "{group.name}".')
 
         # Process pulls into this group
@@ -165,11 +165,11 @@ def update_group(group, queue):
     else:
         log.info(
             f"Skipping update for group {group.name}:"
-            f"queue_empty={queue_empty} cancelled={cancelled}"
+            f"queue_empty={queue_empty} do_update={do_update}"
         )
 
     # Whether or not we did the update, call the post-update hook
-    group.io.after_update(queue_empty, cancelled)
+    group.io.after_update(queue_empty, do_update)
 
 
 def update_node(node, queue):
@@ -192,9 +192,9 @@ def update_node(node, queue):
     auto_import.update_observer(node, queue)
 
     # Pre-update hook
-    cancelled = node.io.before_update(queue_empty)
+    do_update = node.io.before_update(queue_empty)
 
-    if queue_empty and not cancelled:
+    if queue_empty and do_update:
         log.info(f'Updating node "{node.name}".')
 
         # Check if the node is actually active
@@ -223,14 +223,14 @@ def update_node(node, queue):
     else:
         log.info(
             f"Skipping update for node {node.name}:"
-            f"queue_empty={queue_empty} cancelled={cancelled}"
+            f"queue_empty={queue_empty} do_update={do_update}"
         )
 
     # Update the amount of free space, again; this is always done
     update_node_free_space(node)
 
     # Post-update hook
-    node.io.after_update(queue_empty, cancelled)
+    node.io.after_update(queue_empty, do_update)
 
 
 def update_node_active(node):

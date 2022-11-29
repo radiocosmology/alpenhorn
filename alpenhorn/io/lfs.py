@@ -155,6 +155,11 @@ class LFS:
             return HSM_RELEASED
         return HSM_RECALLED
 
+    def hsm_archived(self, path):
+        """Is this file archived?"""
+        state = self.hsm_state(path)
+        return state == HSM_RECALLED or state == HSM_RELEASED
+
     def hsm_released(self, path):
         """Is this file released?"""
         return self.hsm_state(path) == HSM_RELEASED

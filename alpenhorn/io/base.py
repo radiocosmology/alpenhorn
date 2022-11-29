@@ -112,28 +112,28 @@ class BaseNodeIO:
         If queue_empty is False, updates for this node are going to be skipped
         loop cycle.
 
-        This method should return a boolean indicating whether to cancel (skip) the update
-        or not.  If this method returns True, the update is skipped.
+        This method should return a boolean indicating whether to proceed with the update or
+        not (skip it.)  If this method returns False, the update is skipped.
 
         Whether or not the update occurs, the after_update() will be called.
         """
         # By default, we do nothing and allow the update to continue
-        return False
+        return True
 
-    def after_update(self, queue_empty, cancelled):
+    def after_update(self, queue_empty, do_update):
         """Post-update hook.
 
         Parameters
         ----------
         - queue_empty : boolean
                 If False, the update was skipped because the queue was not empty.
-        - cancelled : boolean
+        - do_update : boolean
                 The value returned by before_update().  If True, the update was skipped.
 
         This method is called once per update loop, after all other processing has happened
         on the node.
 
-        If queue_empty is True and cancelled is False, then the update occurred.  Otherwise
+        If both queue_empty and do_update are True, then the update occurred.  Otherwise
         it was skipped.
 
         The value returned by this function is ignored.
@@ -257,13 +257,12 @@ class BaseGroupIO:
         If queue_emtpy is False, the update will be skipped and the after_update() hook
         will be immediately called next.
 
-        This method should return a boolean indicating whether to cancel (skip) the update
-        or not.  If this method returns True, the update is skipped and the after_update()
-        hook is immediately called.
+        This method should return a boolean indicating whether to proceed with the update or
+        not (skip it.)  If this method returns False, the update is skipped.
 
         """
         # By default, we do nothing and allow the update to continue
-        return False
+        return True
 
     def after_update(self, queue_empty, cancelled):
         """Post-update hook.
@@ -272,13 +271,13 @@ class BaseGroupIO:
         ----------
         - queue_empty : boolean
                 If False, the update was skipped because the queue was not empty.
-        - cancelled : boolean
-                The value returned by before_update().  If True, the update was skipped.
+        - do_update : boolean
+                The value returned by before_update().  If False, the update was skipped.
 
         This method is called once per update loop, after all other processing has happened
         on the group.
 
-        If queue_empty is True and cancelled is False, then the update occurred.  Otherwise
+        If both queue_empty and do_update are True, then the update occurred.  Otherwise
         it was skipped.
 
         The value returned by this function is ignored.
