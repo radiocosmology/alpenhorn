@@ -23,7 +23,7 @@ used. Similarly, only the last `database` specification matters.
 import importlib
 import logging
 
-from . import acquisition, config
+from . import config
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ def register_type_extensions():
 
 
 def _register_acq_extensions(acq_types):
+    from . import acquisition
 
     for acq_type in acq_types:
         name = acq_type._acq_type
@@ -132,6 +133,7 @@ def _register_acq_extensions(acq_types):
 
 
 def _register_file_extensions(file_types):
+    from . import acquisition
 
     for file_type in file_types:
         name = file_type._file_type
