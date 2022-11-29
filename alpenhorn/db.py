@@ -22,9 +22,6 @@ optional:
     - "proxy": a peewee database proxy.  Will be initialised by connector
                 returned from the "connect" call.  If not given, a new pw.Proxy()
                 instance is created.
-    - "base_model": a peewee.Model subclass used for all table models in
-                alpenhorn.  If not given, a simple base model is created using
-                the above proxy.
     - "enum": a peewee.Field subclass to represent Enum fields in the database.
                 If not given, a suitable class is provided.
 
@@ -32,8 +29,6 @@ Before access the attributes of this module, init() must be called to set up
 the database.  After that function is called, the following attributes are
 available:
 
-- base_model: a peewee.Model to use as the base class for all tabel models in
-            the ORM.
 - EnumField: a peewee.Field representing an enum field in the database.
 - proxy: a peewee.Proxy object for database access
 - threadsafe: a boolean indicating whether the database can be concurrently
@@ -60,7 +55,6 @@ _db_ext = None
 # =================
 # These are all initialised by init()
 
-base_model = None
 proxy = None
 EnumField = None
 threadsafe = None
@@ -76,7 +70,6 @@ def _capability(key):
     # capability defaults (these implement the fallback database
     # module).
     default_cap = {
-        "base_model": None,
         "enum": None,
         "connect": None,
         "proxy": None,
@@ -124,12 +117,6 @@ def init():
     EnumField = _capability("enum")
     if EnumField is None:
         EnumField = _EnumField
-
-    # Set up models
-    global base_model
-    base_model = _capability("base_model")
-    if base_model is None:
-        base_model = _base_model
 
 
 def connect():
@@ -283,7 +270,7 @@ class _EnumField(pw.Field):
             raise TypeError("Value %s not in ENUM(%s)" % str(self.value))
 
 
-class _base_model(pw.Model):
+class base_model(pw.Model):
     """Fallback base class for all peewee models."""
 
     class Meta(object):
