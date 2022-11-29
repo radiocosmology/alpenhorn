@@ -51,95 +51,116 @@ def setsignals(pool):
     signal.signal(signal.SIGUSR2, _handle_usr2)
 
 
-def _worker(self, stop, queue):
-    """The worker thread main loop.
+class Worker(threading.Thread):
+    """A worker thread.
 
-    Invoked by the .start() method of the worker thread.
-
-    Arguments:
-     - stop: the stop event for this worker
-     - queue: the task queue
-
-    Starts by creating a database connection, which is assumed to be
-    thread-safe (re-entrant).
-
-    Waits and executes tasks from "queue" as they become available.
-    Runs until its stop event fires.
-
-    A database error (pw.OperationalError), will result in this worker
-    cleanly abandonning its current task and exiting.  The main thread
-    will restart it to recover the connection.
-
-    Any other exception will result in this thread firing the
-    global_abort event which will result in a clean-as-possible exit of
-    all of alpenhornd.
+    Parameters
+    ----------
+    - queue : FairMultiFIFOQueue
+        The queue
+    - index : integer
+        The index of this thread.  Only used to set the threadName.
     """
 
-    log.info(f"Worker started.")
+    def __init__(self, queue, index):
+        # thread constructor
+        # daemon=True means the thread will be cancelled if the main thread is aborted
+        threading.Thread.__init__(name=f"Worker#{index}", daemon=True)
 
-    db.connect()
+        self._stop = threading.Event()
+        self._queue = queue
 
-    while True:
-        # Exit if told to stop
-        if global_abort.is_set():
-            log.info(f"Stopped due to global abort.")
-            return
-        if stop.is_set():
-            log.info(f"Stopped.")
-            return
+    def run(self):
+        """The worker thread main loop.
 
-        # Wait for a task:
-        item = queue.get(timeout=5)
+        Invoked by the .start() method of the worker thread.
 
-        if item is not None:
-            # Abandon working if alpenhornd is aborting
+        Starts by creating a database connection, which is assumed to be
+        thread-safe (re-entrant).
+
+        Waits and executes tasks from self._queue as they become available.
+        Runs until the self._stop event fires.
+
+        A database error (pw.OperationalError), will result in this worker
+        cleanly abandonning its current task and exiting.  The main thread
+        will restart it to recover the connection.
+
+        Any other exception will result in this thread firing the
+        global_abort event which will result in a clean-as-possible exit of
+        all of alpenhornd.
+        """
+
+        log.info(f"Started.")
+
+        db.connect()
+
+        while True:
+            # Exit if told to stop
             if global_abort.is_set():
                 log.info(f"Stopped due to global abort.")
                 return
+            if self._stop.is_set():
+                log.info(f"Stopped.")
+                return
 
-            # Otherwise, execute the task.
-            key, task = item
+            # Wait for a task:
+            item = self._queue.get(timeout=5)
 
-            log.debug(f"Beginning task {task}")
-            try:
-                task()
-            except OperationalError:
-                # Try to clean up. This runs task.do_cleanup()
-                # until it raises something other than pw.OperationalError
-                # or finishes.  Each time it is run, at least one cleanup
-                # function will be shifted out of the queue, so at most
-                # we'll call it once per registered cleanup function
+            if item is not None:
+                # Abandon working if alpenhornd is aborting
+                if global_abort.is_set():
+                    log.info(f"Stopped due to global abort.")
+                    return
+
+                # Otherwise, execute the task.
+                key, task = item
+
+                log.debug(f"Beginning task {task}")
                 try:
-                    while True:
-                        try:
-                            task.do_cleanup()
-                            break  # Clean exit, so we're done
-                        except pw.OperationalError:
-                            pass  # Yeah, we know already; try again
+                    task()
+                except OperationalError:
+                    # Try to clean up. This runs task.do_cleanup()
+                    # until it raises something other than pw.OperationalError
+                    # or finishes.  Each time it is run, at least one cleanup
+                    # function will be shifted out of the queue, so at most
+                    # we'll call it once per registered cleanup function
+                    try:
+                        while True:
+                            try:
+                                task.do_cleanup()
+                                break  # Clean exit, so we're done
+                            except pw.OperationalError:
+                                pass  # Yeah, we know already; try again
+                    except Exception as e:
+                        # Errors upon errors: just crash and burn
+                        global_abort.set()
+                        raise RuntimeError(
+                            "Aborting due to uncaught exception in task cleanup"
+                        ) from e
+
+                    log.debug(f"Finished task {task}")
+                    self._queue.task_done(key)  # Keep the queue sanitised
+
+                    # Requeue this task if necessary
+                    task.requeue()
+
+                    log.error(f"Exiting due to db error: {e}")
+                    return 1  # Thread exits, will be respawned in the main loop
                 except Exception as e:
-                    # Errors upon errors: just crash and burn
                     global_abort.set()
                     raise RuntimeError(
-                        "Aborting due to uncaught exception in task cleanup"
+                        "Aborting due to uncaught exception in task"
                     ) from e
 
+                # Who knows what the state of the queue is during a global abort?
+                if not global_abort.is_set():
+                    self._queue.task_done(key)
+
                 log.debug(f"Finished task {task}")
-                queue.task_done(key)  # Keep the queue sanitised
 
-                # Requeue this task if necessary
-                task.requeue()
-
-                log.error(f"Exiting due to db error: {e}")
-                return 1  # Thread exits, will be respawned in the main loop
-            except Exception as e:
-                global_abort.set()
-                raise RuntimeError("Aborting due to uncaught exception in task") from e
-
-            # Who knows what the state of the queue is during a global abort?
-            if not global_abort.is_set():
-                queue.task_done(key)
-
-            log.debug(f"Finished task {task}")
+    def stop(self):
+        """Tell the worker to stop after finishing the current task."""
+        self._stop.set()
 
 
 class WorkerPool:
@@ -157,9 +178,6 @@ class WorkerPool:
 
         # For pool updates
         self._mutex = threading.Lock()
-
-        # A list of stop events for currently-running workers.
-        self._stops = list()
 
         # Running workers (ones being monitored)
         self._workers = list()
@@ -184,37 +202,24 @@ class WorkerPool:
         constructor, callers should acquire the mutex first.
         """
 
-        # Create a stop event for this worker
-        stop = threading.Event()
-
-        # Create the thread
-        if index is None:
-            name = f"Worker#{len(self._workers)}"
-        else:
-            name = f"Worker#{index}"
-        thread = threading.Thread(
-            target=_worker,
-            args=(stop, self._queue),
-            name=name,
-            # daemon=True means the thread will be cancelled if
-            # the main thread is aborted
-            daemon=True,
+        # Create the worker
+        worker = Worker(
+            queue=self._queue,
+            index=len(self._workers) if index is None else index,
         )
 
         if index is None:
             # Append
-            self._stops.append(stop)
-            self._workers.append(thread)
+            self._workers.append(worker)
         else:
             # Replace
-            self._stops[index] = stop
             self._workers[index] = worker
 
         # This is always an append
-        self._all_workers.append(thread)
+        self._all_workers.append(worker)
 
         # Start working
-        tread.start()
+        worker.start()
 
     def add_worker(self, blocking=True):
         """Increment the number of workers in the pool.
@@ -239,12 +244,11 @@ class WorkerPool:
         """
 
         if self._mutex.acquire(blocking=blocking):
-            if len(self._stops) == 0:
+            if len(self._workers) == 0:
                 log.warning("WorkerPool ignoring decrement request: no workers")
 
-            # Fire the stop event (also forget it: we don't need it after this)
-            stop = self._stops.pop()
-            stop.set()
+            # Fire the stop event
+            self._workers.stop()
 
             # Cut the worker loose
             self._workers.pop()
@@ -290,15 +294,14 @@ class WorkerPool:
 
         with self._mutex:
             # Signal all current workers
-            for stop in self._stops:
-                stop.set()
+            for worker in self._workers:
+                worker.stop()
 
             # Wait for _all_ workers
             for worker in self._all_workers:
                 worker.join()
 
             # Probably we're about to exit, but just so everything stays copacetic:
-            self._stops = list()
             self._workers = list()
             self._all_workers = list()
 
