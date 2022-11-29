@@ -162,7 +162,7 @@ class StorageNode(base_model):
             self._io = _get_io_instance(self)
         return self._io
 
-    @proptery
+    @property
     def remote(self):
         """An instance of the remote-I/O class for this node"""
         if self._remote is None:

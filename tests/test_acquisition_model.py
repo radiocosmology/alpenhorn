@@ -56,7 +56,8 @@ def load_fixtures():
 @pytest.fixture
 def fixtures():
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db._connect()
+    db.init()
+    db.connect()
 
     yield load_fixtures()
 

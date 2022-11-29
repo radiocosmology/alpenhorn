@@ -340,7 +340,7 @@ def copy_request_done(
     )
 
     # Upsert the FileCopy
-    with db.proxy.atomic():
+    with db.database_proxy.atomic():
         ar.ArchiveFileCopy.replace(
             file=req.file,
             node=node,

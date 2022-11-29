@@ -19,18 +19,15 @@ optional:
                 Should raise pw.OperationalError if a connection could not
                 be returned.  If not given, the _connect() function in this
                 module will be called instead.
-    - "proxy": a peewee database proxy.  Will be initialised by connector
+    - "database_proxy": a peewee database proxy.  Will be initialised by connector
                 returned from the "connect" call.  If not given, a new pw.Proxy()
                 instance is created.
-    - "enum": a peewee.Field subclass to represent Enum fields in the database.
-                If not given, a suitable class is provided.
 
 Before access the attributes of this module, init() must be called to set up
 the database.  After that function is called, the following attributes are
 available:
 
-- EnumField: a peewee.Field representing an enum field in the database.
-- proxy: a peewee.Proxy object for database access
+- database_proxy: a peewee.Proxy object for database access
 - threadsafe: a boolean indicating whether the database can be concurrently
             accessed from multiple threads.
 
@@ -38,15 +35,14 @@ Also after calling init(), a connection to the database can be initialised by
 calling the connect() function.
 """
 import sys
+import logging
 import peewee as pw
 import playhouse.db_url as db_url
 
 from . import config, extensions
 
 # All peewee-generated logs are logged to this namespace.
-import logging
-
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # We store the database extension here
 _db_ext = None
@@ -55,8 +51,7 @@ _db_ext = None
 # =================
 # These are all initialised by init()
 
-proxy = None
-EnumField = None
+database_proxy = None
 threadsafe = None
 
 
@@ -70,7 +65,6 @@ def _capability(key):
     # capability defaults (these implement the fallback database
     # module).
     default_cap = {
-        "enum": None,
         "connect": None,
         "proxy": None,
         "reentrant": False,
@@ -107,16 +101,10 @@ def init():
     threadsafe = _capability("reentrant")
 
     # Set up proxy
-    global proxy
-    proxy = _capability("proxy")
-    if proxy is None:
-        proxy = pw.Proxy()
-
-    # Set up fields
-    global EnumField
-    EnumField = _capability("enum")
-    if EnumField is None:
-        EnumField = _EnumField
+    global database_proxy
+    database_proxy = _capability("proxy")
+    if database_proxy is None:
+        database_proxy = pw.Proxy()
 
 
 def connect():
@@ -136,16 +124,13 @@ def connect():
         func = _connect
     db = func(config=database_config)
 
-    proxy.initialize(db)
+    database_proxy.initialize(db)
 
-    # If we're using the local _EnumField, initialise it:
-    global EnumField
-    if EnumField is _EnumField:
-        if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
-            db.field_types["enum"] = "enum"
-            _EnumField.native = True
-        else:
-            _EnumField.native = False
+    if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
+        db.field_types["enum"] = "enum"
+        EnumField.native = True
+    else:
+        EnumField.native = False
 
 
 def _connect(config):
@@ -200,15 +185,12 @@ class RetryOperationalError(object):
         return cursor
 
 
-class _EnumField(pw.Field):
+class EnumField(pw.Field):
     """Implements an ENUM field for peewee.
 
     Only MySQL and PostgreSQL support `ENUM` types natively in the database. For
     Sqlite (and others), the `ENUM` is implemented as an appropriately sized
     `VARCHAR` and the validation is done at the Python level.
-
-    Used by default if no database extension module povides another EnumField
-    class.
 
     .. warning::
         For the *native* ``ENUM`` to work you *must* register it with peewee by
@@ -247,11 +229,11 @@ class _EnumField(pw.Field):
 
         self.maxlen = max([len(val) for val in self.enum_list])
 
-        super(_EnumField, self).__init__(*args, **kwargs)
+        super(EnumField, self).__init__(*args, **kwargs)
 
     def clone_base(self, **kwargs):
         # Add the extra parameter so the field is cloned properly
-        return super(_EnumField, self).clone_base(enum_list=self.enum_list, **kwargs)
+        return super(EnumField, self).clone_base(enum_list=self.enum_list, **kwargs)
 
     def get_modifiers(self):
         # This routine seems to be for setting the arguments for creating the
@@ -274,6 +256,6 @@ class base_model(pw.Model):
     """Fallback base class for all peewee models."""
 
     class Meta(object):
-        database = proxy
+        database = database_proxy
 
         # TODO: consider whether to use only_save_dirty = True here

@@ -13,7 +13,8 @@ def fixtures():
 
     from alpenhorn import db
 
-    db._connect()
+    db.init()
+    db.connect()
 
     db.database_proxy.create_tables(
         [

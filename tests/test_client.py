@@ -26,7 +26,8 @@ import test_import as ti
 @pytest.fixture
 def fixtures(tmpdir):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db._connect()
+    db.init()
+    db.connect()
 
     yield ti.load_fixtures(tmpdir)
 

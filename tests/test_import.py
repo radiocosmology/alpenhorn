@@ -99,7 +99,8 @@ def load_fixtures(tmpdir):
 @pytest.fixture
 def fixtures(tmpdir):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db._connect()
+    db.init()
+    db.connect()
 
     yield load_fixtures(tmpdir)
 

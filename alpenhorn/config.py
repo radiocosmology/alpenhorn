@@ -73,6 +73,18 @@ _default_config = {
 }
 
 
+def merge_config(extra_config):
+    """Merge the dict `extra_config` into the config."""
+
+    global config
+
+    # If necessary, initialise with the default
+    if config is None:
+        config = _default_config.copy()
+
+    config = merge_dict_tree(config, extra_config)
+
+
 def load_config():
     """Find and load the configuration from a file."""
 

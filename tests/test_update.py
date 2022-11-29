@@ -16,16 +16,14 @@ try:
 except ImportError:
     from mock import patch
 
+import test_import as ti
+
 import alpenhorn.acquisition as ac
 import alpenhorn.archive as ar
 import alpenhorn.db as db
 import alpenhorn.storage as st
 import alpenhorn.update as update
-import test_import as ti
-from alpenhorn.Task import Task
-from alpenhorn.Task import SourceTransferTask
-from alpenhorn.Task import DiskTransferTask
-from alpenhorn.Task import TaskQueue
+import alpenhorn.config as config
 
 tests_path = os.path.abspath(os.path.dirname(__file__))
 
@@ -37,7 +35,11 @@ num_task_threads = 4
 @pytest.fixture
 def fixtures(tmpdir):
     """Initializes an Sqlite database on disk with data in tests/fixtures"""
-    db._connect("sqlite:///" + str(tmpdir.join("database.sql")))
+    config.merge_config(
+        {"database": {"url": "sqlite:///" + str(tmpdir.join("database.sql"))}}
+    )
+    db.init()
+    db.connect()
 
     fixtures = ti.load_fixtures(tmpdir)
 

@@ -33,7 +33,8 @@ class FailingSqliteDatabase(pw.SqliteDatabase):
 
 @pytest.fixture
 def fixtures(tmpdir):
-    db._connect()
+    db.init()
+    db.connect()
 
     # the database connection will fail to execute a statement every other time
     db.database_proxy.obj.__class__ = type(

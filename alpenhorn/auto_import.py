@@ -10,7 +10,7 @@ from watchdog.events import FileSystemEventHandler
 from . import acquisition as ac
 from . import archive as ar
 from . import config, db, util
-from task import Task
+from .task import Task
 
 import logging
 
@@ -104,7 +104,7 @@ def _import_file(node, path):
         return
 
     # Begin a transaction
-    with db.proxy.atomic():
+    with db.database_proxy.atomic():
         # Add the acqusition, if necessary
         try:
             acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
