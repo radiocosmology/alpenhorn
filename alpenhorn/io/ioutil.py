@@ -266,11 +266,10 @@ def copy_request_done(
     req,
     node,
     success,
-    md5sum,
+    md5ok,
     start_time,
     check_src=True,
     stderr=None,
-    copy_size_b=None,
 ):
     """Update the database after attempting a copy request.
 
@@ -282,7 +281,7 @@ def copy_request_done(
         The destination node
     success : boolean
         True unless the file transfer failed.
-    md5sum : boolean or str
+    md5ok : boolean or str
         Either a boolean indicating if the MD5 sum was correct or
         else a string MD5 sum which we need to verify.  Ignored if
         success is not True.
@@ -292,8 +291,6 @@ def copy_request_done(
         if success is False, should the source file be marked suspect?
     stderr : str or None
         if success is False, this will be copied into the log
-    copy_size_b : int
-        the size of the file copy, in blocks
 
     Returns True if the caller should keep the file or False if the
     file should be deleted."""
@@ -317,13 +314,13 @@ def copy_request_done(
             log.error("Copy failed.")
         return False
 
-    # Otherwise, transfer was successful, remember end time
+    # Otherwise, transfer was completed, remember end time
     end_time = time.time()
 
     # Check integrity.
-    if instance(md5sum, str):
-        md5sum = md5sum == req.file.md5sum
-    if not md5sum:
+    if instance(md5ok, str):
+        md5ok = md5ok == req.file.md5ok
+    if not md5ok:
         log.error(
             f"MD5 mismatch on node {node.name}; "
             f"Marking source file {file.name} on node {req.node_from} suspect."
@@ -350,7 +347,7 @@ def copy_request_done(
             has_file="Y",
             wants_file="Y",
             prepared=True,
-            size_b=copy_size,
+            size_b=node.io.filesize(req.file.path, actual=True),
         ).execute()
 
         # Mark AFCR as completed

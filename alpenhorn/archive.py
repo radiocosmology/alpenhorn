@@ -8,7 +8,7 @@ from .db import EnumField, base_model
 
 
 class ArchiveFileCopy(base_model):
-    """Information about a file.
+    """Information about a copy of a file on a node.
 
     Attributes
     ----------
@@ -16,31 +16,36 @@ class ArchiveFileCopy(base_model):
         Reference to the file of which this is a copy.
     node : foreign key
         The node on which this copy lives (or should live).
-    has_file : string
-        Is the node on the file?
-        - 'Y': yes, the node has the file.
+    has_file : enum
+        Is the file on the node?
+        - 'Y': yes, the node has a copy of the file.
         - 'N': no, the node does not have the file.
-        - 'M': maybe: we've tried to copy/erase it, but haven't yet verified.
+        - 'M': maybe: the file copy needs to be re-checked.
         - 'X': the file is there, but has been verified to be corrupted.
     wants_file : enum
         Does the node want the file?
         - 'Y': yes, keep the file around
         - 'M': maybe, can delete if we need space
-        - 'N': no, attempt to delete
+        - 'N': no, should be deleted
         In all cases we try to keep at least two copies of the file around.
-    prepared : bool
-        Set to true when the source node has prepared the file for transfer.
+    ready : bool
+        _Some_ StorageNode.io_classes use this to tell other hosts that
+        files are ready to be pulled.  Other io_classes do _not_ use this
+        field and assess readiness in some other way, so never check this
+        directly; use StorageNode.remote.pull_ready() to determine whether
+        a remote file is ready for pulling.
     size_b : integer
-        Allocated size of file in bytes (calculated as a multiple of 512-byte
-        blocks).
+        Allocated size of file in bytes (i.e. actual size on the Storage
+        medium.)
     """
 
     file = pw.ForeignKeyField(ArchiveFile, backref="copies")
     node = pw.ForeignKeyField(StorageNode, backref="copies")
     has_file = EnumField(["N", "Y", "M", "X"], default="N")
     wants_file = EnumField(["Y", "M", "N"], default="Y")
-    prepared = pw.BooleanField(default=False)
+    ready = pw.BooleanField(default=False)
     size_b = pw.BigIntegerField()
+    last_update = pw.TimestampField()
 
     @property
     def path(self):

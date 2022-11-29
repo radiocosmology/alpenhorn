@@ -12,11 +12,9 @@ def _get_io_instance(obj):
     if isinstance(obj, StorageGroup):
         obj_type = "StorageGroup"
         io_suffix = "GroupIO"
-        base_class = BaseGroupIO
     else:
         obj_type = "StorageNode"
         io_suffix = "NodeIO"
-        base_class = BaseNodeIO
 
     # If no io_class is specified, the Default I/O classes are used
     io_class = "Default" if obj.io_class is None else obj.io_class
@@ -39,12 +37,6 @@ def _get_io_instance(obj):
         raise ValueError(
             f'Unable to resolve I/O class "{io_class}" for {obj_type} {obj.name}.'
         ) from e
-
-    # Check class_
-    if not issubclass(class_, base_class):
-        raise TypeError(
-            f'I/O class "{io_class}" for {obj_type} {obj.name} does not descend from {base_class}.'
-        )
 
     # instantiate the class and pass the object to it
     return class_(obj)

@@ -1,9 +1,9 @@
 """BaseIO classes.
 
-All IO classes must sublcass from these base classes to be recognised as valid.
+Provides the basic infrastructure for StorageNode and StorageGroup I/O.
 
 These are very low-level classes.  Any module implementing the I/O class for
-something even remotely resembling a POSIX filesystem would be better served
+something even remotely resembling a POSIX filesystem may be better served
 by subclassing from DefaultIO instead of from here directly.
 """
 import json

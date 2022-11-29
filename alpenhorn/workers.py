@@ -3,6 +3,7 @@
 import signal
 import threading
 from . import db
+from collections import deque
 from peewee import OperationalError
 
 import logging
@@ -65,7 +66,7 @@ class Worker(threading.Thread):
     def __init__(self, queue, index):
         # thread constructor
         # daemon=True means the thread will be cancelled if the main thread is aborted
-        threading.Thread.__init__(name=f"Worker#{index}", daemon=True)
+        threading.Thread.__init__(self, name=f"Worker#{index}", daemon=True)
 
         self._stop = threading.Event()
         self._queue = queue
@@ -81,7 +82,7 @@ class Worker(threading.Thread):
         Waits and executes tasks from self._queue as they become available.
         Runs until the self._stop event fires.
 
-        A database error (pw.OperationalError), will result in this worker
+        A database error (peewee.OperationalError), will result in this worker
         cleanly abandonning its current task and exiting.  The main thread
         will restart it to recover the connection.
 
@@ -120,7 +121,7 @@ class Worker(threading.Thread):
                     task()
                 except OperationalError:
                     # Try to clean up. This runs task.do_cleanup()
-                    # until it raises something other than pw.OperationalError
+                    # until it raises something other than OperationalError
                     # or finishes.  Each time it is run, at least one cleanup
                     # function will be shifted out of the queue, so at most
                     # we'll call it once per registered cleanup function
@@ -129,7 +130,7 @@ class Worker(threading.Thread):
                             try:
                                 task.do_cleanup()
                                 break  # Clean exit, so we're done
-                            except pw.OperationalError:
+                            except OperationalError:
                                 pass  # Yeah, we know already; try again
                     except Exception as e:
                         # Errors upon errors: just crash and burn

@@ -29,28 +29,6 @@ def DefaultNodeRemote(BaseNodeRemote):
         return True
 
 
-def DefaultGroupIO(BaseGroupIO):
-    """DefaultGroupIO implements a simple StorageGroup.
-
-    The DefaultGroupIO permits any number of StorageNodes in the group, but only permits at most
-    one to be active on a given host at any time.
-    """
-
-    def before_update(self, nodes, queue_empty):
-        """DefaultGroupIO only accepts a single node to operate on."""
-
-        if len(nodes) > 1:
-            log.warning(f"Too many active nodes in group f{self.group.name}.")
-            return True
-
-        self.node = nodes[0]
-        return False
-
-    def pull(self, req):
-        """Fulfill a copy request pull into this group by passing the request to the node."""
-        self.node.io.pull(req)
-
-
 def DefaultNodeIO(BaseNodeIO):
     """DefaultNodeIO implements a simple StorageNode backed by a regular POSIX filesystem."""
     remote_class = DefaultNodeRemote
@@ -64,7 +42,6 @@ def DefaultNodeIO(BaseNodeIO):
         self.mutex = threading.Lock()
         self._reserved_bytes = 0
 
-    # This was formerly util.alpenhorn_node_check
     def check_active(self):
         """Check that the file <node.root>/ALPENHORN_NODE exists and contains the name of the node.
 
@@ -86,11 +63,11 @@ def DefaultNodeIO(BaseNodeIO):
                 if self.node.name == first_line.rstrip():
                     # Great! Everything is as expected.
                     return True
-                log.debug(
+                log.warning(
                     f"Node name in file {file_path} does not match expected: {self.node.name}."
                 )
         except IOError:
-            log.debug(f"Node file {file_path} could not be read.")
+            log.warning(f"Node file {file_path} could not be read.")
 
         return False
 
@@ -136,15 +113,23 @@ def DefaultNodeIO(BaseNodeIO):
         return path.is_file()
 
     def md5sum_file(self, acqname, filename):
-        """Return the MD5 sum of file acqname/filename"""
+        """Return the MD5 sum of file acqname/filename.
+
+        This can take a long time: call it from an async."""
         return util.md5sum_file(pathlib.PurePath(self.node.root, acqname, filename))
 
     def filesize(self, path, actual=False):
         """Return size in bytes of the file given by path.
 
+        Path may be absolute or relative to node.root.
+
         If acutal is True, returns the amount of space the file actually takes
         up on the storage system.  Otherwise returns apparent size.
         """
+        path = pathlib.PurePath(path)
+        if not path.is_absolute():
+            path = pathlib.PurePath(self.node.root, path)
+
         if actual:
             # Per POSIX, blocksize for st_blocks is always 512 bytes
             return os.stat(path).st_blocks * 512
@@ -167,7 +152,7 @@ def DefaultNodeIO(BaseNodeIO):
         size *= reserve_factor
         with self.mutex:
             bavail = self.bytes_avail()
-            if bavail - self.reserved_bytes > size:
+            if bavail is not None and bavail - self.reserved_bytes > size:
                 return False  # Insufficient space
 
             if not check_only:
@@ -187,16 +172,17 @@ def DefaultNodeIO(BaseNodeIO):
 
     def pull(self, req):
         """Queue an asynchronous I/O task to pull req.file from req.node onto the local filesystem."""
+
         if self.node.under_min():
             log.info(
-                f"Skipping pull for StorageNode f{self.name}: hit minimum free space: "
+                f"Skipping pull for StorageNode f{self.node.name}: hit minimum free space: "
                 f"({self.node.avail_gb:.2f} GiB < {self.node.min_total_gb}:.2f GiB)"
             )
             return
 
         if self.node.over_max():
             log.info(
-                f"Skipping pull for StorageNode f{self.name}: node full. "
+                f"Skipping pull for StorageNode f{self.node.name}: node full. "
                 f"({self.node.total_gb():.2f} GiB >= {self.node.max_total_gb}:.2f GiB)"
             )
             return
@@ -248,3 +234,25 @@ def DefaultNodeIO(BaseNodeIO):
     def ready(self, req):
         """Does nothing: DefaultIO file copies are always ready."""
         pass
+
+
+def DefaultGroupIO(BaseGroupIO):
+    """DefaultGroupIO implements a simple StorageGroup.
+
+    The DefaultGroupIO permits any number of StorageNodes in the group, but only permits at most
+    one to be active on a given host at any time.
+    """
+
+    def before_update(self, nodes, queue_empty):
+        """DefaultGroupIO only accepts a single node to operate on."""
+
+        if len(nodes) > 1:
+            log.warning(f"Too many active nodes in group f{self.group.name}.")
+            return True
+
+        self.node = nodes[0]
+        return False
+
+    def pull(self, req):
+        """Fulfill a copy request pull into this group by passing the request to the node."""
+        self.node.io.pull(req)

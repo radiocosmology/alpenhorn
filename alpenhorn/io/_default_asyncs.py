@@ -35,32 +35,34 @@ def pull_async(task, node, req):
             from_path = req.node_from.remote.file_addr(req.file)
         except ValueError:
             log.warning(
-                f"Skipping request for {req.file.acq.name}/{req.file.name} "
+                f"Skipping request for {req.file.path} "
                 f"due to unconfigured route to host for node {req.node_from.name}."
             )
             return
 
-    to_dir = os.path.join(node.root, req.file.acq.name)
+    to_file = pathlib.Purepath(node.root, req.file.path)
+    to_dir = to_file.parent
     if not os.path.exists(to_dir):
         log.info(f'Creating directory "{to_dir}".')
         os.makedirs(to_dir)
 
     # Giddy up!
     start_time = time.time()
-    to_file = os.path.join(to_dir, req.file.name)
-    log.info(f'Transferring file "{req.file.acq.name}/{req.file.name}":')
+    log.info(f'Transferring file "{req.file.path}":')
 
     # Attempt to transfer the file. Each of the methods below needs to return
     # a dict with required key:
-    #  - ret: return code (0 == success)
+    #  - ret : integer
+    #        return code (0 == success)
     # optional keys:
-    #  - md5sum: string or True; if True, the sum is guaranteed to be right;
-    #            otherwise, it's a md5sum to check against the source
-    #            must be present if ret == 0
-    #  - stderr: string; if given, printed to the log when ret != 0
-    #  - check_src: bool; if given and False, the source file will _not_ be
-    #                     marked suspect when ret != 0; otherwise, a failure
-    #                     results in a source check
+    #  - md5sum : string or True
+    #        If True, the sum is guaranteed to be right; otherwise, it's a
+    #        md5sum to check against the source.  Must be present if ret == 0
+    #  - stderr : string
+    #        if given, printed to the log when ret != 0
+    #  - check_src : bool
+    #        if given and False, the source file will _not_ be marked suspect
+    #        when ret != 0; otherwise, a failure results in a source check
 
     # First we need to check if we are copying over the network
     if not local:
@@ -82,7 +84,13 @@ def pull_async(task, node, req):
 
         # First try to just hard link the file. This will only work if we
         # are on the same filesystem.  If it didn't work, ioresult will be None
-        ioresult = ioutil.hardlink(from_path, to_dir, req.file.name)
+        #
+        # But don't do this if it creates a hardlink between an archive node and
+        # a non-archive node
+        if req.node_from.archive == node.archive:
+            ioresult = ioutil.hardlink(from_path, to_dir, req.file.name)
+        else:
+            ioresult = None
 
         # If we couldn't just link the file, try copying it with rsync.
         if ioresult is None:
@@ -96,7 +104,6 @@ def pull_async(task, node, req):
         req,
         node,
         check_src=ioresult.get("check_src", True),
-        copy_size_b=os.stat(to_file).st_blocks * 512 if ioresult["ret"] == 0 else None,
         md5ok=ioresult["md5sum"],
         start_time=start_time,
         stderr=ioresult.get("stderr", None),
