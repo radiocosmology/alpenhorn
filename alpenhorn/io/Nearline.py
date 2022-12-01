@@ -69,6 +69,45 @@ class NearlineNodeIO(LFSQuotaNodeIO):
 
     def release_files(self):
         """Release files from the nearline disk to keep the headroom clear."""
+
+        def _async(node, lfs, headroom_needed):
+            total_files = 0
+            total_bytes = 0
+
+            # loop through file copies until we've released enough
+            # (or we run out of files)
+            for copy in (
+                ar.ArchiveFileCopy.select()
+                .where(
+                    ar.ArchiveFileCopy.node == node,
+                    ar.ArchiveFileCopy.has_file == "Y",
+                    ar.ArchiveFileCopy.ready == True,
+                )
+                .order_by(ar.ArchiveFile.last_updated)
+            ):
+                # Skip unarchived files
+                if not lfs.hsm_archived(copy.file.path):
+                    continue
+
+                log.debug(
+                    f"releasing file copy {copy.path} "
+                    f"[={pretty_bytes(copy.size_b)}] on node {self.node.name}"
+                )
+                lfs.hsm_release(copy.file.path)
+                # Update copy record
+                ar.ArchiveFileCopy.update(ready=False).where(
+                    ar.ArchiveFileCopy.id == copy.id
+                ).execute()
+                total_files += 1
+                total_bytes += copy.size_b
+                if total_bytes >= headroom_needed:
+                    break
+            log.info(
+                f"released {pretty_bytes(total_bytes)} in "
+                f"{total_files} files on node {self.node.name}"
+            )
+            return
+
         headroom_needed = self._headroom - self._lfs.quota_remaining(
             self._nearline.root
         )
@@ -77,37 +116,13 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         if headroom_needed <= 0:
             return
 
-        total_files = 0
-        total_bytes = 0
-
-        # loop through file copies until we've released enough
-        for copy in (
-            ar.ArchiveFileCopy.select()
-            .where(
-                ar.ArchiveFileCopy.node == self.node,
-                ar.ArchiveFileCopy.has_file == "Y",
-                ar.ArchiveFileCopy.ready == True,
-            )
-            .order_by(ar.ArchiveFile.last_updated)
-        ):
-            # Skip unarchived files
-            if not self._lfs.hsm_archived(copy.file.path):
-                continue
-
-            log.debug(
-                "releasing file copy {copy.path} [={pretty_bytes(copy.size_b)}] on node {self.node.name}"
-            )
-            self._lfs.hsm_release(copy.file.path)
-            # Update copy record
-            ar.ArchiveFileCopy.update(ready=False).where(
-                ar.ArchiveFileCopy.id == copy.id
-            ).execute()
-            total_files += 1
-            total_bytes += copy.size_b
-            if total_bytes >= headroom_needed:
-                break
-        log.info(
-            f"released {pretty_bytes(total_bytes)} in {total_files} files on node {self.node.name}"
+        # Do the rest asynchronously
+        Task(
+            func=_async,
+            queue=self.queue,
+            key=self.node.name,
+            args=(self.node, self._lfs, headroom_needed),
+            name=f"Node {self.node.name}: HSM release {pretty_bytes(headroom_needed)}",
         )
 
     def check_active(self):
