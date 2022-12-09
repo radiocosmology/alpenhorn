@@ -21,6 +21,14 @@ class TransportGroupIO(BaseGroupIO):
             to the fullest node that it thinks it will fit on.
     """
 
+    @property
+    def idle(self):
+        """Returns the True if no node I/O is occurring."""
+        for node in self._nodes:
+            if not node.io.idle:  # Short circuit
+                return False
+        return True
+
     def before_update(self, nodes, queue_empty):
         """Check that nodes in group are transit nodes.
 
@@ -37,6 +45,18 @@ class TransportGroupIO(BaseGroupIO):
                 self._nodes.append(node)
 
         return len(self._nodes) == 0
+
+    def exists(self, path):
+        """Checks whether a file called path exists in this group.
+
+        Returns the StorageNode containing the file, or None if no
+        file was found.
+        """
+        for node in self._nodes:
+            if node.exists(path):
+                return node
+
+        return None
 
     def pull(self, req):
         """Handle a pull request.

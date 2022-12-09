@@ -71,19 +71,34 @@ class StorageGroup(base_model):
             self._io = _get_io_instance(self)
         return self._io
 
-    def copy_present(self, file):
-        """Is a copy of ArchiveFile file present in this group?"""
+    def copy_state(self, file):
+        """Returns the value of has_file for an ArchiveFileCopy for
+        the given ArchiveFile file if found in this group, or 'N'
+        if no such copy exists.
+
+        Return value
+        ------------
+        The return value will be one of:
+        - 'Y' file copy exists
+        - 'X' file copy is corrupt
+        - 'M' file copy needs to be checked
+        - 'N' file copy does not exist.
+        """
 
         try:
-            ar.ArchiveFileCopy.join(st.StorageNode).select().where(
-                ar.ArchiveFileCopy.file == file,
-                ar.ArchiveFileCopy.node.group == self,
-                ar.ArchiveFileCopy.has_file == "Y",
-            ).get()
+            return (
+                di.ArchiveFileCopy.select(di.ArchiveFileCopy.has_file)
+                .join(di.StorageNode)
+                .where(
+                    di.ArchiveFileCopy.node.group == self.group,
+                    di.ArchiveFileCopy.file == file,
+                )
+                .scalar()
+            )
         except pw.DoesNotExist:
-            return False
+            pass
 
-        return True
+        return "N"
 
 
 class StorageNode(base_model):
@@ -108,8 +123,10 @@ class StorageNode(base_model):
         Is the node active?
     auto_import : bool
         Should files that appear on this node be automatically added?
-    suspect : bool
-        Could this node be corrupted?
+    auto_verify : integer
+        If greater than zero, automatically re-verify file copies on this
+        node during times of no other activity.  The value is the maximum
+        number of files that will be re-verified per update loop.
     storage_type : enum
         What is the type of storage?
         - 'A': archival storage
@@ -123,9 +140,6 @@ class StorageNode(base_model):
         How much free space is there on this node?
     avail_gb_last_checked : datetime
         When was the amount of free space last checked?
-    min_delete_age_days : float
-        What is the minimum amount of time a file must remain on the node before
-        we are allowed to delete it?
     notes : string
         Any notes or comments about this node.
     io_config : string
@@ -145,12 +159,12 @@ class StorageNode(base_model):
     group = pw.ForeignKeyField(StorageGroup, backref="nodes")
     active = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
+    auto_verify = pw.IntegerField(default=0)
     storage_type = EnumField(["A", "T", "F"], default="A")
     max_total_gb = pw.FloatField(default=-1.0, null=True)
     min_avail_gb = pw.FloatField(null=True)
     avail_gb = pw.FloatField(null=True)
     avail_gb_last_checked = pw.DateTimeField(null=True)
-    min_delete_age_days = pw.FloatField(default=30, null=True)
     notes = pw.TextField(null=True)
     io_config = pw.TextField(null=True)
 

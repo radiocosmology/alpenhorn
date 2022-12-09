@@ -7,6 +7,7 @@ and StorageGroups which do not explicitly specify io_class.
 
 
 import os
+import logging
 import threading
 from pathlib import PurePath
 from watchdog.observers.inotify import InotifyObserver
@@ -15,8 +16,6 @@ from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
 # The asyncs are over here:
 from _default_asyncs import *
-
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +106,13 @@ def DefaultNodeIO(BaseNodeIO):
         """
         return self._walk(self, self.node.root)
 
-    def lock_present(self, acqname, filename):
+    def exists(self, path):
+        """Returns a boolean indicating whether the file path exists or not.
+
+        path is relative to the root."""
+        return pathlib.Path(self.node.root, path).is_file()
+
+    def locked(self, acqname, filename):
         """Returns true if "acqname/.filename.lock" exists."""
         path = pathlib.Path(self.node.root, acqname, "." + filename + ".lock")
         return path.is_file()
@@ -243,7 +248,12 @@ def DefaultGroupIO(BaseGroupIO):
     one to be active on a given host at any time.
     """
 
-    def before_update(self, nodes, queue_empty):
+    @property
+    def idle(self):
+        """Returns the True if no node I/O is occurring."""
+        return self.node.io.idle
+
+    def before_update(self, nodes, idle):
         """DefaultGroupIO only accepts a single node to operate on."""
 
         if len(nodes) > 1:
@@ -253,6 +263,18 @@ def DefaultGroupIO(BaseGroupIO):
         self.node = nodes[0]
         return True
 
+    def exists(self, path):
+        """Checks whether a file called path exists in this group.
+
+        Returns the StorageNode containing the file, or None if no
+        file was found.
+        """
+        if self.node.exists(path):
+            return self.node
+
+        return None
+
     def pull(self, req):
-        """Fulfill a copy request pull into this group by passing the request to the node."""
+        """Fulfill a copy request pull into this group by passing the request to
+        the node."""
         self.node.io.pull(req)

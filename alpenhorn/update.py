@@ -1,11 +1,11 @@
 """Routines for updating the state of a node.
 """
 
-import datetime as dt
-import logging
 import os
 import re
 import time
+import logging
+import datetime
 
 import peewee as pw
 from peewee import fn
@@ -17,31 +17,103 @@ from . import storage as st
 from . import auto_import, util
 from .task import Task
 from .workers import global_abort
+from .querywalker import QueryWalker
 
 log = logging.getLogger(__name__)
 
 
 def update_loop(host, queue, pool):
-    """Loop over nodes performing any updates needed.
+    """Main loop of alepnhornd.
 
-    Asynchronous I/O tasks may be executed by putting them on the queue.  The
-    will be performed by workers in the pool."""
+    This is the main update loop for the alpenhorn daemon.
+
+    Parameters
+    ----------
+    host : string
+        the name of the host we're running on (must match the value in the DB)
+    queue : FairMultiFIFOQueue
+        the task manager
+    pool : WorkerPool
+        the pool of worker threads (may be empty)
+
+    The daemon cycles through the update loop until it is terminated in
+    one of three ways:
+
+    - receiving SIGINT (AKA KeyboardInterrupt).  This causes a clean exit.
+    - a global abort caused by an uncaught exception in a worker thread.  This
+        causes a clean exit.
+    - a crash due to an uncaught exception in the main thread.  This does _not_
+        cause a clean exit.
+
+    During a clean exit, alpenhornd will try to finish in-progress tasks before
+    shutting down.
+    """
     while not global_abort.is_set():
         loop_start = time.time()
 
-        # Iterate over nodes and groups and perform I/O updates.
-        #
-        # nodes and groups are re-queried every loop iteration so we can
-        # detect changes in available storage media
-        for node in st.StorageNode.select().where(st.StorageNode.host == host):
-            update_node(node, queue)
+        # Used to remember the results if idle checks for later.
+        group_idle = dict()
+        node_idle = dict()
 
-        for group in (
-            st.StorageGroup.join(st.StorageGroup)
-            .select()
-            .where(st.StorageNode.host == host)
+        # Iterate over nodes first
+        #
+        # nodes and are re-queried every loop iteration so we can
+        # detect changes in available storage media
+        for node in st.StorageNode.select().where(
+            st.StorageNode.host == host, st.StorageNode.active == True
         ):
-            update_group(group, queue)
+            # Init I/O, if necessary.
+            node.io.set_queue(queue)
+
+            # Update group_idle.  As we loop through the nodes, this builds up
+            # a list of which groups are available on this host and whether they
+            # were idle before node I/O happened.
+            group_idle[node.group] = group_idle.get(node.group, True) and node.io.idle
+
+            # Perform the node update, maybe
+            updated = update_node(node, queue)
+
+            # After the update, check again whether I/O is ongoing or if we're idle
+            if updated:
+                node_idle[node] = node.io.idle
+            else:
+                node_idle[node] = None
+
+        # Group updates
+        for group in group_idle:
+            updated = update_group(group, queue, group_idle[group])
+
+            # After the update, check again whether I/O is ongoing or if we're idle
+            if updated:
+                group_idle[group] = group.io.idle
+            else:
+                group_idle[group] = None
+
+        # Regular I/O updates are done.  If any nodes or groups are idle after that,
+        # run the idle updates, but only if the update happened for that group.
+
+        # loop over all the nodes and run the idle updates if we're idle
+        for node in node_idle:
+            if node_idle[node] is True:
+                node.io.idle_update()
+
+                # Run auto-verfiy, if requested
+                if node.auto_verify > 0:
+                    auto_verfiy(node)
+
+        # Ditto for groups
+        for group in group_idle:
+            if group_idle[group] is True:
+                group.io.idle_update()
+
+        # Lean into duck-typing and just mush everything together to
+        # loop over all the things and run the post-update hooks
+        # (also note: groups come first, here)
+        for item in (group_idle | node_idle).items():
+            thing, idle = *item
+            thing.io.after_update(idle)
+
+        # Done with the I/O updates, do some housekeeping:
 
         # Respawn workers that have exited (due to DB error)
         pool.check()
@@ -91,8 +163,12 @@ def serial_io(queue):
         log.debug(f"Finished task {task}")
 
 
-def update_group(group, queue):
-    """Perform I/O updates on a StorageGroup"""
+def update_group(group, queue, idle):
+    """Perform I/O updates on a StorageGroup.
+
+    Returns a boolean indicating whether I/O happened or not (i.e. it was
+    skipped).
+    """
 
     # Find all active nodes in this group on this host
     nodes_in_group = list(
@@ -103,18 +179,12 @@ def update_group(group, queue):
         )
     )
 
-    # Set the queue for all nodes and chewck if the queue is empty
-    queue_empty = True
-    for node in nodes_in_group:
-        node.io.set_queue(queue)
-        if queue_empty and queue.fifo_size(node.name) > 0:
-            queue_empty = False
-
     # Call the before update hook
-    do_update = group.io.before_update(nodes_in_group, queue_empty)
+    do_update = group.io.before_update(nodes_in_group, idle)
 
-    # Update only happens if the queue is empty and the I/O layer hasn't cancelled the update
-    if queue_empty and do_update:
+    # Update only happens if the queue is empty and the I/O layer hasn't
+    # cancelled the update
+    if idle and do_update:
         log.info(f'Updating group "{group.name}".')
 
         # Process pulls into this group
@@ -123,22 +193,68 @@ def update_group(group, queue):
             ar.ArchiveFileCopyRequest.cancelled == 0,
             ar.ArchiveFileCopyRequest.group_to == self.group,
         ):
-            # If the destination file is already present in this group, cancel the request.
-            if self.group.copy_present(req.file):
+            # What's the current situation on the destination?
+            copy_state = self.group.copy_state(req.file)
+            if copy_state == "Y":
                 log.info(
-                    f"Cancelling pull request for {req.file.acq.name}/{req.file.name}: "
+                    f"Cancelling pull request for "
+                    f"{req.file.acq.name}/{req.file.name}: "
                     f"already present in group {group.name}."
                 )
                 ar.ArchiveFileCopyRequest.update(cancelled=True).where(
                     ar.ArchiveFileCopyRequest.id == req.id
                 ).execute()
                 continue
+            elif copy_state == "M":
+                log.warning(
+                    f"Skipping pull request for "
+                    f"{req.file.acq.name}/{req.file.name}: "
+                    f"existing copy in group {group.name} needs check."
+                )
+                continue
+            elif copy_state == "X":
+                # If the file is corrupt, we continue with the
+                # pull to overwrite the corrupt file
+                pass
+            elif copy_state == "N":
+                # Check whether an actual file exists on the target.
+                node = group.io.exists(req.file.path)
+                if node is not None:
+                    # file on disk: create/update the ArchiveFileCopy
+                    # to force a check next pass
+                    log.warning(
+                        f"Skipping pull request for "
+                        f"{req.file.acq.name}/{req.file.name}: "
+                        f"file already on disk in group {group.name}."
+                    )
+                    log.info(
+                        f"Requesting check of "
+                        f"{req.file.acq.name}/{req.file.name} on node "
+                        f"{node.name}."
+                    )
+                    # Upsert ArchiveFileCopy to force a check
+                    ar.ArchiveFileCopy.replace(
+                        file=req.file,
+                        node=node,
+                        has_file="M",
+                        wants_file="Y",
+                        prepared=False,
+                        size_b=node.io.filesize(req.file.path, actual=True),
+                    ).execute()
+                    continue
+            else:
+                # Shouldn't get here
+                log.error(
+                    f"Unexpected copy state: '{copy_state}' "
+                    f"for file ID={req.file.id} in group {group.name}."
+                )
+                continue
 
             # Skip request unless the source node is active
             if not req.node_from.active:
-                log.error(
-                    f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-                    f"source node {req.node_from.name} is not active."
+                log.warning(
+                    f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                    f" source node {req.node_from.name} is not active."
                 )
                 continue
 
@@ -146,17 +262,18 @@ def update_group(group, queue):
             #
             # XXX Cancel instead?
             if not req.node_from.copy_present(req.file):
-                log.error(
-                    f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-                    f"not available on node {req.node_from.name}. [file_id={req.file.id}]"
+                log.warning(
+                    f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                    f" not available on node {req.node_from.name}. "
+                    f"[file_id={req.file.id}]"
                 )
                 continue
 
             # If the source file is not ready, skip the request.
             if not req.node_from.remote.pull_ready(req.file):
                 log.info(
-                    f"Skipping request for {req.file.acq.name}/{req.file.name}: "
-                    f"not ready on node {req.node_from.name}."
+                    f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                    f" not ready on node {req.node_from.name}."
                 )
                 continue
 
@@ -165,36 +282,31 @@ def update_group(group, queue):
     else:
         log.info(
             f"Skipping update for group {group.name}:"
-            f"queue_empty={queue_empty} do_update={do_update}"
+            f"idle={idle} do_update={do_update}"
         )
 
-    # Whether or not we did the update, call the post-update hook
-    group.io.after_update(queue_empty, do_update)
+    return idle and do_update
 
 
 def update_node(node, queue):
-    """Perform I/O updates on a StorageNode"""
+    """Perform I/O updates on a StorageNode.
 
-    # Make sure this node is usable.
-    if not node.active:
-        log.debug(f'Skipping inactive node "{node.name}".')
-        return
-
-    # Init I/O, if necessary.
-    node.io.set_queue(queue)
+    Returns a boolean indicating whether I/O happened or not (i.e. it was
+    skipped).
+    """
 
     # Is this node's FIFO empty?  If not, we'll skip this
     # update since we can't know whether we'd duplicate tasks
     # or not
-    queue_empty = queue.fifo_size(node.name) == 0
+    idle = node.io.idle
 
     # Update (start or stop) an auto-import observer for this node if needed
     auto_import.update_observer(node, queue)
 
     # Pre-update hook
-    do_update = node.io.before_update(queue_empty)
+    do_update = node.io.before_update(idle)
 
-    if queue_empty and do_update:
+    if idle and do_update:
         log.info(f'Updating node "{node.name}".')
 
         # Check if the node is actually active
@@ -202,14 +314,15 @@ def update_node(node, queue):
             return
 
         # Check and update the amount of free space
-        update_node_free_space(node)
+        node.io.update_avail_gb()
 
         # Check the integrity of any questionable files (has_file=M)
         for copy in ar.ArchiveFileCopy.select().where(
             ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "M"
         ):
             log.info(
-                f'Checking copy "{copy.file.acq.name}/{copy.file.name}" on node {node.name}.'
+                f'Checking copy "{copy.file.acq.name}/{copy.file.name}" on node'
+                f" {node.name}."
             )
 
             # Dispatch integrity check to I/O layer
@@ -219,22 +332,28 @@ def update_node(node, queue):
         update_node_delete(node)
 
         # Process any regular transfers requests from this node
-        update_node_ready_copies(node, queue)
+        for req in ar.ArchiveFileCopyRequest.select().where(
+            ar.ArchiveFileCopyRequest.completed == 0,
+            ar.ArchiveFileCopyRequest.cancelled == 0,
+            ar.ArchiveFileCopyRequest.node_from == self.node,
+        ):
+            node.io.ready(req)
     else:
         log.info(
             f"Skipping update for node {node.name}:"
-            f"queue_empty={queue_empty} do_update={do_update}"
+            f"idle={idle} do_update={do_update}"
         )
 
     # Update the amount of free space, again; this is always done
-    update_node_free_space(node)
+    node.io.update_avail_gb()
 
-    # Post-update hook
-    node.io.after_update(queue_empty, do_update)
+    return idle and do_update
 
 
 def update_node_active(node):
-    """Check if the node is actually active in the system.  Returns True if it is."""
+    """Check if the node is actually active in the system.
+
+    Returns True if it is."""
 
     if node.active:
         if node.io.check_active():
@@ -242,9 +361,10 @@ def update_node_active(node):
         else:
             # Mark the node as inactive in the database
             node.active = False
-            node.save(only=node.dirty_fields)  # save only fields that have been updated
+            node.save(only=StorageNode.active)
             log.info(
-                f'Correcting the database: node "f{node.name}" is now set to inactive.'
+                f'Correcting the database: node "f{node.name}" is now set to '
+                "inactive."
             )
     else:
         log.warning(f'Attempted to update inactive node "f{node.name}"')
@@ -252,51 +372,20 @@ def update_node_active(node):
     return False
 
 
-def update_node_free_space(node, fast=False):
-    """Calculate the free space on the node and update the database with it.
-
-    If fast is True, then this is a fast call, and I/O classes for which checking
-    available space is expensive may skip it.
-
-    """
-
-    new_avail = node.io.bytes_avail(fast)
-
-    # If this was a fast call and the result was None, ignore it.  (On a slow call,
-    # None is honoured and written to the database.)
-    if fast and new_avail is None:
-        return
-
-    # The value in the database is in GiB (2**30 bytes)
-    if new_avail is None:
-        node.avail_gb = None
-    else:
-        node.avail_gb = new_avail / 2**30
-
-    # Update the DB with the free space but don't clobber changes made manually to the
-    # database
-    node.save(only=[st.StorageNode.avail_gb])
-
-    if new_avail is None:
-        log.info(f'Unable to determine available space for "{node.name}".')
-    else:
-        log.info(f'Node "{node.name}" has {node.avail_gb:.2f} GiB available.')
-
-
 def update_node_delete(node):
     """Process this node for files to delete."""
 
     # Find all file copies needing deletion on this node
     #
-    # If we have less than the minimum available space, we should consider all files
-    # not explicitly wanted (i.e. wants_file != 'Y') as candidates for deletion, provided
-    # the copy is not on an archive node. If we have more than the minimum space, or
-    # we are on archive node then only those explicitly marked (wants_file == 'N')
-    # will be removed.
+    # If we have less than the minimum available space, we should consider all
+    # files not explicitly wanted (i.e. wants_file != 'Y') as candidates for
+    # deletion, provided the copy is not on an archive node. If we have more
+    # than the minimum space, or we are on archive node then only those
+    # explicitly marked (wants_file == 'N') will be removed.
     if self.node.under_min() and not self.node.archive:
         log.info(
-            f"Hit minimum available space on {node.name} -- considering all unwanted "
-            "files for deletion!"
+            f"Hit minimum available space on {node.name} -- "
+            "considering all unwanted files for deletion!"
         )
         dfclause = ar.ArchiveFileCopy.wants_file != "Y"
     else:
@@ -314,9 +403,7 @@ def update_node_delete(node):
         .order_by(ar.ArchiveFileCopy.id)
     ):
         # Group a bunch of these together to reduce the number of I/O Tasks
-        # created
-        #
-        # TODO figure out if this actually helps
+        # created.  TODO: figure out if this actually helps
         if len(del_copies) >= 10:
             node.io.delete(del_copies)
             del_copies = [copy]
@@ -327,12 +414,19 @@ def update_node_delete(node):
     node.io.delete(del_copies)
 
 
-def update_node_ready_copies(node, queue):
-    """Process file copy requests from this node."""
+qws = dict()
 
-    for req in ar.ArchiveFileCopyRequest.select().where(
-        ar.ArchiveFileCopyRequest.completed == 0,
-        ar.ArchiveFileCopyRequest.cancelled == 0,
-        ar.ArchiveFileCopyRequest.node_from == self.node,
-    ):
-        node.io.ready(req)
+
+def auto_verify(node):
+    """Run auto-verification on nodes that request it during idle times."""
+
+    global qws
+    if node.name not in qws:
+        try:
+            qws[node.name] = QueryWalker(
+                ar.ArchiveFileCopy,
+                ar.ArchiveFileCopy.node == node,
+                ar.ArchiveFileCopy.has_file != "N",
+            )
+        except pw.DoesNotExist:
+            return  # No files to verify

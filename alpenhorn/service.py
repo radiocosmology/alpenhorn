@@ -103,9 +103,8 @@ def cli():
         # Global abort
         if workers.global_abort.is_set():
             log.warning("Exiting due to global abort")
-            break
 
-    # Exit on a keyboard interrupt
+    # Catch keyboard interrupt
     except KeyboardInterrupt:
         log.info("Exiting due to SIGINT")
 

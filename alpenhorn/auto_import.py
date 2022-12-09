@@ -99,7 +99,7 @@ def _import_file(node, path):
         return
 
     # Skip a file if there is still a lock on it.
-    if node.io.lockfile_present(acqname, filename):
+    if node.io.locked(acqname, filename):
         log.debug('Skipping "{path}": locked.', file_path)
         return
 
