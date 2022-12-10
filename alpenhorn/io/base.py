@@ -269,6 +269,15 @@ class BaseNodeIO:
         """Check whether ArchiveFileCopy `copy` is corrupt."""
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def auto_verify(self, copy):
+        """Check whether ArchiveFileCopy `copy` is corrupt.
+
+        This is called by the auto-verification process which can be
+        run during idle times on a node.
+
+        The default behaviour is to simply pass `copy` on to self.check."""
+        return self.check(copy)
+
     def delete(self, copies):
         """Delete the ArchiveFileCopy list `copies` from the node.
 

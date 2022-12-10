@@ -13,6 +13,9 @@ from alpenhorn.io.ioutil import pretty_bytes
 from alpenhorn.querywalker import QueryWalker
 from alpenhorn.io.LFSQuota import LFSQuotaNodeIO
 
+# This is the DefaultIO check async; used in auto_verify()
+from _default_asyncs import check_async
+
 log = logging.getLogger(__name__)
 
 
@@ -56,9 +59,6 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             "headroom", self.config["fixed_quota"] * 2**8
         )
 
-        # The release checker.  Will get initialised later
-        self._release_check = None
-
     def before_update(self, idle):
         """Before node update check.
 
@@ -73,7 +73,7 @@ class NearlineNodeIO(LFSQuotaNodeIO):
     def release_files(self):
         """Release files from the nearline disk to keep the headroom clear."""
 
-        def _async(node, lfs, headroom_needed):
+        def _async(task, node, lfs, headroom_needed):
             total_files = 0
             total_bytes = 0
 
@@ -161,19 +161,95 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         pass
 
     def check(self, copy):
-        """Make sure the file is recalled before trying to check it."""
+        """Make sure the file is restored before trying to check it."""
 
-        # If the file is released, recall it
+        # If the file is released, restore it and do nothing
+        # further (assuming the update loop will re-call this
+        # method next time through the loop).
         if self._lfs.hsm_released(copy.path):
-            self._lfs.hsm_recall(copy.path)
+            self._lfs.hsm_restore(copy.path)
             return
 
         # Otherwise, use the DefaultIO method to do the check
         super().check(copy)
 
+    def auto_verify(self, copy):
+        """Auto-verify a file in nearline.
+
+        If the file happens to be restored, we simply run check() on
+        it.  If it's released, instead we do the following:
+
+        - trigger a restore the file
+        - wait for the file to be restored
+        - run the check()
+        - release the file again
+
+        The last step here is to keep auto-verifcation from replacing
+        all the newly added data from nearline (which are presumably
+        more interesting that some random files being auto-verified).
+        """
+        hsm_state = self._lfs.hsm_state(copy.path)
+        # The trivial case.
+        if not pathlib.Path(copy.path).exists():
+            # Only update if this is surprising (which it probably
+            # is.)
+            if copy.has_file != "N":
+                log.warning(
+                    "File copy missing during auto-verify: "
+                    f"{copy.file.path}.  Updating database."
+                )
+                ar.ArchiveFileCopy.update(has_file="N").where(
+                    ar.ArchiveFileCopy.id == copy.id
+                ).execute()
+            return
+
+        # Are we restored?  Note: we're interested in the actual
+        # state of the file, not the state as recorded in the database.
+        if not self._lfs.hsm_released(copy.path):
+            return super().check(copy)
+
+        def _async(task, node, lfs, copy):
+            """Asyncrhonously restore a file, verify it, and then
+            release it again.
+            """
+            # Trigger restore
+            lfs.hsm_restore(copy.path)
+
+            # While the file is not restored, yield to wait for later
+            while lfs.hsm_released(copy.path):
+                yield 30
+
+            # Do the check by inlining the Default-I/O function
+            check_async(task, node, copy)
+
+            # Before releasing the file, check whether the DB thinks
+            # it's restored.  If it is don't bother releasing, since
+            # it's better to be consistent with the DB
+            ready = (
+                di.ArchiveFileCopy.select(di.ArchiveFileCopy.ready)
+                .where(di.ArchiveFileCopy.id == copy.id)
+                .scalar()
+            )
+            if not ready:
+                lfs.hsm_release(copy.path)
+
+        Task(
+            func=_async,
+            queue=self.queue,
+            # We put this in a secret low-priority queue to prevent this
+            # task waiting for restore from stopping regular I/O updates
+            # in subsequent update loops
+            key=self.node.name + "---alpenhornd-idle",
+            args=(self.node, self._lfs, copies),
+            name=(
+                f"Auto-verify released file {copy.file.name} "
+                f"on node {self.node.name}"
+            ),
+        )
+
     def ready(self, req):
         """Recall a file, if necessary, to prepare for a remote pull."""
-        # If the file is released, recall it
+        # If the file is released, restore it
         state = self._lfs.hsm_state(copy.path)
 
         # Update DB based on HSM state
@@ -181,9 +257,9 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             ready=(state == self._lfs.HSM_RECALLED or state == self._lfs.HSM_UNARCHIVED)
         ).where(ar.ArchiveFileCopy.id == copy.id).execute()
 
-        # If it's recallable, recall it
+        # If it's restorable, restore it
         if state == self._lfs.HSM_RELEASED:
-            self._lfs.hsm_recall(copy.path)
+            self._lfs.hsm_restore(copy.path)
 
 
 class NearlineGroupIO(BaseGroupIO):
@@ -267,12 +343,12 @@ class NearlineGroupIO(BaseGroupIO):
         If the group is idle after an update, double check the HSM state
         for a few files and update the DB if necessary.
 
-        Any I/O on a nearline file will recall it.  It's important for the
+        Any I/O on a nearline file will restore it.  It's important for the
         data index to reflect changes made in this way outside of alpenhorn so that
         the alpenhornd daemon can properly manage free space.
         """
 
-        def _async(node, lfs, copies):
+        def _async(task, node, lfs, copies):
             for copy in copies:
                 state = lfs.hsm_state(copy.path)
                 if state == lfs.HSM_MISSING:

@@ -110,7 +110,7 @@ def update_loop(host, queue, pool):
         # loop over all the things and run the post-update hooks
         # (also note: groups come first, here)
         for item in (group_idle | node_idle).items():
-            thing, idle = *item
+            thing, idle = item
             thing.io.after_update(idle)
 
         # Done with the I/O updates, do some housekeeping:
@@ -430,3 +430,19 @@ def auto_verify(node):
             )
         except pw.DoesNotExist:
             return  # No files to verify
+
+    # Get some files to re-verify
+    try:
+        copies = qws[node.name].get(node.auto_verify)
+    except pw.DoesNotExist:
+        # No files to verify; delete query walker to try to re-init next time
+        del qes[node.name]
+        return
+
+    for copy in copies:
+        log.info(
+            f'Auto-verifing copy "{copy.file.acq.name}/{copy.file.name}" on node'
+            f" {node.name}."
+        )
+
+        node.io.auto_verify(copy)

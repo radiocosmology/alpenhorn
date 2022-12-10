@@ -5,6 +5,7 @@ import threading
 from . import db
 from collections import deque
 from peewee import OperationalError
+from inspect import isgenerator
 
 import logging
 
@@ -70,6 +71,7 @@ class Worker(threading.Thread):
 
         self._stop = threading.Event()
         self._queue = queue
+        self._yielded = deque()
 
     def run(self):
         """The worker thread main loop.
@@ -118,7 +120,7 @@ class Worker(threading.Thread):
 
                 log.debug(f"Beginning task {task}")
                 try:
-                    task()
+                    result = task()
                 except OperationalError:
                     # Try to clean up. This runs task.do_cleanup()
                     # until it raises something other than OperationalError

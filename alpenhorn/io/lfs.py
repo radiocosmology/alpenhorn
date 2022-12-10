@@ -25,20 +25,20 @@ class HSMState(Enum):
         the state of newly created files until they are archived.
     HSMState.RELEASED:
         The file is on tape but not on disk.
-    HSMState.RECALLED:
+    HSMState.RESTORED:
         The file is both on tape and on disk.
 
     A new file starts off in state UNARCHIVED.  Initial archiving is beyond
     our control, but once the file has been archived, it moves from state
-    UNARCHIVED to state RECALLED.
+    UNARCHIVED to state RESTORED.
 
-    A lfs.hsm_recall() changes a file's state from RELEASED to RECALLED.
-    A lfs.hsm_release() changes a file's state from RECALLED to RELEASED.
+    A lfs.hsm_restore() changes a file's state from RELEASED to RESTORED.
+    A lfs.hsm_release() changes a file's state from RESTORED to RELEASED.
     """
 
     MISSING = 0
     UNARCHIVED = 1
-    RECALLED = 2
+    RESTORED = 2
     RELEASED = 3
 
 
@@ -153,23 +153,23 @@ class LFS:
             return HSM_UNARCHIVED
         if "released" in stdout:
             return HSM_RELEASED
-        return HSM_RECALLED
+        return HSM_RESTORED
 
     def hsm_archived(self, path):
         """Is this file archived?"""
         state = self.hsm_state(path)
-        return state == HSM_RECALLED or state == HSM_RELEASED
+        return state == HSM_RESTORED or state == HSM_RELEASED
 
     def hsm_released(self, path):
         """Is this file released?"""
         return self.hsm_state(path) == HSM_RELEASED
 
-    def hsm_recall(self, path):
-        """Trigger recall of path from tape.
+    def hsm_restore(self, path):
+        """Trigger restore of path from tape.
 
-        If path is already recalled, returns True.
+        If path is already restored, returns True.
 
-        Otherwise, returns a boolean indicating whether the recall request was
+        Otherwise, returns a boolean indicating whether the restore request was
         successful.
         """
 
@@ -183,7 +183,7 @@ class LFS:
         if state != HSM_RELEASED:
             return True
 
-        return self.run_lfs("hsm_recall", path) is not None
+        return self.run_lfs("hsm_restore", path) is not None
 
     def hsm_release(self, path):
         """Trigger release of path from disk.
@@ -201,7 +201,7 @@ class LFS:
             return True
 
         # If the file can't be released, fail
-        if state != HSM_RECALLED:
+        if state != HSM_RESTORED:
             return False
 
         # Otherwise send the request
