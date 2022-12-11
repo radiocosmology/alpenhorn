@@ -1,6 +1,7 @@
 """An asynchronous I/O task handled by a worker thread."""
 
 from collections import deque
+from inspect import isgenerator
 
 import logging
 
@@ -67,24 +68,61 @@ class Task:
 
         self._requeue = requeue
 
+        # a generator returned by calling _func (because it yields)
+        self._generator = None
+
         # Enqueue ourself
         queue.put(self, key)
 
     def __call__(self):
-        """This method is invoked by the worker thread to run the task."""
-        self._func(*self._args, **self._kwargs)
+        """This method is invoked by the worker thread to run the task.
 
-        # Now clean up
-        self.do_cleanup()
+        Returns True if the task is finished.
+        """
 
-    def do_cleanup(self, internal=True):
+        # If we have no generator, run _func and check whether it yielded
+        if self._generator is None:
+            result = self._func(*self._args, **self._kwargs)
+            if isgenerator(result):
+                # If calling _func returned a generator (because it contains a
+                # yield statement), remember it so we can iterate it.
+                self._generator = result
+
+                # No return here: we need to iterate the generator once to start
+                # up the function for the first time.
+            else:
+                # Otherwise, a regular function.  Task is done.
+                self.do_cleanup(True)
+                return True
+
+        # We're working on a generator.  Iterate it once to get the next
+        # yielded value.
+        try:
+            result = next(self._generator)
+            # yielding no value results in immediate re-queueing
+            if result is None:
+                result = 0
+            # Requeue ourself so we can iterate another time.
+            log.debug(
+                f"Requeueing yielded task {self._name} in FIFO {self._key} "
+                f"with delay {result} seconds"
+            )
+            queue.put(self, self._key, wait=result)
+            return False
+        except StopIteration:
+            # Function exited without yielding (i.e. we're done)
+            self._generator = None
+            self.do_cleanup(True)
+            return True
+
+    def do_cleanup(self):
         """Run through the cleanup stack."""
 
         # We pop here to handle the case where a pw.OperationalError
-        # in a cleanup function causes the worker to cancel.  If that
-        # happens it will call this function on it's way out the door.
+        # in a cleanup function causes the worker to cancel.
         #
-        # If that happens, we don't want to re-reun clean-up functions
+        # If that happens it will call this function on it's way out
+        # the door and we don't want to re-reun clean-up functions
         # we've already tried.
         for func, args, kwargs in self._cleanup.popleft():
             func(*args, **kwargs)
@@ -98,7 +136,7 @@ class Task:
         This method is expected to be called from within the task.
         """
         if self._requeue:
-            log.info("Requeueing task {self._name} in FIFO {self._key}")
+            log.info(f"Requeueing task {self._name} in FIFO {self._key}")
             Task(
                 func=self._func,
                 queue=self._queue,

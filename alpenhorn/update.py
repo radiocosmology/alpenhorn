@@ -128,7 +128,8 @@ def update_loop(host, queue, pool):
 
         # Pool and queue info
         log.info(
-            f"Tasks: {queue.qsize()} queued, {queue.inprogress_size()} in-progress on {len(pool)} workers"
+            f"Tasks: {queue.qsize()} queued, {queue.deferred_size()} deferred, "
+            f"{queue.inprogress_size()} in-progress on {len(pool)} workers"
         )
 
         # Avoid looping too fast.

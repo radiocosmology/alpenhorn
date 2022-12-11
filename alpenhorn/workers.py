@@ -5,7 +5,6 @@ import threading
 from . import db
 from collections import deque
 from peewee import OperationalError
-from inspect import isgenerator
 
 import logging
 
@@ -65,13 +64,12 @@ class Worker(threading.Thread):
     """
 
     def __init__(self, queue, index):
-        # thread constructor
-        # daemon=True means the thread will be cancelled if the main thread is aborted
+        # thread constructor; daemon=True means the thread will be cancelled if the
+        # main thread dies
         threading.Thread.__init__(self, name=f"Worker#{index}", daemon=True)
 
         self._stop = threading.Event()
         self._queue = queue
-        self._yielded = deque()
 
     def run(self):
         """The worker thread main loop.
@@ -120,7 +118,7 @@ class Worker(threading.Thread):
 
                 log.debug(f"Beginning task {task}")
                 try:
-                    result = task()
+                    task()
                 except OperationalError:
                     # Try to clean up. This runs task.do_cleanup()
                     # until it raises something other than OperationalError
@@ -133,9 +131,9 @@ class Worker(threading.Thread):
                                 task.do_cleanup()
                                 break  # Clean exit, so we're done
                             except OperationalError:
-                                pass  # Yeah, we know already; try again
+                                pass  # Yeah, we know already; try the next one
                     except Exception as e:
-                        # Errors upon errors: just crash and burn
+                        # Errors upon errors: time to crash and burn
                         global_abort.set()
                         raise RuntimeError(
                             "Aborting due to uncaught exception in task cleanup"

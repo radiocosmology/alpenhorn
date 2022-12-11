@@ -13,6 +13,7 @@ the same number of tasks from each FIFO in progress at all times.
 The queue is unbounded.
 """
 
+import heapq
 import threading
 from time import time
 from collections import deque
@@ -31,14 +32,22 @@ class FairMultiFIFOQueue:
         self._total_inprogress = 0
         # Counts of in-progress tasks by FIFO
         self._inprogress_counts = {}
-        # A list of sets of FIFO keys, ordered by number of in-progress tasks
+        # A list of sets of FIFO keys, indexed by number of in-progress tasks
         #
         # We initialise element 0 to the empty set to simplify creating new
         # FIFOs, which will always get added to that set.
         self._keys_by_inprogress = [set()]
 
-        # The thread lock (mutex) and the conditionals (see queue.py for details, which
-        # this implementation broadly follows)
+        # Deferred puts.  This is a heapq.
+        self._deferrals = list()
+        # Are we in a join() call?
+        self._joining = False
+        # The lock for _deferrals and _joining, which can be held independently
+        # of the primary _lock.
+        self._dlock = threading.lock()
+
+        # The thread lock (mutex) and the conditionals (see queue.py for
+        # details, which this implementation broadly follows)
         self._lock = threading.Lock()
         self._not_empty = threading.Condition(self._lock)
         self._all_tasks_done = threading.Condition(self._lock)
@@ -89,22 +98,39 @@ class FairMultiFIFOQueue:
             # so trimming can save memory in cases where large excursions of
             # in-progress counts happen occasionally.
             #
-            # However, in our particular case (alpenhornd), at most, the list will
-            # have as many elements as the maximum number of worker threads that
-            # have ever existed at one time, so it's probably not worth the trouble.
+            # However, in our particular case (alpenhornd), at most, the list
+            # will have as many elements as the maximum number of worker threads
+            # that have ever existed at one time, so it's probably not worth the
+            # trouble.
 
             # Notify waiters when there are no pending tasks
             if self._total_queued == 0 and self._total_inprogress == 0:
                 self._all_tasks_done.notify_all()  # wakes up all waiting threads
 
     def join(self):
-        """Blocks until there's nothing left in the queue, including in-progress tasks."""
+        """Blocks until there's nothing left in the queue.
+
+        This includes waiting for in-progress tasks.  All deferred puts are
+        discarded, including ones added while this call is blocking.
+        """
+        # Discard deferred puts
+        with self._dlock:
+            self._joining = True
+            self._deferrals = list()
+
         with self._all_tasks_done:
             while self._total_inprogress > 0 and self._total_queued > 0:
                 self._all_tasks_done.wait()  # woken up by the notify_all() in task_done()
 
+        with self._dlock:
+            self._joining = False
+
     def qsize(self):
-        """Total number of queued tasks.  Excludes in-progress tasks.  Not to be relied on."""
+        """Total number of queued tasks.
+
+        Excludes in-progress tasks and deferred puts not yet processed.
+
+        Not to be relied on."""
         with self._lock:
             return self._total_queued
 
@@ -116,27 +142,127 @@ class FairMultiFIFOQueue:
     def fifo_size(self, key):
         """Total number of tasks queued or in progress for the FIFO indexed by key.
 
+        Does not include deferred puts not yet processed.
+
         Returns 0 for any non-existent FIFO (i.e for any key not previously used)."""
         with self._lock:
             if key not in self._fifos:
                 return 0
             return len(self._fifos[key]) + self._inprogress_counts[key]
 
-    def put(self, item, key):
+    def deferred_size(self):
+        """Total number of deferred puts not yet processed."""
+        with self._dlock:
+            return len(self._deferrals)
+
+    def _new_fifo(self, key):
+        """Create a new FIFO indexed by key"""
+        fifo = deque()
+        self._fifos[key] = fifo
+        self._inprogress_counts[key] = 0
+        self._keys_by_inprogress[0].append(key)
+        return fifo
+
+    def _put(self, item, key):
+        """Put item into FIFO key without locking.
+
+        Never call this function directly; use put() instead."""
+        # Create the FIFO, if necessary
+        if key not in self._fifos:
+            fifo = self._new_fifo(key)
+        else:
+            fifo = self._fifos[key]
+
+        # push the task onto the FIFO (right-most end)
+        fifo.append(item)
+        self._total_queued += 1
+
+    def put(self, item, key, wait=0):
         """Put an item into the queue by pushing it onto the FIFO indexed by key.
 
-        If the FIFO indexed by key doesn't exist, it is created."""
-        with self._not_empty:
-            # Create the FIFO, if necessary
-            if key not in self._fifos:
-                fifo = self._new_fifo(key)
-            else:
-                fifo = self._fifos[key]
+        If wait <= 0, the item is immediately put into the queue.  This is the
+        default behaviour.
 
-            # push the task onto the fifo (right-most end)
-            fifo.append(item)
-            self._total_queued += 1
-            self._not_empty.notify()  # wakes up a single waiting thread
+        If wait > 0, the put is delayed by _at least_ that many seconds before
+        item is actually added to the queue.  In this case, this call does not
+        wait for the put, but returns immediately.
+
+        If the FIFO indexed by key doesn't exist, it is created."""
+
+        if wait > 0:
+            # Deferred put
+            with self._dlock:
+                # If joining, silently discard this put
+                if not self._joining:
+                    heapq.heappush(
+                        self._deferrals,
+                        (
+                            time() + wait,
+                            item,
+                            key,
+                        ),
+                    )
+        else:
+            # Immediate put
+            with self._not_empty:
+                self._put(item, key)
+                self._not_empty.notify()  # wakes up a single waiting thread
+
+    def _get(self, t):
+        """Iterate the get() loop once for at most `t` seconds.
+
+        Never call this function directly.  Use get() instead."""
+        timeout_at = time() + t
+        with self._dlock:
+            # If there are delayed puts, don't wait past the expiry of
+            # the earliest
+            if len(self._deferrals) > 0:
+                first_expiry = min(self._deferrals)[0]
+                if timeout_at > first_expiry:
+                    timeout_at = first_expiry
+
+        # Wait until t seconds elapse, or there's something to get
+        self._not_empty.wait(timeout_at - time())
+
+        # Execute all the expired deferred puts
+        with self._dlock:
+            while len(self._deferrals) > 0 and min(self._deferrals)[0] <= time():
+                _, item, key = heapq.heappop(self._deferrals)
+                self._put(item, key)
+
+        # If the queue is still empty, time out
+        if self._total_queued < 1:
+            return None
+
+        # Otherwise, get the next item from the queue:
+
+        # Choose a FIFO by walking _keys_by_inprogress: find the lowest non-empty
+        # set and choose a FIFO from it.
+        key = None
+        for key_set in self._keys_by_inprogress:
+            if len(key_set) > 0:
+                # This removes and returns an arbitrary element in the set
+                key = key_set.pop()
+                break
+
+        fifo = self._fifos[key]
+
+        # Pop the first (left-most) item from this FIFO
+        item = fifo.popleft()
+        self._total_queued -= 1
+        self._total_inprogress += 1
+
+        # Increment the in-progress count and re-add the key to in _keys_by_inprogress
+        count = self._inprogress_counts[key] + 1
+        self._inprogress_counts[key] = count
+        if len(self._keys_by_inprogress) == count:
+            self._keys_by_inprogress[count] = set([key])
+        else:
+            self._keys_by_inprogress[count].add(key)
+
+        return (key, item)
+
+    GET_PERIOD = 10  # seconds
 
     def get(self, timeout=None):
         """Take the next item from the queue.
@@ -148,51 +274,22 @@ class FairMultiFIFOQueue:
         key of the FIFO from which item was taken.  This key must be passed to
         task_done() once processing item is complete.
         """
-
         with self._not_empty:
             if timeout is None:
                 # Wait until there is something in the queue
-                while self._total_queued < 1:
-                    self._not_empty.wait()  # woken up by the notify() in put()
+                while True:
+                    item = self._get(GET_PERIOD)
+                    if item is not None:
+                        return item
             else:
                 # Wait until woken up or timeout
                 wait_until = time() + timeout
-                while self._total_queued < 1:
+                while True:
                     remaining = wait_until - time()
                     if remaining <= 0:
-                        return None
-                    self._not_empty.wait(remaining)  # woken up by the notify() in put()
-
-            # Choose a FIFO by walking _keys_by_inprogress: find the lowest non-empty
-            # set and
-            key = None
-            for key_set in self._keys_by_inprogress:
-                if len(key_set) > 0:
-                    # This removes and returns an arbitrary element in the set
-                    key = key_set.pop()
-                    break
-
-            fifo = self._fifos[key]
-
-            # Pop the first (left-most) item from this FIFO
-            item = fifo.popleft()
-            self._total_queued -= 1
-            self._total_inprogress += 1
-
-            # Increment the in-progress count and re-add the key to in _keys_by_inprogress
-            count = self._inprogress_counts[key] + 1
-            self._inprogress_counts[key] = count
-            if len(self._keys_by_inprogress) == count:
-                self._keys_by_inprogress[count] = set([key])
-            else:
-                self._keys_by_inprogress[count].add(key)
-
-            return (key, item)
-
-    def _new_fifo(self, key):
-        """Create a new FIFO indexed by key"""
-        fifo = deque()
-        self._fifos[key] = fifo
-        self._inprogress_counts[key] = 0
-        self._keys_by_inprogress[0].append(key)
-        return fifo
+                        return None  # timeout
+                    item = self._get(
+                        remaining if remaining < GET_PERIOD else GET_PERIOD
+                    )
+                    if item is not None:
+                        return item
