@@ -73,6 +73,7 @@ def load_extensions():
 
         # Don't allow more than one database extension
         if "database" in extension_dict:
+            global _db_ext
             if _db_ext is None:
                 _db_ext = extension_dict
             else:

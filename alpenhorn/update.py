@@ -156,7 +156,7 @@ def serial_io(queue):
             break
 
         # Run the task
-        key, task = item
+        task, key = item
 
         log.debug(f"Beginning task {task}")
         task()

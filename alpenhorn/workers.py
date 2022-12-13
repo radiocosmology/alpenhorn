@@ -114,7 +114,7 @@ class Worker(threading.Thread):
                     return
 
                 # Otherwise, execute the task.
-                key, task = item
+                task, key = item
 
                 log.debug(f"Beginning task {task}")
                 try:

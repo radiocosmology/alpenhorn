@@ -1,13 +1,12 @@
 import os
 import pathlib
+import logging
 import datetime
 
 import peewee as pw
 
 from .config import ConfigClass
 from .db import base_model
-
-import logging
 
 log = logging.getLogger(__name__)
 

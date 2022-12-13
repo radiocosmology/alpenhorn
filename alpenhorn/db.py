@@ -1,7 +1,7 @@
 """Database connection.
 
-This module implements a minimally-functional database connector for alpenhorn
-(the "fallback" database).
+This module abstracts the database connection, providing a minimally
+function fallback if no external database module has been provided.
 
 More capable database connectors may be provided by a database extension
 module.  The dict returned by the register_extension() call to a database
@@ -10,29 +10,29 @@ with keys providing the database extensions capabilities.
 
 The following keys are allowed in the "database" dict, all of which are
 optional:
-    - "reentrant": boolean.  If True, the database extension is re-entrant
-                (threadsafe), and simultaneous independant connections to the
-                database will be made to it.  False is assumed if not given.
-    - "connect": a callable.  Invoked to create a database connection.  Will be
-                passed a dict containing the contents of the "database" section
-                of the alpenhorn config as the keyword parameter "config".
-                Should raise pw.OperationalError if a connection could not
-                be returned.  If not given, the _connect() function in this
-                module will be called instead.
-    - "database_proxy": a peewee database proxy.  Will be initialised by connector
-                returned from the "connect" call.  If not given, a new pw.Proxy()
-                instance is created.
+    - "reentrant" : boolean
+            If True, the database extension is re-entrant (threadsafe), and
+            simultaneous independant connections to the database will be
+            made to it.  False is assumed if not given.
+    - "connect" : callable
+            Invoked to create a database connection.  Will be passed a dict
+            containing the contents of the "database" section of the
+            alpenhorn config as the keyword parameter "config".  Should
+            raise pw.OperationalError if a connection could not be
+            established.  If not given, the _connect() function in this
+            module will be called instead.
+    - "close": a callable.
+            Invoked to close the database connection.
 
-Before access the attributes of this module, init() must be called to set up
-the database.  After that function is called, the following attributes are
-available:
+Before access the attributes of this module, init() must be called to set
+up the database.  After that function is called, the following attributes
+are available:
 
-- database_proxy: a peewee.Proxy object for database access
 - threadsafe: a boolean indicating whether the database can be concurrently
             accessed from multiple threads.
 
-Also after calling init(), a connection to the database can be initialised by
-calling the connect() function.
+Also after calling init(), a connection to the database may be initialised
+by calling the connect() function.
 """
 import sys
 import logging
@@ -51,7 +51,7 @@ _db_ext = None
 # =================
 # These are all initialised by init()
 
-database_proxy = None
+database_proxy = pw.Proxy()
 threadsafe = None
 
 
@@ -66,7 +66,7 @@ def _capability(key):
     # module).
     default_cap = {
         "connect": None,
-        "proxy": None,
+        "close": None,
         "reentrant": False,
     }
 
@@ -100,13 +100,6 @@ def init():
     global threadsafe
     threadsafe = _capability("reentrant")
 
-    # Set up proxy
-    global database_proxy
-    database_proxy = _capability("proxy")
-    if database_proxy is None:
-        database_proxy = pw.Proxy()
-
-
 def connect():
     """Connect to the database.
 
@@ -131,7 +124,6 @@ def connect():
         EnumField.native = True
     else:
         EnumField.native = False
-
 
 def _connect(config):
     """Set up the fallback database connection from an explicit peewee url
@@ -159,6 +151,16 @@ def _connect(config):
     db.__class__ = type("RetryableDatabase", (RetryOperationalError, type(db)), {})
 
     return db
+
+def close():
+    """Close a database connection if it is open."""
+
+    func = _capability("close")
+    if func is None:
+        if database_proxy.obj is not None:
+            database_proxy.close()
+    else:
+        func()
 
 
 # Helper classes for the peewee ORM

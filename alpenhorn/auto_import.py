@@ -2,6 +2,7 @@
 
 import os
 import time
+import logging
 from pathlib import PurePath
 
 import peewee as pw
@@ -11,8 +12,6 @@ from . import acquisition as ac
 from . import archive as ar
 from . import config, db, util
 from .task import Task
-
-import logging
 
 log = logging.getLogger(__name__)
 

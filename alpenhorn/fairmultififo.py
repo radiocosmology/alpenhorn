@@ -44,7 +44,7 @@ class FairMultiFIFOQueue:
         self._joining = False
         # The lock for _deferrals and _joining, which can be held independently
         # of the primary _lock.
-        self._dlock = threading.lock()
+        self._dlock = threading.Lock()
 
         # The thread lock (mutex) and the conditionals (see queue.py for
         # details, which this implementation broadly follows)
@@ -125,6 +125,7 @@ class FairMultiFIFOQueue:
         with self._dlock:
             self._joining = False
 
+    @property
     def qsize(self):
         """Total number of queued tasks.
 
@@ -134,6 +135,7 @@ class FairMultiFIFOQueue:
         with self._lock:
             return self._total_queued
 
+    @property
     def inprogress_size(self):
         """Total number of in-progress tasks.  Not to be relied on."""
         with self._lock:
@@ -150,6 +152,7 @@ class FairMultiFIFOQueue:
                 return 0
             return len(self._fifos[key]) + self._inprogress_counts[key]
 
+    @property
     def deferred_size(self):
         """Total number of deferred puts not yet processed."""
         with self._dlock:
@@ -160,7 +163,7 @@ class FairMultiFIFOQueue:
         fifo = deque()
         self._fifos[key] = fifo
         self._inprogress_counts[key] = 0
-        self._keys_by_inprogress[0].append(key)
+        self._keys_by_inprogress[0].add(key)
         return fifo
 
     def _put(self, item, key):
@@ -222,7 +225,10 @@ class FairMultiFIFOQueue:
                     timeout_at = first_expiry
 
         # Wait until t seconds elapse, or there's something to get
-        self._not_empty.wait(timeout_at - time())
+        wait = timeout_at - time()
+        if wait > 0 and self._total_queued == 0:
+            self._not_empty.wait(wait)
+
 
         # Execute all the expired deferred puts
         with self._dlock:
@@ -256,13 +262,11 @@ class FairMultiFIFOQueue:
         count = self._inprogress_counts[key] + 1
         self._inprogress_counts[key] = count
         if len(self._keys_by_inprogress) == count:
-            self._keys_by_inprogress[count] = set([key])
+            self._keys_by_inprogress.append(set([key]))
         else:
             self._keys_by_inprogress[count].add(key)
 
-        return (key, item)
-
-    GET_PERIOD = 10  # seconds
+        return (item, key)
 
     def get(self, timeout=None):
         """Take the next item from the queue.
@@ -270,10 +274,12 @@ class FairMultiFIFOQueue:
         If the queue is empty, blocks until there is something to remove or, if timeout is
         not None, until "timeout" seconds have elapsed.
 
-        On timeout, returns None; otherwise returns a tuple (key,item) where key is the
+        On timeout, returns None; otherwise returns a tuple (item,key) where key is the
         key of the FIFO from which item was taken.  This key must be passed to
         task_done() once processing item is complete.
         """
+        GET_PERIOD = 10  # seconds
+
         with self._not_empty:
             if timeout is None:
                 # Wait until there is something in the queue
