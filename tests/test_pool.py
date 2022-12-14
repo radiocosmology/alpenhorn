@@ -8,8 +8,7 @@ import threading
 import pytest
 
 from alpenhorn.pool import WorkerPool, EmptyPool, setsignals, global_abort
-from test_queue import queue
-
+from alpenhorn.queue import FairMultiFIFOQueue
 
 # Event to indicate that the worker that consumed the opperr_task
 # is exiting
@@ -49,6 +48,10 @@ def crash_task():
 # to consume to avoid the 5-second timeout.
 deleted_count = 0
 
+@pytest.fixture
+def queue():
+    """Queue fixture"""
+    return FairMultiFIFOQueue()
 
 @pytest.fixture
 def pool(dbproxy, queue):
@@ -81,6 +84,7 @@ def pool(dbproxy, queue):
 
     # Pool should be empty after shutdown
     assert len(p) == 0
+    del p
 
 
 @pytest.fixture
@@ -142,6 +146,9 @@ def test_signal(pool):
 def test_check(queue, pool):
     """Test WorkerPool.check()."""
 
+    # Count the number of running threads
+    thread_count = threading.active_count()
+
     # Force a worker to exit
     queue.put(operr_task, "fifo")
 
@@ -153,17 +160,17 @@ def test_check(queue, pool):
     # Worker count is still two: dead workers are part of the count.
     assert len(pool) == 2
 
-    # Check
+    # But we should have one fewer running threads
+    assert threading.active_count() == thread_count - 1
+
+    # Restart the dead worker
     pool.check()
 
-    # Worker count should still be two.
+    # Worker count hasn't changed
     assert len(pool) == 2
 
-    # The most important thing in this test is the assert in the
-    # teardown of the queue() fixture: if the above pool.check()
-    # call hasn't restarted the worker thread, there will be an
-    # item left in the queue which was supposed to be consumed by
-    # the resurrected worker.
+    # But we're back up to a full complement of threads
+    assert threading.active_count() == thread_count
 
 
 def test_crash(queue, pool):

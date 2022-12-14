@@ -4,7 +4,7 @@ import pytest
 import threading
 from time import time
 
-from alpenhorn.fairmultififo import FairMultiFIFOQueue
+from alpenhorn.queue import FairMultiFIFOQueue
 
 
 @pytest.fixture
