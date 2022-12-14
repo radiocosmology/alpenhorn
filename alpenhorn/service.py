@@ -5,7 +5,7 @@ import sys
 
 import click
 
-from .fairmultififo import FairMultiFIFOQueue
+from .queue import FairMultiFIFOQueue
 from .update import update_loop
 
 from . import auto_import, config, db, extensions, logger, storage, util, pool

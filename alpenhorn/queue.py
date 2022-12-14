@@ -18,6 +18,8 @@ import threading
 from time import time
 from collections import deque
 
+import logging
+log = logging.getLogger(__name__)
 
 class FairMultiFIFOQueue:
     """Create a new Fair Multi-FIFO Queue"""
@@ -38,6 +40,12 @@ class FairMultiFIFOQueue:
         # FIFOs, which will always get added to that set.
         self._keys_by_inprogress = [set()]
 
+        # The thread lock (mutex) and the conditionals (see queue.py for
+        # details, which this implementation broadly follows)
+        self._lock = threading.Lock()
+        self._not_empty = threading.Condition(self._lock)
+        self._all_tasks_done = threading.Condition(self._lock)
+
         # Deferred puts.  This is a heapq.
         self._deferrals = list()
         # Are we in a join() call?
@@ -45,12 +53,6 @@ class FairMultiFIFOQueue:
         # The lock for _deferrals and _joining, which can be held independently
         # of the primary _lock.
         self._dlock = threading.Lock()
-
-        # The thread lock (mutex) and the conditionals (see queue.py for
-        # details, which this implementation broadly follows)
-        self._lock = threading.Lock()
-        self._not_empty = threading.Condition(self._lock)
-        self._all_tasks_done = threading.Condition(self._lock)
 
     def task_done(self, key):
         """Report that a task from the FIFO indexed by key is done.
@@ -118,8 +120,9 @@ class FairMultiFIFOQueue:
             self._joining = True
             self._deferrals = list()
 
+
         with self._all_tasks_done:
-            while self._total_inprogress > 0 and self._total_queued > 0:
+            while self._total_inprogress > 0 or self._total_queued > 0:
                 self._all_tasks_done.wait()  # woken up by the notify_all() in task_done()
 
         with self._dlock:
