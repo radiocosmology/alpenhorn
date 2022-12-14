@@ -243,13 +243,30 @@ class FairMultiFIFOQueue:
         # Otherwise, get the next item from the queue:
 
         # Choose a FIFO by walking _keys_by_inprogress: find the lowest non-empty
-        # set and choose a FIFO from it.
+        # set that has a non-empty FIFO in it.
         key = None
         for key_set in self._keys_by_inprogress:
             if len(key_set) > 0:
-                # This removes and returns an arbitrary element in the set
-                key = key_set.pop()
-                break
+                # Pull FIFOs out of the set until we find a non-empty one
+                empties = set()
+                while len(key_set) > 0:
+                    key = key_set.pop()
+                    if len(self._fifos[key]) == 0:
+                        empties.add(key)
+                        key = None
+                    else:
+                        break
+
+                # Put all the empty FIFOs back
+                key_set.update(empties)
+
+                # If we found a non-empty FIFO, we're done
+                if key is not None:
+                    break
+
+        # Nothing to get
+        if key is None:
+            return None
 
         fifo = self._fifos[key]
 
