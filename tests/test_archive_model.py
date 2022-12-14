@@ -11,8 +11,8 @@ import pytest
 import yaml
 
 import alpenhorn.db as db
-import test_acquisition_model as ta
-import test_storage_model as ts
+from test_acquisition_model import load_data as acq_data
+from test_storage_model import load_data as storage_data
 from alpenhorn.archive import (
     ArchiveFile,
     ArchiveFileCopy,
@@ -24,13 +24,11 @@ from alpenhorn.archive import (
 
 tests_path = path.abspath(path.dirname(__file__))
 
-
-def load_fixtures():
+@pytest.fixture
+def load_data(dbproxy, acq_data, storage_data):
     """Loads data from tests/fixtures into the connected database"""
-    fs = ts.load_fixtures()
-    fa = ta.load_fixtures()
 
-    db.database_proxy.create_tables([ArchiveFileCopy, ArchiveFileCopyRequest])
+    dbproxy.create_tables([ArchiveFileCopy, ArchiveFileCopyRequest])
 
     # Check we're starting from a clean slate
     assert ArchiveFileCopy.select().count() == 0
@@ -42,8 +40,8 @@ def load_fixtures():
 
     # fixup foreign keys for the file copies
     for copy in fixtures["file_copies"]:
-        copy["file"] = fa["files"][copy["file"]]
-        copy["node"] = fs["nodes"][copy["node"]]
+        copy["file"] = acq_data["files"][copy["file"]]
+        copy["node"] = storage_data["nodes"][copy["node"]]
         copy["size_b"] = 512
 
     # bulk load the file copies
@@ -54,9 +52,9 @@ def load_fixtures():
 
     # fixup foreign keys for the copy requests
     for req in fixtures["copy_requests"]:
-        req["file"] = fa["files"][req["file"]]
-        req["node_from"] = fs["nodes"][req["node_from"]]
-        req["group_to"] = fs["groups"][req["group_to"]]
+        req["file"] = acq_data["files"][req["file"]]
+        req["node_from"] = storage_data["nodes"][req["node_from"]]
+        req["group_to"] = storage_data["groups"][req["group_to"]]
 
     # bulk load the file copies
     ArchiveFileCopyRequest.insert_many(fixtures["copy_requests"]).execute()
@@ -71,18 +69,7 @@ def load_fixtures():
     return {"file_copies": file_copies, "copy_requests": copy_requests}
 
 
-@pytest.fixture
-def fixtures():
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db.init()
-    db.connect()
-
-    yield load_fixtures()
-
-    db.database_proxy.close()
-
-
-def test_schema(fixtures):
+def test_schema(load_data):
     assert set(db.database_proxy.get_tables()) == {
         "storagegroup",
         "storagenode",
@@ -95,7 +82,7 @@ def test_schema(fixtures):
     }
 
 
-def test_model(fixtures):
+def test_model(load_data):
     copies = set(
         ArchiveFileCopy.select(ArchiveFile.name, StorageNode.name)
         .join(ArchiveFile)
@@ -135,7 +122,7 @@ def test_model(fixtures):
     ) == "M"
 
 
-def test_unique_copy_constraint(fixtures):
+def test_unique_copy_constraint(load_data):
     f = ArchiveFile.get(name="fred")
     assert f.name == "fred"
     n = StorageNode.get(name="x")

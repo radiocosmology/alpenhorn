@@ -22,8 +22,6 @@ def fixtures(dbproxy):
         ]
     )
 
-    yield
-
 
 def test_invalid_extension():
     # Test that invalid extension paths, or modules that are not extensions

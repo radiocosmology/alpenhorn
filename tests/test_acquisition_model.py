@@ -17,10 +17,10 @@ from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 tests_path = path.abspath(path.dirname(__file__))
 
-
-def load_fixtures():
+@pytest.fixture
+def load_data(dbproxy):
     """Loads data from tests/fixtures into the connected database"""
-    db.database_proxy.create_tables([ArchiveAcq, AcqType, FileType, ArchiveFile])
+    dbproxy.create_tables([ArchiveAcq, AcqType, FileType, ArchiveFile])
 
     # Check we're starting from a clean slate
     assert ArchiveAcq.select().count() == 0
@@ -53,18 +53,7 @@ def load_fixtures():
     return {"types": types, "file_types": file_types, "files": files}
 
 
-@pytest.fixture
-def fixtures():
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db.init()
-    db.connect()
-
-    yield load_fixtures()
-
-    db.database_proxy.close()
-
-
-def test_schema(fixtures):
+def test_schema(load_data):
     assert set(db.database_proxy.get_tables()) == {
         "acqtype",
         "archiveacq",
@@ -73,7 +62,7 @@ def test_schema(fixtures):
     }
 
 
-def test_model(fixtures):
+def test_model(load_data):
 
     assert list(ArchiveAcq.select()) == [ArchiveAcq.get(ArchiveAcq.name == "x")]
 
@@ -95,7 +84,7 @@ def test_model(fixtures):
     ]
 
 
-def test_registered(fixtures):
+def test_registered(load_data):
     """Verifies that registered times are unique per each ArchiveFile instance"""
     assert (
         ArchiveFile.select(pw.fn.Count(pw.fn.Distinct(ArchiveFile.registered))).scalar()

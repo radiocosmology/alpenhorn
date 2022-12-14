@@ -15,10 +15,10 @@ from alpenhorn.storage import StorageGroup, StorageNode
 
 tests_path = path.abspath(path.dirname(__file__))
 
-
-def load_fixtures():
+@pytest.fixture
+def load_data(dbproxy):
     """Loads data from tests/fixtures into the connected database"""
-    db.database_proxy.create_tables([StorageGroup, StorageNode])
+    dbproxy.create_tables([StorageGroup, StorageNode])
 
     # Check we're starting from a clean slate
     assert StorageGroup.select().count() == 0
@@ -41,22 +41,11 @@ def load_fixtures():
     return {"groups": groups, "nodes": nodes}
 
 
-@pytest.fixture
-def fixtures():
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db.init()
-    db.connect()
-
-    yield load_fixtures()
-
-    db.database_proxy.close()
+def test_schema(dbproxy, load_data):
+    assert set(dbproxy.get_tables()) == {"storagegroup", "storagenode"}
 
 
-def test_schema(fixtures):
-    assert set(db.database_proxy.get_tables()) == {"storagegroup", "storagenode"}
-
-
-def test_model(fixtures):
+def test_model(load_data):
     groups = set(StorageGroup.select(StorageGroup.name).tuples())
     assert groups == {("foo",), ("bar",), ("transport",)}
     assert StorageGroup.get(StorageGroup.name == "bar").notes == "Some bar!"
@@ -69,19 +58,19 @@ def test_model(fixtures):
             "group": 1,
             "host": "foo.example.com",
             "address": None,
-            "fs_type": None,
+            "io_class": None,
+            "io_config": None,
             "auto_import": False,
+            "auto_verify": 0,
             "storage_type": "A",
             "active": True,
             "root": None,
-            "suspect": False,
             "username": None,
             "notes": None,
-            "max_total_gb": 10,
-            "min_avail_gb": 1,
+            "max_total_gb": 10.,
+            "min_avail_gb": 1.,
             "avail_gb": None,
             "avail_gb_last_checked": None,
-            "min_delete_age_days": 30,
         },
         {
             "id": 2,
@@ -89,18 +78,18 @@ def test_model(fixtures):
             "group": 2,
             "host": "bar.example.com",
             "address": None,
-            "fs_type": None,
+            "io_class": None,
+            "io_config": None,
             "auto_import": False,
+            "auto_verify": 0,
             "storage_type": "A",
             "active": False,
             "root": None,
-            "suspect": False,
             "username": None,
             "notes": None,
-            "max_total_gb": 10,
-            "min_avail_gb": 1,
+            "max_total_gb": 10.,
+            "min_avail_gb": 1.,
             "avail_gb": None,
             "avail_gb_last_checked": None,
-            "min_delete_age_days": 30,
         },
     ]

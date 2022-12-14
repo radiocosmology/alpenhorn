@@ -4,6 +4,7 @@ groups:
   - name: bar
     notes: Some bar!
   - name: transport
+    ioclass: Transport
     notes: null
 
 nodes:
