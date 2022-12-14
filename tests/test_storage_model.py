@@ -14,6 +14,7 @@ from alpenhorn.storage import StorageGroup, StorageNode
 
 tests_path = path.abspath(path.dirname(__file__))
 
+
 @pytest.fixture
 def load_data(dbproxy):
     """Loads data from tests/fixtures into the connected database"""
@@ -66,8 +67,8 @@ def test_model(load_data):
             "root": None,
             "username": None,
             "notes": None,
-            "max_total_gb": 10.,
-            "min_avail_gb": 1.,
+            "max_total_gb": 10.0,
+            "min_avail_gb": 1.0,
             "avail_gb": None,
             "avail_gb_last_checked": None,
         },
@@ -86,8 +87,8 @@ def test_model(load_data):
             "root": None,
             "username": None,
             "notes": None,
-            "max_total_gb": 10.,
-            "min_avail_gb": 1.,
+            "max_total_gb": 10.0,
+            "min_avail_gb": 1.0,
             "avail_gb": None,
             "avail_gb_last_checked": None,
         },

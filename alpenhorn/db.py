@@ -100,6 +100,7 @@ def init():
     global threadsafe
     threadsafe = _capability("reentrant")
 
+
 def connect():
     """Connect to the database.
 
@@ -124,6 +125,7 @@ def connect():
         EnumField.native = True
     else:
         EnumField.native = False
+
 
 def _connect(config):
     """Set up the fallback database connection from an explicit peewee url
@@ -151,6 +153,7 @@ def _connect(config):
     db.__class__ = type("RetryableDatabase", (RetryOperationalError, type(db)), {})
 
     return db
+
 
 def close():
     """Close a database connection if it is open."""

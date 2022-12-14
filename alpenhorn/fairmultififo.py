@@ -229,7 +229,6 @@ class FairMultiFIFOQueue:
         if wait > 0 and self._total_queued == 0:
             self._not_empty.wait(wait)
 
-
         # Execute all the expired deferred puts
         with self._dlock:
             while len(self._deferrals) > 0 and min(self._deferrals)[0] <= time():

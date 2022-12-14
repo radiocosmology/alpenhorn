@@ -16,6 +16,7 @@ from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 tests_path = path.abspath(path.dirname(__file__))
 
+
 @pytest.fixture
 def load_data(dbproxy):
     """Loads data from tests/fixtures into the connected database"""

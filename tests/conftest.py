@@ -3,6 +3,7 @@ import pytest
 
 from alpenhorn import config, db, extensions
 
+
 @pytest.fixture
 def use_chimedb():
     """Use chimedb, if possible.
@@ -13,12 +14,13 @@ def use_chimedb():
     cdb = pytest.importorskip("chimedb.core")
     cdb.test_enable()
 
-    config.merge_config({"extensions": [ "chimedb.core.alpenhorn" ]})
+    config.merge_config({"extensions": ["chimedb.core.alpenhorn"]})
 
     yield
 
     # Reset the config
     config.merge_config(dict(), replace=True)
+
 
 @pytest.fixture
 def dbproxy():

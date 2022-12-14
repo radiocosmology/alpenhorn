@@ -23,6 +23,7 @@ from alpenhorn.archive import (
 
 tests_path = path.abspath(path.dirname(__file__))
 
+
 @pytest.fixture
 def load_data(dbproxy, acq_data, storage_data):
     """Loads data from tests/fixtures into the connected database"""

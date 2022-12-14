@@ -6,6 +6,7 @@ from time import time
 
 from alpenhorn.fairmultififo import FairMultiFIFOQueue
 
+
 @pytest.fixture
 def queue():
     """Queue init and teardown"""
@@ -19,16 +20,18 @@ def queue():
     assert queue.qsize == 0
     assert queue.inprogress_size == 0
 
+
 def test_emptyget(queue):
     """Try to get() nothing."""
     assert queue.get(timeout=1) is None
+
 
 def test_putget(queue):
     """Test synchronous put -> get -> task_done."""
 
     assert queue.qsize == 0
     assert queue.inprogress_size == 0
-    assert queue.fifo_size("fifo") == 0 # "fifo" doesn't exist yet
+    assert queue.fifo_size("fifo") == 0  # "fifo" doesn't exist yet
 
     queue.put("item", "fifo")
 
@@ -40,7 +43,7 @@ def test_putget(queue):
 
     assert queue.qsize == 0
     assert queue.inprogress_size == 1
-    assert queue.fifo_size("fifo") == 1 # includes in-progress
+    assert queue.fifo_size("fifo") == 1  # includes in-progress
 
     queue.task_done("fifo")
 
@@ -48,10 +51,13 @@ def test_putget(queue):
     assert queue.inprogress_size == 0
     assert queue.fifo_size("fifo") == 0
 
+
 def test_deferred(queue):
     """Test deferred put."""
     queue.put("item", "fifo", wait=2)
-    timeout = time() + 2 # This can't be sooner than the expiry time of the deferred put
+    timeout = (
+        time() + 2
+    )  # This can't be sooner than the expiry time of the deferred put
     assert queue.qsize == 0
     assert queue.deferred_size == 1
 
@@ -71,6 +77,7 @@ def test_deferred(queue):
         assert time() < timeout
 
     queue.task_done("fifo")
+
 
 def test_wakeget(queue):
     """Test waking up a get from a put."""
@@ -93,6 +100,7 @@ def test_wakeget(queue):
     # Queue should be empty
     assert queue.qsize == 0
     assert queue.inprogress_size == 0
+
 
 def test_concurrency(queue):
     """Test concurrent puts and gets"""
@@ -117,7 +125,7 @@ def test_concurrency(queue):
 
     # Create the same number producers
     for i in range(10):
-        threads.append(threading.Thread(target=producer, args=(queue,i), daemon=True))
+        threads.append(threading.Thread(target=producer, args=(queue, i), daemon=True))
 
     # Start all the threads
     for thread in threads:

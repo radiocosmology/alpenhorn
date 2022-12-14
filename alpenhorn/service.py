@@ -8,7 +8,7 @@ import click
 from .fairmultififo import FairMultiFIFOQueue
 from .update import update_loop
 
-from . import auto_import, config, db, extensions, logger, storage, util, workers
+from . import auto_import, config, db, extensions, logger, storage, util, pool
 
 log = logging.getLogger(__name__)
 
@@ -53,13 +53,13 @@ def cli():
 
     # If we can be multithreaded, start the worker pool
     if db.threadsafe:
-        pool = workers.WorkerPool(num_workers=default_num_workers, queue=queue)
+        pool = pool.WorkerPool(num_workers=default_num_workers, queue=queue)
     else:
         # EmptyPool acts like WorkerPool, but always has zero workers
-        pool = workers.EmptyPool()
+        pool = pool.EmptyPool()
 
     # Set up worker increment/decrement signals
-    workers.setsignals(pool)
+    pool.setsignals(pool)
 
     # Get the name of this host
     host = util.get_short_hostname()
@@ -101,7 +101,7 @@ def cli():
         update_loop(host, queue, pool)
 
         # Global abort
-        if workers.global_abort.is_set():
+        if pool.global_abort.is_set():
             log.warning("Exiting due to global abort")
 
     # Catch keyboard interrupt

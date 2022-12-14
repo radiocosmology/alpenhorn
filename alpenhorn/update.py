@@ -16,7 +16,7 @@ from . import config, db
 from . import storage as st
 from . import auto_import, util
 from .task import Task
-from .workers import global_abort
+from .pool import global_abort
 from .querywalker import QueryWalker
 
 log = logging.getLogger(__name__)
