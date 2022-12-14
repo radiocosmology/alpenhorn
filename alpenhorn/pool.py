@@ -47,6 +47,7 @@ def setsignals(pool):
     SIGUSR1 will result in a new worker being started.
     SIGUSR2 will result in a worker being deleted.
     """
+    global _signalpool
     _signalpool = pool
     signal.signal(signal.SIGUSR1, _handle_usr1)
     signal.signal(signal.SIGUSR2, _handle_usr2)
@@ -68,7 +69,7 @@ class Worker(threading.Thread):
         # main thread dies
         threading.Thread.__init__(self, name=f"Worker#{index}", daemon=True)
 
-        self._stop = threading.Event()
+        self._worker_stop = threading.Event()
         self._queue = queue
 
     def run(self):
@@ -80,7 +81,7 @@ class Worker(threading.Thread):
         thread-safe (re-entrant).
 
         Waits and executes tasks from self._queue as they become available.
-        Runs until the self._stop event fires.
+        Runs until the self._worker_stop event fires.
 
         A database error (peewee.OperationalError), will result in this worker
         cleanly abandonning its current task and exiting.  The main thread
@@ -100,7 +101,7 @@ class Worker(threading.Thread):
             if global_abort.is_set():
                 log.info(f"Stopped due to global abort.")
                 return
-            if self._stop.is_set():
+            if self._worker_stop.is_set():
                 log.info(f"Stopped.")
                 return
 
@@ -159,9 +160,9 @@ class Worker(threading.Thread):
 
                 log.debug(f"Finished task {task}")
 
-    def stop(self):
+    def stop_working(self):
         """Tell the worker to stop after finishing the current task."""
-        self._stop.set()
+        self._worker_stop.set()
 
 
 class WorkerPool:
@@ -229,6 +230,7 @@ class WorkerPool:
         """
         if self._mutex.acquire(blocking=blocking):
             self._new_worker()
+            self._mutex.release()
         else:
             log.warning("WorkerPool ignoring increment request: pool not clean")
 
@@ -247,12 +249,15 @@ class WorkerPool:
         if self._mutex.acquire(blocking=blocking):
             if len(self._workers) == 0:
                 log.warning("WorkerPool ignoring decrement request: no workers")
+            else:
+                # Cut the worker loose
+                worker = self._workers.pop()
 
-            # Fire the stop event
-            self._workers.stop()
+                # Fire the stop event
+                worker.stop_working()
 
-            # Cut the worker loose
-            self._workers.pop()
+            # Release the lock
+            self._mutex.release()
         else:
             log.warning("WorkerPool ignoring decrement request: pool not clean")
 
@@ -296,7 +301,7 @@ class WorkerPool:
         with self._mutex:
             # Signal all current workers
             for worker in self._workers:
-                worker.stop()
+                worker.stop_working()
 
             # Wait for _all_ workers
             for worker in self._all_workers:
