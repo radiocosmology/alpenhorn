@@ -15,6 +15,11 @@ def use_chimedb():
 
     config.merge_config({"extensions": [ "chimedb.core.alpenhorn" ]})
 
+    yield
+
+    # Reset the config
+    config.merge_config(dict(), replace=True)
+
 @pytest.fixture
 def dbproxy():
     """Database init and teardown.

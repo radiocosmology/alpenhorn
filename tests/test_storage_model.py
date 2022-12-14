@@ -10,7 +10,6 @@ from os import path
 import pytest
 import yaml
 
-import alpenhorn.db as db
 from alpenhorn.storage import StorageGroup, StorageNode
 
 tests_path = path.abspath(path.dirname(__file__))

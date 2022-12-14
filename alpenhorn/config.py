@@ -73,13 +73,18 @@ _default_config = {
 }
 
 
-def merge_config(extra_config):
-    """Merge the dict `extra_config` into the config."""
+def merge_config(extra_config, replace=False):
+    """Merge `extra_config` into the config.
+
+    If `replace` is True, config is reset to the default config
+    before merging in `extra_config`.
+
+    This is mostly used for testing."""
 
     global config
 
     # If necessary, initialise with the default
-    if config is None:
+    if replace or config is None:
         config = _default_config.copy()
 
     config = merge_dict_tree(config, extra_config)

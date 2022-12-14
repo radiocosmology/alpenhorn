@@ -10,7 +10,6 @@ from os import path
 import pytest
 import yaml
 
-import alpenhorn.db as db
 from test_acquisition_model import load_data as acq_data
 from test_storage_model import load_data as storage_data
 from alpenhorn.archive import (
@@ -69,8 +68,8 @@ def load_data(dbproxy, acq_data, storage_data):
     return {"file_copies": file_copies, "copy_requests": copy_requests}
 
 
-def test_schema(load_data):
-    assert set(db.database_proxy.get_tables()) == {
+def test_schema(dbproxy, load_data):
+    assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
         "acqtype",

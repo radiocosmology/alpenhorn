@@ -12,7 +12,6 @@ import peewee as pw
 import pytest
 import yaml
 
-import alpenhorn.db as db
 from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 tests_path = path.abspath(path.dirname(__file__))
@@ -53,8 +52,8 @@ def load_data(dbproxy):
     return {"types": types, "file_types": file_types, "files": files}
 
 
-def test_schema(load_data):
-    assert set(db.database_proxy.get_tables()) == {
+def test_schema(dbproxy, load_data):
+    assert set(dbproxy.get_tables()) == {
         "acqtype",
         "archiveacq",
         "filetype",
