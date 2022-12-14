@@ -63,6 +63,7 @@ def test_yield(queue):
 
     # After the yield, the task has requeued itself
     assert queue.qsize == 1
+    assert task_stage == 1
 
     task, key = queue.get()
     task()
@@ -73,6 +74,37 @@ def test_yield(queue):
 
     # Verify that the same Task instance was run both times
     assert first_task == last_task
+
+def test_yieldwait(queue):
+    """Test yielding with deferred queueing."""
+    task_finished = False
+    def _task(task):
+        # Any number > 0 causes a deferred put
+        yield 1e-5
+
+        nonlocal task_finished
+        task_finished = True
+
+    Task(_task, queue, "fifo")
+    assert queue.qsize == 1
+    assert queue.deferred_size == 0
+
+    # Run the task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # put stays deferred until a get() is performed on the queue
+    assert queue.qsize == 0
+    assert queue.deferred_size == 1
+
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    assert queue.qsize == 0
+    assert queue.deferred_size == 0
+    assert task_finished
 
 
 def test_cleanup(queue):
