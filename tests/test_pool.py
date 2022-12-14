@@ -4,11 +4,12 @@ import os
 import signal
 import peewee
 import threading
+from time import sleep
 
 import pytest
 
 from alpenhorn.pool import WorkerPool, EmptyPool, setsignals, global_abort
-from alpenhorn.queue import FairMultiFIFOQueue
+from test_queue import dirty_queue as queue
 
 # Event to indicate that the worker that consumed the opperr_task
 # is exiting
@@ -47,12 +48,6 @@ def crash_task():
 # many workers have been deleted and need to be given a task
 # to consume to avoid the 5-second timeout.
 deleted_count = 0
-
-
-@pytest.fixture
-def queue():
-    """Queue fixture"""
-    return FairMultiFIFOQueue()
 
 
 @pytest.fixture
@@ -158,6 +153,8 @@ def test_check(queue, pool):
     global operr_done
     with operr_done:
         operr_done.wait()
+        # Wait a teeny bit longer
+        sleep(0.05)
 
     # Worker count is still two: dead workers are part of the count.
     assert len(pool) == 2
@@ -186,7 +183,3 @@ def test_crash(queue, pool):
 
     # Do some clean-up so the queue fixture can exit
     queue.task_done("fifo")
-
-    # Don't add an empty task for the crashed worker.
-    global deleted_count
-    deleted_count = -1

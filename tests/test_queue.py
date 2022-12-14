@@ -8,17 +8,24 @@ from alpenhorn.queue import FairMultiFIFOQueue
 
 
 @pytest.fixture
-def queue():
-    """Queue init and teardown"""
-    queue = FairMultiFIFOQueue()
+def dirty_queue():
+    """A test queue that doesn't ensure clean-up.
 
-    yield queue
+    (This is how the queue in alpenhornd behaves.)"""
+    yield FairMultiFIFOQueue()
 
-    queue.join()
+
+@pytest.fixture
+def queue(dirty_queue):
+    """A clean queue init and teardown"""
+    yield dirty_queue
+
+    # Clean the dirty queue
+    dirty_queue.join()
 
     # Check for clean shutdown
-    assert queue.qsize == 0
-    assert queue.inprogress_size == 0
+    assert dirty_queue.qsize == 0
+    assert dirty_queue.inprogress_size == 0
 
 
 def test_emptyget(queue):

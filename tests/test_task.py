@@ -1,0 +1,143 @@
+"""Test Tasks"""
+
+from alpenhorn.task import Task
+from test_queue import dirty_queue as queue
+
+
+def test_args(queue):
+    """Verify that args passed to the task are passed on to the func."""
+
+    task_ran = False
+
+    def _task(task, arg, kwarg=None):
+        assert isinstance(task, Task)
+        assert arg == "arg"
+        assert kwarg == "kwarg"
+
+        nonlocal task_ran
+        task_ran = True
+
+    Task(_task, queue, "fifo", args=("arg",), kwargs={"kwarg": "kwarg"})
+
+    # Get the task and execute it
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Check that it ran
+    assert task_ran
+
+
+def test_yield(queue):
+    """Test a yielding task."""
+
+    task_stage = 0
+    first_task = None
+    last_task = None
+
+    def _task(task):
+        nonlocal task_stage
+        task_stage = 1
+
+        nonlocal first_task
+        first_task = task
+
+        yield
+
+        task_stage = 2
+
+        nonlocal last_task
+        last_task = task
+
+    Task(_task, queue, "fifo")
+
+    # Pop the task
+    task, key = queue.get()
+
+    # Verify queue is empty
+    assert queue.qsize == 0
+
+    # Run the task
+    task()
+    queue.task_done(key)
+
+    # After the yield, the task has requeued itself
+    assert queue.qsize == 1
+
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Check that it ran to the end
+    assert task_stage == 2
+
+    # Verify that the same Task instance was run both times
+    assert first_task == last_task
+
+
+def test_cleanup(queue):
+    """Test task clean-up running."""
+
+    cleaned_up = False
+
+    def _task(task):
+        nonlocal cleaned_up
+
+        def _cleanup():
+            nonlocal cleaned_up
+            cleaned_up = True
+
+        task.on_cleanup(_cleanup)
+
+    Task(_task, queue, "fifo")
+
+    # Run the task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Check that cleanup happened
+    assert cleaned_up
+
+
+def test_requeue(queue):
+    """Test requeueing"""
+
+    def _task(task):
+        task.requeue()
+
+    # Queue a non-requeuing version to check that the requeue() call is ignored.
+    Task(_task, queue, "fifo")
+
+    # Get the task
+    task, key = queue.get()
+
+    # Queue is empty
+    assert queue.qsize == 0
+    task()
+    queue.task_done(key)
+
+    # Queue is still empty
+    assert queue.qsize == 0
+
+    # Now try a requeuing task
+    Task(_task, queue, "fifo", requeue=True)
+
+    # Get the task
+    task, key = queue.get()
+
+    # Queue is empty
+    assert queue.qsize == 0
+    task()
+    queue.task_done(key)
+
+    # Queue is _not_ empty
+    assert queue.qsize == 1
+
+    # We can do it again: because _task always requeues, there's
+    # no way to ever get it out of the queue
+    task, key = queue.get()
+    assert queue.qsize == 0
+    task()
+    queue.task_done(key)
+    assert queue.qsize == 1

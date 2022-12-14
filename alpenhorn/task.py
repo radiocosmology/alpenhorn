@@ -82,7 +82,7 @@ class Task:
 
         # If we have no generator, run _func and check whether it yielded
         if self._generator is None:
-            result = self._func(*self._args, **self._kwargs)
+            result = self._func(self, *self._args, **self._kwargs)
             if isgenerator(result):
                 # If calling _func returned a generator (because it contains a
                 # yield statement), remember it so we can iterate it.
@@ -92,7 +92,7 @@ class Task:
                 # up the function for the first time.
             else:
                 # Otherwise, a regular function.  Task is done.
-                self.do_cleanup(True)
+                self.do_cleanup()
                 return True
 
         # We're working on a generator.  Iterate it once to get the next
@@ -107,12 +107,12 @@ class Task:
                 f"Requeueing yielded task {self._name} in FIFO {self._key} "
                 f"with delay {result} seconds"
             )
-            queue.put(self, self._key, wait=result)
+            self._queue.put(self, self._key, wait=result)
             return False
         except StopIteration:
             # Function exited without yielding (i.e. we're done)
             self._generator = None
-            self.do_cleanup(True)
+            self.do_cleanup()
             return True
 
     def do_cleanup(self):
@@ -124,16 +124,21 @@ class Task:
         # If that happens it will call this function on it's way out
         # the door and we don't want to re-reun clean-up functions
         # we've already tried.
-        for func, args, kwargs in self._cleanup.popleft():
+        while len(self._cleanup) > 0:
+            func, args, kwargs = self._cleanup.popleft()
             func(*args, **kwargs)
 
     def __str__(self):
         return self._name
 
     def requeue(self):
-        """If requesteed, re-queue a new copy of this task.
+        """If requested, re-queue a new copy of this task.
 
         This method is expected to be called from within the task.
+
+        Note that the task put back into the queue is a _copy_: a yielding
+        task will be restarted from the beginning, and won't pick up from
+        where it was when it called requeue().
         """
         if self._requeue:
             log.info(f"Requeueing task {self._name} in FIFO {self._key}")
