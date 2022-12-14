@@ -1,12 +1,12 @@
 """Worker thread framework."""
 
 import signal
+import logging
 import threading
-from . import db
 from collections import deque
 from peewee import OperationalError
 
-import logging
+from . import db
 
 log = logging.getLogger(__name__)
 
@@ -109,18 +109,19 @@ class Worker(threading.Thread):
             item = self._queue.get(timeout=5)
 
             if item is not None:
+                task, key = item
+
                 # Abandon working if alpenhornd is aborting
                 if global_abort.is_set():
                     log.info(f"Stopped due to global abort.")
+                    self._queue.task_done(key)
                     return
 
                 # Otherwise, execute the task.
-                task, key = item
-
                 log.debug(f"Beginning task {task}")
                 try:
                     task()
-                except OperationalError:
+                except OperationalError as operr:
                     # Try to clean up. This runs task.do_cleanup()
                     # until it raises something other than OperationalError
                     # or finishes.  Each time it is run, at least one cleanup
@@ -136,9 +137,10 @@ class Worker(threading.Thread):
                     except Exception as e:
                         # Errors upon errors: time to crash and burn
                         global_abort.set()
-                        raise RuntimeError(
+                        log.exception(
                             "Aborting due to uncaught exception in task cleanup"
-                        ) from e
+                        )
+                        return 1
 
                     log.debug(f"Finished task {task}")
                     self._queue.task_done(key)  # Keep the queue sanitised
@@ -146,17 +148,14 @@ class Worker(threading.Thread):
                     # Requeue this task if necessary
                     task.requeue()
 
-                    log.error(f"Exiting due to db error: {e}")
+                    log.error(f"Exiting due to db error: {operr}")
                     return 1  # Thread exits, will be respawned in the main loop
                 except Exception as e:
                     global_abort.set()
-                    raise RuntimeError(
-                        "Aborting due to uncaught exception in task"
-                    ) from e
+                    log.exception("Aborting due to uncaught exception in task")
+                    return 1
 
-                # Who knows what the state of the queue is during a global abort?
-                if not global_abort.is_set():
-                    self._queue.task_done(key)
+                self._queue.task_done(key)
 
                 log.debug(f"Finished task {task}")
 
