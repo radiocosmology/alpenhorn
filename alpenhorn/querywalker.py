@@ -1,10 +1,7 @@
 """The QueryWalker class"""
 
-import logging
 import peewee as pw
 from peewee import fn
-
-log = logging.getLogger(__name__)
 
 
 class QueryWalker:
@@ -39,6 +36,8 @@ class QueryWalker:
         beginning when we get to the end.  If `n` is greater than the total number
         of matching records, duplicate records will be returned.
 
+        Note: this always returns a list of n records, even when n == 1.
+
         Raises ValueError if n < 1 or peewee.DoesNotExist if the query produces no
         results
         """
@@ -70,7 +69,7 @@ class QueryWalker:
             # is no longer producing results
             if len(more_items) == 0:
                 raise pw.DoesNotExist("no records matched query")
-            items.append(more_items)
+            items += more_items
             n -= len(more_items)
 
         # Save the current position for next time.
