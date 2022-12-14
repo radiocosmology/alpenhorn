@@ -23,7 +23,7 @@ def queue():
 
 def test_emptyget(queue):
     """Try to get() nothing."""
-    assert queue.get(timeout=1) is None
+    assert queue.get(timeout=0.1) is None
 
 
 def test_putget(queue):
@@ -54,15 +54,15 @@ def test_putget(queue):
 
 def test_deferred(queue):
     """Test deferred put."""
-    queue.put("item", "fifo", wait=2)
+    queue.put("item", "fifo", wait=0.1)
     timeout = (
-        time() + 2
+        time() + 0.1
     )  # This can't be sooner than the expiry time of the deferred put
     assert queue.qsize == 0
     assert queue.deferred_size == 1
 
     while True:
-        item = queue.get(timeout=1)
+        item = queue.get(timeout=0.1)
 
         if item is None:
             assert queue.qsize == 0
