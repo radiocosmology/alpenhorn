@@ -9,14 +9,9 @@ from alpenhorn import acquisition, extensions, generic
 
 
 @pytest.fixture
-def fixtures():
+def fixtures(dbproxy):
 
-    from alpenhorn import db
-
-    db.init()
-    db.connect()
-
-    db.database_proxy.create_tables(
+    dbproxy.create_tables(
         [
             acquisition.AcqType,
             acquisition.FileType,
@@ -28,9 +23,6 @@ def fixtures():
     )
 
     yield
-
-    # cleanup
-    db.database_proxy.close()
 
 
 def test_invalid_extension():
