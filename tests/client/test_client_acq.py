@@ -19,6 +19,7 @@ import alpenhorn.storage as st
 # XXX: client is broken
 pytest.skip("client is broken", allow_module_level=True)
 
+
 @pytest.fixture
 def fixtures(tmpdir):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""

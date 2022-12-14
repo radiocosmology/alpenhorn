@@ -18,8 +18,6 @@ import threading
 from time import time
 from collections import deque
 
-import logging
-log = logging.getLogger(__name__)
 
 class FairMultiFIFOQueue:
     """Create a new Fair Multi-FIFO Queue"""
@@ -119,7 +117,6 @@ class FairMultiFIFOQueue:
         with self._dlock:
             self._joining = True
             self._deferrals = list()
-
 
         with self._all_tasks_done:
             while self._total_inprogress > 0 or self._total_queued > 0:

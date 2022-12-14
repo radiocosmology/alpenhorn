@@ -48,10 +48,12 @@ def crash_task():
 # to consume to avoid the 5-second timeout.
 deleted_count = 0
 
+
 @pytest.fixture
 def queue():
     """Queue fixture"""
     return FairMultiFIFOQueue()
+
 
 @pytest.fixture
 def pool(dbproxy, queue):
