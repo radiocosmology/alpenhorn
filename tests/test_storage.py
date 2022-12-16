@@ -11,7 +11,6 @@ from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
 
-
 def _storagenode_dict(name, nodes):
     """Given the loaded YAML node list "nodes", return a full
     StorageNode dict for node "name"."""

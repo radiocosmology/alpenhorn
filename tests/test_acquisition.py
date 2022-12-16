@@ -12,7 +12,6 @@ import pytest
 from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 
-
 def test_schema(dbproxy, acq_data):
     assert set(dbproxy.get_tables()) == {
         "acqtype",

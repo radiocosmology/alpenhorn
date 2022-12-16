@@ -75,9 +75,11 @@ def test_yield(queue):
     # Verify that the same Task instance was run both times
     assert first_task == last_task
 
+
 def test_yieldwait(queue):
     """Test yielding with deferred queueing."""
     task_finished = False
+
     def _task(task):
         # Any number > 0 causes a deferred put
         yield 1e-5

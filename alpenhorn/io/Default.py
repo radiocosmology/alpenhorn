@@ -13,6 +13,7 @@ from pathlib import PurePath
 
 # Fallback to the polling observer on platforms which don't support inotify
 import watchdog.utils
+
 try:
     from watchdog.observers.inotify import InotifyObserver as DefaultObserver
 except watchdog.utils.UnsupportedLibc:
@@ -36,6 +37,7 @@ class DefaultNodeRemote(BaseNodeRemote):
 
 class DefaultNodeIO(BaseNodeIO):
     """DefaultNodeIO implements a simple StorageNode backed by a regular POSIX filesystem."""
+
     remote_class = DefaultNodeRemote
 
     observer = DefaultObserver  # Only works on local filesystems.

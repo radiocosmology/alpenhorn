@@ -69,8 +69,10 @@ def dbproxy():
 
     db.close()
 
+
 # Path to the data YAML files
 data_path = pathlib.Path(__file__).with_name("fixtures")
+
 
 @pytest.fixture
 def storage_data(dbproxy):
@@ -95,6 +97,7 @@ def storage_data(dbproxy):
     StorageNode.insert_many(fixtures["nodes"]).execute()
 
     return fixtures
+
 
 @pytest.fixture
 def acq_data(dbproxy):
@@ -130,6 +133,7 @@ def acq_data(dbproxy):
 
     return fixtures
 
+
 @pytest.fixture
 def archive_data(dbproxy, acq_data, storage_data):
     """Loads ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest data into dbproxy"""
@@ -146,7 +150,9 @@ def archive_data(dbproxy, acq_data, storage_data):
     # name -> id lookups
     files = {file["name"]: 1 + id_ for id_, file in enumerate(acq_data["files"])}
     nodes = {node["name"]: 1 + id_ for id_, node in enumerate(storage_data["nodes"])}
-    groups = {group["name"]: 1 + id_ for id_, group in enumerate(storage_data["groups"])}
+    groups = {
+        group["name"]: 1 + id_ for id_, group in enumerate(storage_data["groups"])
+    }
 
     # fixup foreign keys for the file copies
     for copy in fixtures["file_copies"]:
@@ -166,5 +172,3 @@ def archive_data(dbproxy, acq_data, storage_data):
     ArchiveFileCopyRequest.insert_many(fixtures["copy_requests"]).execute()
 
     return fixtures
-
-
