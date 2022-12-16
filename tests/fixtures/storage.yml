@@ -1,16 +1,12 @@
 groups:
   - name: foo
-    id: 1
     notes: null
   - name: bar
-    id: 2
     notes: Some bar!
   - name: transport
-    id: 3
     io_class: Transport
     notes: null
   - name: nearline
-    id: 4
     io_class: Nearline
 
 nodes:
