@@ -24,11 +24,11 @@ def _get_io_instance(obj):
         module = importlib.import_module("alpenhorn.io." + io_class)
     except ImportError as e:
         raise ValueError(
-            f'Unable to find I/O class "{io_class}{io_suffix}" for {obj_type} {obj.name}.'
+            f'Unable to find I/O module "alpenhorn.io.{io_class}" for {obj_type} {obj.name}.'
         ) from e
 
     # Add suffix to create I/O class name, i.e. ("DefaultNodeIO" or "DefaultGroupIO" or whatever)
-    io_class.append(io_suffix)
+    io_class += io_suffix
 
     # Within the module, find the class
     try:
@@ -67,7 +67,7 @@ class StorageGroup(base_model):
     def io(self):
         """An instance of the I/O class for this group"""
 
-        if self._io is None:
+        if getattr(self, "_io", None) is None:
             self._io = _get_io_instance(self)
         return self._io
 
@@ -146,10 +146,6 @@ class StorageNode(base_model):
         An optional JSON blob of configuration data interpreted by the I/O class
     """
 
-    def init(self):
-        self._io = None
-        self._remote = None
-
     name = pw.CharField(max_length=64)
     root = pw.CharField(max_length=255, null=True)
     host = pw.CharField(max_length=64, null=True)
@@ -172,14 +168,14 @@ class StorageNode(base_model):
     def io(self):
         """An instance of the I/O class for this node"""
 
-        if self._io is None:
+        if getattr(self, "_io", None) is None:
             self._io = _get_io_instance(self)
         return self._io
 
     @property
     def remote(self):
         """An instance of the remote-I/O class for this node"""
-        if self._remote is None:
+        if getattr(self, "_remote", None) is None:
             self._remote = self.io.get_remote()
         return self._remote
 

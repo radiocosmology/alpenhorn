@@ -8,18 +8,18 @@ import logging
 
 from alpenhorn.io import lfs
 import alpenhorn.archive as ar
-from alpenhorn.io.base import BaseGroupIO
+from alpenhorn.io.base import BaseGroupIO, BaseNodeRemote
 from alpenhorn.io.ioutil import pretty_bytes
 from alpenhorn.querywalker import QueryWalker
 from alpenhorn.io.LFSQuota import LFSQuotaNodeIO
 
 # This is the DefaultIO check async; used in auto_verify()
-from _default_asyncs import check_async
+from ._default_asyncs import check_async
 
 log = logging.getLogger(__name__)
 
 
-def NearlineNodeRemote(BaseNodeRemote):
+class NearlineNodeRemote(BaseNodeRemote):
     """NearlineNodeRemote: information about a Nearline remote StorageNode."""
 
     def pull_ready(self, file):

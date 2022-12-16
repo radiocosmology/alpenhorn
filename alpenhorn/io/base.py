@@ -74,18 +74,11 @@ class BaseNodeIO:
     def __init__(self, node):
         self.node = node
 
-        # Default config from the table
-        self.base_config = {
-            "min_delete_age_days": node.min_delete_age_days,
-        }
-
-        # Mix in extra config if given
-        if node.io_conifg is None:
-            self.io_config = dict()
+        # Load config if present
+        if node.io_config is None:
+            self.config = dict()
         else:
-            self.io_config = json.loads(node.io_config)
-
-        self.config = merge_dict_tree(self.base_config, self.io_config)
+            self.config = json.loads(node.io_config)
 
     def get_remote(self):
         """Returns an instance of the remote-I/O class for this node.
@@ -305,7 +298,7 @@ class BaseGroupIO:
 
     def __init__(self, group):
         self.group = group
-        if group.io_conifg is None:
+        if group.io_config is None:
             self.config = dict()
         else:
             self.config = json.loads(group.io_config)

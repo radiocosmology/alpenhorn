@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from test_acquisition_model import load_data as acq_data
-from test_storage_model import load_data as storage_data
+from test_storage import load_data as storage_data
 from alpenhorn.archive import (
     ArchiveFile,
     ArchiveFileCopy,

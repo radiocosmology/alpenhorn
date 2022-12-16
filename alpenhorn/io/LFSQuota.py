@@ -11,7 +11,7 @@ from .lfs import LFS
 log = logging.getLogger(__name__)
 
 
-def LFSQuotaNodeIO(DefaultNodeIO):
+class LFSQuotaNodeIO(DefaultNodeIO):
     """An extension to DefaultNodeIO which uses the "lfs quota" to determine
     free space, rather than stat.
 

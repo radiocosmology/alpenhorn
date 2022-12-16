@@ -15,12 +15,12 @@ from watchdog.observers.inotify import InotifyObserver
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
 # The asyncs are over here:
-from _default_asyncs import *
+from ._default_asyncs import *
 
 log = logging.getLogger(__name__)
 
 
-def DefaultNodeRemote(BaseNodeRemote):
+class DefaultNodeRemote(BaseNodeRemote):
     """DefaultNodeRemote: information about a DefaultIO remote StorageNode."""
 
     def pull_ready(self, file):
@@ -28,7 +28,7 @@ def DefaultNodeRemote(BaseNodeRemote):
         return True
 
 
-def DefaultNodeIO(BaseNodeIO):
+class DefaultNodeIO(BaseNodeIO):
     """DefaultNodeIO implements a simple StorageNode backed by a regular POSIX filesystem."""
     remote_class = DefaultNodeRemote
 
@@ -241,7 +241,7 @@ def DefaultNodeIO(BaseNodeIO):
         pass
 
 
-def DefaultGroupIO(BaseGroupIO):
+class DefaultGroupIO(BaseGroupIO):
     """DefaultGroupIO implements a simple StorageGroup.
 
     The DefaultGroupIO permits any number of StorageNodes in the group, but only permits at most

@@ -1,17 +1,26 @@
 groups:
   - name: foo
+    id: 1
     notes: null
   - name: bar
+    id: 2
     notes: Some bar!
   - name: transport
-    ioclass: Transport
+    id: 3
+    io_class: Transport
     notes: null
+  - name: nearline
+    id: 4
+    io_class: Nearline
 
 nodes:
   - name: x
     host: foo.example.com
     group: foo
+    io_class: null
+    io_config: null
     active: True
+    storage_type: F
     max_total_gb: 10
     min_avail_gb: 1
   - name: z
@@ -20,3 +29,21 @@ nodes:
     active: False
     max_total_gb: 10
     min_avail_gb: 1
+  - name: nearline
+    io_class: Nearline
+    group: nearline
+    storage_type: A
+    io_config: '{"quota_group": "qgroup", "fixed_quota": 300000000}'
+  - name: smallfile
+    io_class: Default
+    group: nearline
+    storage_type: A
+  - name: polling
+    io_class: Polling
+    group: transport
+    storage_type: T
+  - name: lfsquota
+    io_class: LFSQuota
+    storage_type: F
+    group: bar
+    io_config: '{"quota_group": "qgroup"}'
