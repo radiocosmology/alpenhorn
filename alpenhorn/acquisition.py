@@ -23,6 +23,9 @@ class AcqType(base_model):
     name = pw.CharField(max_length=64)
     notes = pw.TextField(null=True)
 
+    class Meta:
+        indexes = ((("name",), True),)  # name is unique
+
     # This dict is an atribute on the class, used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
     _registered_acq_types = {}
@@ -175,6 +178,9 @@ class ArchiveAcq(base_model):
     type = pw.ForeignKeyField(AcqType, backref="acqs")
     comment = pw.TextField(null=True)
 
+    class Meta:
+        indexes = ((("name",), True),)  # name is unique
+
 
 class FileType(base_model):
     """A file type.
@@ -189,6 +195,9 @@ class FileType(base_model):
 
     name = pw.CharField(max_length=64)
     notes = pw.TextField(null=True)
+
+    class Meta:
+        indexes = ((("name",), True),)  # name is unique
 
     # This dict is an atribute on the class used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
@@ -312,6 +321,17 @@ class ArchiveFile(base_model):
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
     registered = pw.DateTimeField(default=datetime.datetime.now)
+
+    class Meta:
+        indexes = (
+            (
+                (
+                    "acq",
+                    "name",
+                ),
+                True,
+            ),
+        )  # (acq,name) is unique
 
     @property
     def path(self):

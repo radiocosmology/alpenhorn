@@ -7,20 +7,23 @@ Tests for `alpenhorn.storage` module.
 
 import pytest
 import pathlib
+import peewee as pw
 
 from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
 
-def test_schema(dbproxy, storagegroup, storagenode):
-    group = storagegroup(name="group")
-    storagenode(name="node", group=group)
+def test_schema(dbproxy, genericnode):
     assert set(dbproxy.get_tables()) == {"storagegroup", "storagenode"}
 
 
 def test_group_model(storagegroup):
     storagegroup(name="min")
     storagegroup(name="max", io_class="IOClass", notes="Notes", io_config="{ioconfig}")
+
+    # name is unique
+    with pytest.raises(pw.IntegrityError):
+        storagegroup(name="min")
 
     # Check records in DB
     assert StorageGroup.select().where(StorageGroup.name == "min").dicts().get() == {
@@ -61,6 +64,10 @@ def test_storage_model(storagegroup, storagenode):
         storage_type="T",
         username="user",
     )
+
+    # name is unique
+    with pytest.raises(pw.IntegrityError):
+        storagenode(name="min", group=group)
 
     # Check records in DB
     assert StorageNode.select().where(StorageNode.name == "min").dicts().get() == {

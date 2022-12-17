@@ -22,7 +22,7 @@ def lfs():
     def _mocked_which(cmd, mode=os.F_OK | os.X_OK, path=None):
         """A mock of shutil.which that points to our test LFS command."""
         if cmd == "lfs":
-            return pathlib.Path(__file__).with_name("lfs.py").absolute()
+            return pathlib.Path(__file__).with_name("lfs").absolute()
 
         return shutil.which(cmd, mode, path)
 

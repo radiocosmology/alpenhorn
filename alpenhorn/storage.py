@@ -63,6 +63,9 @@ class StorageGroup(base_model):
     notes = pw.TextField(null=True)
     io_config = pw.TextField(null=True)
 
+    class Meta:
+        indexes = ((("name",), True),)  # name is unique
+
     @property
     def io(self):
         """An instance of the I/O class for this group"""
@@ -164,6 +167,9 @@ class StorageNode(base_model):
     avail_gb_last_checked = pw.DateTimeField(null=True)
     notes = pw.TextField(null=True)
     io_config = pw.TextField(null=True)
+
+    class Meta:
+        indexes = ((("name",), True),)  # name is unique
 
     @property
     def io(self):
