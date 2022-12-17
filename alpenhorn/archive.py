@@ -30,11 +30,12 @@ class ArchiveFileCopy(base_model):
         - 'N': no, should be deleted
         In all cases we try to keep at least two copies of the file around.
     ready : bool
-        _Some_ StorageNode.io_classes use this to tell other hosts that
-        files are ready to be pulled.  Other io_classes do _not_ use this
+        _Some_ StorageNode I/O classes use this to tell other hosts that
+        files are ready to be pulled.  Other I/O classes do _not_ use this
         field and assess readiness in some other way, so never check this
-        directly; use StorageNode.remote.pull_ready() to determine whether
-        a remote file is ready for pulling.
+        directly; outside of the I/O class code itself, use
+        StorageNode.remote.pull_ready() to determine whether a remote file
+        is ready for pulling.
     size_b : integer
         Allocated size of file in bytes (i.e. actual size on the Storage
         medium.)
@@ -55,12 +56,10 @@ class ArchiveFileCopy(base_model):
         For a relative path (one omitting node.root), use copy.file.path
         """
 
-        # It's a PurePath and not a Path because it's not guaranteed to exist
-        # because this property is defined even when has_file!=Y
-        return pathlib.PurePath(self.node.root, self.file.path)
+        return pathlib.Path(self.node.root, self.file.path)
 
     class Meta:
-        indexes = ((("file", "node"), True),)
+        indexes = ((("file", "node"), True),)  # (file, node) is unique
 
 
 class ArchiveFileCopyRequest(base_model):
@@ -74,8 +73,6 @@ class ArchiveFileCopyRequest(base_model):
         The storage group to which the file should be copied.
     node_from : foreign key
         The node from which the file should be copied.
-    nice : integer
-        For nicing the copy/rsync process if resource management is needed.
     completed : bool
         Set to true when the copy has succeeded.
     cancelled : bool
@@ -91,10 +88,9 @@ class ArchiveFileCopyRequest(base_model):
     file = pw.ForeignKeyField(ArchiveFile, backref="requests")
     group_to = pw.ForeignKeyField(StorageGroup, backref="requests_to")
     node_from = pw.ForeignKeyField(StorageNode, backref="requests_from")
-    nice = pw.IntegerField()
-    completed = pw.BooleanField()
+    completed = pw.BooleanField(default=False)
     cancelled = pw.BooleanField(default=False)
-    timestamp = pw.DateTimeField()
+    timestamp = pw.DateTimeField(default=datetime.datetime.now())
     transfer_started = pw.DateTimeField(null=True)
     transfer_completed = pw.DateTimeField(null=True)
 

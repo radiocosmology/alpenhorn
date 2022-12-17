@@ -6,13 +6,15 @@ Tests for `alpenhorn.archive` module.
 """
 
 import pytest
+import pathlib
+import datetime
 import peewee as pw
 
 from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
 
 
-def test_schema(dbproxy, archive_data):
+def test_schema(dbproxy, genericcopy, genericrequest):
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
@@ -25,56 +27,99 @@ def test_schema(dbproxy, archive_data):
     }
 
 
-def test_model(archive_data):
-    copies = set(
-        ArchiveFileCopy.select(ArchiveFile.name, StorageNode.name)
-        .join(ArchiveFile)
-        .switch(ArchiveFileCopy)
-        .join(StorageNode)
-        .tuples()
+def test_archivefilecopy_model(
+    genericgroup, storagenode, genericacq, filetype, archivefile, archivefilecopy
+):
+    """Test ArchiveFileCopy table model."""
+    node = storagenode(name="n1", group=genericgroup)
+    ft = filetype(name="name")
+    minfile = archivefile(name="min", acq=genericacq, type=ft)
+    maxfile = archivefile(name="max", acq=genericacq, type=ft)
+
+    # DB doesn't store microseconds, so zero them here.
+    before = datetime.datetime.now().replace(microsecond=0)
+    archivefilecopy(file=minfile, node=node)
+    archivefilecopy(
+        file=maxfile, node=node, has_file="X", wants_file="M", ready=True, size_b=300,
+        last_update = before
     )
-    assert copies == {("fred", "x"), ("sheila", "x")}
+    after = datetime.datetime.now()
 
-    reqs = set(
-        ArchiveFileCopyRequest.select(
-            ArchiveFile.name, StorageNode.name, StorageGroup.name
-        )
-        .join(ArchiveFile)
-        .switch(ArchiveFileCopyRequest)
-        .join(StorageNode)
-        .switch(ArchiveFileCopyRequest)
-        .join(StorageGroup)
-        .tuples()
-    )
-    assert reqs == {("jim", "x", "bar")}
+    afc = ArchiveFileCopy.select().where(ArchiveFileCopy.file == minfile).dicts().get()
 
-    assert list(
-        ArchiveFileCopy.select(
-            ArchiveFile.name, ArchiveFileCopy.has_file, ArchiveFileCopy.wants_file
-        )
-        .join(ArchiveFile)
-        .where(ArchiveFile.name == "fred")
-        .dicts()
-    ) == [{"name": "fred", "has_file": "N", "wants_file": "Y"}]
-    assert (
-        ArchiveFileCopy.select()
-        .join(ArchiveFile)
-        .where(ArchiveFile.name == "sheila")
-        .get()
-        .wants_file
-    ) == "M"
+    assert afc["last_update"] >= before
+    assert afc["last_update"] <= after
+    del afc["last_update"]
 
+    assert afc == {
+        "file": minfile.id,
+        "node": node.id,
+        "id": 1,
+        "has_file": 'N',
+        "wants_file": 'Y',
+        "ready": False,
+        "size_b": None,
+    }
+    assert ArchiveFileCopy.select().where(ArchiveFileCopy.file == maxfile).dicts().get() == {
+        "file": maxfile.id,
+        "node": node.id,
+        "id": 2,
+        "has_file": 'X',
+        "wants_file": 'M',
+        "ready": True,
+        "size_b": 300,
+        "last_update": before,
+    }
 
-def test_unique_copy_constraint(archive_data):
-    f = ArchiveFile.get(name="fred")
-    assert f.name == "fred"
-    n = StorageNode.get(name="x")
-    assert n.name == "x"
-
-    # we have one copy
-    assert [fc for fc in f.copies] == [ArchiveFileCopy.get(file=f, node=n)]
-
-    # but can't insert a second with identical file and node:
+    # (node, file) is unique
     with pytest.raises(pw.IntegrityError):
-        file_copy = ArchiveFileCopy.create(file=f, node=n)
-        file_copy.save()
+        archivefilecopy(file=minfile, node=node)
+    # But this should work
+    node2 = storagenode(name="new", group=genericgroup)
+    archivefilecopy(file=minfile, node=node2)
+
+def test_archivefilecopyrequest_model(genericgroup, storagenode, genericfile, archivefilecopyrequest):
+    """Test ArchiveFileCopyRequest model"""
+    minnode = storagenode(name="min", group=genericgroup)
+    maxnode = storagenode(name="max", group=genericgroup)
+    before = datetime.datetime.now().replace(microsecond=0)
+    archivefilecopyrequest(file=genericfile, node_from=minnode, group_to=genericgroup)
+    after = datetime.datetime.now()
+    archivefilecopyrequest(file=genericfile, node_from=maxnode, group_to=genericgroup, cancelled=True, completed=True,
+                           timestamp=before, transfer_completed=before, transfer_started=after)
+
+    afcr = ArchiveFileCopyRequest.select().where(ArchiveFileCopyRequest.node_from == minnode).dicts().get()
+    assert afcr["timestamp"] >= before
+    assert afcr["timestamp"] <= after
+    del afcr["timestamp"]
+    assert afcr == {
+            "file": genericfile.id,
+            "node_from": minnode.id,
+            "group_to": genericgroup.id,
+            "id": 1,
+            "cancelled": False,
+            "completed": False,
+            "transfer_completed": None,
+            "transfer_started": None,
+            }
+    assert ArchiveFileCopyRequest.select().where(ArchiveFileCopyRequest.node_from == maxnode).dicts().get() == {
+            "file": genericfile.id,
+            "node_from": maxnode.id,
+            "group_to": genericgroup.id,
+            "id": 2,
+            "cancelled": True,
+            "completed": True,
+            "timestamp": before,
+            "transfer_completed": before,
+            "transfer_started": after,
+            }
+
+    # Not unique
+    archivefilecopyrequest(file=genericfile, node_from=minnode, group_to=genericgroup)
+
+def test_copy_path(genericfile, genericnode, archivefilecopy):
+    """Test ArchiveFileCopy.path."""
+
+    copy = archivefilecopy(file=genericfile, node=genericnode)
+
+    assert copy.path == pathlib.PurePath(genericnode.root, genericfile.acq.name, genericfile.name)

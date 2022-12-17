@@ -92,7 +92,7 @@ def test_file_model(acqtype, archiveacq, filetype, archivefile):
     at = acqtype(name="type")
     acq1 = archiveacq(name="acq1", type=at)
     ft = filetype(name="type")
-    before = datetime.datetime.now()
+    before = datetime.datetime.now().replace(microsecond=0)
     archivefile(name="min", acq=acq1, type=ft)
     after = datetime.datetime.now()
     archivefile(

@@ -132,6 +132,11 @@ def archivefilecopy(factory_factory):
     return factory_factory(ArchiveFileCopy)
 
 
+@pytest.fixture
+def archivefilecopyrequest(factory_factory):
+    return factory_factory(ArchiveFileCopyRequest)
+
+
 # Generic versions of the above.  When you just want a record, but don't care
 # what it is.
 
@@ -172,3 +177,52 @@ def genericfile(acqtype, archiveacq, filetype, archivefile):
     acq = archiveacq(name="genericfile_acq", type=acqtype)
     filetype = filetype(name="genericfile_filetype")
     return archivefile(name="genericfile", acq=acq, type=filetype, size_b=2**20)
+
+
+@pytest.fixture
+def genericcopy(
+    acqtype,
+    archiveacq,
+    filetype,
+    archivefile,
+    archivefilecopy,
+    storagenode,
+    storagegroup,
+):
+    """Create a generic ArchiveFileCopy record.
+
+    Creates all necessary backrefs.
+    """
+    acqtype = acqtype(name="genericcopy_actype")
+    acq = archiveacq(name="genericcopy_acq", type=acqtype)
+    filetype = filetype(name="genericcopy_filetype")
+    file = archivefile(name="genericcopy_file", acq=acq, type=filetype, size_b=2**20)
+    group = storagegroup(name="genericcopy_group")
+    node = storagenode(name="genericcopy_node", group=group)
+    return archivefilecopy(file=file, node=node)
+
+
+@pytest.fixture
+def genericrequest(
+    acqtype,
+    archiveacq,
+    filetype,
+    archivefile,
+    archivefilecopyrequest,
+    storagenode,
+    storagegroup,
+):
+    """Create a generic ArchiveFileCopyRequest record.
+
+    Creates all necessary backrefs.
+    """
+    acqtype = acqtype(name="genericrequest_actype")
+    acq = archiveacq(name="genericrequest_acq", type=acqtype)
+    filetype = filetype(name="genericrequest_filetype")
+    file = archivefile(
+        name="genericrequest_file", acq=acq, type=filetype, size_b=2**20
+    )
+    group1 = storagegroup(name="genericrequest_group1")
+    group2 = storagegroup(name="genericrequest_group2")
+    node = storagenode(name="genericrequest_node", group=group1)
+    return archivefilecopyrequest(file=file, node_from=node, group_to=group2)
