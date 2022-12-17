@@ -2,9 +2,8 @@
 """
 
 
-import logging
-import re
 import socket
+import logging
 
 log = logging.getLogger(__name__)
 
@@ -58,11 +57,6 @@ def run_command(cmd, timeout=None, **kwargs):
         stdout_val.decode(errors="replace"),
         stderr_val.decode(errors="replace"),
     )
-
-
-def is_md5_hash(h):
-    """Is this the correct format to be an md5 hash?"""
-    return re.match("[a-f0-9]{32}", h) is not None
 
 
 def md5sum_file(filename, hr=True, cmd_line=False):

@@ -5,10 +5,23 @@ import pathlib
 import shutil
 from unittest.mock import patch
 
-from alpenhorn import config, db, extensions
+from alpenhorn import config, db, extensions, util
+from alpenhorn.queue import FairMultiFIFOQueue
 from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
+
+
+@pytest.fixture
+def hostname():
+    """Returns the current hostname."""
+    return util.get_short_hostname()
+
+
+@pytest.fixture
+def queue():
+    """A test queue."""
+    yield FairMultiFIFOQueue()
 
 
 @pytest.fixture
@@ -28,6 +41,55 @@ def lfs():
 
     with patch("shutil.which", _mocked_which):
         yield
+
+
+@pytest.fixture
+def mock_statvfs(fs):
+    """Mocks os.statvfs to work with pyfakefs."""
+
+    def _mocked_statvfs(path):
+        """A mock of os.statvfs that reports the size of the pyfakefs filesystem."""
+        nonlocal fs
+
+        # Anything with a __dict__ works here.
+        class Result:
+            f_bavail = fs.get_disk_usage().free
+            f_bsize = 1
+
+        return Result
+
+    with patch("os.statvfs", _mocked_statvfs):
+        yield
+
+
+@pytest.fixture
+def mock_stat(fs):
+    """Mocks os.stat to work with pyfakefs."""
+
+    def _mocked_stat(path):
+        """A mock of os.stat that reports the size of files in a pyfakefs filesystem."""
+        nonlocal fs
+
+        from math import ceil
+
+        size = fs.get_object(path).size
+
+        # Anything with a __dict__ works here.
+        class Result:
+            # stat reports sizes in 512-byte blocks
+            st_blocks = ceil(size / 512)
+
+        return Result
+
+    with patch("os.stat", _mocked_stat):
+        yield
+
+
+@pytest.fixture
+def xfs(fs, mock_statvfs, mock_stat):
+    """An extended pyfakefs which patches more os functions
+    for proper behaviour with alpenhorn"""
+    return fs
 
 
 @pytest.fixture

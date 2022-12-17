@@ -36,8 +36,10 @@ def test_archivefilecopy_model(
     minfile = archivefile(name="min", acq=genericacq, type=ft)
     maxfile = archivefile(name="max", acq=genericacq, type=ft)
 
-    # DB doesn't store microseconds, so zero them here.
-    before = datetime.datetime.now().replace(microsecond=0)
+    # Deal with round-off
+    before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
+        microsecond=0
+    )
     archivefilecopy(file=minfile, node=node)
     archivefilecopy(
         file=maxfile,
@@ -48,7 +50,7 @@ def test_archivefilecopy_model(
         size_b=300,
         last_update=before,
     )
-    after = datetime.datetime.now()
+    after = datetime.datetime.now() + datetime.timedelta(seconds=1)
 
     afc = ArchiveFileCopy.select().where(ArchiveFileCopy.file == minfile).dicts().get()
 
@@ -92,9 +94,11 @@ def test_archivefilecopyrequest_model(
     """Test ArchiveFileCopyRequest model"""
     minnode = storagenode(name="min", group=genericgroup)
     maxnode = storagenode(name="max", group=genericgroup)
-    before = datetime.datetime.now().replace(microsecond=0)
+    before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
+        microsecond=0
+    )
     archivefilecopyrequest(file=genericfile, node_from=minnode, group_to=genericgroup)
-    after = datetime.datetime.now()
+    after = datetime.datetime.now() + datetime.timedelta(seconds=1)
     archivefilecopyrequest(
         file=genericfile,
         node_from=maxnode,

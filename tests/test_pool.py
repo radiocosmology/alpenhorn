@@ -9,7 +9,6 @@ from time import sleep
 import pytest
 
 from alpenhorn.pool import WorkerPool, EmptyPool, setsignals, global_abort
-from test_queue import dirty_queue as queue
 
 # Event to indicate that the worker that consumed the opperr_task
 # is exiting

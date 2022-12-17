@@ -1,7 +1,6 @@
 """Test Tasks"""
 
 from alpenhorn.task import Task
-from test_queue import dirty_queue as queue
 
 
 def test_args(queue):
