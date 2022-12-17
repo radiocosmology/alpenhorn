@@ -64,6 +64,12 @@ class LFS:
             is searched.
     """
 
+    # Conveniences for clients
+    HSM_MISSING = HSMState.MISSING
+    HSM_UNARCHIVED = HSMState.UNARCHIVED
+    HSM_RESTORED = HSMState.RESTORED
+    HSM_RELEASED = HSMState.RELEASED
+
     def __init__(self, quota_group, fixed_quota=None, lfs="lfs", path=None):
         self._quota_group = quota_group
         self._fixed_quota = fixed_quota

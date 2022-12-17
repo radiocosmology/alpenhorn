@@ -19,7 +19,7 @@ try:
 except watchdog.utils.UnsupportedLibc:
     from watchdog.observers.polling import PollingObserver as DefaultObserver
 
-from . import util
+from .. import util
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 from ..task import Task
 
