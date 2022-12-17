@@ -8,21 +8,23 @@ and StorageGroups which do not explicitly specify io_class.
 
 import os
 import logging
+import pathlib
 import threading
+import watchdog.utils
 from pathlib import PurePath
 
 # Fallback to the polling observer on platforms which don't support inotify
-import watchdog.utils
-
 try:
     from watchdog.observers.inotify import InotifyObserver as DefaultObserver
 except watchdog.utils.UnsupportedLibc:
     from watchdog.observers.polling import PollingObserver as DefaultObserver
 
+from . import util
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
+from ..task import Task
 
 # The asyncs are over here:
-from ._default_asyncs import *
+from ._default_asyncs import pull_async, check_async, delete_async
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         Does not account for space reserved via reserve_bytes()."""
 
-        x = os.statvfs(node.root)
+        x = os.statvfs(self.node.root)
         return float(x.f_bavail) * x.f_bsize
 
     def fits(self, size_b):
@@ -91,7 +93,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         Takes into account reserved space.
         """
-        return reserve_bytes(self, size_b, check_only=True)
+        return self.reserve_bytes(self, size_b, check_only=True)
 
     def _walk(self, path):
         """Recurse through directory path, yielding files"""
@@ -162,7 +164,7 @@ class DefaultNodeIO(BaseNodeIO):
         If check_only is True, no reservation is made and the only result is the
         return value.
         """
-        size *= reserve_factor
+        size *= self.reserve_factor
         with self.mutex:
             bavail = self.bytes_avail()
             if bavail is not None and bavail - self.reserved_bytes > size:
@@ -175,7 +177,7 @@ class DefaultNodeIO(BaseNodeIO):
 
     def release_bytes(self, size):
         """Release space previously reserved with reserve_bytes()."""
-        size *= reserve_factor
+        size *= self.reserve_factor
         with self.mutex:
             if self.reserved_bytes < size:
                 raise ValueError(
@@ -235,13 +237,13 @@ class DefaultNodeIO(BaseNodeIO):
             return
 
         Task(
-            func=del_async,
+            func=delete_async,
             queue=self.queue,
             key=self.node.name,
             args=(self.nodem, copies),
-            name=f"Delete copies "
+            name="Delete copies "
             + str([copy.id for copy in copies])
-            + " on {self.node.name}",
+            + f" on {self.node.name}",
         )
 
     def ready(self, req):

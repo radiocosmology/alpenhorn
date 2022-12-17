@@ -5,6 +5,7 @@ Provides the LFS class which wraps calls to lfs(1) for use on Lustre filesystems
 import re
 import shutil
 import logging
+import pathlib
 from enum import Enum
 
 from alpenhorn.util import run_command
@@ -109,7 +110,7 @@ class LFS:
         )
 
         # lfs quota reports values in kiByte blocks
-        node.avail_gb = (quota_limit - int(lfs_quota[0])) * 2**10.0
+        return (quota_limit - int(lfs_quota[0])) * 2**10.0
 
     def hsm_state(self, path):
         """Returns the HSM state of path.
@@ -120,7 +121,7 @@ class LFS:
 
         # No need to check with HSM if the path isn't present
         if not pathlib.Path(path).exists():
-            return HSM_MISSING
+            return HSMState.MISSING
 
         stdout = self.run_lfs("hsm_state", path)
         if stdout is None:
@@ -149,20 +150,20 @@ class LFS:
         # bits providing information, but I don't know if we care about them.
         #
         # See llapi_hsm_state_get(3) for full details about these.
-        if not "archived" in stdout:
-            return HSM_UNARCHIVED
+        if "archived" not in stdout:
+            return HSMState.UNARCHIVED
         if "released" in stdout:
-            return HSM_RELEASED
-        return HSM_RESTORED
+            return HSMState.RELEASED
+        return HSMState.RESTORED
 
     def hsm_archived(self, path):
         """Is this file archived?"""
         state = self.hsm_state(path)
-        return state == HSM_RESTORED or state == HSM_RELEASED
+        return state == HSMState.RESTORED or state == HSMState.RELEASED
 
     def hsm_released(self, path):
         """Is this file released?"""
-        return self.hsm_state(path) == HSM_RELEASED
+        return self.hsm_state(path) == HSMState.RELEASED
 
     def hsm_restore(self, path):
         """Trigger restore of path from tape.
@@ -176,11 +177,11 @@ class LFS:
         state = self.hsm_state(path)
 
         # If the file doesn't exist, fail
-        if state == HSM_MISSING:
+        if state == HSMState.MISSING:
             return False
 
         # If there's nothing to do, do nothing
-        if state != HSM_RELEASED:
+        if state != HSMState.RELEASED:
             return True
 
         return self.run_lfs("hsm_restore", path) is not None
@@ -197,11 +198,11 @@ class LFS:
         state = self.hsm_state(path)
 
         # If there's nothing to do, do nothing
-        if state == HSM_RELEASED:
+        if state == HSMState.RELEASED:
             return True
 
         # If the file can't be released, fail
-        if state != HSM_RESTORED:
+        if state != HSMState.RESTORED:
             return False
 
         # Otherwise send the request

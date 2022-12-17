@@ -3,7 +3,6 @@
 import signal
 import logging
 import threading
-from collections import deque
 from peewee import OperationalError
 
 from . import db
@@ -92,17 +91,17 @@ class Worker(threading.Thread):
         all of alpenhornd.
         """
 
-        log.info(f"Started.")
+        log.info("Started.")
 
         db.connect()
 
         while True:
             # Exit if told to stop
             if global_abort.is_set():
-                log.info(f"Stopped due to global abort.")
+                log.info("Stopped due to global abort.")
                 return
             if self._worker_stop.is_set():
-                log.info(f"Stopped.")
+                log.info("Stopped.")
                 return
 
             # Wait for a task:
@@ -113,7 +112,7 @@ class Worker(threading.Thread):
 
                 # Abandon working if alpenhornd is aborting
                 if global_abort.is_set():
-                    log.info(f"Stopped due to global abort.")
+                    log.info("Stopped due to global abort.")
                     self._queue.task_done(key)
                     return
 
@@ -134,7 +133,7 @@ class Worker(threading.Thread):
                                 break  # Clean exit, so we're done
                             except OperationalError:
                                 pass  # Yeah, we know already; try the next one
-                    except Exception as e:
+                    except Exception:
                         # Errors upon errors: time to crash and burn
                         global_abort.set()
                         log.exception(
@@ -150,7 +149,7 @@ class Worker(threading.Thread):
 
                     log.error(f"Exiting due to db error: {operr}")
                     return 1  # Thread exits, will be respawned in the main loop
-                except Exception as e:
+                except Exception:
                     global_abort.set()
                     log.exception("Aborting due to uncaught exception in task")
                     return 1

@@ -1,10 +1,14 @@
 """DefaultIO asyncs (functions that run asynchronously in tasks)."""
 
 import os
+import time
 import shutil
+import pathlib
 
+from .. import util
 from . import ioutil
-from .. import archive as ar
+from ..archive import ArchiveFileCopy
+from ..storage import StorageNode
 
 import logging
 
@@ -107,7 +111,7 @@ def pull_async(task, node, req):
         md5ok=ioresult["md5sum"],
         start_time=start_time,
         stderr=ioresult.get("stderr", None),
-        success=(ioresutl["ret"] == 0),
+        success=(ioresult["ret"] == 0),
     ):
         # Remove file, on error
         try:
@@ -118,7 +122,7 @@ def pull_async(task, node, req):
 
     # Whatever has happened, update free space
     node.avail_gb = node.io.bytes_avail() / 2**30
-    node.save(only=[st.StorageNode.avail_gb])
+    node.save(only=[StorageNode.avail_gb])
     log.info(f"Node {node.name} has {node.avail_gb:.2f} GiB available.")
 
 
@@ -151,12 +155,12 @@ def delete_async(task, node, copies):
     """Delete some file copies, if possible."""
 
     # Process candidates for deletion
-    for fcopy in del_files:
+    for copy in copies:
         # Archived count
-        ncopies = fcopy.file.archive_count()
+        ncopies = copy.file.archive_count()
 
-        shortname = fcopy.file.path
-        fullpath = fcopy.path
+        shortname = copy.file.path
+        fullpath = copy.path
 
         # If at least two _other_ copies exist, we can delete the file.
         if ncopies >= (3 if copy.node.archive else 2):
@@ -190,8 +194,8 @@ def delete_async(task, node, copies):
                 dirname = dirname.parent
 
             # Update the DB
-            ar.ArchiveFileCopy.update(has_file="N", wants_file="N").where(
-                ar.ArchiveFileCopy.id == fcopy.id
+            ArchiveFileCopy.update(has_file="N", wants_file="N").where(
+                ArchiveFileCopy.id == copy.id
             ).execute()
         else:
             log.warning(

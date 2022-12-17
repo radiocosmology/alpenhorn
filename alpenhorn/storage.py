@@ -3,7 +3,6 @@ from peewee import fn
 import peewee as pw
 
 from .db import EnumField, base_model
-from .io.base import BaseNodeIO, BaseGroupIO
 
 
 def _get_io_instance(obj):

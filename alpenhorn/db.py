@@ -34,7 +34,6 @@ are available:
 Also after calling init(), a connection to the database may be initialised
 by calling the connect() function.
 """
-import sys
 import logging
 import peewee as pw
 import playhouse.db_url as db_url

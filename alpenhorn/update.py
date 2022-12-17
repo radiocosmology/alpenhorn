@@ -1,23 +1,16 @@
 """Routines for updating the state of a node.
 """
 
-import os
-import re
 import time
 import logging
-import datetime
 
 import peewee as pw
-from peewee import fn
 
-from . import acquisition as ac
-from . import archive as ar
-from . import config, db
-from . import storage as st
-from . import auto_import, util
-from .task import Task
+from . import auto_import, config
+from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from .pool import global_abort
 from .querywalker import QueryWalker
+from .storage import StorageNode
 
 log = logging.getLogger(__name__)
 
@@ -59,8 +52,8 @@ def update_loop(host, queue, pool):
         #
         # nodes and are re-queried every loop iteration so we can
         # detect changes in available storage media
-        for node in st.StorageNode.select().where(
-            st.StorageNode.host == host, st.StorageNode.active == True
+        for node in StorageNode.select().where(
+            StorageNode.host == host, StorageNode.active is True
         ):
             # Init I/O, if necessary.
             node.io.set_queue(queue)
@@ -81,7 +74,7 @@ def update_loop(host, queue, pool):
 
         # Group updates
         for group in group_idle:
-            updated = update_group(group, queue, group_idle[group])
+            updated = update_group(group, host, queue, group_idle[group])
 
             # After the update, check again whether I/O is ongoing or if we're idle
             if updated:
@@ -99,7 +92,7 @@ def update_loop(host, queue, pool):
 
                 # Run auto-verfiy, if requested
                 if node.auto_verify > 0:
-                    auto_verfiy(node)
+                    auto_verify(node)
 
         # Ditto for groups
         for group in group_idle:
@@ -164,7 +157,7 @@ def serial_io(queue):
         log.debug(f"Finished task {task}")
 
 
-def update_group(group, queue, idle):
+def update_group(group, host, queue, idle):
     """Perform I/O updates on a StorageGroup.
 
     Returns a boolean indicating whether I/O happened or not (i.e. it was
@@ -173,10 +166,10 @@ def update_group(group, queue, idle):
 
     # Find all active nodes in this group on this host
     nodes_in_group = list(
-        st.StorageNode.select().where(
-            st.StorageNode.active == True,
-            st.StorageNode.host == host,
-            st.StorageNode.group == group,
+        StorageNode.select().where(
+            StorageNode.active is True,
+            StorageNode.host == host,
+            StorageNode.group == group,
         )
     )
 
@@ -189,21 +182,21 @@ def update_group(group, queue, idle):
         log.info(f'Updating group "{group.name}".')
 
         # Process pulls into this group
-        for req in ar.ArchiveFileCopyRequest.select().where(
-            ar.ArchiveFileCopyRequest.completed == 0,
-            ar.ArchiveFileCopyRequest.cancelled == 0,
-            ar.ArchiveFileCopyRequest.group_to == self.group,
+        for req in ArchiveFileCopyRequest.select().where(
+            ArchiveFileCopyRequest.completed == 0,
+            ArchiveFileCopyRequest.cancelled == 0,
+            ArchiveFileCopyRequest.group_to == group,
         ):
             # What's the current situation on the destination?
-            copy_state = self.group.copy_state(req.file)
+            copy_state = group.copy_state(req.file)
             if copy_state == "Y":
                 log.info(
                     f"Cancelling pull request for "
                     f"{req.file.acq.name}/{req.file.name}: "
                     f"already present in group {group.name}."
                 )
-                ar.ArchiveFileCopyRequest.update(cancelled=True).where(
-                    ar.ArchiveFileCopyRequest.id == req.id
+                ArchiveFileCopyRequest.update(cancelled=True).where(
+                    ArchiveFileCopyRequest.id == req.id
                 ).execute()
                 continue
             elif copy_state == "M":
@@ -234,7 +227,7 @@ def update_group(group, queue, idle):
                         f"{node.name}."
                     )
                     # Upsert ArchiveFileCopy to force a check
-                    ar.ArchiveFileCopy.replace(
+                    ArchiveFileCopy.replace(
                         file=req.file,
                         node=node,
                         has_file="M",
@@ -318,8 +311,8 @@ def update_node(node, queue):
         node.io.update_avail_gb()
 
         # Check the integrity of any questionable files (has_file=M)
-        for copy in ar.ArchiveFileCopy.select().where(
-            ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "M"
+        for copy in ArchiveFileCopy.select().where(
+            ArchiveFileCopy.node == node, ArchiveFileCopy.has_file == "M"
         ):
             log.info(
                 f'Checking copy "{copy.file.acq.name}/{copy.file.name}" on node'
@@ -333,10 +326,10 @@ def update_node(node, queue):
         update_node_delete(node)
 
         # Process any regular transfers requests from this node
-        for req in ar.ArchiveFileCopyRequest.select().where(
-            ar.ArchiveFileCopyRequest.completed == 0,
-            ar.ArchiveFileCopyRequest.cancelled == 0,
-            ar.ArchiveFileCopyRequest.node_from == self.node,
+        for req in ArchiveFileCopyRequest.select().where(
+            ArchiveFileCopyRequest.completed == 0,
+            ArchiveFileCopyRequest.cancelled == 0,
+            ArchiveFileCopyRequest.node_from == node,
         ):
             node.io.ready(req)
     else:
@@ -383,25 +376,25 @@ def update_node_delete(node):
     # deletion, provided the copy is not on an archive node. If we have more
     # than the minimum space, or we are on archive node then only those
     # explicitly marked (wants_file == 'N') will be removed.
-    if self.node.under_min() and not self.node.archive:
+    if node.under_min() and not node.archive:
         log.info(
             f"Hit minimum available space on {node.name} -- "
             "considering all unwanted files for deletion!"
         )
-        dfclause = ar.ArchiveFileCopy.wants_file != "Y"
+        dfclause = ArchiveFileCopy.wants_file != "Y"
     else:
-        dfclause = ar.ArchiveFileCopy.wants_file == "N"
+        dfclause = ArchiveFileCopy.wants_file == "N"
 
     # Search db for candidates on this node to delete.
     del_copies = list()
     for copy in (
-        ar.ArchiveFileCopy.select()
+        ArchiveFileCopy.select()
         .where(
             dfclause,
-            ar.ArchiveFileCopy.node == self.node,
-            ar.ArchiveFileCopy.has_file == "Y",
+            ArchiveFileCopy.node == node,
+            ArchiveFileCopy.has_file == "Y",
         )
-        .order_by(ar.ArchiveFileCopy.id)
+        .order_by(ArchiveFileCopy.id)
     ):
         # Group a bunch of these together to reduce the number of I/O Tasks
         # created.  TODO: figure out if this actually helps
@@ -425,9 +418,9 @@ def auto_verify(node):
     if node.name not in qws:
         try:
             qws[node.name] = QueryWalker(
-                ar.ArchiveFileCopy,
-                ar.ArchiveFileCopy.node == node,
-                ar.ArchiveFileCopy.has_file != "N",
+                ArchiveFileCopy,
+                ArchiveFileCopy.node == node,
+                ArchiveFileCopy.has_file != "N",
             )
         except pw.DoesNotExist:
             return  # No files to verify
@@ -437,7 +430,7 @@ def auto_verify(node):
         copies = qws[node.name].get(node.auto_verify)
     except pw.DoesNotExist:
         # No files to verify; delete query walker to try to re-init next time
-        del qes[node.name]
+        del qws[node.name]
         return
 
     for copy in copies:

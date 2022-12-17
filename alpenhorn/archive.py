@@ -57,7 +57,7 @@ class ArchiveFileCopy(base_model):
 
         # It's a PurePath and not a Path because it's not guaranteed to exist
         # because this property is defined even when has_file!=Y
-        return pathlib.PurePath(node.root, file.path)
+        return pathlib.PurePath(self.node.root, self.file.path)
 
     class Meta:
         indexes = ((("file", "node"), True),)

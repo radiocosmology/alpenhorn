@@ -251,7 +251,7 @@ def hardlinke(from_path, to_dir, filename):
             # We can be certain that we can create anything we want in here
             tmp_path = os.path.join(tmpdir, filename)
             # Try to create the new hardlink in the tempdir
-            os.link(from_path, tmpname)
+            os.link(from_path, tmp_path)
             # Hardlink succeeded!  Overwrite any existing file atomically
             os.rename(tmp_path, dest_path)
     except OSError:
@@ -318,12 +318,12 @@ def copy_request_done(
     end_time = time.time()
 
     # Check integrity.
-    if instance(md5ok, str):
+    if isinstance(md5ok, str):
         md5ok = md5ok == req.file.md5ok
     if not md5ok:
         log.error(
             f"MD5 mismatch on node {node.name}; "
-            f"Marking source file {file.name} on node {req.node_from} suspect."
+            f"Marking source file {req.file.name} on node {req.node_from} suspect."
         )
         ar.ArchiveFileCopy.update(has_file="M").where(
             ar.ArchiveFileCopy.file == req.file,

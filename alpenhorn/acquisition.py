@@ -455,7 +455,7 @@ class FileInfoBase(base_model, ConfigClass):
         file_info.file = file
 
         # Call the method on the derived class to set its metadata
-        acqpath = path.join(node.root, file.acq.name)
+        acqpath = pathlib.PurePath(node.root, file.acq.name)
         file_info.set_info(file.name, acqpath)
 
         # Save the changes and return the FileInfo object

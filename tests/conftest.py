@@ -1,6 +1,5 @@
 """Common fixtures"""
 import os
-import yaml
 import pytest
 import pathlib
 import shutil

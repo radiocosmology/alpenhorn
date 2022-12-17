@@ -1,5 +1,9 @@
 """Transport Group I/O."""
+import logging
+
 from .base import BaseGroupIO
+
+log = logging.getLogger(__name__)
 
 
 class TransportGroupIO(BaseGroupIO):

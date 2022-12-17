@@ -53,13 +53,13 @@ def cli():
 
     # If we can be multithreaded, start the worker pool
     if db.threadsafe:
-        pool = pool.WorkerPool(num_workers=default_num_workers, queue=queue)
+        wpool = pool.WorkerPool(num_workers=default_num_workers, queue=queue)
     else:
         # EmptyPool acts like WorkerPool, but always has zero workers
-        pool = pool.EmptyPool()
+        wpool = pool.EmptyPool()
 
     # Set up worker increment/decrement signals
-    pool.setsignals(pool)
+    pool.setsignals(wpool)
 
     # Get the name of this host
     host = util.get_short_hostname()
@@ -74,7 +74,7 @@ def cli():
         # Skip all this if not auto importing
         if node.auto_import:
             # Init the I/O layer
-            group.io.set_queue(queue)
+            node.io.set_queue(queue)
 
             # Start the observer to watch the nodes for new files
             auto_import.update_observer(node, queue)
@@ -98,7 +98,7 @@ def cli():
     # way which would simply delay starting the main loop until the crawl
     # was complete.
     try:
-        update_loop(host, queue, pool)
+        update_loop(host, queue, wpool)
 
         # Global abort
         if pool.global_abort.is_set():
@@ -110,4 +110,4 @@ def cli():
 
     # Attempt to exit cleanly
     auto_import.stop()
-    pool.shutdown()
+    wpool.shutdown()

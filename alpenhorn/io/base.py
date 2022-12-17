@@ -7,11 +7,13 @@ something even remotely resembling a POSIX filesystem may be better served
 by subclassing from DefaultIO instead of from here directly.
 """
 import json
-import os.path
-from peewee import fn
+import logging
+import pathlib
+import datetime
 
-from ..config import merge_dict_tree
+from ..storage import StorageNode
 
+log = logging.getLogger(__name__)
 
 # Comment from DVW:
 #
@@ -92,7 +94,7 @@ class BaseNodeIO:
             return self.remote_class(self.node, self.config)
 
         raise TypeError(
-            f'Remote I/O class "{self.remote_class}" for StorageNode {obj.name}'
+            f'Remote I/O class "{self.remote_class}" for StorageNode {self.node.name}'
             "does not descend from alpenhorn.io.BaseNodeRemote"
         )
 
@@ -208,14 +210,14 @@ class BaseNodeIO:
 
         # Update the DB with the free space but don't clobber changes made
         # manually to the database
-        self.node.save(
-            only=[st.StorageNode.avail_gb, st.StorageNode.avail_gb_last_checked]
-        )
+        self.node.save(only=[StorageNode.avail_gb, StorageNode.avail_gb_last_checked])
 
         if new_avail is None:
-            log.info(f'Unable to determine available space for "{node.name}".')
+            log.info(f'Unable to determine available space for "{self.node.name}".')
         else:
-            log.info(f'Node "{node.name}" has {node.avail_gb:.2f} GiB available.')
+            log.info(
+                f'Node "{self.node.name}" has {self.node.avail_gb:.2f} GiB available.'
+            )
 
         return new_avail
 

@@ -1,16 +1,15 @@
 """Routines for the importing of new files on a node."""
 
 import os
-import time
 import logging
-from pathlib import PurePath
+import pathlib
 
 import peewee as pw
 from watchdog.events import FileSystemEventHandler
 
 from . import acquisition as ac
 from . import archive as ar
-from . import config, db, util
+from . import config, db
 from .task import Task
 
 log = logging.getLogger(__name__)
@@ -99,14 +98,14 @@ def _import_file(node, path):
 
     # Skip a file if there is still a lock on it.
     if node.io.locked(acqname, filename):
-        log.debug('Skipping "{path}": locked.', file_path)
+        log.debug(f'Skipping "{path}": locked.')
         return
 
     # Begin a transaction
     with db.database_proxy.atomic():
         # Add the acqusition, if necessary
         try:
-            acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
+            acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acqname)
             log.debug(f'Acquisition "{acqname}" already in DB. Skipping.')
         except pw.DoesNotExist:
             # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition.
@@ -122,7 +121,7 @@ def _import_file(node, path):
         path = path.PurePath(acqname, filename)
         try:
             file_ = ac.ArchiveFile.get(
-                ac.ArchiveFile.name == file_name, ac.ArchiveFile.acq == acq
+                ac.ArchiveFile.name == filename, ac.ArchiveFile.acq == acq
             )
             log.debug(f'File "{path}" already in DB. Skipping.')
         except pw.DoesNotExist:
@@ -132,8 +131,8 @@ def _import_file(node, path):
 
             file_ = ac.ArchiveFile.create(
                 acq=acq,
-                type=ftype,
-                name=file_name,
+                type=filetype,
+                name=filename,
                 size_b=size_b,
                 md5sum=md5sum,
             )
@@ -151,7 +150,7 @@ def _import_file(node, path):
         except pw.DoesNotExist:
             # No existing file copy; create a new one.
             copy_size_b = node.io.filesize(path, actual=True)
-            copy = ar.ArchiveFile.replace(
+            ar.ArchiveFile.replace(
                 file=file_,
                 node=node,
                 has_file="Y",

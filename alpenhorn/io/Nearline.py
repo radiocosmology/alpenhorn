@@ -5,9 +5,12 @@ These I/O classes are specific to the nearline tape archive at cedar.
 
 import os
 import logging
+import pathlib
+import peewee as pw
 
-from alpenhorn.io import lfs
-import alpenhorn.archive as ar
+from alpenhorn.task import Task
+from alpenhorn.acquisition import ArchiveFile
+from alpenhorn.archive import ArchiveFileCopy
 from alpenhorn.io.base import BaseGroupIO, BaseNodeRemote
 from alpenhorn.io.ioutil import pretty_bytes
 from alpenhorn.querywalker import QueryWalker
@@ -25,7 +28,7 @@ class NearlineNodeRemote(BaseNodeRemote):
     def pull_ready(self, file):
         """Returns True if the file copy is ready (not released)."""
         try:
-            copy = ar.ArchiveFileCopy.get(file=file, node=self.node)
+            copy = ArchiveFileCopy.get(file=file, node=self.node)
         except pw.DoesNotExist:
             return False
 
@@ -80,13 +83,13 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             # loop through file copies until we've released enough
             # (or we run out of files)
             for copy in (
-                ar.ArchiveFileCopy.select()
+                ArchiveFileCopy.select()
                 .where(
-                    ar.ArchiveFileCopy.node == node,
-                    ar.ArchiveFileCopy.has_file == "Y",
-                    ar.ArchiveFileCopy.ready == True,
+                    ArchiveFileCopy.node == node,
+                    ArchiveFileCopy.has_file == "Y",
+                    ArchiveFileCopy.ready is True,
                 )
-                .order_by(ar.ArchiveFile.last_updated)
+                .order_by(ArchiveFile.last_updated)
             ):
                 # Skip unarchived files
                 if not lfs.hsm_archived(copy.file.path):
@@ -98,8 +101,8 @@ class NearlineNodeIO(LFSQuotaNodeIO):
                 )
                 lfs.hsm_release(copy.file.path)
                 # Update copy record
-                ar.ArchiveFileCopy.update(ready=False).where(
-                    ar.ArchiveFileCopy.id == copy.id
+                ArchiveFileCopy.update(ready=False).where(
+                    ArchiveFileCopy.id == copy.id
                 ).execute()
                 total_files += 1
                 total_bytes += copy.size_b
@@ -188,7 +191,6 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         all the newly added data from nearline (which are presumably
         more interesting that some random files being auto-verified).
         """
-        hsm_state = self._lfs.hsm_state(copy.path)
         # The trivial case.
         if not pathlib.Path(copy.path).exists():
             # Only update if this is surprising (which it probably
@@ -198,8 +200,8 @@ class NearlineNodeIO(LFSQuotaNodeIO):
                     "File copy missing during auto-verify: "
                     f"{copy.file.path}.  Updating database."
                 )
-                ar.ArchiveFileCopy.update(has_file="N").where(
-                    ar.ArchiveFileCopy.id == copy.id
+                ArchiveFileCopy.update(has_file="N").where(
+                    ArchiveFileCopy.id == copy.id
                 ).execute()
             return
 
@@ -226,8 +228,8 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             # it's restored.  If it is don't bother releasing, since
             # it's better to be consistent with the DB
             ready = (
-                di.ArchiveFileCopy.select(di.ArchiveFileCopy.ready)
-                .where(di.ArchiveFileCopy.id == copy.id)
+                ArchiveFileCopy.select(ArchiveFileCopy.ready)
+                .where(ArchiveFileCopy.id == copy.id)
                 .scalar()
             )
             if not ready:
@@ -240,7 +242,7 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             # task waiting for restore from stopping regular I/O updates
             # in subsequent update loops
             key=self.node.name + "---alpenhornd-idle",
-            args=(self.node, self._lfs, copies),
+            args=(self.node, self._lfs, copy),
             name=(
                 f"Auto-verify released file {copy.file.name} "
                 f"on node {self.node.name}"
@@ -250,16 +252,18 @@ class NearlineNodeIO(LFSQuotaNodeIO):
     def ready(self, req):
         """Recall a file, if necessary, to prepare for a remote pull."""
         # If the file is released, restore it
-        state = self._lfs.hsm_state(copy.path)
+        state = self._lfs.hsm_state(req.file.path)
 
         # Update DB based on HSM state
-        ar.ArchiveFileCopy.update(
+        ArchiveFileCopy.update(
             ready=(state == self._lfs.HSM_RECALLED or state == self._lfs.HSM_UNARCHIVED)
-        ).where(ar.ArchiveFileCopy.id == copy.id).execute()
+        ).where(
+            ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == req.node_from
+        ).execute()
 
         # If it's restorable, restore it
         if state == self._lfs.HSM_RELEASED:
-            self._lfs.hsm_restore(copy.path)
+            self._lfs.hsm_restore(req.file.path)
 
 
 class NearlineGroupIO(BaseGroupIO):
@@ -309,7 +313,7 @@ class NearlineGroupIO(BaseGroupIO):
         """
         if len(nodes) != 2:
             log.error(
-                f"need exactly two nodes in Nearline group {self.group.name} (have {len(node)})"
+                f"need exactly two nodes in Nearline group {self.group.name} (have {len(nodes)})"
             )
             return False
 
@@ -356,20 +360,20 @@ class NearlineGroupIO(BaseGroupIO):
                     log.warning(
                         f"File copy {copy.file.path} on node {node.name} is missing!"
                     )
-                    ar.ArchiveFileCopy.update(has_file="N").where(
-                        di.ArchiveFileCopy.id == copy.id
+                    ArchiveFileCopy.update(has_file="N").where(
+                        ArchiveFileCopy.id == copy.id
                     )
                 elif state == lfs.HSM_RELEASED:
                     if copy.ready:
                         log.debug("Updating file copy {copy.file.path}: ready -> False")
-                        ar.ArchiveFileCopy.update(ready=False).where(
-                            di.ArchiveFileCopy.id == copy.id
+                        ArchiveFileCopy.update(ready=False).where(
+                            ArchiveFileCopy.id == copy.id
                         )
                 else:  # i.e. RECALLED or UNARCHIVED
                     if not copy.ready:
                         log.debug("Updating file copy {copy.file.path}: ready -> True")
-                        ar.ArchiveFileCopy.update(ready=True).where(
-                            di.ArchiveFileCopy.id == copy.id
+                        ArchiveFileCopy.update(ready=True).where(
+                            ArchiveFileCopy.id == copy.id
                         )
 
         # Hedge against the nearline node changing somehow between update loops
@@ -381,9 +385,9 @@ class NearlineGroupIO(BaseGroupIO):
         if self._release_node is None:
             try:
                 self._release_qw = QueryWalker(
-                    ar.ArchiveFileCopy,
-                    ar.ArchiveFileCopy.node == self._nearline,
-                    ar.ArchiveFileCopy.has_file == "Y",
+                    ArchiveFileCopy,
+                    ArchiveFileCopy.node == self._nearline,
+                    ArchiveFileCopy.has_file == "Y",
                 )
                 self._release_node = self._nearline.id
             except pw.DoesNotExist:
