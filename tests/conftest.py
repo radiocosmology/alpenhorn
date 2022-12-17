@@ -70,105 +70,106 @@ def dbproxy():
     db.close()
 
 
-# Path to the data YAML files
-data_path = pathlib.Path(__file__).with_name("fixtures")
+# Data table fixtures.  Each of these will add a row with the specified
+# data to the appropriate table in the DB, creating the table first if
+# necessary
 
 
 @pytest.fixture
-def storage_data(dbproxy):
-    """Loads StorageNode and StorageGroup data into dbproxy"""
-    dbproxy.create_tables([StorageGroup, StorageNode])
+def factory_factory(dbproxy):
+    """Fixture which creates a factory which, in turn, creates a factory fixture
+    for inserting data into the database."""
 
-    # Check we're starting from a clean slate
-    assert StorageGroup.select().count() == 0
-    assert StorageNode.select().count() == 0
+    def _factory_factory(model):
+        nonlocal dbproxy
 
-    with open(data_path.joinpath("storage.yml")) as f:
-        fixtures = yaml.safe_load(f)
+        def _factory(**kwargs):
+            nonlocal dbproxy
+            nonlocal model
 
-    StorageGroup.insert_many(fixtures["groups"]).execute()
-    groups = {group["name"]: 1 + id_ for id_, group in enumerate(fixtures["groups"])}
+            # This does nothing if the table already exists
+            dbproxy.create_tables([model])
 
-    # fixup foreign keys for the nodes
-    for node in fixtures["nodes"]:
-        node["group"] = groups[node["group"]]
+            # Add and return the record
+            return model.create(**kwargs)
 
-    # bulk load the nodes
-    StorageNode.insert_many(fixtures["nodes"]).execute()
+        return _factory
 
-    return fixtures
+    return _factory_factory
 
 
 @pytest.fixture
-def acq_data(dbproxy):
-    """Loads ArchiveAcq, AcqType, FileType, ArchiveFile data into dbproxy"""
-    dbproxy.create_tables([ArchiveAcq, AcqType, FileType, ArchiveFile])
-
-    # Check we're starting from a clean slate
-    assert ArchiveAcq.select().count() == 0
-    assert AcqType.select().count() == 0
-
-    with open(data_path.joinpath("acquisition.yml")) as f:
-        fixtures = yaml.safe_load(f)
-
-    AcqType.insert_many(fixtures["types"]).execute()
-    types = dict(AcqType.select(AcqType.name, AcqType.id).tuples())
-
-    # fixup foreign keys for the acquisitions
-    for acq in fixtures["acquisitions"]:
-        acq["type"] = types[acq["type"]]
-
-    ArchiveAcq.insert_many(fixtures["acquisitions"]).execute()
-    acqs = dict(ArchiveAcq.select(ArchiveAcq.name, ArchiveAcq.id).tuples())
-
-    FileType.insert_many(fixtures["file_types"]).execute()
-    file_types = dict(FileType.select(FileType.name, FileType.id).tuples())
-
-    # fixup foreign keys for the files
-    for file in fixtures["files"]:
-        file["acq"] = acqs[file["acq"]]
-        file["type"] = file_types[file["type"]]
-
-    ArchiveFile.insert_many(fixtures["files"]).execute()
-
-    return fixtures
+def storagegroup(factory_factory):
+    return factory_factory(StorageGroup)
 
 
 @pytest.fixture
-def archive_data(dbproxy, acq_data, storage_data):
-    """Loads ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest data into dbproxy"""
+def storagenode(factory_factory):
+    return factory_factory(StorageNode)
 
-    dbproxy.create_tables([ArchiveFileCopy, ArchiveFileCopyRequest])
 
-    # Check we're starting from a clean slate
-    assert ArchiveFileCopy.select().count() == 0
-    assert ArchiveFileCopyRequest.select().count() == 0
+@pytest.fixture
+def acqtype(factory_factory):
+    return factory_factory(AcqType)
 
-    with open(data_path.joinpath("archive.yml")) as f:
-        fixtures = yaml.safe_load(f)
 
-    # name -> id lookups
-    files = {file["name"]: 1 + id_ for id_, file in enumerate(acq_data["files"])}
-    nodes = {node["name"]: 1 + id_ for id_, node in enumerate(storage_data["nodes"])}
-    groups = {
-        group["name"]: 1 + id_ for id_, group in enumerate(storage_data["groups"])
-    }
+@pytest.fixture
+def archiveacq(factory_factory):
+    return factory_factory(ArchiveAcq)
 
-    # fixup foreign keys for the file copies
-    for copy in fixtures["file_copies"]:
-        copy["file"] = files[copy["file"]]
-        copy["node"] = nodes[copy["node"]]
 
-    # bulk load the file copies
-    ArchiveFileCopy.insert_many(fixtures["file_copies"]).execute()
+@pytest.fixture
+def filetype(factory_factory):
+    return factory_factory(FileType)
 
-    # fixup foreign keys for the copy requests
-    for req in fixtures["copy_requests"]:
-        req["file"] = files[req["file"]]
-        req["node_from"] = nodes[req["node_from"]]
-        req["group_to"] = groups[req["group_to"]]
 
-    # bulk load the file copies
-    ArchiveFileCopyRequest.insert_many(fixtures["copy_requests"]).execute()
+@pytest.fixture
+def archivefile(factory_factory):
+    return factory_factory(ArchiveFile)
 
-    return fixtures
+
+@pytest.fixture
+def archivefilecopy(factory_factory):
+    return factory_factory(ArchiveFileCopy)
+
+
+# Generic versions of the above.  When you just want a record, but don't care
+# what it is.
+
+
+@pytest.fixture
+def genericgroup(storagegroup):
+    """Create a generic StorageGroup record."""
+    return storagegroup(name="genericgroup")
+
+
+@pytest.fixture
+def genericnode(storagenode, storagegroup):
+    """Create a generic StorageNode record.
+
+    Creates all necessary backrefs.
+    """
+    group = storagegroup(name="genericnode_group")
+    return storagenode(name="genericnode", group=group, root="/root")
+
+
+@pytest.fixture
+def genericacq(acqtype, archiveacq, filetype, archivefile):
+    """Create a generic ArchiveAcq record.
+
+    Creates all necessary backrefs.
+    """
+    acqtype = acqtype(name="genericacq_acqetype")
+    return archiveacq(name="genericacq", type=acqtype)
+
+
+@pytest.fixture
+def genericfile(acqtype, archiveacq, filetype, archivefile):
+    """Create a generic ArchiveFile record.
+
+    Creates all necessary backrefs.
+    """
+    acqtype = acqtype(name="genericfile_actype")
+    acq = archiveacq(name="genericfile_acq", type=acqtype)
+    filetype = filetype(name="genericfile_filetype")
+    return archivefile(name="genericfile", acq=acq, type=filetype, size_b=2**20)

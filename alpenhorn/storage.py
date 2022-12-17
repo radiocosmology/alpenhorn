@@ -1,5 +1,6 @@
-import peewee as pw
 import importlib
+from peewee import fn
+import peewee as pw
 
 from .db import EnumField, base_model
 from .io.base import BaseNodeIO, BaseGroupIO
@@ -84,17 +85,18 @@ class StorageGroup(base_model):
         - 'M' file copy needs to be checked
         - 'N' file copy does not exist.
         """
+        from .archive import ArchiveFileCopy
 
         try:
-            return (
-                di.ArchiveFileCopy.select(di.ArchiveFileCopy.has_file)
-                .join(di.StorageNode)
+            copy = (
+                ArchiveFileCopy.select(ArchiveFileCopy.has_file)
+                .join(StorageNode)
                 .where(
-                    di.ArchiveFileCopy.node.group == self.group,
-                    di.ArchiveFileCopy.file == file,
+                    ArchiveFileCopy.node.group == self,
+                    ArchiveFileCopy.file == file,
                 )
-                .scalar()
-            )
+            ).get()
+            return copy.has_file
         except pw.DoesNotExist:
             pass
 
@@ -157,7 +159,7 @@ class StorageNode(base_model):
     auto_import = pw.BooleanField(default=False)
     auto_verify = pw.IntegerField(default=0)
     storage_type = EnumField(["A", "T", "F"], default="A")
-    max_total_gb = pw.FloatField(default=-1.0, null=True)
+    max_total_gb = pw.FloatField(null=True)
     min_avail_gb = pw.FloatField(null=True)
     avail_gb = pw.FloatField(null=True)
     avail_gb_last_checked = pw.DateTimeField(null=True)
@@ -196,22 +198,25 @@ class StorageNode(base_model):
     def over_max(self):
         """Is the total size of file copies on the node greater than allowed?
 
-        If max_total_gb is zero or None, returns False.
+        If max_total_gb is non-positive or None, returns False.
         """
-        if not self.max_total_gb:
+        if self.max_total_gb is None or self.max_total_gb <= 0:
             return False
         return self.total_gb() >= self.max_total_gb
 
     def named_copy_present(self, acqname, filename):
         """Is a copy of a file called filename in acqname present
         on this node?"""
+        from .archive import ArchiveFileCopy
+        from .acquisition import ArchiveFile, ArchiveAcq
+
         try:
-            ar.ArchiveFileCopy.join(ArchiveFile).join(ArchiveAcq).get(
-                ar.ArchiveAcq.name == acqname,
-                ar.ArchiveFile.name == filename,
-                ar.ArchiveFileCopy.node == self,
-                ar.ArchiveFileCopy.has_file == "Y",
-            )
+            ArchiveFileCopy.select().join(ArchiveFile).join(ArchiveAcq).where(
+                ArchiveAcq.name == acqname,
+                ArchiveFile.name == filename,
+                ArchiveFileCopy.node == self,
+                ArchiveFileCopy.has_file == "Y",
+            ).get()
         except pw.DoesNotExist:
             return False
 
@@ -219,11 +224,13 @@ class StorageNode(base_model):
 
     def copy_present(self, file):
         """Is a copy of ArchiveFile file present on this node?"""
+        from .archive import ArchiveFileCopy
+
         try:
-            ar.ArchiveFileCopy.get(
-                ar.ArchiveFileCopy.file == file,
-                ar.ArchiveFileCopy.node == self,
-                ar.ArchiveFileCopy.has_file == "Y",
+            ArchiveFileCopy.get(
+                ArchiveFileCopy.file == file,
+                ArchiveFileCopy.node == self,
+                ArchiveFileCopy.has_file == "Y",
             )
         except pw.DoesNotExist:
             return False
@@ -235,12 +242,13 @@ class StorageNode(base_model):
 
         This is the total of all apparent file sizes from the database.  It may be quite different
         than the amount of actual space the file copies take up on the underlying storage system."""
+        from .acquisition import ArchiveFile
+        from .archive import ArchiveFileCopy
+
         size = (
-            ac.ArchiveFile.select(fn.Sum(ac.ArchiveFile.size_b))
-            .join(ar.ArchiveFileCopy)
-            .where(
-                ar.ArchiveFileCopy.node == self.node, ar.ArchiveFileCopy.has_file == "Y"
-            )
+            ArchiveFile.select(fn.Sum(ArchiveFile.size_b))
+            .join(ArchiveFileCopy)
+            .where(ArchiveFileCopy.node == self, ArchiveFileCopy.has_file == "Y")
         ).scalar(as_tuple=True)[0]
 
         return 0.0 if size is None else float(size) / 2**20
@@ -250,14 +258,13 @@ class StorageNode(base_model):
 
         Returns paths relative to root for all file copies exsiting on the node.
         """
+        from .archive import ArchiveFileCopy
+
         return [
             copy.file.path
             for copy in (
-                ar.ArchiveFileCopy.join(ac.ArchiveFile)
-                .join(ac.ArchiveAcq)
-                .select(ac.ArchiveFile.name, ac.ArchiveAcq.name)
-                .where(
-                    ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y"
+                ArchiveFileCopy.select().where(
+                    ArchiveFileCopy.node == self, ArchiveFileCopy.has_file == "Y"
                 )
             )
         ]

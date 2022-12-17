@@ -1,4 +1,5 @@
 import pathlib
+import datetime
 import peewee as pw
 
 from alpenhorn.acquisition import ArchiveFile
@@ -44,8 +45,8 @@ class ArchiveFileCopy(base_model):
     has_file = EnumField(["N", "Y", "M", "X"], default="N")
     wants_file = EnumField(["Y", "M", "N"], default="Y")
     ready = pw.BooleanField(default=False)
-    size_b = pw.BigIntegerField()
-    last_update = pw.TimestampField()
+    size_b = pw.BigIntegerField(null=True)
+    last_update = pw.TimestampField(default=datetime.datetime.now())
 
     @property
     def path(self):
