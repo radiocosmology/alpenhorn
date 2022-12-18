@@ -29,6 +29,12 @@ from ._default_asyncs import pull_async, check_async, delete_async
 log = logging.getLogger(__name__)
 
 
+# Reserved byte counts are stored here, indexed by node name and protected
+# by the mutex
+_mutex = threading.Lock()
+_reserved_bytes = dict()
+
+
 class DefaultNodeRemote(BaseNodeRemote):
     """DefaultNodeRemote: information about a DefaultIO remote StorageNode."""
 
@@ -47,9 +53,9 @@ class DefaultNodeIO(BaseNodeIO):
     def __init__(self, node):
         super().__init__(node)
 
-        # Space accounting to avoid asynchronously overfilling the disk
-        self.mutex = threading.Lock()
-        self._reserved_bytes = 0
+        # Set up a reservation for ourself if necessary
+        with _mutex:
+            _reserved_bytes.setdefault(self.node.name, 0)
 
     def check_active(self):
         """Check that the file <node.root>/ALPENHORN_NODE exists and contains the name of the node.
@@ -93,7 +99,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         Takes into account reserved space.
         """
-        return self.reserve_bytes(self, size_b, check_only=True)
+        return self.reserve_bytes(size_b, check_only=True)
 
     def _walk(self, path):
         """Recurse through directory path, yielding files"""
@@ -103,10 +109,10 @@ class DefaultNodeIO(BaseNodeIO):
         for entry in os.scandir(path):
             if entry.is_dir():
                 # Recurse
-                for entry in self._walk(entry):
-                    yield PurePath(entry)
+                for subentry in self._walk(entry):
+                    yield PurePath(subentry)
             # is_file() on a symlink to a file returns true, so we need both
-            elif entry.is_file() and not entry.is_link():
+            elif entry.is_file() and not entry.is_symlink():
                 yield PurePath(entry)
 
     def file_walk(self):
@@ -114,7 +120,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         path.PurePaths returned by the iterator are absolute
         """
-        return self._walk(self, self.node.root)
+        return self._walk(self.node.root)
 
     def exists(self, path):
         """Returns a boolean indicating whether the file path exists or not.
@@ -165,25 +171,25 @@ class DefaultNodeIO(BaseNodeIO):
         return value.
         """
         size *= self.reserve_factor
-        with self.mutex:
+        with _mutex:
             bavail = self.bytes_avail()
-            if bavail is not None and bavail - self.reserved_bytes > size:
+            if bavail is not None and bavail - _reserved_bytes[self.node.name] < size:
                 return False  # Insufficient space
 
             if not check_only:
-                self.reserved_bytes += size
+                _reserved_bytes[self.node.name] += size
 
             return True
 
     def release_bytes(self, size):
         """Release space previously reserved with reserve_bytes()."""
         size *= self.reserve_factor
-        with self.mutex:
-            if self.reserved_bytes < size:
+        with _mutex:
+            if _reserved_bytes[self.node.name] < size:
                 raise ValueError(
-                    f"attempted to release too many bytes: {self.reserved_bytes} < {size}"
+                    f"attempted to release too many bytes: {_reserved_bytes[self.node.name]} < {size}"
                 )
-            self.reserved_bytes -= size
+            _reserved_bytes[self.node.name] -= size
 
     def pull(self, req):
         """Queue an asynchronous I/O task to pull req.file from req.node onto the local filesystem."""
@@ -191,7 +197,7 @@ class DefaultNodeIO(BaseNodeIO):
         if self.node.under_min():
             log.info(
                 f"Skipping pull for StorageNode f{self.node.name}: hit minimum free space: "
-                f"({self.node.avail_gb:.2f} GiB < {self.node.min_total_gb}:.2f GiB)"
+                f"({self.node.avail_gb:.2f} GiB < {self.node.min_avail_gb}:.2f GiB)"
             )
             return
 
@@ -212,10 +218,10 @@ class DefaultNodeIO(BaseNodeIO):
 
         Task(
             func=pull_async,
-            queue=self.queue,
+            queue=self._queue,
             key=self.node.name,
             args=(self.node, req),
-            name=f"AFCR#{req.id}: {req.node.name} -> {self.node.name}",
+            name=f"AFCR#{req.id}: {req.node_from.name} -> {self.node.name}",
         )
 
     def check(self, copy):
@@ -223,7 +229,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         Task(
             func=check_async,
-            queue=self.queue,
+            queue=self._queue,
             key=self.node.name,
             args=(self.node, copy),
             name=f"Check copy#{copy.id} on {self.node.name}",
@@ -238,7 +244,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         Task(
             func=delete_async,
-            queue=self.queue,
+            queue=self._queue,
             key=self.node.name,
             args=(self.nodem, copies),
             name="Delete copies "
@@ -260,7 +266,7 @@ class DefaultGroupIO(BaseGroupIO):
 
     @property
     def idle(self):
-        """Returns the True if no node I/O is occurring."""
+        """Returns True if no node I/O is occurring."""
         return self.node.io.idle
 
     def before_update(self, nodes, idle):

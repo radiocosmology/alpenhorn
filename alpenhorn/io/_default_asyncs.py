@@ -26,7 +26,7 @@ def pull_async(task, node, req):
 
     # Before we were queued, NodeIO reserved space for this file.
     # Automatically release bytes on task completion
-    task.cleanup(node.io.release_bytes, args=(req.file.size_b,))
+    task.on_cleanup(node.io.release_bytes, args=(req.file.size_b,))
 
     # Is source and dest on the same host?
     local = req.node_from.host == node.host

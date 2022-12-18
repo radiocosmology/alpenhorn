@@ -1,6 +1,6 @@
 import importlib
-from peewee import fn
 import peewee as pw
+from peewee import fn
 
 from .db import EnumField, base_model
 

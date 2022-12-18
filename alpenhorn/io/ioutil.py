@@ -57,7 +57,7 @@ def pretty_bytes(num):
             return f"{num:.1f} {p}iB"
 
     # overflow
-    raise ValueError("a suffusion of yellow")
+    raise OverflowError("a suffusion of yellow")
 
 
 def pretty_deltat(seconds):
@@ -65,14 +65,14 @@ def pretty_deltat(seconds):
 
     # Reject weird stuff
     try:
-        seconds = int(seconds)
+        seconds = float(seconds)
     except (TypeError, ValueError):
         raise TypeError("non-numeric time delta")
 
     if seconds < 0:
         raise ValueError("negative time delta")
 
-    hours, minutes = divmod(int(seconds), 3600)
+    hours, minutes = divmod(seconds, 3600)
     minutes, seconds = divmod(minutes, 60)
 
     if hours > 0:
@@ -213,26 +213,32 @@ def rsync(from_path, to_dir, size_b, local):
         timeout=PULL_TIMEOUT_BASE + size_b / PULL_BYTES_PER_SECOND,
     )
 
-    # rsync guarantees the md5 sum of a file is not changed if a
-    # transfer succeeds (ret == 0)
-    ioresult = {"ret": ret, "stderr": stderr, "md5sum": True}
+    ioresult = {"ret": ret, "stderr": stderr}
 
     # If the rsync error occured during `mkstemp` or during a write, this is a
     # problem on the destination, not the source
-    if ret and "mkstemp" in stderr:
-        log.warn("rsync file creation failed")
-        ioresult["check_src"] = False
-    elif "write failed on" in stderr:
-        log.warn(
-            "rsync failed to write to destination: "
-            + stderr[stderr.rfind(":") + 2 :].strip()
-        )
-        ioresult["check_src"] = False
+    if ret:
+        if "mkstemp" in stderr:
+            log.warning("rsync file creation failed")
+            ioresult["check_src"] = False
+        elif "write failed on" in stderr:
+            log.warning(
+                "rsync failed to write to destination: "
+                + stderr[stderr.rfind(":") + 2 :].strip()
+            )
+            ioresult["check_src"] = False
+        else:
+            # Other error, perhaps due to source
+            ioresult["check_src"] = True
+    else:
+        # rsync guarantees the md5 sum of a file is not changed if a
+        # transfer succeeds (ret == 0)
+        ioresult["md5sum"] = True
 
     return ioresult
 
 
-def hardlinke(from_path, to_dir, filename):
+def hardlink(from_path, to_dir, filename):
     """hard link from_path as to_dir/filename
 
     Atomically overwrites an existing to_dir/filename.
@@ -254,8 +260,9 @@ def hardlinke(from_path, to_dir, filename):
             os.link(from_path, tmp_path)
             # Hardlink succeeded!  Overwrite any existing file atomically
             os.rename(tmp_path, dest_path)
-    except OSError:
+    except OSError as e:
         # Link creation failed for some reason
+        log.debug(f"hardlink failed: {e}")
         return None
 
     # md5sum is obviously correct

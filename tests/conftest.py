@@ -12,6 +12,53 @@ from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "run_command_result(ret, stdout, stderr):"
+        "the desired return value for util.run_command() in "
+        "the mock_run_command fixture.",
+    )
+
+
+@pytest.fixture
+def mock_run_command(request):
+    """Mock alpenhorn.util.run_command to _not_ run a command.
+
+    The value returned by run_command() can be set by the test via the
+    run_command_result mark.
+
+    This fixture yields a function which returns a dictionary containing
+    the agruments passed to run_command.
+    """
+    run_command_report = dict()
+
+    marker = request.node.get_closest_marker("run_command_result")
+    if marker is None:
+        run_command_result = (0, "", "")
+    else:
+        run_command_result = tuple(marker.args)
+
+    def _mocked_run_command(cmd, timeout=None, **kwargs):
+        nonlocal run_command_report
+        nonlocal run_command_result
+
+        # This just reports its input
+        run_command_report["cmd"] = cmd
+        run_command_report["timeout"] = timeout
+        run_command_report["kwargs"] = kwargs
+
+        # Return the requested value (or maybe the default)
+        return run_command_result
+
+    def _get_run_command_report():
+        nonlocal run_command_report
+        return run_command_report
+
+    with patch("alpenhorn.util.run_command", _mocked_run_command):
+        yield _get_run_command_report
+
+
 @pytest.fixture
 def hostname():
     """Returns the current hostname."""
