@@ -309,7 +309,7 @@ def copy_request_done(
             stderr = "Unspecified error."
         if check_src:
             # If the copy didn't work, then the remote file may be corrupted.
-            log.error(f"Copy failed: {stderr}.  Marking source file suspect.")
+            log.error(f"Copy failed: {stderr};  Marking source file suspect.")
             ArchiveFileCopy.update(has_file="M").where(
                 ArchiveFileCopy.file == req.file,
                 ArchiveFileCopy.node == req.node_from,
@@ -317,7 +317,7 @@ def copy_request_done(
         else:
             # An error occurred that can't be due to the source
             # being corrupt
-            log.error(f"Copy failed: {stderr}.")
+            log.error(f"Copy failed: {stderr}")
         return False
 
     # Otherwise, transfer was completed, remember end time

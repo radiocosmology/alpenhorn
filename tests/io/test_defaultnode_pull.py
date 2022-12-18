@@ -1,21 +1,54 @@
 """Test DefaultNodeIO.pull()"""
 
+import os
 import pytest
+import shutil
 import pathlib
+from unittest.mock import patch
 
-from alpenhorn.archive import ArchiveFileCopyRequest
+from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 
 
 @pytest.fixture
-def pull_async(queue, test_req):
-    """Put a pull_async Task on the queue.
+def have_bbcp(mock_run_command):
+    """Pretend to have bbcp
 
-    Returns a two-element tuple: (node_to, copy_request)"""
-    node, req = test_req
-    node.io.set_queue(queue)
-    node.io.pull(req)
+    Mocks shutil.which to indicate bbcp is present.
 
-    return test_req
+    Also mocks util.run_command to emulate running bbcp.  Use the
+    run_command_result marker to specify the result of running bbcp."""
+
+    from shutil import which as real_which
+
+    def _mocked_which(cmd, mode=os.F_OK | os.X_OK, path=None):
+        nonlocal real_which
+        if cmd == "bbcp":
+            return "BBCP"
+        return real_which(cmd, mode, path)
+
+    with patch("shutil.which", _mocked_which):
+        yield mock_run_command
+
+
+@pytest.fixture
+def have_rsync(mock_run_command):
+    """Pretend to have rsync
+
+    Mocks shutil.which to indicate rsync is present.
+
+    Also mocks util.run_command to emulate running rsync.  Use the
+    run_command_result marker to specify the result of running rsync."""
+
+    from shutil import which as real_which
+
+    def _mocked_which(cmd, mode=os.F_OK | os.X_OK, path=None):
+        nonlocal real_which
+        if cmd == "rsync":
+            return "RSYNC"
+        return real_which(cmd, mode, path)
+
+    with patch("shutil.which", _mocked_which):
+        yield mock_run_command
 
 
 @pytest.fixture
@@ -29,7 +62,11 @@ def test_req(
     group_to = storagegroup(name="group_to")
     node_to = storagenode(name="node_to", group=group_to, root="/node_to")
     node_from = storagenode(
-        name="node_from", group=storagegroup(name="group_from"), root="/node_from"
+        name="node_from",
+        group=storagegroup(name="group_from"),
+        root="/node_from",
+        username="user",
+        address="addr",
     )
 
     copy = archivefilecopy(file=genericfile, node=node_from, has_file="Y")
@@ -43,6 +80,18 @@ def test_req(
             file=genericfile, node_from=node_from, group_to=group_to
         ),
     )
+
+
+@pytest.fixture
+def pull_async(queue, test_req):
+    """Put a pull_async Task on the queue.
+
+    Returns a two-element tuple: (node_to, copy_request)"""
+    node, req = test_req
+    node.io.set_queue(queue)
+    node.io.pull(req)
+
+    return test_req
 
 
 def test_pull_sync_undermin(queue, test_req):
@@ -112,9 +161,9 @@ def test_pull_async_noroute(queue, pull_async):
 
     # Make the request non-local
     node.host = "here"
-    req.node_from.host = "There"
+    req.node_from.host = "there"
 
-    # Get the Task
+    # Call the async
     task, key = queue.get()
     task()
     queue.task_done(key)
@@ -123,3 +172,326 @@ def test_pull_async_noroute(queue, pull_async):
     afcr = ArchiveFileCopyRequest.get(id=req.id)
     assert afcr.completed is False
     assert afcr.cancelled is False
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+@pytest.mark.run_command_result(1, "", "bbcp_stderr")
+def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async):
+    """Test an unsuccessful bbcp remote pull."""
+
+    node, req = pull_async
+
+    # Make the request non-local
+    node.host = "here"
+    req.node_from.host = "there"
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Verify that bbcp ran
+    assert "bbcp" in have_bbcp()["cmd"]
+
+    # Req isn't resolved.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+
+
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async):
+    """Test a successful bbcp remote pull."""
+
+    node, req = pull_async
+
+    # Make the request non-local
+    node.host = "here"
+    req.node_from.host = "there"
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Req is complete.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is True
+    assert afcr.cancelled is False
+
+    # Verify that bbcp ran
+    assert "bbcp" in have_bbcp()["cmd"]
+
+    # Target copy exists
+    afc = ArchiveFileCopy.get(node=node, file=req.file)
+    assert afc.has_file == 'Y'
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+@pytest.mark.run_command_result(1, "", "rsync_stderr")
+def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async):
+    """Test an unsuccessful rsync remote pull."""
+
+    node, req = pull_async
+
+    # Make the request non-local
+    node.host = "here"
+    req.node_from.host = "there"
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Verify that rsync ran
+    assert "rsync" in have_rsync()["cmd"]
+
+    # Req isn't resolved.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+
+
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_async):
+    """Test a successful rsync remote pull."""
+
+    node, req = pull_async
+
+    # Make the request non-local
+    node.host = "here"
+    req.node_from.host = "there"
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Verify that rsync ran
+    assert "rsync" in have_rsync()["cmd"]
+
+    # Req is complete.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is True
+    assert afcr.cancelled is False
+
+    # Target copy exists
+    afc = ArchiveFileCopy.get(node=node, file=req.file)
+    assert afc.has_file == 'Y'
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+def test_pull_async_remote_nomethod(queue, pull_async):
+    """Test remote pull with no command available."""
+
+    node, req = pull_async
+
+    # Make the request non-local
+    node.host = "here"
+    req.node_from.host = "there"
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Req isn't resolved.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+def test_pull_async_link_arccontam(queue, pull_async):
+    """Test not creating hardlinks between archive and non-archive nodes."""
+
+    node, req = pull_async
+
+    # Make only of them an archive node
+    node.storage_type = 'T'
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Req isn't resolved because we have no rsync, so failure
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+def test_pull_async_link(queue, pull_async):
+    """Test creating hardlink."""
+
+    node, req = pull_async
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Req is resolved after successful hardlink
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is True
+    assert afcr.cancelled is False
+
+    # Target copy exists
+    afc = ArchiveFileCopy.get(node=node, file=req.file)
+    assert afc.has_file == 'Y'
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+@pytest.mark.run_command_result(1, "", "rsync_stderr")
+def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
+    """Test an unsuccessful rsync local pull."""
+
+    node, req = pull_async
+
+    # Make the request non-local
+    node.host = "here"
+    req.node_from.host = "there"
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Verify that rsync ran
+    assert "rsync" in have_rsync()["cmd"]
+
+    # Req isn't resolved.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+
+
+def test_pull_async_link_arccontam(queue, pull_async):
+    """Test not creating hardlinks between archive nodes."""
+
+    node, req = pull_async
+
+    # Make one node non-archival
+    node.storage_type = 'F'
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Req isn't resolved because we have no rsync, so failure
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+@pytest.mark.run_command_result(0, "", "stderr")
+def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_async):
+    """Test a successful rsync remote pull."""
+
+    node, req = pull_async
+
+    # Make one node non-archival to avoid hardlinking
+    node.storage_type = 'F'
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Verify that rsync ran
+    assert "rsync" in have_rsync()["cmd"]
+
+    # Req is complete.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is True
+    assert afcr.cancelled is False
+
+    # Target copy exists
+    afc = ArchiveFileCopy.get(node=node, file=req.file)
+    assert afc.has_file == 'Y'
+
+    # Source is not being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+
+
+@pytest.mark.run_command_result(1, "", "rsync_stderr")
+def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
+    """Test an unsuccessful rsync local pull."""
+
+    node, req = pull_async
+
+    # Make one node non-archival to avoid hardlinking
+    node.storage_type = 'F'
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Verify that rsync ran
+    assert "rsync" in have_rsync()["cmd"]
+
+    # Req isn't resolved.
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Source is being re-checked
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+
+
+def test_pull_fail_unlink(xfs, queue, pull_async):
+    """Test failure deleting the destination."""
+
+    node, req = pull_async
+
+    # Destination path
+    path = pathlib.Path(node.root, req.file.path)
+
+    # Create destination file
+    xfs.create_file(path)
+
+    # Verify
+    assert path.exists()
+
+    # Force hardlinking to fail
+    node.storage_type = 'T'
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Pull failure
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # File is gone
+    assert not path.exists()

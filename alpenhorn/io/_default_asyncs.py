@@ -44,7 +44,7 @@ def pull_async(task, node, req):
             )
             return
 
-    to_file = pathlib.Purepath(node.root, req.file.path)
+    to_file = pathlib.Path(node.root, req.file.path)
     to_dir = to_file.parent
     if not os.path.exists(to_dir):
         log.info(f'Creating directory "{to_dir}".')
@@ -108,14 +108,14 @@ def pull_async(task, node, req):
         req,
         node,
         check_src=ioresult.get("check_src", True),
-        md5ok=ioresult["md5sum"],
+        md5ok=ioresult.get("md5sum", None),
         start_time=start_time,
         stderr=ioresult.get("stderr", None),
         success=(ioresult["ret"] == 0),
     ):
         # Remove file, on error
         try:
-            if os.path.lexists(to_file):
+            if to_file.exists():
                 os.remove(to_file)
         except OSError as e:
             log.error(f"Error removing corrupt file {to_file}: {e}")

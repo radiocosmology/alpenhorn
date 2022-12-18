@@ -54,7 +54,7 @@ class BaseNodeRemote:
         if self.node.address is None:
             raise ValueError("missing address")
 
-        return f"{self.node.username}@{self.node.address}:{self.file_path()}"
+        return f"{self.node.username}@{self.node.address}:{file.path}"
 
 
 class BaseNodeIO:

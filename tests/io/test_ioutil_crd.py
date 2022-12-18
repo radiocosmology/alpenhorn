@@ -3,25 +3,10 @@
 import time
 import pytest
 import datetime
-from unittest.mock import patch
 
 
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io.ioutil import copy_request_done
-
-
-@pytest.fixture
-def mock_filesize():
-    """Mocks DefaultNodeIO.filesize to return a fake file size."""
-
-    # Load class first
-    from alpenhorn.io.Default import DefaultNodeIO
-
-    def _mock_filesize(self, path, actual=False):
-        return 512 * 3 if actual else 1234
-
-    with patch("alpenhorn.io.Default.DefaultNodeIO.filesize", _mock_filesize):
-        yield
 
 
 @pytest.fixture
@@ -47,7 +32,7 @@ def db_setup(
         archivefilecopyrequest(
             file=genericfile, node_from=node_from, group_to=group_to
         ),
-        time.time() - 2, # start_time
+        time.time() - 2,  # start_time
     )
 
 

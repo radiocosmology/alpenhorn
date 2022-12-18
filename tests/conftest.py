@@ -60,6 +60,20 @@ def mock_run_command(request):
 
 
 @pytest.fixture
+def mock_filesize():
+    """Mocks DefaultNodeIO.filesize to return a fake file size."""
+
+    # Load class first
+    from alpenhorn.io.Default import DefaultNodeIO
+
+    def _mock_filesize(self, path, actual=False):
+        return 512 * 3 if actual else 1234
+
+    with patch("alpenhorn.io.Default.DefaultNodeIO.filesize", _mock_filesize):
+        yield
+
+
+@pytest.fixture
 def hostname():
     """Returns the current hostname."""
     return util.get_short_hostname()
