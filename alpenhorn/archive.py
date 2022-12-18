@@ -39,6 +39,10 @@ class ArchiveFileCopy(base_model):
     size_b : integer
         Allocated size of file in bytes (i.e. actual size on the Storage
         medium.)
+    last_update : timestamp
+        The time at which this record was last updated.  This property
+        is automatically updated on save.  Any value explicity set will be
+        ignored.
     """
 
     file = pw.ForeignKeyField(ArchiveFile, backref="copies")
@@ -47,7 +51,21 @@ class ArchiveFileCopy(base_model):
     wants_file = EnumField(["Y", "M", "N"], default="Y")
     ready = pw.BooleanField(default=False)
     size_b = pw.BigIntegerField(null=True)
-    last_update = pw.TimestampField(default=datetime.datetime.now())
+    last_update = pw.TimestampField(default=datetime.datetime.now)
+
+    # Re-implement save() to always update last_update
+    def save(self, force_insert=False, only=None):
+        """Save an ArchiveFileCopy.
+
+        Automatically updates last_update to the current time.
+        """
+
+        # Only update if dirty
+        if self.is_dirty():
+            self.last_update = datetime.datetime.now()
+            if only is not None and ArchiveFileCopy.last_update not in only:
+                only.append(ArchiveFileCopy.last_update)
+        super().save(force_insert, only)
 
     @property
     def path(self):
@@ -90,7 +108,7 @@ class ArchiveFileCopyRequest(base_model):
     node_from = pw.ForeignKeyField(StorageNode, backref="requests_from")
     completed = pw.BooleanField(default=False)
     cancelled = pw.BooleanField(default=False)
-    timestamp = pw.DateTimeField(default=datetime.datetime.now())
+    timestamp = pw.DateTimeField(default=datetime.datetime.now, null=True)
     transfer_started = pw.DateTimeField(null=True)
     transfer_completed = pw.DateTimeField(null=True)
 

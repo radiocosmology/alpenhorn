@@ -48,7 +48,7 @@ def test_archivefilecopy_model(
         wants_file="M",
         ready=True,
         size_b=300,
-        last_update=before,
+        last_update=datetime.datetime(1925, 3, 4, 10, 12, 22),  # this is ignored
     )
     after = datetime.datetime.now() + datetime.timedelta(seconds=1)
 
@@ -67,9 +67,14 @@ def test_archivefilecopy_model(
         "ready": False,
         "size_b": None,
     }
-    assert ArchiveFileCopy.select().where(
-        ArchiveFileCopy.file == maxfile
-    ).dicts().get() == {
+
+    afc = ArchiveFileCopy.select().where(ArchiveFileCopy.file == maxfile).dicts().get()
+
+    assert afc["last_update"] >= before
+    assert afc["last_update"] <= after
+    del afc["last_update"]
+
+    assert afc == {
         "file": maxfile.id,
         "node": node.id,
         "id": 2,
@@ -77,7 +82,6 @@ def test_archivefilecopy_model(
         "wants_file": "M",
         "ready": True,
         "size_b": 300,
-        "last_update": before,
     }
 
     # (node, file) is unique

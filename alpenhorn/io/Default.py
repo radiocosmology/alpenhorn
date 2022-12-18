@@ -147,16 +147,16 @@ class DefaultNodeIO(BaseNodeIO):
         If acutal is True, returns the amount of space the file actually takes
         up on the storage system.  Otherwise returns apparent size.
         """
-        path = pathlib.PurePath(path)
+        path = pathlib.Path(path)
         if not path.is_absolute():
-            path = pathlib.PurePath(self.node.root, path)
+            path = pathlib.Path(self.node.root, path)
 
         if actual:
             # Per POSIX, blocksize for st_blocks is always 512 bytes
-            return os.stat(path).st_blocks * 512
+            return path.stat().st_blocks * 512
 
         # Apparent size
-        return os.path.getsize(path)
+        return path.stat().st_size
 
     # This is the reservation fudge factor.  XXX Is it correct?
     reserve_factor = 2

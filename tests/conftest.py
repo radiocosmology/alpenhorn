@@ -111,24 +111,27 @@ def mock_statvfs(fs):
 
 @pytest.fixture
 def mock_stat(fs):
-    """Mocks os.stat to work with pyfakefs."""
+    """Mocks pathlib.PosixPath.stat to work with pyfakefs."""
 
     def _mocked_stat(path):
-        """A mock of os.stat that reports the size of files in a pyfakefs filesystem."""
+        """A mock of pathlib.PosixPath.stat that reports the size of files in a pyfakefs filesystem."""
         nonlocal fs
 
         from math import ceil
 
-        size = fs.get_object(path).size
+        file = fs.get_object(path)
+        size = file.size
 
         # Anything with a __dict__ works here.
         class Result:
             # stat reports sizes in 512-byte blocks
             st_blocks = ceil(size / 512)
+            st_size = size
+            st_mode = file.st_mode
 
         return Result
 
-    with patch("os.stat", _mocked_stat):
+    with patch("pathlib.PosixPath.stat", _mocked_stat):
         yield
 
 
@@ -285,7 +288,13 @@ def genericfile(acqtype, archiveacq, filetype, archivefile):
     acqtype = acqtype(name="genericfile_actype")
     acq = archiveacq(name="genericfile_acq", type=acqtype)
     filetype = filetype(name="genericfile_filetype")
-    return archivefile(name="genericfile", acq=acq, type=filetype, size_b=2**20)
+    return archivefile(
+        name="genericfile",
+        acq=acq,
+        type=filetype,
+        md5sum="d41d8cd98f00b204e9800998ecf8427e",
+        size_b=2**20,
+    )
 
 
 @pytest.fixture

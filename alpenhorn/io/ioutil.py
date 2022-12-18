@@ -3,10 +3,11 @@
 import os
 import re
 import time
+import peewee as pw
 from datetime import datetime
 from tempfile import TemporaryDirectory
 
-from .. import archive as ar
+from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from .. import util
 from .. import db
 
@@ -304,21 +305,19 @@ def copy_request_done(
 
     # Check the result
     if not success:
+        if stderr is None:
+            stderr = "Unspecified error."
         if check_src:
             # If the copy didn't work, then the remote file may be corrupted.
-            log.error(
-                "Copy failed: {0}. Marking source file suspect.".format(
-                    stderr if stderr is not None else "Unspecified error."
-                )
-            )
-            ar.ArchiveFileCopy.update(has_file="M").where(
-                ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == req.node_from,
+            log.error(f"Copy failed: {stderr}.  Marking source file suspect.")
+            ArchiveFileCopy.update(has_file="M").where(
+                ArchiveFileCopy.file == req.file,
+                ArchiveFileCopy.node == req.node_from,
             ).execute()
         else:
             # An error occurred that can't be due to the source
             # being corrupt
-            log.error("Copy failed.")
+            log.error(f"Copy failed: {stderr}.")
         return False
 
     # Otherwise, transfer was completed, remember end time
@@ -326,15 +325,15 @@ def copy_request_done(
 
     # Check integrity.
     if isinstance(md5ok, str):
-        md5ok = md5ok == req.file.md5ok
+        md5ok = md5ok == req.file.md5sum
     if not md5ok:
         log.error(
             f"MD5 mismatch on node {node.name}; "
             f"Marking source file {req.file.name} on node {req.node_from} suspect."
         )
-        ar.ArchiveFileCopy.update(has_file="M").where(
-            ar.ArchiveFileCopy.file == req.file,
-            ar.ArchiveFileCopy.node == req.node_from,
+        ArchiveFileCopy.update(has_file="M").where(
+            ArchiveFileCopy.file == req.file,
+            ArchiveFileCopy.node == req.node_from,
         ).execute()
         return False
 
@@ -346,22 +345,30 @@ def copy_request_done(
         f"in {pretty_deltat(trans_time)} [{pretty_bytes(rate)}/s]"
     )
 
-    # Upsert the FileCopy
     with db.database_proxy.atomic():
-        ar.ArchiveFileCopy.replace(
-            file=req.file,
-            node=node,
-            has_file="Y",
-            wants_file="Y",
-            prepared=True,
-            size_b=node.io.filesize(req.file.path, actual=True),
-        ).execute()
+        # Upsert the FileCopy
+        size = node.io.filesize(req.file.path, actual=True)
+        try:
+            ArchiveFileCopy.insert(
+                file=req.file,
+                node=node,
+                has_file="Y",
+                wants_file="Y",
+                ready=True,
+                size_b=size,
+            ).execute()
+        except pw.IntegrityError:
+            ArchiveFileCopy.update(
+                has_file="Y", wants_file="Y", ready=True, size_b=size
+            ).where(
+                ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == node
+            ).execute()
 
         # Mark AFCR as completed
-        ar.ArchiveFileCopyRequest.update(
+        ArchiveFileCopyRequest.update(
             completed=True,
             transfer_started=datetime.fromtimestamp(start_time),
             transfer_completed=datetime.fromtimestamp(end_time),
-        ).where(ar.ArchiveFileCopyRequest.id == req.id).execute()
+        ).where(ArchiveFileCopyRequest.id == req.id).execute()
 
     return True
