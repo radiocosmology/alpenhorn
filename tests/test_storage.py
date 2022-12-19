@@ -146,29 +146,32 @@ def test_ioload(lfs, storagegroup, storagenode):
         assert isinstance(io, BaseGroupIO)
 
 
-def test_copy_state(genericnode, genericacq, archivefile, filetype, archivefilecopy):
+def test_copy_state(
+    genericnode, genericacq, archivefile, genericfiletype, archivefilecopy
+):
     """Test group.copy_state()."""
-    ft = filetype(name="type")
     group = genericnode.group
 
-    filen = archivefile(name="filen", acq=genericacq, type=ft, size_b=1)
+    filen = archivefile(name="filen", acq=genericacq, type=genericfiletype, size_b=1)
     archivefilecopy(file=filen, node=genericnode, has_file="N")
     assert group.copy_state(filen) == "N"
 
-    filey = archivefile(name="filey", acq=genericacq, type=ft, size_b=1)
+    filey = archivefile(name="filey", acq=genericacq, type=genericfiletype, size_b=1)
     archivefilecopy(file=filey, node=genericnode, has_file="Y")
     assert group.copy_state(filey) == "Y"
 
-    filex = archivefile(name="filex", acq=genericacq, type=ft, size_b=1)
+    filex = archivefile(name="filex", acq=genericacq, type=genericfiletype, size_b=1)
     archivefilecopy(file=filex, node=genericnode, has_file="X")
     assert group.copy_state(filex) == "X"
 
-    filem = archivefile(name="filem", acq=genericacq, type=ft, size_b=1)
+    filem = archivefile(name="filem", acq=genericacq, type=genericfiletype, size_b=1)
     archivefilecopy(file=filem, node=genericnode, has_file="M")
     assert group.copy_state(filem) == "M"
 
     # Non-existent file returns 'N'
-    missing = archivefile(name="missing", acq=genericacq, type=ft, size_b=1)
+    missing = archivefile(
+        name="missing", acq=genericacq, type=genericfiletype, size_b=1
+    )
     assert group.copy_state(missing) == "N"
 
 
@@ -279,15 +282,16 @@ def test_copypresent(genericgroup, storagenode, genericfile, archivefilecopy):
     assert node.copy_present(genericfile) is False
 
 
-def test_allfiles(genericnode, genericacq, filetype, archivefile, archivefilecopy):
+def test_allfiles(
+    genericnode, genericacq, genericfiletype, archivefile, archivefilecopy
+):
     """Test StorageNode.all_files()."""
-    ft = filetype(name="type")
 
     # Empty
-    file = archivefile(name="file1", acq=genericacq, type=ft)
+    file = archivefile(name="file1", acq=genericacq, type=genericfiletype)
     archivefilecopy(file=file, node=genericnode, has_file="N")
     assert genericnode.all_files() == list()
 
-    file = archivefile(name="file2", acq=genericacq, type=ft)
+    file = archivefile(name="file2", acq=genericacq, type=genericfiletype)
     archivefilecopy(file=file, node=genericnode, has_file="Y")
     assert genericnode.all_files() == list([pathlib.PurePath(genericacq.name, "file2")])

@@ -169,15 +169,15 @@ def delete_async(task, node, copies):
 
     # Process candidates for deletion
     for copy in copies:
+        shortname = copy.file.path
+
         # Archived count
         ncopies = copy.file.archive_count()
 
-        shortname = copy.file.path
-        fullpath = copy.path
-
         # If at least two _other_ copies exist, we can delete the file.
         if ncopies >= (3 if copy.node.archive else 2):
-            if os.path.exists(fullpath):
+            fullpath = copy.path
+            if fullpath.exists():
                 try:
                     os.remove(fullpath)  # Remove the actual file
                 except OSError as e:
@@ -188,7 +188,7 @@ def delete_async(task, node, copies):
 
             # Check if any containing directory is now empty
             # and remove if they are.
-            dirname = shortname.parent
+            dirname = fullpath.parent
 
             while dirname != ".":
                 if any(os.scandir(dirname)):

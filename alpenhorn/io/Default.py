@@ -246,7 +246,7 @@ class DefaultNodeIO(BaseNodeIO):
             func=delete_async,
             queue=self._queue,
             key=self.node.name,
-            args=(self.nodem, copies),
+            args=(self.node, copies),
             name="Delete copies "
             + str([copy.id for copy in copies])
             + f" on {self.node.name}",

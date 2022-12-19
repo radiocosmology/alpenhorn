@@ -28,13 +28,12 @@ def test_schema(dbproxy, genericcopy, genericrequest):
 
 
 def test_archivefilecopy_model(
-    genericgroup, storagenode, genericacq, filetype, archivefile, archivefilecopy
+    genericgroup, storagenode, genericacq, genericfiletype, archivefile, archivefilecopy
 ):
     """Test ArchiveFileCopy table model."""
     node = storagenode(name="n1", group=genericgroup)
-    ft = filetype(name="name")
-    minfile = archivefile(name="min", acq=genericacq, type=ft)
-    maxfile = archivefile(name="max", acq=genericacq, type=ft)
+    minfile = archivefile(name="min", acq=genericacq, type=genericfiletype)
+    maxfile = archivefile(name="max", acq=genericacq, type=genericfiletype)
 
     # Deal with round-off
     before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(

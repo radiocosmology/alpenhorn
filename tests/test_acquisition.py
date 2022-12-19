@@ -43,26 +43,27 @@ def test_acqtype_model(acqtype):
     }
 
 
-def test_acq_model(acqtype, archiveacq):
-    at = acqtype(name="type")
-    archiveacq(name="min", type=at)
-    archiveacq(name="max", type=at, comment="Comment, apparently, is not a note")
+def test_acq_model(genericacqtype, archiveacq):
+    archiveacq(name="min", type=genericacqtype)
+    archiveacq(
+        name="max", type=genericacqtype, comment="Comment, apparently, is not a note"
+    )
 
     # name is unique
     with pytest.raises(pw.IntegrityError):
-        archiveacq(name="min", type=at)
+        archiveacq(name="min", type=genericacqtype)
 
     # Check records in DB
     assert ArchiveAcq.select().where(ArchiveAcq.name == "min").dicts().get() == {
         "id": 1,
         "name": "min",
-        "type": at.id,
+        "type": genericacqtype.id,
         "comment": None,
     }
     assert ArchiveAcq.select().where(ArchiveAcq.name == "max").dicts().get() == {
         "id": 2,
         "name": "max",
-        "type": at.id,
+        "type": genericacqtype.id,
         "comment": "Comment, apparently, is not a note",
     }
 
@@ -88,15 +89,18 @@ def test_filetype_model(filetype):
     }
 
 
-def test_file_model(acqtype, archiveacq, filetype, archivefile):
-    at = acqtype(name="type")
-    acq1 = archiveacq(name="acq1", type=at)
-    ft = filetype(name="type")
+def test_file_model(genericacqtype, archiveacq, genericfiletype, archivefile):
+    acq1 = archiveacq(name="acq1", type=genericacqtype)
     before = datetime.datetime.now().replace(microsecond=0)
-    archivefile(name="min", acq=acq1, type=ft)
+    archivefile(name="min", acq=acq1, type=genericfiletype)
     after = datetime.datetime.now()
     archivefile(
-        name="max", acq=acq1, type=ft, md5sum="123456789", registered=after, size_b=45
+        name="max",
+        acq=acq1,
+        type=genericfiletype,
+        md5sum="123456789",
+        registered=after,
+        size_b=45,
     )
 
     # Check records in DB
@@ -111,7 +115,7 @@ def test_file_model(acqtype, archiveacq, filetype, archivefile):
         "id": 1,
         "acq": acq1.id,
         "name": "min",
-        "type": at.id,
+        "type": genericacqtype.id,
         "md5sum": None,
         "size_b": None,
     }
@@ -119,7 +123,7 @@ def test_file_model(acqtype, archiveacq, filetype, archivefile):
         "id": 2,
         "acq": acq1.id,
         "name": "max",
-        "type": at.id,
+        "type": genericacqtype.id,
         "md5sum": "123456789",
         "registered": after,
         "size_b": 45,
@@ -127,16 +131,15 @@ def test_file_model(acqtype, archiveacq, filetype, archivefile):
 
     # (acq, name) is unique
     with pytest.raises(pw.IntegrityError):
-        archivefile(name="min", acq=acq1, type=ft)
+        archivefile(name="min", acq=acq1, type=genericfiletype)
     # But this should work
-    acq2 = archiveacq(name="acq2", type=at)
-    archivefile(name="min", acq=acq2, type=ft)
+    acq2 = archiveacq(name="acq2", type=genericacqtype)
+    archivefile(name="min", acq=acq2, type=genericfiletype)
 
 
-def test_file_path(genericacq, archivefile, filetype):
+def test_file_path(genericacq, archivefile, genericfiletype):
     """Test ArchiveFile.path."""
-    ft = filetype(name="type")
-    file = archivefile(name="file", acq=genericacq, type=ft)
+    file = archivefile(name="file", acq=genericacq, type=genericfiletype)
 
     assert file.path == pathlib.PurePath(genericacq.name, "file")
 

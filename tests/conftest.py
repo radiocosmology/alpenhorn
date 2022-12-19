@@ -284,28 +284,34 @@ def genericnode(storagenode, storagegroup):
 
 
 @pytest.fixture
-def genericacq(acqtype, archiveacq, filetype, archivefile):
-    """Create a generic ArchiveAcq record.
-
-    Creates all necessary backrefs.
-    """
-    acqtype = acqtype(name="genericacq_acqetype")
-    return archiveacq(name="genericacq", type=acqtype)
+def genericacqtype(acqtype):
+    """Create a generic FileType record."""
+    return acqtype(name="genericacqtype")
 
 
 @pytest.fixture
-def genericfile(acqtype, archiveacq, filetype, archivefile):
+def genericacq(genericacqtype, archiveacq):
+    """Create a generic ArchiveAcq record."""
+    return archiveacq(name="genericacq", type=genericacqtype)
+
+
+@pytest.fixture
+def genericfiletype(filetype):
+    """Create a generic FileType record."""
+    return filetype(name="genericfiletype")
+
+
+@pytest.fixture
+def genericfile(genericacqtype, archiveacq, genericfiletype, archivefile):
     """Create a generic ArchiveFile record.
 
     Creates all necessary backrefs.
     """
-    acqtype = acqtype(name="genericfile_actype")
-    acq = archiveacq(name="genericfile_acq", type=acqtype)
-    filetype = filetype(name="genericfile_filetype")
+    acq = archiveacq(name="genericfile_acq", type=genericacqtype)
     return archivefile(
         name="genericfile",
         acq=acq,
-        type=filetype,
+        type=genericfiletype,
         md5sum="d41d8cd98f00b204e9800998ecf8427e",
         size_b=2**20,
     )
@@ -313,9 +319,9 @@ def genericfile(acqtype, archiveacq, filetype, archivefile):
 
 @pytest.fixture
 def genericcopy(
-    acqtype,
+    genericacqtype,
     archiveacq,
-    filetype,
+    genericfiletype,
     archivefile,
     archivefilecopy,
     storagenode,
@@ -325,10 +331,10 @@ def genericcopy(
 
     Creates all necessary backrefs.
     """
-    acqtype = acqtype(name="genericcopy_actype")
-    acq = archiveacq(name="genericcopy_acq", type=acqtype)
-    filetype = filetype(name="genericcopy_filetype")
-    file = archivefile(name="genericcopy_file", acq=acq, type=filetype, size_b=2**20)
+    acq = archiveacq(name="genericcopy_acq", type=genericacqtype)
+    file = archivefile(
+        name="genericcopy_file", acq=acq, type=genericfiletype, size_b=2**20
+    )
     group = storagegroup(name="genericcopy_group")
     node = storagenode(name="genericcopy_node", group=group)
     return archivefilecopy(file=file, node=node)
@@ -336,9 +342,9 @@ def genericcopy(
 
 @pytest.fixture
 def genericrequest(
-    acqtype,
+    genericacqtype,
     archiveacq,
-    filetype,
+    genericfiletype,
     archivefile,
     archivefilecopyrequest,
     storagenode,
@@ -348,11 +354,9 @@ def genericrequest(
 
     Creates all necessary backrefs.
     """
-    acqtype = acqtype(name="genericrequest_actype")
-    acq = archiveacq(name="genericrequest_acq", type=acqtype)
-    filetype = filetype(name="genericrequest_filetype")
+    acq = archiveacq(name="genericrequest_acq", type=genericacqtype)
     file = archivefile(
-        name="genericrequest_file", acq=acq, type=filetype, size_b=2**20
+        name="genericrequest_file", acq=acq, type=genericfiletype, size_b=2**20
     )
     group1 = storagegroup(name="genericrequest_group1")
     group2 = storagegroup(name="genericrequest_group2")
