@@ -174,7 +174,7 @@ def test_pull_async_noroute(queue, pull_async):
     assert afcr.cancelled is False
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 @pytest.mark.run_command_result(1, "", "bbcp_stderr")
@@ -201,7 +201,7 @@ def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async):
     assert afcr.cancelled is False
 
     # Source is being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == "M"
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
@@ -229,10 +229,10 @@ def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async):
 
     # Target copy exists
     afc = ArchiveFileCopy.get(node=node, file=req.file)
-    assert afc.has_file == 'Y'
+    assert afc.has_file == "Y"
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
@@ -259,7 +259,7 @@ def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async):
     assert afcr.cancelled is False
 
     # Source is being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == "M"
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
@@ -287,10 +287,10 @@ def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_
 
     # Target copy exists
     afc = ArchiveFileCopy.get(node=node, file=req.file)
-    assert afc.has_file == 'Y'
+    assert afc.has_file == "Y"
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 def test_pull_async_remote_nomethod(queue, pull_async):
@@ -313,7 +313,7 @@ def test_pull_async_remote_nomethod(queue, pull_async):
     assert afcr.cancelled is False
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 def test_pull_async_link_arccontam(queue, pull_async):
@@ -322,7 +322,7 @@ def test_pull_async_link_arccontam(queue, pull_async):
     node, req = pull_async
 
     # Make only of them an archive node
-    node.storage_type = 'T'
+    node.storage_type = "T"
 
     # Call the async
     task, key = queue.get()
@@ -335,7 +335,7 @@ def test_pull_async_link_arccontam(queue, pull_async):
     assert afcr.cancelled is False
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 def test_pull_async_link(queue, pull_async):
@@ -355,10 +355,10 @@ def test_pull_async_link(queue, pull_async):
 
     # Target copy exists
     afc = ArchiveFileCopy.get(node=node, file=req.file)
-    assert afc.has_file == 'Y'
+    assert afc.has_file == "Y"
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
@@ -385,7 +385,7 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
     assert afcr.cancelled is False
 
     # Source is being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == "M"
 
 
 def test_pull_async_link_arccontam(queue, pull_async):
@@ -394,7 +394,7 @@ def test_pull_async_link_arccontam(queue, pull_async):
     node, req = pull_async
 
     # Make one node non-archival
-    node.storage_type = 'F'
+    node.storage_type = "F"
 
     # Call the async
     task, key = queue.get()
@@ -407,7 +407,7 @@ def test_pull_async_link_arccontam(queue, pull_async):
     assert afcr.cancelled is False
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 @pytest.mark.run_command_result(0, "", "stderr")
@@ -417,7 +417,7 @@ def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_
     node, req = pull_async
 
     # Make one node non-archival to avoid hardlinking
-    node.storage_type = 'F'
+    node.storage_type = "F"
 
     # Call the async
     task, key = queue.get()
@@ -434,10 +434,10 @@ def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_
 
     # Target copy exists
     afc = ArchiveFileCopy.get(node=node, file=req.file)
-    assert afc.has_file == 'Y'
+    assert afc.has_file == "Y"
 
     # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
@@ -447,7 +447,7 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
     node, req = pull_async
 
     # Make one node non-archival to avoid hardlinking
-    node.storage_type = 'F'
+    node.storage_type = "F"
 
     # Call the async
     task, key = queue.get()
@@ -463,7 +463,7 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
     assert afcr.cancelled is False
 
     # Source is being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == 'M'
+    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == "M"
 
 
 def test_pull_fail_unlink(xfs, queue, pull_async):
@@ -481,7 +481,7 @@ def test_pull_fail_unlink(xfs, queue, pull_async):
     assert path.exists()
 
     # Force hardlinking to fail
-    node.storage_type = 'T'
+    node.storage_type = "T"
 
     # Call the async
     task, key = queue.get()

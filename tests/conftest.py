@@ -280,7 +280,7 @@ def genericnode(storagenode, storagegroup):
     Creates all necessary backrefs.
     """
     group = storagegroup(name="genericnode_group")
-    return storagenode(name="genericnode", group=group, root="/root")
+    return storagenode(name="genericnode", group=group, root="/node")
 
 
 @pytest.fixture

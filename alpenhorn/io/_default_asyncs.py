@@ -134,18 +134,27 @@ def check_async(task, node, copy):
 
     # Does the copy exist?
     if os.path.exists(fullpath):
-        # It does, check the MD5 sum
-        md5sum = util.md5sum_file(fullpath)
-        if md5sum == copy.file.md5sum:
-            log.info(f"File {copyname} on node {node.name} is A-OK!")
-            copy.has_file = "Y"
-            copy.size_b = fullpath.stat().st_blocks * 512
-        else:
+        # First check the size
+        size = fullpath.stat().st_size
+        if copy.file.size_b and size != copy.file.size_b:
             log.error(
                 f"File {copyname} on node {node.name} is corrupt! "
-                f"MD5: {md5sum}; expected: {copy.file.md5sum}"
+                f"Size: {copy.file.size_b}; expected: {copy.file.size_b}"
             )
             copy.has_file = "X"
+        else:
+            # If size is okay, check MD5 sum
+            md5sum = util.md5sum_file(fullpath)
+            if md5sum == copy.file.md5sum:
+                log.info(f"File {copyname} on node {node.name} is A-OK!")
+                copy.has_file = "Y"
+                copy.size_b = fullpath.stat().st_blocks * 512
+            else:
+                log.error(
+                    f"File {copyname} on node {node.name} is corrupt! "
+                    f"MD5: {md5sum}; expected: {copy.file.md5sum}"
+                )
+                copy.has_file = "X"
     else:
         log.error(f"File {copyname} on node {node.name} is missing!")
         copy.has_file = "N"
