@@ -133,40 +133,52 @@ def test_delete_dirs(
     copies = list()
 
     acq1 = archiveacq(name="acq/1", type=genericacqtype)
-    copies.append(archivefilecopy(
-        file=archivefile(name="file/1", type=genericfiletype, acq=acq1),
-        node=node,
-        has_file="Y",
-    ))
-    copies.append(archivefilecopy(
-        file=archivefile(name="file/2", type=genericfiletype, acq=acq1),
-        node=node,
-        has_file="Y",
-    ))
-    copies.append(archivefilecopy(
-        file=archivefile(name="file/3", type=genericfiletype, acq=acq1),
-        node=node,
-        has_file="Y",
-    ))
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file/1", type=genericfiletype, acq=acq1),
+            node=node,
+            has_file="Y",
+        )
+    )
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file/2", type=genericfiletype, acq=acq1),
+            node=node,
+            has_file="Y",
+        )
+    )
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file/3", type=genericfiletype, acq=acq1),
+            node=node,
+            has_file="Y",
+        )
+    )
 
     acq2 = archiveacq(name="acq/2", type=genericacqtype)
-    copies.append(archivefilecopy(
-        file=archivefile(name="file/4", type=genericfiletype, acq=acq2),
-        node=node,
-        has_file="Y",
-    ))
-    copies.append(archivefilecopy(
-        file=archivefile(name="file/5", type=genericfiletype, acq=acq2),
-        node=node,
-        has_file="Y",
-    ))
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file/4", type=genericfiletype, acq=acq2),
+            node=node,
+            has_file="Y",
+        )
+    )
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file/5", type=genericfiletype, acq=acq2),
+            node=node,
+            has_file="Y",
+        )
+    )
 
     acq3 = archiveacq(name="acq3", type=genericacqtype)
-    copies.append(archivefilecopy(
-        file=archivefile(name="file6", type=genericfiletype, acq=acq3),
-        node=node,
-        has_file="Y",
-    ))
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file6", type=genericfiletype, acq=acq3),
+            node=node,
+            has_file="Y",
+        )
+    )
 
     # Create files
     for copy in copies:
@@ -179,8 +191,8 @@ def test_delete_dirs(
     # Call async directly for simplicity.
     delete_async(None, node, delete_copies)
 
-    #Only copies[2] remains
-    assert ArchiveFileCopy.select().where(ArchiveFileCopy.has_file=='Y').count() == 1
+    # Only copies[2] remains
+    assert ArchiveFileCopy.select().where(ArchiveFileCopy.has_file == "Y").count() == 1
 
     # Check files
     assert pathlib.Path(copies[2].path).exists()

@@ -3,6 +3,8 @@
 import pytest
 import pathlib
 
+from alpenhorn.storage import StorageNode
+
 
 @pytest.fixture
 def node(genericgroup, storagenode, xfs):
@@ -31,6 +33,18 @@ def test_bytes_avail(node):
     """test DefaultNodeIO.bytes_avail()"""
 
     assert node.io.bytes_avail() == 10000.0
+
+
+def test_update_avail_gb(node):
+    """test DefaultNodeIO.update_avail_gb()"""
+
+    # The test node initially doesn't have this set
+    assert node.avail_gb is None
+
+    node.io.update_avail_gb()
+
+    # Now the value is set
+    assert StorageNode.get(id=node.id).avail_gb == 10000.0 / 2.0**30
 
 
 def test_fits(node):
@@ -122,3 +136,31 @@ def test_reserve_bytes(node):
 
     # Release the rest
     node.io.release_bytes(2000)
+
+
+def test_idle(node, queue):
+    """Test node.io.idle"""
+
+    # init
+    node.io.set_queue(queue)
+
+    # Currently idle
+    assert node.io.idle is True
+
+    # Enqueue something into this node's queue
+    queue.put(None, node.name)
+
+    # Now not idle
+    assert node.io.idle is False
+
+    # Dequeue it
+    task, key = queue.get()
+
+    # Still not idle, because task is in-progress
+    assert node.io.idle is False
+
+    # Finish the task
+    queue.task_done(node.name)
+
+    # Now idle again
+    assert node.io.idle is True

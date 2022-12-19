@@ -120,10 +120,8 @@ def pull_async(task, node, req):
         except OSError as e:
             log.error(f"Error removing corrupt file {to_file}: {e}")
 
-    # Whatever has happened, update free space
-    node.avail_gb = node.io.bytes_avail() / 2**30
-    node.save(only=[StorageNode.avail_gb])
-    log.info(f"Node {node.name} has {node.avail_gb:.2f} GiB available.")
+    # Whatever has happened, update free space, if possible
+    node.io.update_avail_gb(fast=True)
 
 
 def check_async(task, node, copy):
