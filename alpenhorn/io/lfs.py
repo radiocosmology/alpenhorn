@@ -103,7 +103,7 @@ class LFS:
         """
 
         # Strip non-numeric things
-        regexp = re.compile(b"[^\d ]+")
+        regexp = re.compile(b"[^\\d ]+")
 
         stdout = self.run_lfs("quota", "-q", "-g", self._quota_group, path)
         if stdout is None:
