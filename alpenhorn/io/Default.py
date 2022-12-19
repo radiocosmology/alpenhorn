@@ -285,7 +285,7 @@ class DefaultGroupIO(BaseGroupIO):
         Returns the StorageNode containing the file, or None if no
         file was found.
         """
-        if self.node.exists(path):
+        if self.node.io.exists(path):
             return self.node
 
         return None
