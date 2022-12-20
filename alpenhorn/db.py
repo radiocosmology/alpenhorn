@@ -92,7 +92,7 @@ def init():
     if _db_ext is None:
         # The fallback gets implemented via the default_cap
         # dict defined in _capability()
-        log.info("Using internal fallback database module.")
+        log.debug("Using internal database module.")
         _db_ext = dict()
 
     # Tell everyone whether we're threadsafe

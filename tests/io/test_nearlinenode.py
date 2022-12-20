@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from alpenhorn.archive import ArchiveFileCopy
+from alpenhorn.io.Nearline import NearlineNodeIO
 
 
 @pytest.fixture
@@ -21,7 +22,9 @@ def node(
 
     # Fixed quota provided here is only used to detemine headroom
     # which will get set to (41000 / 4) = 10250 kiB
-    genericnode.io_config = '{"quota_group": "qgroup", "fixed_quota": 41000}'
+    genericnode.io_config = (
+        '{"quota_group": "qgroup", "fixed_quota": 41000, "release_check_count": 6}'
+    )
 
     # Some files
     files = [
@@ -61,6 +64,14 @@ def test_ioconfig(genericnode, have_lfs):
     genericnode.io_config = '{"quota_group": "qgroup"}'
 
     with pytest.raises(KeyError):
+        genericnode.io
+
+    # Check bad release_check_count
+    genericnode.io_config = (
+        '{"quota_group": "qgroup", "fixed_quota": 300000, "release_check_count": -1}'
+    )
+
+    with pytest.raises(ValueError):
         genericnode.io
 
     genericnode.io_config = '{"quota_group": "qgroup", "fixed_quota": 300000}'
@@ -324,3 +335,89 @@ def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
     # File is restored
     lfs = mock_lfs("")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
+
+
+def test_idle_update_empty(queue, mock_lfs, node):
+    """Test NearlineNodeIO.idle_update with no files."""
+
+    # Delete all copies
+    ArchiveFileCopy.update(has_file="N").execute()
+
+    node.io.idle_update()
+
+    # QW has not been initialised
+    assert node.id not in NearlineNodeIO._release_qw
+
+    # No item in queue
+    assert queue.qsize == 0
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/genericacq/file1": "released",
+        "/node/genericacq/file2": "restored",
+        "/node/genericacq/file3": "unarchived",
+        "/node/genericacq/file4": "missing",
+    }
+)
+def test_idle_update_ready(xfs, queue, mock_lfs, node):
+    """Test NearlineNodeIO.idle_update with copies ready"""
+
+    node.io.idle_update()
+
+    # QW has been initialised
+    assert node.id in NearlineNodeIO._release_qw
+
+    # Item in queue
+    assert queue.qsize == 1
+
+    # Run the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # check readiness
+    assert not ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=2).ready
+    assert ArchiveFileCopy.get(id=3).ready
+    assert not ArchiveFileCopy.get(id=4).ready
+
+    # Copy four is no longer on node
+    assert ArchiveFileCopy.get(id=4).has_file == "N"
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/genericacq/file1": "released",
+        "/node/genericacq/file2": "restored",
+        "/node/genericacq/file3": "unarchived",
+        "/node/genericacq/file4": "missing",
+    }
+)
+def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
+    """Test NearlineNodeIO.idle_update with copies not ready"""
+
+    # Update all copies
+    ArchiveFileCopy.update(ready=False).execute()
+
+    node.io.idle_update()
+
+    # QW has been initialised
+    assert node.id in NearlineNodeIO._release_qw
+
+    # Item in queue
+    assert queue.qsize == 1
+
+    # Run the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # check readiness
+    assert not ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=2).ready
+    assert ArchiveFileCopy.get(id=3).ready
+    assert not ArchiveFileCopy.get(id=4).ready
+
+    # Copy four is no longer on node
+    assert ArchiveFileCopy.get(id=4).has_file == "N"

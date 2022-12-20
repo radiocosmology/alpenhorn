@@ -47,9 +47,15 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         * headroom: integer
             the amount of space in bytes to keep empty on the disk.  Defaults
             to 25% of fixed_quota.
+        * release_check_count : integer
+            The number of files to check at a time when doing idle HSM status
+            update (see idle_update()).  Default is 100.
     """
 
     remote_class = NearlineNodeRemote
+
+    # QueryWalkers for the HSM state check.  Indexed by node id
+    _release_qw = dict()
 
     def __init__(self, node):
         super().__init__(node)
@@ -58,6 +64,13 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         self._headroom = self.config.get(
             "headroom", self.config["fixed_quota"] * 2**8
         )
+
+        # For idle-time HSM state updates
+        self._nrelease = self.config.get("release_check_count", 100)
+        if self._nrelease < 1:
+            raise ValueError(
+                f"io_config key 'release_check_count' non-positive (={self._nrelease})"
+            )
 
     def release_files(self):
         """Release files from the nearline disk to keep the headroom clear."""
@@ -254,6 +267,74 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         if state == self._lfs.HSM_RELEASED:
             self._lfs.hsm_restore(fullpath)
 
+    def idle_update(self):
+        """Update HSM state of copies when idle.
+
+        If the node is idle after an update, double check the HSM state
+        for a few files and update the DB if necessary.
+
+        Any I/O on a nearline file will restore it.  It's important for the
+        data index to reflect changes made in this way outside of alpenhorn so that
+        the alpenhornd daemon can properly manage free space.
+        """
+
+        # Get the query walker.  Initialised if necessary.
+        try:
+            qw = self._release_qw[self.node.id]
+        except KeyError:
+            try:
+                qw = QueryWalker(
+                    ArchiveFileCopy,
+                    ArchiveFileCopy.node == self.node,
+                    ArchiveFileCopy.has_file == "Y",
+                )
+                self._release_qw[self.node.id] = qw
+            except pw.DoesNotExist:
+                return  # No files to check on the node
+
+        # Try to get a bunch of copies to check
+        try:
+            copies = qw.get(self._nrelease)
+        except pw.DoesNotExist:
+            # Not sure why all the file copies have gone away, but given there's
+            # nothing on the node now, can't hurt to re-init the QW in this case
+            del self._release_qw[self.node.id]
+            return
+
+        def _async(task, node, lfs, copies):
+            for copy in copies:
+                state = lfs.hsm_state(copy.path)
+                log.info(f"{copy.path} = {state}")
+                if state == lfs.HSM_MISSING:
+                    # File is unexpectedly gone.
+                    log.warning(
+                        f"File copy {copy.file.path} on node {node.name} is missing!"
+                    )
+                    ArchiveFileCopy.update(has_file="N", ready=False).where(
+                        ArchiveFileCopy.id == copy.id
+                    ).execute()
+                elif state == lfs.HSM_RELEASED:
+                    if copy.ready:
+                        log.debug("Updating file copy {copy.file.path}: ready -> False")
+                        ArchiveFileCopy.update(ready=False).where(
+                            ArchiveFileCopy.id == copy.id
+                        ).execute()
+                else:  # i.e. RESTORED or UNARCHIVED
+                    if not copy.ready:
+                        log.debug("Updating file copy {copy.file.path}: ready -> True")
+                        ArchiveFileCopy.update(ready=True).where(
+                            ArchiveFileCopy.id == copy.id
+                        ).execute()
+
+        # Copies get checked in an async
+        Task(
+            func=_async,
+            queue=self._queue,
+            key=self.node.name,
+            args=(self.node, self._lfs, copies),
+            name=f"Node {self.node.name}: HSM state check for {len(copies)} copies",
+        )
+
 
 class NearlineGroupIO(BaseGroupIO):
     """Nearline Group I/O
@@ -267,28 +348,12 @@ class NearlineGroupIO(BaseGroupIO):
             The smallfile threshold, in bytes.  Files above this size are sent to
             nearline and put on tape.  The small files are sent to the secondary
             node.  Default is 1000000000 bytes (1 GB).
-     - release_check_count : integer
-            The number of files to check at a time when doing idle HSM status
-            update (see idle_update()).  Default is 100.
-
-    To identify the nodes, the primary node must have the same name as the group.
     """
 
     def __init__(self, group):
         super().__init__(group)
 
         self._threshold = self.config.get("threshold", 1000000000)  # bytes
-
-        # For idle-time HSM state updates
-        self._nrelease = self.config.get("release_check_count", 100)
-        if self._nrelease < 1:
-            raise ValueError(
-                f"io_config key 'release_check_count' non-positive (={self._nrelease})"
-            )
-
-        # These are initialised later
-        self._release_qw = None  # QueryWalker for the HSM state check
-        self._release_node = None  # node that the QW is bound to
 
     @property
     def idle(self):
@@ -302,18 +367,18 @@ class NearlineGroupIO(BaseGroupIO):
         """
         if len(nodes) != 2:
             log.error(
-                f"need exactly two nodes in Nearline group {self.group.name} (have {len(nodes)})"
+                f"need exactly two nodes in StorageGroup group {self.group.name} (have {len(nodes)})"
             )
             return False
 
-        if nodes[0].name == self.group.name:
+        if nodes[0].io_class == "Nearline":
             self._nearline = nodes[0]
             self._smallfile = nodes[1]
-        elif nodes[1].name == self.group.name:
+        elif nodes[1].io_class == "Nearline":
             self._nearline = nodes[1]
             self._smallfile = nodes[0]
         else:
-            log.error(f"no node in Nearline group named {self.group.name}")
+            log.error(f"no Nearline node in StorageGroup {self.group.name}")
             return False
 
         return True
@@ -324,81 +389,11 @@ class NearlineGroupIO(BaseGroupIO):
         Returns the StorageNode containing the file, or None if no
         file was found.
         """
-        if self._smallfile.exists(path):
+        if self._smallfile.io.exists(path):
             return self._smallfile
-        if self._nearline.exists(path):
+        if self._nearline.io.exists(path):
             return self._nearline
         return None
-
-    def idle_update(self):
-        """Update HSM state of copies when idle.
-
-        If the group is idle after an update, double check the HSM state
-        for a few files and update the DB if necessary.
-
-        Any I/O on a nearline file will restore it.  It's important for the
-        data index to reflect changes made in this way outside of alpenhorn so that
-        the alpenhornd daemon can properly manage free space.
-        """
-
-        # Hedge against the nearline node changing somehow between update loops
-        if self._release_node != self._nearline.id:
-            self._release_node = None
-
-        # (Re-)initialise the query walker.  This happens every time
-        # we notice the nearline node id change
-        if self._release_node is None:
-            try:
-                self._release_qw = QueryWalker(
-                    ArchiveFileCopy,
-                    ArchiveFileCopy.node == self._nearline,
-                    ArchiveFileCopy.has_file == "Y",
-                )
-                self._release_node = self._nearline.id
-            except pw.DoesNotExist:
-                return  # No files to check on the node
-
-        # Try to get a bunch of copies to check
-        try:
-            copies = self._release_qw.get(self._nrelease)
-        except pw.DoesNotExist:
-            # Not sure why all the file copies have gone away, but given there's
-            # nothing on the node now, can't hurt to re-init the QW in this case
-            self._release_node = None
-            return
-
-        def _async(task, node, lfs, copies):
-            for copy in copies:
-                state = lfs.hsm_state(copy.path)
-                if state == lfs.HSM_MISSING:
-                    # File is unexpectedly gone.
-                    log.warning(
-                        f"File copy {copy.file.path} on node {node.name} is missing!"
-                    )
-                    ArchiveFileCopy.update(has_file="N").where(
-                        ArchiveFileCopy.id == copy.id
-                    )
-                elif state == lfs.HSM_RELEASED:
-                    if copy.ready:
-                        log.debug("Updating file copy {copy.file.path}: ready -> False")
-                        ArchiveFileCopy.update(ready=False).where(
-                            ArchiveFileCopy.id == copy.id
-                        )
-                else:  # i.e. RESTORED or UNARCHIVED
-                    if not copy.ready:
-                        log.debug("Updating file copy {copy.file.path}: ready -> True")
-                        ArchiveFileCopy.update(ready=True).where(
-                            ArchiveFileCopy.id == copy.id
-                        )
-
-        # Copies get checked in an async
-        Task(
-            func=_async,
-            queue=self._queue,
-            key=self.node.name,
-            args=(self.node, self._lfs, copies),
-            name=f"Node {self.node.name}: HSM state check for {len(copies)} copies",
-        )
 
     def pull(self, req):
         """Pass ArchiveFileCopyRequest to the correct node."""
