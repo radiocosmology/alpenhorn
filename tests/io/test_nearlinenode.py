@@ -11,36 +11,36 @@ from alpenhorn.io.Nearline import NearlineNodeIO
 def node(
     mock_lfs,
     queue,
-    genericnode,
-    genericacq,
-    genericfiletype,
+    simplenode,
+    simpleacq,
+    simplefiletype,
     archivefile,
     archivefilecopy,
 ):
     """A Nearline node for testing with some stuff on it"""
-    genericnode.io_class = "Nearline"
+    simplenode.io_class = "Nearline"
 
     # Fixed quota provided here is only used to detemine headroom
     # which will get set to (41000 / 4) = 10250 kiB
-    genericnode.io_config = (
+    simplenode.io_config = (
         '{"quota_group": "qgroup", "fixed_quota": 41000, "release_check_count": 6}'
     )
 
     # Some files
     files = [
-        archivefile(name="file1", acq=genericacq, type=genericfiletype, size_b=100000),
-        archivefile(name="file2", acq=genericacq, type=genericfiletype, size_b=300000),
-        archivefile(name="file3", acq=genericacq, type=genericfiletype, size_b=400000),
-        archivefile(name="file4", acq=genericacq, type=genericfiletype, size_b=800000),
-        archivefile(name="file5", acq=genericacq, type=genericfiletype, size_b=50000),
-        archivefile(name="file6", acq=genericacq, type=genericfiletype, size_b=300000),
+        archivefile(name="file1", acq=simpleacq, type=simplefiletype, size_b=100000),
+        archivefile(name="file2", acq=simpleacq, type=simplefiletype, size_b=300000),
+        archivefile(name="file3", acq=simpleacq, type=simplefiletype, size_b=400000),
+        archivefile(name="file4", acq=simpleacq, type=simplefiletype, size_b=800000),
+        archivefile(name="file5", acq=simpleacq, type=simplefiletype, size_b=50000),
+        archivefile(name="file6", acq=simpleacq, type=simplefiletype, size_b=300000),
     ]
 
     # Some copies
     last_updates = [3, 1, 5, 6, 2, 4]
     for num, file in enumerate(files):
         archivefilecopy(
-            file=file, node=genericnode, has_file="Y", size_b=10, ready=True
+            file=file, node=simplenode, has_file="Y", size_b=10, ready=True
         )
         # We need to do it this way to set last_update
         ArchiveFileCopy.update(last_update=last_updates[num]).where(
@@ -48,36 +48,36 @@ def node(
         ).execute()
 
     # Init node I/O
-    genericnode.io.set_queue(queue)
+    simplenode.io.set_queue(queue)
 
-    return genericnode
+    return simplenode
 
 
-def test_ioconfig(genericnode, have_lfs):
+def test_ioconfig(simplenode, have_lfs):
     """Test instantiating I/O without necessary ioconfig."""
 
-    genericnode.io_class = "Nearline"
+    simplenode.io_class = "Nearline"
 
     with pytest.raises(KeyError):
-        genericnode.io
+        simplenode.io
 
-    genericnode.io_config = '{"quota_group": "qgroup"}'
+    simplenode.io_config = '{"quota_group": "qgroup"}'
 
     with pytest.raises(KeyError):
-        genericnode.io
+        simplenode.io
 
     # Check bad release_check_count
-    genericnode.io_config = (
+    simplenode.io_config = (
         '{"quota_group": "qgroup", "fixed_quota": 300000, "release_check_count": -1}'
     )
 
     with pytest.raises(ValueError):
-        genericnode.io
+        simplenode.io
 
-    genericnode.io_config = '{"quota_group": "qgroup", "fixed_quota": 300000}'
+    simplenode.io_config = '{"quota_group": "qgroup", "fixed_quota": 300000}'
 
     # Now it works
-    genericnode.io
+    simplenode.io
 
 
 @pytest.mark.lfs_quota_remaining(20000000)
@@ -93,12 +93,12 @@ def test_release_files_okay(queue, node):
 @pytest.mark.lfs_quota_remaining(10000000)
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "restored",
-        "/node/genericacq/file2": "restored",
-        "/node/genericacq/file3": "restored",
-        "/node/genericacq/file4": "restored",
-        "/node/genericacq/file5": "restored",
-        "/node/genericacq/file6": "unarchived",
+        "/node/simpleacq/file1": "restored",
+        "/node/simpleacq/file2": "restored",
+        "/node/simpleacq/file3": "restored",
+        "/node/simpleacq/file4": "restored",
+        "/node/simpleacq/file5": "restored",
+        "/node/simpleacq/file6": "unarchived",
     }
 )
 def test_release_files(queue, mock_lfs, node):
@@ -131,12 +131,12 @@ def test_release_files(queue, mock_lfs, node):
 
     # Check hsm_relase was actually called
     lfs = mock_lfs("")
-    assert lfs.hsm_state("/node/genericacq/file1") == lfs.HSM_RELEASED
-    assert lfs.hsm_state("/node/genericacq/file2") == lfs.HSM_RELEASED
-    assert lfs.hsm_state("/node/genericacq/file3") == lfs.HSM_RELEASED
-    assert lfs.hsm_state("/node/genericacq/file4") == lfs.HSM_RESTORED
-    assert lfs.hsm_state("/node/genericacq/file5") == lfs.HSM_RELEASED
-    assert lfs.hsm_state("/node/genericacq/file6") == lfs.HSM_UNARCHIVED
+    assert lfs.hsm_state("/node/simpleacq/file1") == lfs.HSM_RELEASED
+    assert lfs.hsm_state("/node/simpleacq/file2") == lfs.HSM_RELEASED
+    assert lfs.hsm_state("/node/simpleacq/file3") == lfs.HSM_RELEASED
+    assert lfs.hsm_state("/node/simpleacq/file4") == lfs.HSM_RESTORED
+    assert lfs.hsm_state("/node/simpleacq/file5") == lfs.HSM_RELEASED
+    assert lfs.hsm_state("/node/simpleacq/file6") == lfs.HSM_UNARCHIVED
 
 
 @pytest.mark.lfs_quota_remaining(10000000)
@@ -157,13 +157,13 @@ def test_before_update(queue, node):
 def test_filesize(xfs, node):
     """Test NearlineNodeIO.filesize(), which always returns st_size"""
 
-    xfs.create_file("/node/genericacq/file1", st_size=100000)
-    assert node.io.filesize("genericacq/file1") == 100000
+    xfs.create_file("/node/simpleacq/file1", st_size=100000)
+    assert node.io.filesize("simpleacq/file1") == 100000
 
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "released",
+        "/node/simpleacq/file1": "released",
     }
 )
 def test_check_released(queue, mock_lfs, node):
@@ -183,7 +183,7 @@ def test_check_released(queue, mock_lfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "restored",
+        "/node/simpleacq/file1": "restored",
     }
 )
 def test_check_restored(queue, mock_lfs, node):
@@ -207,7 +207,7 @@ def test_auto_verify_missing(queue, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "restored",
+        "/node/simpleacq/file1": "restored",
     }
 )
 def test_auto_verify_restored(xfs, node):
@@ -218,7 +218,7 @@ def test_auto_verify_restored(xfs, node):
 
     DefaultNodeIO.check = MagicMock()
 
-    xfs.create_file("/node/genericacq/file1")
+    xfs.create_file("/node/simpleacq/file1")
     copy = ArchiveFileCopy.get(id=1)
 
     node.io.auto_verify(copy)
@@ -227,7 +227,7 @@ def test_auto_verify_restored(xfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "released",
+        "/node/simpleacq/file1": "released",
     }
 )
 def test_auto_verify_released(xfs, queue, mock_lfs, node):
@@ -238,7 +238,7 @@ def test_auto_verify_released(xfs, queue, mock_lfs, node):
 
     _default_asyncs.check_async = MagicMock()
 
-    xfs.create_file("/node/genericacq/file1")
+    xfs.create_file("/node/simpleacq/file1")
 
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
@@ -262,7 +262,7 @@ def test_auto_verify_released(xfs, queue, mock_lfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "released",
+        "/node/simpleacq/file1": "released",
     }
 )
 def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
@@ -273,7 +273,7 @@ def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
 
     _default_asyncs.check_async = MagicMock()
 
-    xfs.create_file("/node/genericacq/file1")
+    xfs.create_file("/node/simpleacq/file1")
 
     copy = ArchiveFileCopy.get(id=1)
     node.io.auto_verify(copy)
@@ -295,7 +295,7 @@ def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "restored",
+        "/node/simpleacq/file1": "restored",
     }
 )
 def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
@@ -318,7 +318,7 @@ def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "released",
+        "/node/simpleacq/file1": "released",
     }
 )
 def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
@@ -354,10 +354,10 @@ def test_idle_update_empty(queue, mock_lfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "released",
-        "/node/genericacq/file2": "restored",
-        "/node/genericacq/file3": "unarchived",
-        "/node/genericacq/file4": "missing",
+        "/node/simpleacq/file1": "released",
+        "/node/simpleacq/file2": "restored",
+        "/node/simpleacq/file3": "unarchived",
+        "/node/simpleacq/file4": "missing",
     }
 )
 def test_idle_update_ready(xfs, queue, mock_lfs, node):
@@ -388,10 +388,10 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
-        "/node/genericacq/file1": "released",
-        "/node/genericacq/file2": "restored",
-        "/node/genericacq/file3": "unarchived",
-        "/node/genericacq/file4": "missing",
+        "/node/simpleacq/file1": "released",
+        "/node/simpleacq/file2": "restored",
+        "/node/simpleacq/file3": "unarchived",
+        "/node/simpleacq/file4": "missing",
     }
 )
 def test_idle_update_not_ready(xfs, queue, mock_lfs, node):

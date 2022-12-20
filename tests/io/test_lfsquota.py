@@ -6,31 +6,31 @@ from alpenhorn.io.LFSQuota import LFSQuotaNodeIO
 
 
 @pytest.fixture
-def node(genericnode, mock_lfs):
+def node(simplenode, mock_lfs):
     """A LFSQuota node for testing"""
-    genericnode.io_class = "LFSQuota"
-    genericnode.io_config = '{"quota_group": "qgroup"}'
+    simplenode.io_class = "LFSQuota"
+    simplenode.io_config = '{"quota_group": "qgroup"}'
 
-    return genericnode
+    return simplenode
 
 
-def test_no_quota_group(genericnode):
+def test_no_quota_group(simplenode):
     """Test instantiating I/O without specifying quota_group."""
 
-    genericnode.io_class = "LFSQuota"
+    simplenode.io_class = "LFSQuota"
 
     with pytest.raises(KeyError):
-        genericnode.io
+        simplenode.io
 
 
-def test_no_lfs(genericnode):
+def test_no_lfs(simplenode):
     """Test crashing if lfs(1) can't be found."""
 
-    genericnode.io_class = "LFSQuota"
-    genericnode.io_config = '{"quota_group": "qgroup"}'
+    simplenode.io_class = "LFSQuota"
+    simplenode.io_config = '{"quota_group": "qgroup"}'
 
     with pytest.raises(RuntimeError):
-        genericnode.io
+        simplenode.io
 
 
 def test_quota_group(node):

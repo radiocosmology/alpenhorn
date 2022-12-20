@@ -7,13 +7,13 @@ from alpenhorn.storage import StorageNode
 
 
 @pytest.fixture
-def node(genericgroup, storagenode, xfs):
+def node(simplegroup, storagenode, xfs):
     """Create a standard node for testing backed by a pyfakefs filesystem.
 
     The disk is 10,000 bytes in size."""
     xfs.create_dir("/node")
     xfs.set_disk_usage(10000)
-    return storagenode(name="node", root="/node", group=genericgroup)
+    return storagenode(name="node", root="/node", group=simplegroup)
 
 
 def test_check_active(fs, node):

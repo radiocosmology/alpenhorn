@@ -14,7 +14,7 @@ from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
 
 
-def test_schema(dbproxy, genericcopy, genericrequest):
+def test_schema(dbproxy, simplecopy, simplerequest):
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
@@ -28,12 +28,12 @@ def test_schema(dbproxy, genericcopy, genericrequest):
 
 
 def test_archivefilecopy_model(
-    genericgroup, storagenode, genericacq, genericfiletype, archivefile, archivefilecopy
+    simplegroup, storagenode, simpleacq, simplefiletype, archivefile, archivefilecopy
 ):
     """Test ArchiveFileCopy table model."""
-    node = storagenode(name="n1", group=genericgroup)
-    minfile = archivefile(name="min", acq=genericacq, type=genericfiletype)
-    maxfile = archivefile(name="max", acq=genericacq, type=genericfiletype)
+    node = storagenode(name="n1", group=simplegroup)
+    minfile = archivefile(name="min", acq=simpleacq, type=simplefiletype)
+    maxfile = archivefile(name="max", acq=simpleacq, type=simplefiletype)
 
     # Deal with round-off
     before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
@@ -87,7 +87,7 @@ def test_archivefilecopy_model(
     with pytest.raises(pw.IntegrityError):
         archivefilecopy(file=minfile, node=node)
     # But this should work
-    node2 = storagenode(name="new", group=genericgroup)
+    node2 = storagenode(name="new", group=simplegroup)
     archivefilecopy(file=minfile, node=node2)
 
     # Should be able to use update() to manually set last_update
@@ -109,20 +109,20 @@ def test_archivefilecopy_model(
 
 
 def test_archivefilecopyrequest_model(
-    genericgroup, storagenode, genericfile, archivefilecopyrequest
+    simplegroup, storagenode, simplefile, archivefilecopyrequest
 ):
     """Test ArchiveFileCopyRequest model"""
-    minnode = storagenode(name="min", group=genericgroup)
-    maxnode = storagenode(name="max", group=genericgroup)
+    minnode = storagenode(name="min", group=simplegroup)
+    maxnode = storagenode(name="max", group=simplegroup)
     before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
         microsecond=0
     )
-    archivefilecopyrequest(file=genericfile, node_from=minnode, group_to=genericgroup)
+    archivefilecopyrequest(file=simplefile, node_from=minnode, group_to=simplegroup)
     after = datetime.datetime.now() + datetime.timedelta(seconds=1)
     archivefilecopyrequest(
-        file=genericfile,
+        file=simplefile,
         node_from=maxnode,
-        group_to=genericgroup,
+        group_to=simplegroup,
         cancelled=True,
         completed=True,
         timestamp=before,
@@ -140,9 +140,9 @@ def test_archivefilecopyrequest_model(
     assert afcr["timestamp"] <= after
     del afcr["timestamp"]
     assert afcr == {
-        "file": genericfile.id,
+        "file": simplefile.id,
         "node_from": minnode.id,
-        "group_to": genericgroup.id,
+        "group_to": simplegroup.id,
         "id": 1,
         "cancelled": False,
         "completed": False,
@@ -152,9 +152,9 @@ def test_archivefilecopyrequest_model(
     assert ArchiveFileCopyRequest.select().where(
         ArchiveFileCopyRequest.node_from == maxnode
     ).dicts().get() == {
-        "file": genericfile.id,
+        "file": simplefile.id,
         "node_from": maxnode.id,
-        "group_to": genericgroup.id,
+        "group_to": simplegroup.id,
         "id": 2,
         "cancelled": True,
         "completed": True,
@@ -164,14 +164,14 @@ def test_archivefilecopyrequest_model(
     }
 
     # Not unique
-    archivefilecopyrequest(file=genericfile, node_from=minnode, group_to=genericgroup)
+    archivefilecopyrequest(file=simplefile, node_from=minnode, group_to=simplegroup)
 
 
-def test_copy_path(genericfile, genericnode, archivefilecopy):
+def test_copy_path(simplefile, simplenode, archivefilecopy):
     """Test ArchiveFileCopy.path."""
 
-    copy = archivefilecopy(file=genericfile, node=genericnode)
+    copy = archivefilecopy(file=simplefile, node=simplenode)
 
     assert copy.path == pathlib.PurePath(
-        genericnode.root, genericfile.acq.name, genericfile.name
+        simplenode.root, simplefile.acq.name, simplefile.name
     )

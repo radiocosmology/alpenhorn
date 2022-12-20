@@ -13,7 +13,7 @@ from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 
 
-def test_schema(dbproxy, genericnode):
+def test_schema(dbproxy, simplenode):
     assert set(dbproxy.get_tables()) == {"storagegroup", "storagenode"}
 
 
@@ -146,162 +146,162 @@ def test_ioload(have_lfs, storagegroup, storagenode):
         assert isinstance(io, BaseGroupIO)
 
 
-def test_local(genericnode, hostname):
+def test_local(simplenode, hostname):
     """Test StorageNode.local"""
 
-    genericnode.host = hostname
-    assert genericnode.local
+    simplenode.host = hostname
+    assert simplenode.local
 
-    genericnode.host = "other-host"
-    assert not genericnode.local
+    simplenode.host = "other-host"
+    assert not simplenode.local
 
 
 def test_copy_state(
-    genericnode, genericacq, archivefile, genericfiletype, archivefilecopy
+    simplenode, simpleacq, archivefile, simplefiletype, archivefilecopy
 ):
     """Test group.copy_state()."""
-    group = genericnode.group
+    group = simplenode.group
 
-    filen = archivefile(name="filen", acq=genericacq, type=genericfiletype, size_b=1)
-    archivefilecopy(file=filen, node=genericnode, has_file="N")
+    filen = archivefile(name="filen", acq=simpleacq, type=simplefiletype, size_b=1)
+    archivefilecopy(file=filen, node=simplenode, has_file="N")
     assert group.copy_state(filen) == "N"
 
-    filey = archivefile(name="filey", acq=genericacq, type=genericfiletype, size_b=1)
-    archivefilecopy(file=filey, node=genericnode, has_file="Y")
+    filey = archivefile(name="filey", acq=simpleacq, type=simplefiletype, size_b=1)
+    archivefilecopy(file=filey, node=simplenode, has_file="Y")
     assert group.copy_state(filey) == "Y"
 
-    filex = archivefile(name="filex", acq=genericacq, type=genericfiletype, size_b=1)
-    archivefilecopy(file=filex, node=genericnode, has_file="X")
+    filex = archivefile(name="filex", acq=simpleacq, type=simplefiletype, size_b=1)
+    archivefilecopy(file=filex, node=simplenode, has_file="X")
     assert group.copy_state(filex) == "X"
 
-    filem = archivefile(name="filem", acq=genericacq, type=genericfiletype, size_b=1)
-    archivefilecopy(file=filem, node=genericnode, has_file="M")
+    filem = archivefile(name="filem", acq=simpleacq, type=simplefiletype, size_b=1)
+    archivefilecopy(file=filem, node=simplenode, has_file="M")
     assert group.copy_state(filem) == "M"
 
     # Non-existent file returns 'N'
     missing = archivefile(
-        name="missing", acq=genericacq, type=genericfiletype, size_b=1
+        name="missing", acq=simpleacq, type=simplefiletype, size_b=1
     )
     assert group.copy_state(missing) == "N"
 
 
-def test_archive_property(genericgroup, storagenode):
+def test_archive_property(simplegroup, storagenode):
     """Test the StorageNode.archive boolean."""
-    node = storagenode(name="a", group=genericgroup, storage_type="A")
+    node = storagenode(name="a", group=simplegroup, storage_type="A")
     assert node.archive is True
 
-    node = storagenode(name="f", group=genericgroup, storage_type="F")
+    node = storagenode(name="f", group=simplegroup, storage_type="F")
     assert node.archive is False
 
-    node = storagenode(name="t", group=genericgroup, storage_type="T")
+    node = storagenode(name="t", group=simplegroup, storage_type="T")
     assert node.archive is False
 
 
-def test_undermin(genericgroup, storagenode):
+def test_undermin(simplegroup, storagenode):
     """Test StorageNode.under_min()."""
 
-    node = storagenode(name="anone", group=genericgroup, min_avail_gb=2.0)
+    node = storagenode(name="anone", group=simplegroup, min_avail_gb=2.0)
     assert node.under_min() is False  # avail_gb is None
 
-    node = storagenode(name="mnone", group=genericgroup, avail_gb=1.0)
+    node = storagenode(name="mnone", group=simplegroup, avail_gb=1.0)
     assert node.under_min() is False  # min_avail_gb is None
 
-    node = storagenode(name="mzero", group=genericgroup, avail_gb=1.0, min_avail_gb=0.0)
+    node = storagenode(name="mzero", group=simplegroup, avail_gb=1.0, min_avail_gb=0.0)
     assert node.under_min() is False  # min_avail_gb is zero
 
-    node = storagenode(name="false", group=genericgroup, avail_gb=3.0, min_avail_gb=2.0)
+    node = storagenode(name="false", group=simplegroup, avail_gb=3.0, min_avail_gb=2.0)
     assert node.under_min() is False
 
-    node = storagenode(name="true", group=genericgroup, avail_gb=1.0, min_avail_gb=2.0)
+    node = storagenode(name="true", group=simplegroup, avail_gb=1.0, min_avail_gb=2.0)
     assert node.under_min() is True
 
 
-def test_totalgb(genericgroup, storagenode, genericfile, archivefilecopy):
+def test_totalgb(simplegroup, storagenode, simplefile, archivefilecopy):
     """Test StorageNode.totalgb()."""
 
-    # Node with a copy (genericfile has size_b==1GiB)
-    node = storagenode(name="good", group=genericgroup)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    # Node with a copy (simplefile has size_b==1GiB)
+    node = storagenode(name="good", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.total_gb() == 1.0
 
     # Node with bad copy
-    node = storagenode(name="bad", group=genericgroup)
-    archivefilecopy(file=genericfile, node=node, has_file="X")
+    node = storagenode(name="bad", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="X")
     assert node.total_gb() == 0.0
 
     # Node with no file copies
-    node = storagenode(name="empty", group=genericgroup)
+    node = storagenode(name="empty", group=simplegroup)
     assert node.total_gb() == 0.0
 
 
-def test_overmax(genericgroup, storagenode, genericfile, archivefilecopy):
+def test_overmax(simplegroup, storagenode, simplefile, archivefilecopy):
     """Test StorageNode.over_max()."""
 
-    # genericfile has size_b==1GiB
-    node = storagenode(name="toofull", group=genericgroup, max_total_gb=0.1)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    # simplefile has size_b==1GiB
+    node = storagenode(name="toofull", group=simplegroup, max_total_gb=0.1)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.over_max() is True
 
-    node = storagenode(name="notfull", group=genericgroup, max_total_gb=2.0)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    node = storagenode(name="notfull", group=simplegroup, max_total_gb=2.0)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.over_max() is False
 
-    node = storagenode(name="zero", group=genericgroup, max_total_gb=0)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    node = storagenode(name="zero", group=simplegroup, max_total_gb=0)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.over_max() is False
 
     # This is the old default
-    node = storagenode(name="-1", group=genericgroup, max_total_gb=-1.0)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    node = storagenode(name="-1", group=simplegroup, max_total_gb=-1.0)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.over_max() is False
 
-    node = storagenode(name="none", group=genericgroup, max_total_gb=None)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    node = storagenode(name="none", group=simplegroup, max_total_gb=None)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.over_max() is False
 
 
-def test_namedcopypresent(genericgroup, storagenode, genericfile, archivefilecopy):
+def test_namedcopypresent(simplegroup, storagenode, simplefile, archivefilecopy):
     """Test StorageNode.named_copy_present()."""
-    acqname = genericfile.acq.name
-    filename = genericfile.name
+    acqname = simplefile.acq.name
+    filename = simplefile.name
 
-    node = storagenode(name="present", group=genericgroup)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
+    node = storagenode(name="present", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.named_copy_present(acqname, filename) is True
 
-    node = storagenode(name="corrupt", group=genericgroup)
-    archivefilecopy(file=genericfile, node=node, has_file="X")
+    node = storagenode(name="corrupt", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="X")
     assert node.named_copy_present(acqname, filename) is False
 
-    node = storagenode(name="missing", group=genericgroup)
+    node = storagenode(name="missing", group=simplegroup)
     assert node.named_copy_present(acqname, filename) is False
 
 
-def test_copypresent(genericgroup, storagenode, genericfile, archivefilecopy):
+def test_copypresent(simplegroup, storagenode, simplefile, archivefilecopy):
     """Test StorageNode.copy_present()."""
 
-    node = storagenode(name="present", group=genericgroup)
-    archivefilecopy(file=genericfile, node=node, has_file="Y")
-    assert node.copy_present(genericfile) is True
+    node = storagenode(name="present", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="Y")
+    assert node.copy_present(simplefile) is True
 
-    node = storagenode(name="corrupt", group=genericgroup)
-    archivefilecopy(file=genericfile, node=node, has_file="X")
-    assert node.copy_present(genericfile) is False
+    node = storagenode(name="corrupt", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="X")
+    assert node.copy_present(simplefile) is False
 
-    node = storagenode(name="missing", group=genericgroup)
-    assert node.copy_present(genericfile) is False
+    node = storagenode(name="missing", group=simplegroup)
+    assert node.copy_present(simplefile) is False
 
 
 def test_allfiles(
-    genericnode, genericacq, genericfiletype, archivefile, archivefilecopy
+    simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy
 ):
     """Test StorageNode.all_files()."""
 
     # Empty
-    file = archivefile(name="file1", acq=genericacq, type=genericfiletype)
-    archivefilecopy(file=file, node=genericnode, has_file="N")
-    assert genericnode.all_files() == list()
+    file = archivefile(name="file1", acq=simpleacq, type=simplefiletype)
+    archivefilecopy(file=file, node=simplenode, has_file="N")
+    assert simplenode.all_files() == list()
 
-    file = archivefile(name="file2", acq=genericacq, type=genericfiletype)
-    archivefilecopy(file=file, node=genericnode, has_file="Y")
-    assert genericnode.all_files() == list([pathlib.PurePath(genericacq.name, "file2")])
+    file = archivefile(name="file2", acq=simpleacq, type=simplefiletype)
+    archivefilecopy(file=file, node=simplenode, has_file="Y")
+    assert simplenode.all_files() == list([pathlib.PurePath(simpleacq.name, "file2")])

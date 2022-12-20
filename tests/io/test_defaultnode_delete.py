@@ -19,11 +19,11 @@ def mock_archive_count():
         yield
 
 
-def test_zero_len(queue, genericnode):
+def test_zero_len(queue, simplenode):
     """Test doing nothing when given nothing."""
 
-    genericnode.io.set_queue(queue)
-    genericnode.io.delete([])
+    simplenode.io.set_queue(queue)
+    simplenode.io.delete([])
 
     assert queue.qsize == 0
 
@@ -31,10 +31,10 @@ def test_zero_len(queue, genericnode):
 def test_ncopies(
     xfs,
     queue,
-    genericgroup,
+    simplegroup,
     storagenode,
-    genericacq,
-    genericfiletype,
+    simpleacq,
+    simplefiletype,
     archivefile,
     archivefilecopy,
     storage_type="F",
@@ -42,27 +42,27 @@ def test_ncopies(
     """Test not deleting from non-archival node when there are not enough other copies of the file."""
 
     # Need to make the containing directory
-    xfs.create_dir("/node/genericacq")
+    xfs.create_dir("/node/simpleacq")
 
     node = storagenode(
-        name="node", group=genericgroup, root="/node", storage_type=storage_type
+        name="node", group=simplegroup, root="/node", storage_type=storage_type
     )
-    arc1 = storagenode(name="arc1", group=genericgroup, root="/arc1", storage_type="A")
-    arc2 = storagenode(name="arc2", group=genericgroup, root="/arc2", storage_type="A")
+    arc1 = storagenode(name="arc1", group=simplegroup, root="/arc1", storage_type="A")
+    arc2 = storagenode(name="arc2", group=simplegroup, root="/arc2", storage_type="A")
 
     # Can't be deleted from node: only one archive copy
-    file1 = archivefile(name="file1", acq=genericacq, type=genericfiletype)
+    file1 = archivefile(name="file1", acq=simpleacq, type=simplefiletype)
     copy1 = archivefilecopy(file=file1, node=node, has_file="Y")
     archivefilecopy(file=file1, node=arc1, has_file="Y")
 
     # Can't be deleted from node: only one archive copy
-    file2 = archivefile(name="file2", acq=genericacq, type=genericfiletype)
+    file2 = archivefile(name="file2", acq=simpleacq, type=simplefiletype)
     copy2 = archivefilecopy(file=file2, node=node, has_file="Y")
     archivefilecopy(file=file2, node=arc1, has_file="Y")
     archivefilecopy(file=file2, node=arc2, has_file="N")
 
     # Can be deleted from node: two archived copies
-    file3 = archivefile(name="file3", acq=genericacq, type=genericfiletype)
+    file3 = archivefile(name="file3", acq=simpleacq, type=simplefiletype)
     copy3 = archivefilecopy(file=file3, node=node, has_file="Y")
     archivefilecopy(file=file3, node=arc1, has_file="Y")
     archivefilecopy(file=file3, node=arc2, has_file="Y")
@@ -93,10 +93,10 @@ def test_ncopies(
 def test_ncopies_archive(
     xfs,
     queue,
-    genericgroup,
+    simplegroup,
     storagenode,
-    genericacq,
-    genericfiletype,
+    simpleacq,
+    simplefiletype,
     archivefile,
     archivefilecopy,
 ):
@@ -105,10 +105,10 @@ def test_ncopies_archive(
     test_ncopies(
         xfs,
         queue,
-        genericgroup,
+        simplegroup,
         storagenode,
-        genericacq,
-        genericfiletype,
+        simpleacq,
+        simplefiletype,
         archivefile,
         archivefilecopy,
         storage_type="A",
@@ -118,63 +118,63 @@ def test_ncopies_archive(
 def test_delete_dirs(
     xfs,
     queue,
-    genericgroup,
+    simplegroup,
     storagenode,
-    genericacqtype,
+    simpleacqtype,
     archiveacq,
-    genericfiletype,
+    simplefiletype,
     archivefile,
     archivefilecopy,
     mock_archive_count,
 ):
     """Test deleting directories (and some files)."""
-    node = storagenode(name="node", group=genericgroup, root="/node")
+    node = storagenode(name="node", group=simplegroup, root="/node")
 
     copies = list()
 
-    acq1 = archiveacq(name="acq/1", type=genericacqtype)
+    acq1 = archiveacq(name="acq/1", type=simpleacqtype)
     copies.append(
         archivefilecopy(
-            file=archivefile(name="file/1", type=genericfiletype, acq=acq1),
+            file=archivefile(name="file/1", type=simplefiletype, acq=acq1),
             node=node,
             has_file="Y",
         )
     )
     copies.append(
         archivefilecopy(
-            file=archivefile(name="file/2", type=genericfiletype, acq=acq1),
+            file=archivefile(name="file/2", type=simplefiletype, acq=acq1),
             node=node,
             has_file="Y",
         )
     )
     copies.append(
         archivefilecopy(
-            file=archivefile(name="file/3", type=genericfiletype, acq=acq1),
-            node=node,
-            has_file="Y",
-        )
-    )
-
-    acq2 = archiveacq(name="acq/2", type=genericacqtype)
-    copies.append(
-        archivefilecopy(
-            file=archivefile(name="file/4", type=genericfiletype, acq=acq2),
-            node=node,
-            has_file="Y",
-        )
-    )
-    copies.append(
-        archivefilecopy(
-            file=archivefile(name="file/5", type=genericfiletype, acq=acq2),
+            file=archivefile(name="file/3", type=simplefiletype, acq=acq1),
             node=node,
             has_file="Y",
         )
     )
 
-    acq3 = archiveacq(name="acq3", type=genericacqtype)
+    acq2 = archiveacq(name="acq/2", type=simpleacqtype)
     copies.append(
         archivefilecopy(
-            file=archivefile(name="file6", type=genericfiletype, acq=acq3),
+            file=archivefile(name="file/4", type=simplefiletype, acq=acq2),
+            node=node,
+            has_file="Y",
+        )
+    )
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file/5", type=simplefiletype, acq=acq2),
+            node=node,
+            has_file="Y",
+        )
+    )
+
+    acq3 = archiveacq(name="acq3", type=simpleacqtype)
+    copies.append(
+        archivefilecopy(
+            file=archivefile(name="file6", type=simplefiletype, acq=acq3),
             node=node,
             has_file="Y",
         )

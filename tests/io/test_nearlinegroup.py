@@ -45,16 +45,16 @@ def group(xfs, mock_lfs, hostname, queue, storagegroup, storagenode):
 @pytest.fixture
 def req(
     group,
-    genericgroup,
+    simplegroup,
     storagenode,
-    genericfile,
+    simplefile,
     archivefilecopyrequest,
 ):
     """Create an ArchiveFileCopyRequest targetting the nearline group."""
     group_to = group[0]
-    node_from = storagenode(name="src", group=genericgroup)
+    node_from = storagenode(name="src", group=simplegroup)
     req = archivefilecopyrequest(
-        file=genericfile, node_from=node_from, group_to=group_to
+        file=simplefile, node_from=node_from, group_to=group_to
     )
 
     return req

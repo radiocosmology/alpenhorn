@@ -14,7 +14,7 @@ def db_setup(
     mock_filesize,
     storagegroup,
     storagenode,
-    genericfile,
+    simplefile,
     archivefilecopy,
     archivefilecopyrequest,
 ):
@@ -28,9 +28,9 @@ def db_setup(
 
     return (
         node_to,
-        archivefilecopy(file=genericfile, node=node_from, has_file="Y"),
+        archivefilecopy(file=simplefile, node=node_from, has_file="Y"),
         archivefilecopyrequest(
-            file=genericfile, node_from=node_from, group_to=group_to
+            file=simplefile, node_from=node_from, group_to=group_to
         ),
         time.time() - 2,  # start_time
     )

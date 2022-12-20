@@ -83,7 +83,7 @@ def test_exists(xfs, groupnode):
     assert group.io.exists("no-acq/no-file") is None
 
 
-def test_pull_handoff(groupnode, genericrequest):
+def test_pull_handoff(groupnode, simplerequest):
     """Test DefaultGroupIO.pull()."""
 
     # We mock the DefaultNodeIO.pull() method because we don't need to test it here.
@@ -91,7 +91,7 @@ def test_pull_handoff(groupnode, genericrequest):
     node.io.pull = MagicMock(return_value=None)
 
     # Call pull
-    group.io.pull(genericrequest)
+    group.io.pull(simplerequest)
 
     # Check for hand-off to the node
-    node.io.pull.assert_called_with(genericrequest)
+    node.io.pull.assert_called_with(simplerequest)

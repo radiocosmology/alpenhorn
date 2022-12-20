@@ -57,7 +57,7 @@ def test_req(
     hostname,
     storagegroup,
     storagenode,
-    genericfile,
+    simplefile,
     archivefilecopy,
     archivefilecopyrequest,
 ):
@@ -78,7 +78,7 @@ def test_req(
         address="addr",
     )
 
-    copy = archivefilecopy(file=genericfile, node=node_from, has_file="Y")
+    copy = archivefilecopy(file=simplefile, node=node_from, has_file="Y")
 
     # Create source file and dest root
     xfs.create_dir("/node_to")
@@ -86,7 +86,7 @@ def test_req(
     return (
         node_to,
         archivefilecopyrequest(
-            file=genericfile, node_from=node_from, group_to=group_to
+            file=simplefile, node_from=node_from, group_to=group_to
         ),
     )
 

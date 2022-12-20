@@ -81,16 +81,16 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
 @pytest.fixture
 def remote_req(
     transport_fleet,
-    genericgroup,
+    simplegroup,
     storagenode,
-    genericfile,
+    simplefile,
     archivefilecopyrequest,
 ):
     """Create a non-local ArchiveFileCopyRequest targetting the transport group."""
     group_to, _ = transport_fleet
-    node_from = storagenode(name="src", group=genericgroup, host="other-host")
+    node_from = storagenode(name="src", group=simplegroup, host="other-host")
     req = archivefilecopyrequest(
-        file=genericfile, node_from=node_from, group_to=group_to
+        file=simplefile, node_from=node_from, group_to=group_to
     )
 
     return req

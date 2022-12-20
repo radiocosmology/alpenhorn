@@ -412,97 +412,97 @@ def archivefilecopyrequest(factory_factory):
 
 
 @pytest.fixture
-def genericgroup(storagegroup):
-    """Create a generic StorageGroup record."""
-    return storagegroup(name="genericgroup")
+def simplegroup(storagegroup):
+    """Create a simple StorageGroup record."""
+    return storagegroup(name="simplegroup")
 
 
 @pytest.fixture
-def genericnode(storagenode, storagegroup):
-    """Create a generic StorageNode record.
+def simplenode(storagenode, storagegroup):
+    """Create a simple StorageNode record.
 
     Creates all necessary backrefs.
     """
-    group = storagegroup(name="genericnode_group")
-    return storagenode(name="genericnode", group=group, root="/node")
+    group = storagegroup(name="simplenode_group")
+    return storagenode(name="simplenode", group=group, root="/node")
 
 
 @pytest.fixture
-def genericacqtype(acqtype):
-    """Create a generic FileType record."""
-    return acqtype(name="genericacqtype")
+def simpleacqtype(acqtype):
+    """Create a simple FileType record."""
+    return acqtype(name="simpleacqtype")
 
 
 @pytest.fixture
-def genericacq(genericacqtype, archiveacq):
-    """Create a generic ArchiveAcq record."""
-    return archiveacq(name="genericacq", type=genericacqtype)
+def simpleacq(simpleacqtype, archiveacq):
+    """Create a simple ArchiveAcq record."""
+    return archiveacq(name="simpleacq", type=simpleacqtype)
 
 
 @pytest.fixture
-def genericfiletype(filetype):
-    """Create a generic FileType record."""
-    return filetype(name="genericfiletype")
+def simplefiletype(filetype):
+    """Create a simple FileType record."""
+    return filetype(name="simplefiletype")
 
 
 @pytest.fixture
-def genericfile(genericacqtype, archiveacq, genericfiletype, archivefile):
-    """Create a generic ArchiveFile record.
+def simplefile(simpleacqtype, archiveacq, simplefiletype, archivefile):
+    """Create a simple ArchiveFile record.
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="genericfile_acq", type=genericacqtype)
+    acq = archiveacq(name="simplefile_acq", type=simpleacqtype)
     return archivefile(
-        name="genericfile",
+        name="simplefile",
         acq=acq,
-        type=genericfiletype,
+        type=simplefiletype,
         md5sum="d41d8cd98f00b204e9800998ecf8427e",
         size_b=2**20,
     )
 
 
 @pytest.fixture
-def genericcopy(
-    genericacqtype,
+def simplecopy(
+    simpleacqtype,
     archiveacq,
-    genericfiletype,
+    simplefiletype,
     archivefile,
     archivefilecopy,
     storagenode,
     storagegroup,
 ):
-    """Create a generic ArchiveFileCopy record.
+    """Create a simple ArchiveFileCopy record.
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="genericcopy_acq", type=genericacqtype)
+    acq = archiveacq(name="simplecopy_acq", type=simpleacqtype)
     file = archivefile(
-        name="genericcopy_file", acq=acq, type=genericfiletype, size_b=2**20
+        name="simplecopy_file", acq=acq, type=simplefiletype, size_b=2**20
     )
-    group = storagegroup(name="genericcopy_group")
-    node = storagenode(name="genericcopy_node", group=group)
+    group = storagegroup(name="simplecopy_group")
+    node = storagenode(name="simplecopy_node", group=group)
     return archivefilecopy(file=file, node=node)
 
 
 @pytest.fixture
-def genericrequest(
-    genericacqtype,
+def simplerequest(
+    simpleacqtype,
     archiveacq,
-    genericfiletype,
+    simplefiletype,
     archivefile,
     archivefilecopyrequest,
     storagenode,
     storagegroup,
 ):
-    """Create a generic ArchiveFileCopyRequest record.
+    """Create a simple ArchiveFileCopyRequest record.
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="genericrequest_acq", type=genericacqtype)
+    acq = archiveacq(name="simplerequest_acq", type=simpleacqtype)
     file = archivefile(
-        name="genericrequest_file", acq=acq, type=genericfiletype, size_b=2**20
+        name="simplerequest_file", acq=acq, type=simplefiletype, size_b=2**20
     )
-    group1 = storagegroup(name="genericrequest_group1")
-    group2 = storagegroup(name="genericrequest_group2")
-    node = storagenode(name="genericrequest_node", group=group1)
+    group1 = storagegroup(name="simplerequest_group1")
+    group2 = storagegroup(name="simplerequest_group2")
+    node = storagenode(name="simplerequest_node", group=group1)
     return archivefilecopyrequest(file=file, node_from=node, group_to=group2)

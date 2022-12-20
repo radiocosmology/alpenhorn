@@ -13,7 +13,7 @@ import peewee as pw
 from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 
-def test_schema(dbproxy, genericfile):
+def test_schema(dbproxy, simplefile):
     assert set(dbproxy.get_tables()) == {
         "acqtype",
         "archiveacq",
@@ -43,27 +43,27 @@ def test_acqtype_model(acqtype):
     }
 
 
-def test_acq_model(genericacqtype, archiveacq):
-    archiveacq(name="min", type=genericacqtype)
+def test_acq_model(simpleacqtype, archiveacq):
+    archiveacq(name="min", type=simpleacqtype)
     archiveacq(
-        name="max", type=genericacqtype, comment="Comment, apparently, is not a note"
+        name="max", type=simpleacqtype, comment="Comment, apparently, is not a note"
     )
 
     # name is unique
     with pytest.raises(pw.IntegrityError):
-        archiveacq(name="min", type=genericacqtype)
+        archiveacq(name="min", type=simpleacqtype)
 
     # Check records in DB
     assert ArchiveAcq.select().where(ArchiveAcq.name == "min").dicts().get() == {
         "id": 1,
         "name": "min",
-        "type": genericacqtype.id,
+        "type": simpleacqtype.id,
         "comment": None,
     }
     assert ArchiveAcq.select().where(ArchiveAcq.name == "max").dicts().get() == {
         "id": 2,
         "name": "max",
-        "type": genericacqtype.id,
+        "type": simpleacqtype.id,
         "comment": "Comment, apparently, is not a note",
     }
 
@@ -89,15 +89,15 @@ def test_filetype_model(filetype):
     }
 
 
-def test_file_model(genericacqtype, archiveacq, genericfiletype, archivefile):
-    acq1 = archiveacq(name="acq1", type=genericacqtype)
+def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
+    acq1 = archiveacq(name="acq1", type=simpleacqtype)
     before = datetime.datetime.now().replace(microsecond=0)
-    archivefile(name="min", acq=acq1, type=genericfiletype)
+    archivefile(name="min", acq=acq1, type=simplefiletype)
     after = datetime.datetime.now()
     archivefile(
         name="max",
         acq=acq1,
-        type=genericfiletype,
+        type=simplefiletype,
         md5sum="123456789",
         registered=after,
         size_b=45,
@@ -115,7 +115,7 @@ def test_file_model(genericacqtype, archiveacq, genericfiletype, archivefile):
         "id": 1,
         "acq": acq1.id,
         "name": "min",
-        "type": genericacqtype.id,
+        "type": simpleacqtype.id,
         "md5sum": None,
         "size_b": None,
     }
@@ -123,7 +123,7 @@ def test_file_model(genericacqtype, archiveacq, genericfiletype, archivefile):
         "id": 2,
         "acq": acq1.id,
         "name": "max",
-        "type": genericacqtype.id,
+        "type": simpleacqtype.id,
         "md5sum": "123456789",
         "registered": after,
         "size_b": 45,
@@ -131,68 +131,68 @@ def test_file_model(genericacqtype, archiveacq, genericfiletype, archivefile):
 
     # (acq, name) is unique
     with pytest.raises(pw.IntegrityError):
-        archivefile(name="min", acq=acq1, type=genericfiletype)
+        archivefile(name="min", acq=acq1, type=simplefiletype)
     # But this should work
-    acq2 = archiveacq(name="acq2", type=genericacqtype)
-    archivefile(name="min", acq=acq2, type=genericfiletype)
+    acq2 = archiveacq(name="acq2", type=simpleacqtype)
+    archivefile(name="min", acq=acq2, type=simplefiletype)
 
 
-def test_file_path(genericacq, archivefile, genericfiletype):
+def test_file_path(simpleacq, archivefile, simplefiletype):
     """Test ArchiveFile.path."""
-    file = archivefile(name="file", acq=genericacq, type=genericfiletype)
+    file = archivefile(name="file", acq=simpleacq, type=simplefiletype)
 
-    assert file.path == pathlib.PurePath(genericacq.name, "file")
+    assert file.path == pathlib.PurePath(simpleacq.name, "file")
 
 
-def test_archive_count(genericgroup, storagenode, genericfile, archivefilecopy):
+def test_archive_count(simplegroup, storagenode, simplefile, archivefilecopy):
     """Test ArchiveFile.archive_count()"""
 
     # Create a bunch of copies in various states on various node types
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n1", group=genericgroup, storage_type="A"),
+        file=simplefile,
+        node=storagenode(name="n1", group=simplegroup, storage_type="A"),
         has_file="N",
     )
-    assert genericfile.archive_count() == 0
+    assert simplefile.archive_count() == 0
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n2", group=genericgroup, storage_type="F"),
+        file=simplefile,
+        node=storagenode(name="n2", group=simplegroup, storage_type="F"),
         has_file="Y",
     )
-    assert genericfile.archive_count() == 0
+    assert simplefile.archive_count() == 0
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n3", group=genericgroup, storage_type="T"),
+        file=simplefile,
+        node=storagenode(name="n3", group=simplegroup, storage_type="T"),
         has_file="Y",
     )
-    assert genericfile.archive_count() == 0
+    assert simplefile.archive_count() == 0
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n4", group=genericgroup, storage_type="F"),
+        file=simplefile,
+        node=storagenode(name="n4", group=simplegroup, storage_type="F"),
         has_file="Y",
     )
-    assert genericfile.archive_count() == 0
+    assert simplefile.archive_count() == 0
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n5", group=genericgroup, storage_type="A"),
+        file=simplefile,
+        node=storagenode(name="n5", group=simplegroup, storage_type="A"),
         has_file="Y",
     )
-    assert genericfile.archive_count() == 1
+    assert simplefile.archive_count() == 1
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n6", group=genericgroup, storage_type="A"),
+        file=simplefile,
+        node=storagenode(name="n6", group=simplegroup, storage_type="A"),
         has_file="X",
     )
-    assert genericfile.archive_count() == 1
+    assert simplefile.archive_count() == 1
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n7", group=genericgroup, storage_type="A"),
+        file=simplefile,
+        node=storagenode(name="n7", group=simplegroup, storage_type="A"),
         has_file="M",
     )
-    assert genericfile.archive_count() == 1
+    assert simplefile.archive_count() == 1
     archivefilecopy(
-        file=genericfile,
-        node=storagenode(name="n8", group=genericgroup, storage_type="A"),
+        file=simplefile,
+        node=storagenode(name="n8", group=simplegroup, storage_type="A"),
         has_file="Y",
     )
-    assert genericfile.archive_count() == 2
+    assert simplefile.archive_count() == 2
