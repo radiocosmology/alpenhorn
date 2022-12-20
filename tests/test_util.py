@@ -1,7 +1,7 @@
 """alpenhorn.util tests."""
 
 import pytest
-from alpenhorn import util
+from alpenhorn import util, config
 
 
 def test_run_retval0():
@@ -45,8 +45,17 @@ def test_md5sum_file(tmp_path):
     assert util.md5sum_file(file) == "9e107d9d372bb6826bd81d3542a419d6"
 
 
-def test_getshorthostname():
-    """Test util.get_short_hostname"""
-    host = util.get_short_hostname()
+def test_gethostname_config():
+    """Test util.get_hostname with config"""
+
+    # Set hostname in config
+    config.merge_config({"base": {"hostname": "alpenhost"}})
+
+    assert util.get_hostname() == "alpenhost"
+
+
+def test_gethostname_default():
+    """Test util.get_hostname with no config"""
+    host = util.get_hostname()
     assert "." not in host
     assert len(host) > 0

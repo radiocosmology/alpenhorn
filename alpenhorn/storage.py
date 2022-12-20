@@ -3,6 +3,7 @@ import peewee as pw
 from peewee import fn
 
 from .db import EnumField, base_model
+from . import util
 
 
 def _get_io_instance(obj):
@@ -185,6 +186,11 @@ class StorageNode(base_model):
         if getattr(self, "_remote", None) is None:
             self._remote = self.io.get_remote()
         return self._remote
+
+    @property
+    def local(self):
+        """Is this node local to where we are running?"""
+        return self.host == util.get_hostname()
 
     @property
     def archive(self):

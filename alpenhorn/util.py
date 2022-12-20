@@ -5,6 +5,8 @@
 import socket
 import logging
 
+from . import config
+
 log = logging.getLogger(__name__)
 
 
@@ -96,6 +98,12 @@ def md5sum_file(filename, hr=True, cmd_line=False):
         return md5.digest()
 
 
-def get_short_hostname():
-    """Returns the short hostname (up to the first '.')"""
+def get_hostname():
+    """Returns the canonical hostname for the machine we're running on.
+
+    If there is a host name specified in the config, that is returned
+    otherwise the local hostname up to the first '.' is returned"""
+    if config.config is not None and "hostname" in config.config.get("base", dict()):
+        return config.config["base"]["hostname"]
+
     return socket.gethostname().split(".")[0]

@@ -15,6 +15,10 @@ Example config:
 
 .. codeblock:: yaml
 
+    # Base configuration
+    base:
+        hostname: alpenhost
+
     # Configure the data base connection with a peewee db_url
     database:
         url: peewee_url
@@ -24,6 +28,7 @@ Example config:
     extensions:
         - alpenhorn.generic
         - alpenhorn_chime
+        - chimedb.core.alpenhorn
 
     # Logging configuration
     logging:

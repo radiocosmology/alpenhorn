@@ -146,6 +146,16 @@ def test_ioload(lfs, storagegroup, storagenode):
         assert isinstance(io, BaseGroupIO)
 
 
+def test_local(genericnode, hostname):
+    """Test StorageNode.local"""
+
+    genericnode.host = hostname
+    assert genericnode.local
+
+    genericnode.host = "other-host"
+    assert not genericnode.local
+
+
 def test_copy_state(
     genericnode, genericacq, archivefile, genericfiletype, archivefilecopy
 ):

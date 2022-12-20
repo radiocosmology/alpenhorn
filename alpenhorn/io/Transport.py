@@ -19,8 +19,8 @@ class TransportGroupIO(BaseGroupIO):
             node.storage_type == 'T', but no restrictions are put on the
             io_class of nodes
         - all pulls to the StorageGroup must be local: non-local pull
-            requests will be cancelled
-        - when handling pull requests, transport nodes are priorities by
+            requests will be ignored
+        - when handling pull requests, transport nodes are prioritised by
             increasing free space: the group will attempt to pull a file
             to the fullest node that it thinks it will fit on.
     """
@@ -48,7 +48,7 @@ class TransportGroupIO(BaseGroupIO):
             else:
                 self._nodes.append(node)
 
-        return len(self._nodes) == 0
+        return len(self._nodes) != 0
 
     def exists(self, path):
         """Checks whether a file called path exists in this group.
@@ -57,7 +57,7 @@ class TransportGroupIO(BaseGroupIO):
         file was found.
         """
         for node in self._nodes:
-            if node.exists(path):
+            if node.io.exists(path):
                 return node
 
         return None
@@ -69,7 +69,16 @@ class TransportGroupIO(BaseGroupIO):
         file to be pulled.
         """
 
-        # First sort the nodes; this has to be done for every request because
+        # If this is a non-local transfer, skip it.
+        if not req.node_from.local:
+            log.info(
+                f"Skipping pull of {req.file.path} from node "
+                f"{req.node_from.name} to group {req.group_to.name}: "
+                f"non-local transfer request."
+            )
+            return
+
+        # Sort the nodes; this has to be done for every request because
         # available space (hopefully) changes as requests are submitted and
         # complete.
 
@@ -91,8 +100,8 @@ class TransportGroupIO(BaseGroupIO):
             if node.avail_gb is None:
                 # In this case, we've run out of nodes that know how full they are
                 # so just use the first one we get.  This is probably going to
-                # cause trouble; probably shouldn't be using transport disks which
-                # can't tell you how full they are.
+                # cause trouble; probably we shouldn't be using transport disks
+                # which can't tell us how full they are.
                 node_to = node
                 break
 

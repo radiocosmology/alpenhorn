@@ -157,6 +157,20 @@ def xfs(fs, mock_statvfs, mock_stat):
 
 
 @pytest.fixture
+def hostname():
+    """Ensure our hostname is set.
+
+    Returns the hostname."""
+
+    config.merge_config({"base": {"hostname": "alpenhost"}})
+
+    yield "alpenhost"
+
+    # Reset the config
+    config.merge_config(dict(), replace=True)
+
+
+@pytest.fixture
 def use_chimedb():
     """Use chimedb, if possible.
 

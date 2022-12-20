@@ -28,8 +28,8 @@ def pull_async(task, node, req):
     # Automatically release bytes on task completion
     task.on_cleanup(node.io.release_bytes, args=(req.file.size_b,))
 
-    # Is source and dest on the same host?
-    local = req.node_from.host == node.host
+    # We know dest is local, so if source is too, this is a local transfer
+    local = req.node_from.local
 
     # Source spec
     if local:

@@ -62,7 +62,7 @@ def cli():
     pool.setsignals(wpool)
 
     # Get the name of this host
-    host = util.get_short_hostname()
+    host = util.get_hostname()
 
     # Loop over nodes active on this host looking for auto-imported ones
     node_have = False

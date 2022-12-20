@@ -53,18 +53,27 @@ def have_rsync(mock_run_command):
 
 @pytest.fixture
 def test_req(
-    xfs, storagegroup, storagenode, genericfile, archivefilecopy, archivefilecopyrequest
+    xfs,
+    hostname,
+    storagegroup,
+    storagenode,
+    genericfile,
+    archivefilecopy,
+    archivefilecopyrequest,
 ):
     """Create a test ArchiveFileCopyRequest.
 
     Returns a two-element tuple: (node_to, copy_request)"""
 
     group_to = storagegroup(name="group_to")
-    node_to = storagenode(name="node_to", group=group_to, root="/node_to")
+    node_to = storagenode(
+        name="node_to", group=group_to, host=hostname, root="/node_to"
+    )
     node_from = storagenode(
         name="node_from",
         group=storagegroup(name="group_from"),
         root="/node_from",
+        host=hostname,  # By default the transfer is local
         username="user",
         address="addr",
     )
@@ -160,8 +169,7 @@ def test_pull_async_noroute(queue, pull_async):
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
@@ -184,8 +192,7 @@ def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async):
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
@@ -211,8 +218,7 @@ def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async):
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
@@ -242,8 +248,7 @@ def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async):
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
@@ -269,8 +274,7 @@ def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
@@ -299,8 +303,7 @@ def test_pull_async_remote_nomethod(queue, pull_async):
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
@@ -368,8 +371,7 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
     node, req = pull_async
 
     # Make the request non-local
-    node.host = "here"
-    req.node_from.host = "there"
+    req.node_from.host = "other-host"
 
     # Call the async
     task, key = queue.get()
