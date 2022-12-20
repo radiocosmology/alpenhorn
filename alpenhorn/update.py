@@ -53,7 +53,7 @@ def update_loop(host, queue, pool):
         # nodes and are re-queried every loop iteration so we can
         # detect changes in available storage media
         for node in StorageNode.select().where(
-            StorageNode.host == host, StorageNode.active is True
+            StorageNode.host == host, StorageNode.active == True
         ):
             # Init I/O, if necessary.
             node.io.set_queue(queue)
@@ -167,7 +167,7 @@ def update_group(group, host, queue, idle):
     # Find all active nodes in this group on this host
     nodes_in_group = list(
         StorageNode.select().where(
-            StorageNode.active is True,
+            StorageNode.active == True,
             StorageNode.host == host,
             StorageNode.group == group,
         )

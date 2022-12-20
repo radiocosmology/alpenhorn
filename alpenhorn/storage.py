@@ -59,13 +59,10 @@ class StorageGroup(base_model):
         An optional JSON blob of configuration data interpreted by the I/O class
     """
 
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=64, unique=True)
     io_class = pw.CharField(max_length=255, null=True)
     notes = pw.TextField(null=True)
     io_config = pw.TextField(null=True)
-
-    class Meta:
-        indexes = ((("name",), True),)  # name is unique
 
     @property
     def io(self):
@@ -151,7 +148,7 @@ class StorageNode(base_model):
         An optional JSON blob of configuration data interpreted by the I/O class
     """
 
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=64, unique=True)
     root = pw.CharField(max_length=255, null=True)
     host = pw.CharField(max_length=64, null=True)
     username = pw.CharField(max_length=64, null=True)
@@ -168,9 +165,6 @@ class StorageNode(base_model):
     avail_gb_last_checked = pw.DateTimeField(null=True)
     notes = pw.TextField(null=True)
     io_config = pw.TextField(null=True)
-
-    class Meta:
-        indexes = ((("name",), True),)  # name is unique
 
     @property
     def io(self):

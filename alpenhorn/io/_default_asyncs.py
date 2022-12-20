@@ -137,7 +137,7 @@ def check_async(task, node, copy):
         if copy.file.size_b and size != copy.file.size_b:
             log.error(
                 f"File {copyname} on node {node.name} is corrupt! "
-                f"Size: {copy.file.size_b}; expected: {copy.file.size_b}"
+                f"Size: {size}; expected: {copy.file.size_b}"
             )
             copy.has_file = "X"
         else:

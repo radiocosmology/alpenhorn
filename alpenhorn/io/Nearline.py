@@ -3,7 +3,6 @@
 These I/O classes are specific to the nearline tape archive at cedar.
 """
 
-import os
 import logging
 import pathlib
 import peewee as pw
@@ -15,9 +14,7 @@ from alpenhorn.io.base import BaseGroupIO, BaseNodeRemote
 from alpenhorn.io.ioutil import pretty_bytes
 from alpenhorn.querywalker import QueryWalker
 from alpenhorn.io.LFSQuota import LFSQuotaNodeIO
-
-# This is the DefaultIO check async; used in auto_verify()
-from ._default_asyncs import check_async
+from alpenhorn.io import _default_asyncs
 
 log = logging.getLogger(__name__)
 
@@ -62,19 +59,14 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             "headroom", self.config["fixed_quota"] * 2**8
         )
 
-    def before_update(self, idle):
-        """Before node update check.
-
-        If idle is True, call self.release_files to potentially free up space."""
-        # If the update is going to happen, clear up headroom, if necessary
-        if idle:
-            self.release_files()
-
-        # Continue with the update
-        return True
-
     def release_files(self):
         """Release files from the nearline disk to keep the headroom clear."""
+
+        headroom_needed = self._headroom - self._lfs.quota_remaining(self.node.root)
+
+        # Nothing to do
+        if headroom_needed <= 0:
+            return
 
         def _async(task, node, lfs, headroom_needed):
             total_files = 0
@@ -87,25 +79,25 @@ class NearlineNodeIO(LFSQuotaNodeIO):
                 .where(
                     ArchiveFileCopy.node == node,
                     ArchiveFileCopy.has_file == "Y",
-                    ArchiveFileCopy.ready is True,
+                    ArchiveFileCopy.ready == True,
                 )
-                .order_by(ArchiveFile.last_updated)
+                .order_by(ArchiveFileCopy.last_update)
             ):
                 # Skip unarchived files
-                if not lfs.hsm_archived(copy.file.path):
+                if not lfs.hsm_archived(copy.path):
                     continue
 
                 log.debug(
                     f"releasing file copy {copy.path} "
-                    f"[={pretty_bytes(copy.size_b)}] on node {self.node.name}"
+                    f"[={pretty_bytes(copy.file.size_b)}] on node {self.node.name}"
                 )
-                lfs.hsm_release(copy.file.path)
-                # Update copy record
+                lfs.hsm_release(copy.path)
+                # Update copy record immediately
                 ArchiveFileCopy.update(ready=False).where(
                     ArchiveFileCopy.id == copy.id
                 ).execute()
                 total_files += 1
-                total_bytes += copy.size_b
+                total_bytes += copy.file.size_b
                 if total_bytes >= headroom_needed:
                     break
             log.info(
@@ -114,22 +106,25 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             )
             return
 
-        headroom_needed = self._headroom - self._lfs.quota_remaining(
-            self._nearline.root
-        )
-
-        # Nothing to do
-        if headroom_needed <= 0:
-            return
-
         # Do the rest asynchronously
         Task(
             func=_async,
-            queue=self.queue,
+            queue=self._queue,
             key=self.node.name,
             args=(self.node, self._lfs, headroom_needed),
             name=f"Node {self.node.name}: HSM release {pretty_bytes(headroom_needed)}",
         )
+
+    def before_update(self, idle):
+        """Before node update check.
+
+        If idle is True, call self.release_files to potentially free up space."""
+        # If the update is going to happen, clear up headroom, if necessary
+        if idle:
+            self.release_files()
+
+        # Continue with the update
+        return True
 
     def check_active(self):
         """Returns True.
@@ -148,12 +143,13 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         """Returns the size of the file given by path.
 
         This _always_ returns the apprent size, since the size on tape is
-        not known (or important).
+        not known (or important), and the size on disk is usually that of the
+        the file stub.
         """
-        path = pathlib.PurePath(path)
+        path = pathlib.Path(path)
         if not path.is_absolute():
-            path = pathlib.PurePath(self.node.root, path)
-        return os.path.getsize(path)
+            path = pathlib.Path(self.node.root, path)
+        return path.stat().st_size
 
     def reserve_bytes(self, size, check_only=False):
         """Returns True."""
@@ -222,26 +218,18 @@ class NearlineNodeIO(LFSQuotaNodeIO):
                 yield 30
 
             # Do the check by inlining the Default-I/O function
-            check_async(task, node, copy)
+            _default_asyncs.check_async(task, node, copy)
 
             # Before releasing the file, check whether the DB thinks
             # it's restored.  If it is don't bother releasing, since
             # it's better to be consistent with the DB
-            ready = (
-                ArchiveFileCopy.select(ArchiveFileCopy.ready)
-                .where(ArchiveFileCopy.id == copy.id)
-                .scalar()
-            )
-            if not ready:
+            if not ArchiveFileCopy.get(id=copy.id).ready:
                 lfs.hsm_release(copy.path)
 
         Task(
             func=_async,
-            queue=self.queue,
-            # We put this in a secret low-priority queue to prevent this
-            # task waiting for restore from stopping regular I/O updates
-            # in subsequent update loops
-            key=self.node.name + "---alpenhornd-idle",
+            queue=self._queue,
+            key=self.node.name,
             args=(self.node, self._lfs, copy),
             name=(
                 f"Auto-verify released file {copy.file.name} "
@@ -251,19 +239,20 @@ class NearlineNodeIO(LFSQuotaNodeIO):
 
     def ready(self, req):
         """Recall a file, if necessary, to prepare for a remote pull."""
-        # If the file is released, restore it
-        state = self._lfs.hsm_state(req.file.path)
+
+        fullpath = pathlib.Path(self.node.root, req.file.path)
+        state = self._lfs.hsm_state(fullpath)
 
         # Update DB based on HSM state
         ArchiveFileCopy.update(
-            ready=(state == self._lfs.HSM_RECALLED or state == self._lfs.HSM_UNARCHIVED)
+            ready=(state == self._lfs.HSM_RESTORED or state == self._lfs.HSM_UNARCHIVED)
         ).where(
             ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == req.node_from
         ).execute()
 
         # If it's restorable, restore it
         if state == self._lfs.HSM_RELEASED:
-            self._lfs.hsm_restore(req.file.path)
+            self._lfs.hsm_restore(fullpath)
 
 
 class NearlineGroupIO(BaseGroupIO):
@@ -352,30 +341,6 @@ class NearlineGroupIO(BaseGroupIO):
         the alpenhornd daemon can properly manage free space.
         """
 
-        def _async(task, node, lfs, copies):
-            for copy in copies:
-                state = lfs.hsm_state(copy.path)
-                if state == lfs.HSM_MISSING:
-                    # File is unexpectedly gone.
-                    log.warning(
-                        f"File copy {copy.file.path} on node {node.name} is missing!"
-                    )
-                    ArchiveFileCopy.update(has_file="N").where(
-                        ArchiveFileCopy.id == copy.id
-                    )
-                elif state == lfs.HSM_RELEASED:
-                    if copy.ready:
-                        log.debug("Updating file copy {copy.file.path}: ready -> False")
-                        ArchiveFileCopy.update(ready=False).where(
-                            ArchiveFileCopy.id == copy.id
-                        )
-                else:  # i.e. RECALLED or UNARCHIVED
-                    if not copy.ready:
-                        log.debug("Updating file copy {copy.file.path}: ready -> True")
-                        ArchiveFileCopy.update(ready=True).where(
-                            ArchiveFileCopy.id == copy.id
-                        )
-
         # Hedge against the nearline node changing somehow between update loops
         if self._release_node != self._nearline.id:
             self._release_node = None
@@ -402,10 +367,34 @@ class NearlineGroupIO(BaseGroupIO):
             self._release_node = None
             return
 
+        def _async(task, node, lfs, copies):
+            for copy in copies:
+                state = lfs.hsm_state(copy.path)
+                if state == lfs.HSM_MISSING:
+                    # File is unexpectedly gone.
+                    log.warning(
+                        f"File copy {copy.file.path} on node {node.name} is missing!"
+                    )
+                    ArchiveFileCopy.update(has_file="N").where(
+                        ArchiveFileCopy.id == copy.id
+                    )
+                elif state == lfs.HSM_RELEASED:
+                    if copy.ready:
+                        log.debug("Updating file copy {copy.file.path}: ready -> False")
+                        ArchiveFileCopy.update(ready=False).where(
+                            ArchiveFileCopy.id == copy.id
+                        )
+                else:  # i.e. RESTORED or UNARCHIVED
+                    if not copy.ready:
+                        log.debug("Updating file copy {copy.file.path}: ready -> True")
+                        ArchiveFileCopy.update(ready=True).where(
+                            ArchiveFileCopy.id == copy.id
+                        )
+
         # Copies get checked in an async
         Task(
             func=_async,
-            queue=self.queue,
+            queue=self._queue,
             key=self.node.name,
             args=(self.node, self._lfs, copies),
             name=f"Node {self.node.name}: HSM state check for {len(copies)} copies",

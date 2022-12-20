@@ -90,6 +90,23 @@ def test_archivefilecopy_model(
     node2 = storagenode(name="new", group=genericgroup)
     archivefilecopy(file=minfile, node=node2)
 
+    # Should be able to use update() to manually set last_update
+    ArchiveFileCopy.update(size_b=11, last_update=3).where(
+        ArchiveFileCopy.id == 1
+    ).execute()
+
+    afc = ArchiveFileCopy.get(id=1)
+    assert afc.last_update == datetime.datetime.fromtimestamp(3)
+    assert afc.size_b == 11
+
+    # But update() should set last_update when not explicitly given
+    ArchiveFileCopy.update(size_b=12).where(ArchiveFileCopy.id == 1).execute()
+
+    # last_update has updated
+    afc = ArchiveFileCopy.get(id=1)
+    assert afc.last_update >= before
+    assert afc.size_b == 12
+
 
 def test_archivefilecopyrequest_model(
     genericgroup, storagenode, genericfile, archivefilecopyrequest

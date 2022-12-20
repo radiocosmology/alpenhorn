@@ -42,7 +42,8 @@ class ArchiveFileCopy(base_model):
     last_update : timestamp
         The time at which this record was last updated.  This property
         is automatically updated on save.  Any value explicity set will be
-        ignored.
+        ignored.  (You can still manually set last_update in the
+        database by using the update() method, if necessary).
     """
 
     file = pw.ForeignKeyField(ArchiveFile, backref="copies")
@@ -65,7 +66,14 @@ class ArchiveFileCopy(base_model):
             self.last_update = datetime.datetime.now()
             if only is not None and ArchiveFileCopy.last_update not in only:
                 only.append(ArchiveFileCopy.last_update)
-        super().save(force_insert, only)
+        return super().save(force_insert, only)
+
+    # Re-implement update() to add last_update if not given
+    @classmethod
+    def update(cls, **kwargs):
+        if "last_update" not in kwargs:
+            kwargs["last_update"] = datetime.datetime.now()
+        return super().update(kwargs)
 
     @property
     def path(self):

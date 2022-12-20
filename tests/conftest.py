@@ -34,6 +34,12 @@ def pytest_configure(config):
         "to indicate the desired quota that LFS.quota_remaining "
         "should return.",
     )
+    config.addinivalue_line(
+        "markers",
+        "lfs_dont_mock(*method_names): "
+        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "to indicate which parts of LFS should _not_ be mocked.",
+    )
 
 
 @pytest.fixture
@@ -124,14 +130,23 @@ def mock_lfs(have_lfs, request):
 
     the mocked hsm_state() method will return values specified in the
     lfs_hsm_state marker.  Passing a path not specified in the marker returns
-    HSMState.MISSING.
+    HSMState.MISSING.  The values in this dict may be updated by calling
+    hms_restore() and hsm_release()
 
     The mocked quota_remaining() method will retun the value of the
     lfs_quota_remaining marker.  If that marker isn't set, behaves as if
     quota_remaining failed.
+
+    Yields the LFS class.
     """
 
     from alpenhorn.io.lfs import LFS, HSMState
+
+    marker = request.node.get_closest_marker("lfs_dont_mock")
+    if marker is None:
+        lfs_dont_mock = list()
+    else:
+        lfs_dont_mock = marker.args
 
     marker = request.node.get_closest_marker("lfs_hsm_state")
     if marker is None:
@@ -142,17 +157,47 @@ def mock_lfs(have_lfs, request):
     def _mocked_lfs_hsm_state(self, path):
         nonlocal lfs_hsm_state
 
-        value = lfs_hsm_state.get(path, "missing")
-        if value == "missing":
+        # de-pathlib-ify
+        path = str(path)
+
+        state = lfs_hsm_state.get(path, "missing")
+        if state == "missing":
             return HSMState.MISSING
-        if value == "unarchived":
+        if state == "unarchived":
             return HSMState.UNARCHIVED
-        if value == "restored":
+        if state == "restored":
             return HSMState.RESTORED
-        if value == "released":
+        if state == "released":
             return HSMState.RELEASED
 
-        raise ValueError("Bad value in lfs_hsm_state marker: {value} for path {path}")
+        raise ValueError("Bad state in lfs_hsm_state marker: {state} for path {path}")
+
+    def _mocked_lfs_hsm_restore(self, path):
+        nonlocal lfs_hsm_state
+
+        # de-pathlib-ify
+        path = str(path)
+
+        state = lfs_hsm_state.get(path, "missing")
+        if state == "missing":
+            return False
+        if state == "released":
+            lfs_hsm_state[path] = "restored"
+        return True
+
+    def _mocked_lfs_hsm_release(self, path):
+        nonlocal lfs_hsm_state
+
+        # de-pathlib-ify
+        path = str(path)
+
+        state = lfs_hsm_state.get(path, "missing")
+        if state == "missing" or state == "unarchived":
+            return False
+        if state == "restored":
+            lfs_hsm_state[path] = "released"
+
+        return True
 
     marker = request.node.get_closest_marker("lfs_quota_remaining")
     if marker is None:
@@ -164,9 +209,29 @@ def mock_lfs(have_lfs, request):
         nonlocal lfs_quota
         return lfs_quota
 
-    with patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state):
-        with patch("alpenhorn.io.lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining):
-            yield
+    patches = list()
+    if "hsm_state" not in lfs_dont_mock:
+        patches.append(patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state))
+    if "hsm_release" not in lfs_dont_mock:
+        patches.append(
+            patch("alpenhorn.io.lfs.LFS.hsm_release", _mocked_lfs_hsm_release),
+        )
+    if "hsm_restore" not in lfs_dont_mock:
+        patches.append(
+            patch("alpenhorn.io.lfs.LFS.hsm_restore", _mocked_lfs_hsm_restore),
+        )
+    if "quota_remaining" not in lfs_dont_mock:
+        patches.append(
+            patch("alpenhorn.io.lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining),
+        )
+
+    for p in patches:
+        p.start()
+
+    yield LFS
+
+    for p in patches:
+        p.stop()
 
 
 @pytest.fixture

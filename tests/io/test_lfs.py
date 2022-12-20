@@ -58,7 +58,7 @@ def test_quota_auto(have_lfs, mock_run_command):
 
 
 @pytest.mark.run_command_result(0, "/path\n   1234 2000 3000 - 100 200 300", None)
-def test_state_missing(have_lfs, mock_run_command):
+def test_quota_fixed(have_lfs, mock_run_command):
     """Test getting quota_remaining from lfs.quota() with fixed quota."""
 
     lfs = LFS("qgroup", fixed_quota=2500)
@@ -161,6 +161,7 @@ def test_hsm_released(mock_lfs):
     }
 )
 @pytest.mark.run_command_result(0, "", None)
+@pytest.mark.lfs_dont_mock("hsm_restore")
 def test_hsm_restore(mock_lfs, mock_run_command):
     """Test hsm_restore()."""
 
@@ -188,6 +189,7 @@ def test_hsm_restore(mock_lfs, mock_run_command):
     }
 )
 @pytest.mark.run_command_result(0, "", None)
+@pytest.mark.lfs_dont_mock("hsm_release")
 def test_hsm_release(mock_lfs, mock_run_command):
     """Test hsm_restore()."""
 

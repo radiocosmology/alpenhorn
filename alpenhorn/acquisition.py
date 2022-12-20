@@ -20,11 +20,8 @@ class AcqType(base_model):
         Short name of type. e.g. `raw`, `vis`
     """
 
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=64, unique=True)
     notes = pw.TextField(null=True)
-
-    class Meta:
-        indexes = ((("name",), True),)  # name is unique
 
     # This dict is an atribute on the class, used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
@@ -174,12 +171,9 @@ class ArchiveAcq(base_model):
     n_timed_files
     """
 
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=64, unique=True)
     type = pw.ForeignKeyField(AcqType, backref="acqs")
     comment = pw.TextField(null=True)
-
-    class Meta:
-        indexes = ((("name",), True),)  # name is unique
 
 
 class FileType(base_model):
@@ -193,11 +187,8 @@ class FileType(base_model):
         Any notes or comments about this file type.
     """
 
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=64, unique=True)
     notes = pw.TextField(null=True)
-
-    class Meta:
-        indexes = ((("name",), True),)  # name is unique
 
     # This dict is an atribute on the class used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
