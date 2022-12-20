@@ -27,7 +27,7 @@ class LFSQuotaNodeIO(DefaultNodeIO):
     def __init__(self, node):
         super().__init__(node)
 
-        # Make alpenhornd crash if someone's been screwing up the node config in the database
+        # Make alpenhornd crash if the io_config is incomplete.
         if "quota_group" not in self.config:
             raise KeyError(
                 f'"quota_group" missing from StorageNode {node.name} io_config'

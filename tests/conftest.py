@@ -22,10 +22,17 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "lfs_hsm_state(dict): "
-        "used on tests which mock alpenhorn.io.lfs.LFS.hsm_state() "
+        "used on tests which mock alpenhorn.io.lfs.LFS "
         "to indicate the desired HSM State value(s) to return. "
         "The keys of dict are the paths; the values should be "
         "one of: 'missing', 'unarchived', 'released', 'restored'.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "lfs_quota_remaining(quota): "
+        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "to indicate the desired quota that LFS.quota_remaining "
+        "should return.",
     )
 
 
@@ -113,10 +120,16 @@ def have_lfs():
 
 @pytest.fixture
 def mock_lfs(have_lfs, request):
-    """Mocks alpenhorn.lfs.LFS.hsm_state for testing.
+    """Mocks methods of alpenhorn.lfs.LFS for testing.
 
     the mocked hsm_state() method will return values specified in the
-    lfs_hsm_state marker.  Passing a path not specified in the marker returns HSMState.MISSING."""
+    lfs_hsm_state marker.  Passing a path not specified in the marker returns
+    HSMState.MISSING.
+
+    The mocked quota_remaining() method will retun the value of the
+    lfs_quota_remaining marker.  If that marker isn't set, behaves as if
+    quota_remaining failed.
+    """
 
     from alpenhorn.io.lfs import LFS, HSMState
 
@@ -141,8 +154,19 @@ def mock_lfs(have_lfs, request):
 
         raise ValueError("Bad value in lfs_hsm_state marker: {value} for path {path}")
 
+    marker = request.node.get_closest_marker("lfs_quota_remaining")
+    if marker is None:
+        lfs_quota = None
+    else:
+        lfs_quota = marker.args[0]
+
+    def _mocked_lfs_quota_remaining(self, path):
+        nonlocal lfs_quota
+        return lfs_quota
+
     with patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state):
-        yield
+        with patch("alpenhorn.io.lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining):
+            yield
 
 
 @pytest.fixture
