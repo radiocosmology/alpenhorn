@@ -2,13 +2,12 @@
 
 Provides the LFS class which wraps calls to lfs(1) for use on Lustre filesystems
 """
-import re
 import shutil
 import logging
 import pathlib
 from enum import Enum
 
-from alpenhorn.util import run_command
+from alpenhorn import util
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ class LFS:
         Returns stdout if the command was successful or
         None if it failed.
         """
-        ret, stdout, stderr = run_command([self._lfs] + args)
+        ret, stdout, stderr = util.run_command([self._lfs] + list(args))
 
         if ret != 0:
             log.warning(f"LFS command failed (ret={ret}): " + " ".join(args))
@@ -102,14 +101,29 @@ class LFS:
         Returns None if running "lfs quota" fails.
         """
 
-        # Strip non-numeric things
-        regexp = re.compile(b"[^\\d ]+")
+        # There are two lines output by "lfs quota -q -g <group> <path>"
+        #
+        # The first line is just the path.
+        #
+        # The second line has eight fields:
+        #  - blocks used
+        #  - block quota
+        #  - block limit
+        #  - block grace
+        #  - files used
+        #  - file quota
+        #  - file limit
+        #  - file grace
 
         stdout = self.run_lfs("quota", "-q", "-g", self._quota_group, path)
         if stdout is None:
             return None
 
-        lfs_quota = regexp.sub("", stdout).split()
+        # Split lines
+        lines = stdout.splitlines()
+
+        # Split the second line into the eight values
+        lfs_quota = lines[1].split()
 
         quota_limit = (
             self._fixed_quota if self._fixed_quota is not None else int(lfs_quota[1])

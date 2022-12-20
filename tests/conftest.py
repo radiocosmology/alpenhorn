@@ -15,9 +15,17 @@ from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyReque
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "run_command_result(ret, stdout, stderr):"
-        "the desired return value for util.run_command() in "
-        "the mock_run_command fixture.",
+        "run_command_result(ret, stdout, stderr): "
+        "used on tests which mock alpenhorn.util.run_command to "
+        "set the desired return value for the mocked call.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "lfs_hsm_state(dict): "
+        "used on tests which mock alpenhorn.io.lfs.LFS.hsm_state() "
+        "to indicate the desired HSM State value(s) to return. "
+        "The keys of dict are the paths; the values should be "
+        "one of: 'missing', 'unarchived', 'released', 'restored'.",
     )
 
 
@@ -32,6 +40,9 @@ def mock_run_command(request):
     the agruments passed to run_command.
     """
     run_command_report = dict()
+
+    # Ensure loaded
+    from alpenhorn.util import run_command
 
     marker = request.node.get_closest_marker("run_command_result")
     if marker is None:
@@ -86,21 +97,51 @@ def queue():
 
 
 @pytest.fixture
-def lfs():
-    """Set up the test lfs by fixing the location of the lfs binary to our test lfs.py.
-
-    Must be used by any test that instantiates LFSQuotaNodeIO or NearlineNodeIO (because
-    they, in turn, instantiate alpenhorn.io.lfs.LFS).
-    """
+def have_lfs():
+    """Mock shutil.which to indicate "lfs" is present."""
 
     def _mocked_which(cmd, mode=os.F_OK | os.X_OK, path=None):
         """A mock of shutil.which that points to our test LFS command."""
         if cmd == "lfs":
-            return pathlib.Path(__file__).with_name("lfs").absolute()
+            return "LFS"
 
         return shutil.which(cmd, mode, path)
 
     with patch("shutil.which", _mocked_which):
+        yield
+
+
+@pytest.fixture
+def mock_lfs(have_lfs, request):
+    """Mocks alpenhorn.lfs.LFS.hsm_state for testing.
+
+    the mocked hsm_state() method will return values specified in the
+    lfs_hsm_state marker.  Passing a path not specified in the marker returns HSMState.MISSING."""
+
+    from alpenhorn.io.lfs import LFS, HSMState
+
+    marker = request.node.get_closest_marker("lfs_hsm_state")
+    if marker is None:
+        lfs_hsm_state = dict()
+    else:
+        lfs_hsm_state = marker.args[0]
+
+    def _mocked_lfs_hsm_state(self, path):
+        nonlocal lfs_hsm_state
+
+        value = lfs_hsm_state.get(path, "missing")
+        if value == "missing":
+            return HSMState.MISSING
+        if value == "unarchived":
+            return HSMState.UNARCHIVED
+        if value == "restored":
+            return HSMState.RESTORED
+        if value == "released":
+            return HSMState.RELEASED
+
+        raise ValueError("Bad value in lfs_hsm_state marker: {value} for path {path}")
+
+    with patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state):
         yield
 
 

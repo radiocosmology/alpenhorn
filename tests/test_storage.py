@@ -113,7 +113,7 @@ def test_storage_model(storagegroup, storagenode):
     }
 
 
-def test_ioload(lfs, storagegroup, storagenode):
+def test_ioload(have_lfs, storagegroup, storagenode):
     """Test instantiation of the I/O classes"""
 
     for ioclass in ["Default", "Transport", "Nearline", None]:
