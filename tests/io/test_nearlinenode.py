@@ -39,9 +39,7 @@ def node(
     # Some copies
     last_updates = [3, 1, 5, 6, 2, 4]
     for num, file in enumerate(files):
-        archivefilecopy(
-            file=file, node=simplenode, has_file="Y", size_b=10, ready=True
-        )
+        archivefilecopy(file=file, node=simplenode, has_file="Y", size_b=10, ready=True)
         # We need to do it this way to set last_update
         ArchiveFileCopy.update(last_update=last_updates[num]).where(
             ArchiveFileCopy.id == num + 1

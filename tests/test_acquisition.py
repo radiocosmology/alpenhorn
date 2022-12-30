@@ -24,7 +24,12 @@ def test_schema(dbproxy, simplefile):
 
 def test_acqtype_model(acqtype):
     acqtype(name="min")
-    acqtype(name="max", notes="Note")
+    acqtype(
+        name="max",
+        notes="Note",
+        info_class="InfoClass",
+        info_config='{"info": "config"}',
+    )
 
     # name is unique
     with pytest.raises(pw.IntegrityError):
@@ -33,11 +38,15 @@ def test_acqtype_model(acqtype):
     # Check records in DB
     assert AcqType.select().where(AcqType.name == "min").dicts().get() == {
         "id": 1,
+        "info_class": None,
+        "info_config": None,
         "notes": None,
         "name": "min",
     }
     assert AcqType.select().where(AcqType.name == "max").dicts().get() == {
         "id": 2,
+        "info_class": "InfoClass",
+        "info_config": '{"info": "config"}',
         "notes": "Note",
         "name": "max",
     }
@@ -70,7 +79,12 @@ def test_acq_model(simpleacqtype, archiveacq):
 
 def test_filetype_model(filetype):
     filetype(name="min")
-    filetype(name="max", notes="Note")
+    filetype(
+        name="max",
+        notes="Note",
+        info_class="InfoClass",
+        info_config='{"info": "config"}',
+    )
 
     # name is unique
     with pytest.raises(pw.IntegrityError):
@@ -79,11 +93,15 @@ def test_filetype_model(filetype):
     # Check records in DB
     assert FileType.select().where(FileType.name == "min").dicts().get() == {
         "id": 1,
+        "info_class": None,
+        "info_config": None,
         "notes": None,
         "name": "min",
     }
     assert FileType.select().where(FileType.name == "max").dicts().get() == {
         "id": 2,
+        "info_class": "InfoClass",
+        "info_config": '{"info": "config"}',
         "notes": "Note",
         "name": "max",
     }

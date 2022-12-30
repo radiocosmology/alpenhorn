@@ -85,9 +85,7 @@ def test_req(
     xfs.create_file(copy.path, st_size=copy.size_b)
     return (
         node_to,
-        archivefilecopyrequest(
-            file=simplefile, node_from=node_from, group_to=group_to
-        ),
+        archivefilecopyrequest(file=simplefile, node_from=node_from, group_to=group_to),
     )
 
 

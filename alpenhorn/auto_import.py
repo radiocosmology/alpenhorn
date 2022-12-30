@@ -36,9 +36,7 @@ def import_file(node, queue, path):
             path = path.relative_to(node.root)
         except ValueError:
             # Not rooted under node.root
-            log.debug(
-                "skipping import of {file_path}: not rooted under node {node.root}"
-            )
+            log.debug(f"skipping import of {path}: not rooted under node {node.root}")
             return
 
     # New import task.  It's better to do this in a worker
@@ -87,7 +85,7 @@ def _import_file(node, path):
     filetype = ac.FileType.detect(filename, acqtype, acqname, node)
 
     if filetype is None:
-        log.info('Skipping unrecognised file "{path}".')
+        log.info(f'Skipping unrecognised file "{path}".')
         return
 
     # Double check that this file doesn't already exist on this node.
@@ -125,7 +123,7 @@ def _import_file(node, path):
             )
             log.debug(f'File "{path}" already in DB. Skipping.')
         except pw.DoesNotExist:
-            log.debug('Computing md5sum of "{path}".')
+            log.debug(f'Computing md5sum of "{path}".')
             md5sum = node.io.md5sum_file(path)
             size_b = node.io.filesize(path)
 
@@ -158,7 +156,7 @@ def _import_file(node, path):
                 prepared=True,
                 size_b=copy_size_b,
             )
-            log.info('Registered file copy "{path}" to DB.')
+            log.info(f'Registered file copy "{path}" to DB.')
 
 
 # Watchdog stuff

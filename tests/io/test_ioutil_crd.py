@@ -29,9 +29,7 @@ def db_setup(
     return (
         node_to,
         archivefilecopy(file=simplefile, node=node_from, has_file="Y"),
-        archivefilecopyrequest(
-            file=simplefile, node_from=node_from, group_to=group_to
-        ),
+        archivefilecopyrequest(file=simplefile, node_from=node_from, group_to=group_to),
         time.time() - 2,  # start_time
     )
 

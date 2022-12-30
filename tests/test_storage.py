@@ -179,9 +179,7 @@ def test_copy_state(
     assert group.copy_state(filem) == "M"
 
     # Non-existent file returns 'N'
-    missing = archivefile(
-        name="missing", acq=simpleacq, type=simplefiletype, size_b=1
-    )
+    missing = archivefile(name="missing", acq=simpleacq, type=simplefiletype, size_b=1)
     assert group.copy_state(missing) == "N"
 
 
@@ -292,9 +290,7 @@ def test_copypresent(simplegroup, storagenode, simplefile, archivefilecopy):
     assert node.copy_present(simplefile) is False
 
 
-def test_allfiles(
-    simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy
-):
+def test_allfiles(simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy):
     """Test StorageNode.all_files()."""
 
     # Empty

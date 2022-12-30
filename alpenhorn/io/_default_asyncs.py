@@ -8,7 +8,6 @@ import pathlib
 from .. import util
 from . import ioutil
 from ..archive import ArchiveFileCopy
-from ..storage import StorageNode
 
 import logging
 

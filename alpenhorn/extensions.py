@@ -4,15 +4,11 @@ Extensions are simply python packages or modules providing extra functionality
 to alpenhorn. They should be specified in the `'extension'` section of the
 alpenhorn configuration as fully qualified python name. They must have a
 `'register_extension'` function that returns a `dict` specifying the extra
-functionality they provide. There are currently three supported keys:
+functionality they provide. There are currently one supported key:
 
 `database`
     A dict providing capabilities of a database extension.  See the db module
     for details.  At most one database extension is permitted.
-`acq_types`
-    The acquisition type extensions, given as a list of `AcqInfoBase` subclasses.
-`file_types`
-    The file type extensions, given as a list of `FileInfoBase` subclasses.
 
 If multiple extensions provide acquisition or file types with the same name (as
 seen by the `._acq_type` or `._file_type` properties), only the last one is
@@ -99,51 +95,3 @@ def database_extension():
 
     log.info(f"Using database extension {_db_ext['name']}")
     return _db_ext["database"]
-
-
-def register_type_extensions():
-    """Register any types found in extension modules.
-
-    Later entries will override earlier ones. This *must* be called after the
-    database has been connected.
-    """
-
-    for ext_dict in _ext:
-
-        if "acq_types" in ext_dict:
-            _register_acq_extensions(ext_dict["acq_types"])
-
-        if "file_types" in ext_dict:
-            _register_file_extensions(ext_dict["file_types"])
-
-
-def _register_acq_extensions(acq_types):
-    from . import acquisition
-
-    for acq_type in acq_types:
-        name = acq_type._acq_type
-        log.info("Registering new acquisition type %s", name)
-        acquisition.AcqType.register_type(acq_type)
-
-        try:
-            conf = config.config["acq_types"][name]
-        except KeyError:
-            conf = {}
-
-        acq_type.set_config(conf)
-
-
-def _register_file_extensions(file_types):
-    from . import acquisition
-
-    for file_type in file_types:
-        name = file_type._file_type
-        log.info("Registering new file type %s", name)
-        acquisition.FileType.register_type(file_type)
-
-        try:
-            conf = config.config["file_types"][name]
-        except KeyError:
-            conf = {}
-
-        file_type.set_config(conf)

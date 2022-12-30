@@ -6,9 +6,19 @@ import sys
 import click
 
 from .queue import FairMultiFIFOQueue
-from .update import update_loop
 
-from . import auto_import, config, db, extensions, logger, storage, util, pool
+from . import (
+    acquisition,
+    auto_import,
+    config,
+    db,
+    extensions,
+    logger,
+    pool,
+    storage,
+    update,
+    util,
+)
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +46,7 @@ def cli():
     # Set up logging
     logger.start_logging()
 
-    # Attempt to load any alpenhor extensions
+    # Load alpenhorn extensions
     extensions.load_extensions()
 
     # Initialise the database framework
@@ -45,8 +55,8 @@ def cli():
     # Connect to the database
     db.connect()
 
-    # Regsiter any extension types
-    extensions.register_type_extensions()
+    # Load acquisition & file info classes
+    acquisition.import_info_classes()
 
     # Set up the task queue
     queue = FairMultiFIFOQueue()
@@ -87,7 +97,7 @@ def cli():
     # it's useful to keep alpenhornd running for nodes where we exclusively use
     # transport disks (e.g. jingle)
     if not node_have:
-        log.warn(f"No nodes on this host ({host}) registered in the DB!")
+        log.warning(f"No nodes on this host ({host}) registered in the DB!")
 
     # Enter main loop.
     #
@@ -98,7 +108,7 @@ def cli():
     # way which would simply delay starting the main loop until the crawl
     # was complete.
     try:
-        update_loop(host, queue, wpool)
+        update.update_loop(host, queue, wpool)
 
         # Global abort
         if pool.global_abort.is_set():

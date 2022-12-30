@@ -45,13 +45,10 @@ def test_md5sum_file(tmp_path):
     assert util.md5sum_file(file) == "9e107d9d372bb6826bd81d3542a419d6"
 
 
-def test_gethostname_config():
+def test_gethostname_config(hostname):
     """Test util.get_hostname with config"""
 
-    # Set hostname in config
-    config.merge_config({"base": {"hostname": "alpenhost"}})
-
-    assert util.get_hostname() == "alpenhost"
+    assert util.get_hostname() == hostname
 
 
 def test_gethostname_default():

@@ -6,11 +6,17 @@ import shutil
 from unittest.mock import patch
 
 from alpenhorn import config, db, extensions, util
+from alpenhorn.info_base import NoInfo
 from alpenhorn.queue import FairMultiFIFOQueue
 from alpenhorn.storage import StorageGroup, StorageNode
-from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
+from alpenhorn.acquisition import (
+    AcqType,
+    ArchiveAcq,
+    ArchiveFile,
+    FileType,
+    AcqFileTypes,
+)
 from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
-
 
 def pytest_configure(config):
     config.addinivalue_line(
@@ -40,6 +46,37 @@ def pytest_configure(config):
         "used on tests which mock alpenhorn.io.lfs.LFS "
         "to indicate which parts of LFS should _not_ be mocked.",
     )
+    config.addinivalue_line(
+        "markers",
+        "alpenhorn_config(*config_dict): "
+        "used to set the alpenhorn.config for testing.  config_dict"
+        "is merged with the default config.",
+    )
+
+
+@pytest.fixture
+def set_config(request):
+    """Set alpenhorn.config.config for testing.
+
+    Any value given in the alpenhorn_config mark is merged into the
+    default config.
+
+    Yields alpenhorn.config.config.
+
+    After the test completes, alpenhorn.config.config is set to None."""
+    # If initialise with the default
+    config.config = config._default_config.copy()
+
+    marker = request.node.get_closest_marker("alpenhorn_config")
+    if marker is not None:
+        config.config = config.merge_dict_tree(config.config, marker.args[0])
+
+    yield config.config
+
+    # Reset globals
+    config.config = None
+    extensions._db_ext = None
+    extensions._ext = None
 
 
 @pytest.fixture
@@ -287,21 +324,20 @@ def xfs(fs, mock_statvfs, mock_stat):
 
 
 @pytest.fixture
-def hostname():
+def hostname(set_config):
     """Ensure our hostname is set.
 
     Returns the hostname."""
 
-    config.merge_config({"base": {"hostname": "alpenhost"}})
+    config.config = config.merge_dict_tree(
+        set_config, {"base": {"hostname": "alpenhost"}}
+    )
 
     yield "alpenhost"
 
-    # Reset the config
-    config.merge_config(dict(), replace=True)
-
 
 @pytest.fixture
-def use_chimedb():
+def use_chimedb(set_config):
     """Use chimedb, if possible.
 
     If chimedb.core can't be imported, tests
@@ -310,23 +346,15 @@ def use_chimedb():
     cdb = pytest.importorskip("chimedb.core")
     cdb.test_enable()
 
-    config.merge_config({"extensions": ["chimedb.core.alpenhorn"]})
-
-    yield
-
-    # Reset the config
-    config.merge_config(dict(), replace=True)
+    config.config = config.merge_dict_tree(set_config, {"extensions": ["chimedb.core.alpenhorn"]})
 
 
 @pytest.fixture
-def dbproxy():
+def dbproxy(set_config):
     """Database init and teardown.
 
     The fixture returns the database proxy after initialisation.
     """
-    # Ensure config is initialised
-    config.merge_config(dict())
-
     # Load extensions
     extensions.load_extensions()
 
@@ -337,6 +365,24 @@ def dbproxy():
     yield db.database_proxy
 
     db.close()
+
+
+@pytest.fixture
+def dbtables(dbproxy):
+    """Create all the usual tables in the database."""
+
+    dbproxy.create_tables(
+        [
+            StorageGroup,
+            StorageNode,
+            AcqType,
+            ArchiveAcq,
+            FileType,
+            ArchiveFile,
+            ArchiveFileCopy,
+            ArchiveFileCopyRequest,
+        ]
+    )
 
 
 # Data table fixtures.  Each of these will add a row with the specified
@@ -380,6 +426,11 @@ def storagenode(factory_factory):
 @pytest.fixture
 def acqtype(factory_factory):
     return factory_factory(AcqType)
+
+
+@pytest.fixture
+def acqfiletypes(factory_factory):
+    return factory_factory(AcqFileTypes)
 
 
 @pytest.fixture
@@ -429,14 +480,37 @@ def simplenode(storagenode, storagegroup):
 
 @pytest.fixture
 def simpleacqtype(acqtype):
-    """Create a simple FileType record."""
+    """Create a simple AcqType record."""
+
     return acqtype(name="simpleacqtype")
+
+
+@pytest.fixture
+def simpleacqinfo():
+    """Create a SimpleAcqInfo class."""
+
+    class SimpleAcqInfo(NoInfo):
+        _type = "simpleacqtype"
+        patterns = ["acq"]
+
+    return SimpleAcqInfo
 
 
 @pytest.fixture
 def simpleacq(simpleacqtype, archiveacq):
     """Create a simple ArchiveAcq record."""
     return archiveacq(name="simpleacq", type=simpleacqtype)
+
+
+@pytest.fixture
+def simplefileinfo(simplefiletype):
+    """Create a SimpleFileInfo class."""
+
+    class SimpleFileInfo(NoInfo):
+        _type = "simplefiletype"
+        patterns = ["file"]
+
+    return SimpleFileInfo
 
 
 @pytest.fixture

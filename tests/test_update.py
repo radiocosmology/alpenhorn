@@ -36,11 +36,12 @@ num_task_threads = 4
 
 
 @pytest.fixture
-def fixtures(tmpdir):
-    """Initializes an Sqlite database on disk with data in tests/fixtures"""
-    config.merge_config(
+@pytest.mark.alpenhorn_config(
         {"database": {"url": "sqlite:///" + str(tmpdir.join("database.sql"))}}
-    )
+        )
+def fixtures(set_config, tmpdir):
+    """Initializes an Sqlite database on disk with data in tests/fixtures"""
+
     db.init()
     db.connect()
 

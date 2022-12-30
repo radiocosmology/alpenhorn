@@ -1,11 +1,11 @@
-import os
 import pathlib
 import logging
 import datetime
+import importlib
 
 import peewee as pw
 
-from .config import ConfigClass
+from . import config
 from .db import base_model
 
 log = logging.getLogger(__name__)
@@ -17,56 +17,26 @@ class AcqType(base_model):
     Attributes
     ----------
     name : string
-        Short name of type. e.g. `raw`, `vis`
+        Name of the acqusition type. e.g. `raw`, `vis`
+    info_class : string
+        Import path of the associated Python class implementing this
+        type's AcqInfo class.  The class specified must be subclassed
+        from alpenhorn.info_base.acq_info_base.
+    notes : string
+        A human-readable description.
+    info_config : string
+        An optional JSON blob containing configuration data for the
+        associated AcqInfo class.
     """
 
     name = pw.CharField(max_length=64, unique=True)
+    info_class = pw.CharField(max_length=254, null=True)
     notes = pw.TextField(null=True)
+    info_config = pw.TextField(null=True)
 
     # This dict is an atribute on the class, used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
     _registered_acq_types = {}
-
-    @classmethod
-    def register_type(cls, acq_info):
-        """Register a new acquisition type with alpenhorn.
-
-        This creates the entry in the AcqType table if it does not already exist.
-
-        Parameters
-        ----------
-        acq_info : AcqInfoBase
-            AcqInfoBase describing the type of acquisition.
-        """
-
-        try:
-            cls.get(name=acq_info._acq_type)
-        except pw.DoesNotExist:
-            log.info('Create AcqType entry for "%s"' % acq_info._acq_type)
-            cls.create(name=acq_info._acq_type)
-
-        # Add to registry
-        cls._registered_acq_types[acq_info._acq_type] = acq_info
-
-    @classmethod
-    def check_registration(cls):
-        """Check that all AcqTypes known to the database have a
-        registered handler.
-        """
-
-        # Get the list of types names from the database
-        db_acq_types = [row[0] for row in cls.select(cls.name).tuples()]
-
-        # Get the names of all the registered types
-        reg_acq_types = cls._registered_acq_types.keys()
-
-        # Find any missing types
-        missing_acq_types = set(db_acq_types) - set(reg_acq_types)
-
-        if len(missing_acq_types):
-            raise RuntimeError(
-                "AcqTypes %s have no registered handler." % repr(missing_acq_types)
-            )
 
     def is_type(self, acqname, node):
         """Does this acquisition type understand this directory?
@@ -83,7 +53,7 @@ class AcqType(base_model):
         -------
         is_type : boolean
         """
-        return self.acq_info.is_type(acqname, node)
+        return self.acq_info().is_type(acqname, node)
 
     @classmethod
     def detect(cls, acqname, node):
@@ -91,7 +61,7 @@ class AcqType(base_model):
 
         Parameters
         ----------
-        acqname : string
+        acqname : pathlib.Path
             Name of the acquisition we are trying to find the type of.
         node : StorageNode
             The node we are importing from. Needed so we can inspect the actual
@@ -112,46 +82,78 @@ class AcqType(base_model):
         """
 
         # Paths must be relative, otherwise we enter an infinite loop below
-        if os.path.isabs(acqname):
-            log.error(
-                "acqname (%s) is absolute path. Must be relative to node root.", acqname
-            )
+        if acqname.is_absolute():
+            log.error(f"acq name ({acqname}) cannot be absolute.")
             return None
 
         # Iterate over all known acquisition types to try and find one that
         # can handle the acqname path. If nothing is found, repeat
         # the process with the parent directory of acqname, until we run out of
         # directory segment
-        while acqname != "":
+        for name in acqname.parents:
             for acq_type in cls.select():
-                if acq_type.is_type(acqname, node):
-                    return acq_type, acqname
-            acqname = os.path.dirname(acqname)
+                if acq_type.is_type(name, node):
+                    return acq_type, name
 
+        # No match
         return None
 
-    @property
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Get the import_error action for this type
+        self._info_import_errors = config.info_import_errors(self.name, is_acq=True)
+
     def acq_info(self):
         """The AcqInfo table for this AcqType."""
-        return self.__class__._registered_acq_types[self.name]
+
+        from .info_base import no_info
+
+        # If the info class has already been loaded, just return it.
+        try:
+            return self._registered_acq_types[self.name]
+        except KeyError:
+            pass
+
+        # Not in _registered_acq_types, find the info class
+        if self.info_class is None:
+            class_ = no_info()
+        else:
+            # Separate the module from the classname
+            dot = self.info_class.rfind(".")
+            try:
+                if dot < 0:
+                    # No module, try getting it from the globals, I guess
+                    class_ = globals()[self.info_class]
+                else:
+                    modname = self.info_class[:dot]
+                    classname = self.info_class[dot + 1 :]
+
+                    # Try to import the module
+                    module = importlib.import_module(modname)
+                    class_ = getattr(module, classname)
+            except (KeyError, ImportError, AttributeError) as e:
+                if self._info_import_errors == "skip":
+                    self._registered_acq_types[self.name] = None
+                    return None
+                elif self._info_import_errors == "ignore":
+                    class_ = no_info()
+                else:
+                    raise ImportError(
+                        f'Unable to load info class "{self.info_class}" '
+                        f'for acq type "{self.name}"'
+                    ) from e
+
+        # Initialise the _class_ with the acq_type
+        class_.set_config(self)
+        self._registered_acq_types[self.name] = class_
+
+        return class_
 
     @property
     def file_types(self):
         """The FileTypes supported by this AcqType."""
-
-        def _resolve(x):
-            if isinstance(x, str):
-                return x
-            elif isinstance(x, type) and issubclass(x, FileInfoBase):
-                return x.file_type
-            else:
-                raise RuntimeError("FileType %s not understood." % repr(x))
-
-        # Resolve the file_types list of the AcqInfo to the names
-        file_type_names = [_resolve(x) for x in self.acq_info._file_types]
-
-        # Query for the names in the database and return
-        return FileType.select().where(FileType.name << file_type_names)
+        return FileType.select().join(AcqFileTypes).where(AcqFileTypes.acq_type == self)
 
 
 class ArchiveAcq(base_model):
@@ -183,57 +185,25 @@ class FileType(base_model):
     ----------
     name : string
         The name of this file type.
-    notes: string
+    info_class : string
+        Import path of the associated Python class implementing this
+        type's FileInfo class.  The class specified must be subclassed
+        from alpenhorn.info_base.file_info_base.
+    notes : string
         Any notes or comments about this file type.
+    info_config : string
+        An optional JSON blob containing configuration data for the
+        associated FileInfo class.
     """
 
     name = pw.CharField(max_length=64, unique=True)
+    info_class = pw.CharField(max_length=254, null=True)
     notes = pw.TextField(null=True)
+    info_config = pw.TextField(null=True)
 
     # This dict is an atribute on the class used to hold the set of registered
     # handlers. Store as a dictionary for easy lookup of handlers by name.
     _registered_file_types = {}
-
-    @classmethod
-    def register_type(cls, file_info):
-        """Register a new file type with alpenhorn.
-
-        This creates the entry in the FileType table if it does not already exist.
-
-        Parameters
-        ----------
-        file_info : FileInfoBase
-            FileInfoBase describing the type of acquisition.
-        """
-
-        try:
-            cls.get(name=file_info._file_type)
-        except pw.DoesNotExist:
-            log.info('Create FileType entry for "%s"' % file_info._file_type)
-            cls.create(name=file_info._file_type)
-
-        # Add to registry
-        cls._registered_file_types[file_info._file_type] = file_info
-
-    @classmethod
-    def check_registration(cls):
-        """Check that all FileTypes known to the database have a
-        registered handler.
-        """
-
-        # Get the list of types names from the database
-        db_file_types = [row[0] for row in cls.select(cls.name).tuples()]
-
-        # Get the names of all the registered types
-        reg_file_types = cls._registered_file_types.keys()
-
-        # Find any missing types
-        missing_file_types = set(db_file_types) - set(reg_file_types)
-
-        if len(missing_file_types):
-            raise RuntimeError(
-                "FileTypes %s have no registered handler." % repr(missing_file_types)
-            )
 
     def is_type(self, filename, acq_name, node):
         """Check if this file can be handled by this file type.
@@ -252,7 +222,7 @@ class FileType(base_model):
         -------
         is_type : boolean
         """
-        return self.file_info.is_type(filename, node, acq_name)
+        return self.file_info.is_type(filename, acq_name, node)
 
     @classmethod
     def detect(cls, filename, acqtype, acqname, node):
@@ -281,10 +251,74 @@ class FileType(base_model):
 
         return None
 
-    @property
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Get the import_error action for this type
+        self._info_import_errors = config.info_import_errors(self.name, is_acq=False)
+
     def file_info(self):
         """The FileInfo table for this FileType."""
-        return self.__class__._registered_file_types[self.name]
+
+        # If the info class has already been loaded, just return it.
+        try:
+            return self._registered_acq_types[self.name]
+        except KeyError:
+            pass
+
+        # Not in _registered_acq_types, find the info class
+        if self.info_class is None:
+            class_ = no_info()
+        else:
+            # Separate the module from the classname
+            dot = self.info_class.rfind(".")
+            try:
+                if dot < 0:
+                    # No module, try getting it from the globals, I guess
+                    class_ = globals()[self.info_class]
+                else:
+                    modname = self.info_class[:dot]
+                    classname = self.info_class[dot + 1 :]
+
+                    # Try to import the module
+                    module = importlib.import_module(modname)
+                    class_ = getattr(module, classname)
+            except (KeyError, ImportError, AttributeError) as e:
+                if self._info_import_errors == "skip":
+                    self._registered_acq_types[self.name] = None
+                    return None
+                elif self._info_import_errors == "ignore":
+                    class_ = no_info()
+                else:
+                    raise ImportError(
+                        f'Unable to load info class "{self.info_class}" '
+                        f'for acq type "{self.name}"'
+                    ) from e
+
+        # Initialise the _class_ with the acq_type
+        class_.set_config(self)
+        self._registered_acq_types[self.name] = class_
+
+        return class_
+
+
+class AcqFileTypes(base_model):
+    """FileTypes supported by an AcqType.
+
+    A junction table providing the many-to-many relationship
+    indicating which FileTypes are supported by which AcqTypes.
+
+    Attributes
+    ----------
+    acq_type : foreign key to AcqType
+    file_type : foreign key to FileType
+    """
+
+    acq_type = pw.ForeignKeyField(AcqType, backref="acq_types")
+    file_type = pw.ForeignKeyField(FileType, backref="file_types")
+
+    class Meta:
+        primary_key = pw.CompositeKey("acq", "file")
 
 
 class ArchiveFile(base_model):
@@ -348,161 +382,11 @@ class ArchiveFile(base_model):
         )
 
 
-class AcqInfoBase(base_model, ConfigClass):
-    """Base class for storing metadata for acquisitions.
+def import_info_classes():
+    """Iterate through AcqType and FileType to load their associated info classes."""
 
-    To make a working AcqInfo type you must at a minimum set `_acq_type` to be
-    the name of this acquisition type (this is what is used in the `AcqType`
-    table), and set `_file_types` to be a list of the file types supported by
-    this Acquisition type, as well as provide implementations for `is_type` and
-    `set_info`. Additionally you might want to implement `set_config` to receive
-    configuration information.
-    """
+    for acqtype in AcqType.select():
+        acqtype.acq_info()
 
-    _acq_type = None
-
-    _file_types = None
-
-    acq = pw.ForeignKeyField(ArchiveAcq)
-
-    @classmethod
-    def new(cls, acq, node):
-        """Create a new AcqInfo object.
-
-        Parameters
-        ----------
-        acq : ArchiveAcq
-            The acquisition we are adding metadata for.
-        node : StorageNode
-            The node we are currently on. Used so we can inspect the actual
-            acquisition directory.
-
-        Returns
-        -------
-        acq_info : AcqInfoBase
-            The AcqInfo instance.
-        """
-
-        # Create an instance of the metadata class and point it at the
-        # acquisition
-        acq_info = cls()
-        acq_info.acq = acq
-
-        # Call the method on the derived class to set its metadata
-        acq_info.set_info(acq.name, node.root)
-
-        # Save the changes and return the AcqInfo object
-        acq_info.save()
-        return acq_info
-
-    @classmethod
-    def is_type(cls, acq_name, node):
-        """Check if this acqusition path can be handled by this acquisition type.
-
-        Parameters
-        ----------
-        acq_name : string
-            Path to the acquisition directory.
-        node : StorageNode
-            The node containing the acquisition.
-        """
-        raise NotImplementedError()
-
-    @classmethod
-    def get_acq_type(cls):
-        """Get an instance of the AcqType row corresponding to this AcqInfo."""
-        return AcqType.get(name=cls._acq_type)
-
-    def set_info(self, acqpath, node_root):
-        """Set any metadata from the acquisition directory.
-
-        Abstract method, must be implemented in a derived AcqInfo table.
-
-        Parameters
-        ----------
-        acqpath : string
-            Path to the acquisition directory.
-        node_root : string
-            Path to the root directory for data in the node we are currently on.
-        """
-        raise NotImplementedError()
-
-
-class FileInfoBase(base_model, ConfigClass):
-    """Base class for storing metadata for files.
-
-    To make a working FileInfo type you must at a minimum set `_file_type` to be
-    the name of this file type (this is what is used in the `FileType` table),
-    as well as provide implementations for `is_type` and `set_info`.
-    Additionally you might want to implement `set_config` to receive
-    configuration information.
-    """
-
-    _file_type = None
-
-    file = pw.ForeignKeyField(ArchiveFile)
-
-    @classmethod
-    def new(cls, file, node):
-        """Create a new AcqInfo object.
-
-        Parameters
-        ----------
-        file : ArchiveFile
-            The file we are adding metadata for.
-        node : StorageNode
-            The node we are currently on. Used so we can inspect the actual
-            archive file.
-
-        Returns
-        -------
-        file_info : FileInfoBase
-            The FileInfo instance.
-        """
-
-        # Create an instance of the metadata class and point it at the
-        # acquisition
-        file_info = cls()
-        file_info.file = file
-
-        # Call the method on the derived class to set its metadata
-        acqpath = pathlib.PurePath(node.root, file.acq.name)
-        file_info.set_info(file.name, acqpath)
-
-        # Save the changes and return the FileInfo object
-        file_info.save()
-        return file_info
-
-    @classmethod
-    def get_file_type(cls):
-        """Get an instance of the FileType row corresponding to this FileInfo."""
-        return FileType.get(name=cls._file_type)
-
-    @classmethod
-    def is_type(cls, filename, node, acq_name):
-        """Check if this file can be handled by this file type.
-
-        Parameters
-        ----------
-        filename : string
-            Name of the file.
-        node : StorageNode
-            The node containing the file.
-        acq_name : string
-            Name of the acquisition.
-        """
-        raise NotImplementedError()
-
-    def set_info(self, filename, acq_root):
-        """Set any metadata from the file.
-
-        Abstract method, must be implemented in a derived FileInfo table.
-
-        Parameters
-        ----------
-        filename : string
-            Name of the file.
-        acq_root : string
-            Path to the root of the the acquisition on the node.
-        """
-        raise NotImplementedError()
+    for filetype in FileType.select():
+        filetype.file_info()

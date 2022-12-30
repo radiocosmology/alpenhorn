@@ -8,7 +8,6 @@ import pathlib
 import peewee as pw
 
 from alpenhorn.task import Task
-from alpenhorn.acquisition import ArchiveFile
 from alpenhorn.archive import ArchiveFileCopy
 from alpenhorn.io.base import BaseGroupIO, BaseNodeRemote
 from alpenhorn.io.ioutil import pretty_bytes
