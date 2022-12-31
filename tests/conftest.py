@@ -18,6 +18,7 @@ from alpenhorn.acquisition import (
 )
 from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
 
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
@@ -346,7 +347,9 @@ def use_chimedb(set_config):
     cdb = pytest.importorskip("chimedb.core")
     cdb.test_enable()
 
-    config.config = config.merge_dict_tree(set_config, {"extensions": ["chimedb.core.alpenhorn"]})
+    config.config = config.merge_dict_tree(
+        set_config, {"extensions": ["chimedb.core.alpenhorn"]}
+    )
 
 
 @pytest.fixture

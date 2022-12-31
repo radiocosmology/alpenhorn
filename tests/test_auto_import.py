@@ -54,4 +54,3 @@ def test_import_file_bad_file(
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
         ArchiveAcq.get(name="acq")
-    assert False

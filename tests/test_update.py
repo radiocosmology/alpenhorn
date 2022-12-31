@@ -37,8 +37,8 @@ num_task_threads = 4
 
 @pytest.fixture
 @pytest.mark.alpenhorn_config(
-        {"database": {"url": "sqlite:///" + str(tmpdir.join("database.sql"))}}
-        )
+    {"database": {"url": "sqlite:///" + str(tmpdir.join("database.sql"))}}
+)
 def fixtures(set_config, tmpdir):
     """Initializes an Sqlite database on disk with data in tests/fixtures"""
 
