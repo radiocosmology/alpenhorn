@@ -71,7 +71,7 @@ class acq_info_base(base_model, info_base):
         """
         raise NotImplementedError()
 
-    def set_info(self, acqpath, node_root):
+    def set_info(self, acqpath, node):
         """Set any metadata from the acquisition directory.
 
         Abstract method, must be implemented in a derived AcqInfo table.

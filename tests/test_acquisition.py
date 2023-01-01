@@ -15,6 +15,7 @@ from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
 
 def test_schema(dbproxy, simplefile):
     assert set(dbproxy.get_tables()) == {
+        "acqfiletypes",
         "acqtype",
         "archiveacq",
         "filetype",
@@ -50,6 +51,26 @@ def test_acqtype_model(acqtype):
         "notes": "Note",
         "name": "max",
     }
+
+
+def test_acqtype_filetypes_empty(simpleacqtype, simplefiletype):
+    """Test AcqType.file_types() returning no matches."""
+    assert list(simpleacqtype.file_types) == list()
+
+
+def test_acqtype_filetypes(simpleacqtype, acqfiletypes, filetype):
+    """Test AcqType.file_types()."""
+
+    # Add a bunch of filetypes to the acqtype
+    filetypes = [
+        filetype(name="1"),
+        filetype(name="2"),
+        filetype(name="3"),
+    ]
+    for ft in filetypes:
+        acqfiletypes(acq_type=simpleacqtype, file_type=ft)
+
+    assert list(simpleacqtype.file_types) == filetypes
 
 
 def test_acq_model(simpleacqtype, archiveacq):

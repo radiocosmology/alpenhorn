@@ -506,6 +506,16 @@ def simpleacq(simpleacqtype, archiveacq):
 
 
 @pytest.fixture
+def simplefiletype(filetype, acqtype, acqfiletypes):
+    """Create a simple FileType record attached to an acqtype."""
+    at = acqtype(name="simplefiletype_acqtype")
+    ft = filetype(name="simplefiletype")
+    acqfiletypes(acq_type=at, file_type=ft)
+
+    return ft
+
+
+@pytest.fixture
 def simplefileinfo(simplefiletype):
     """Create a SimpleFileInfo class."""
 
@@ -514,12 +524,6 @@ def simplefileinfo(simplefiletype):
         patterns = ["file"]
 
     return SimpleFileInfo
-
-
-@pytest.fixture
-def simplefiletype(filetype):
-    """Create a simple FileType record."""
-    return filetype(name="simplefiletype")
 
 
 @pytest.fixture

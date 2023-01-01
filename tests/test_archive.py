@@ -18,6 +18,7 @@ def test_schema(dbproxy, simplecopy, simplerequest):
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
+        "acqfiletypes",
         "acqtype",
         "archiveacq",
         "filetype",

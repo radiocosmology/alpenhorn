@@ -111,8 +111,8 @@ def _import_file(node, path):
             # Insert the archive record
             acq = ac.ArchiveAcq.create(name=acqname, type=acqtype)
 
-            # Generate the metadata table
-            acqtype.acq_info.new(acq, node)
+            # Generate the metadata info
+            acqtype.acq_info().set_info(acq, node)
             log.info(f'Acquisition "{acqname}" added to DB.')
 
         # Add the file, if necessary.

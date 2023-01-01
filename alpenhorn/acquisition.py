@@ -318,7 +318,7 @@ class AcqFileTypes(base_model):
     file_type = pw.ForeignKeyField(FileType, backref="file_types")
 
     class Meta:
-        primary_key = pw.CompositeKey("acq", "file")
+        primary_key = pw.CompositeKey("acq_type", "file_type")
 
 
 class ArchiveFile(base_model):
