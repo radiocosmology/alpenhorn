@@ -49,7 +49,9 @@ info_class field of an AcqType or FileType will result in an error.  This
 module also provides a class factory no_info() which returns _NoInfo
 subclasses.
 """
+import re
 import json
+import globre
 import logging
 
 import peewee as pw
@@ -174,28 +176,25 @@ class info_base:
         if self._type is None:
             raise RuntimeError("attempt to instantiate unconfigured info class")
 
-        # Call _set_info, if necessary
+        # Remove keywords we consume
         path = kwargs.pop("path_", None)
-        if path is not None:
-            try:
-                node = kwargs.pop("node_")
-            except KeyError:
-                # Or ValueError?
-                raise TypeError("no node_ specified with path_")
-            # These are optional
-            acqname = kwargs.pop("acqname_", None)
-            acqtype = kwargs.pop("acqtype_", None)
+        node = kwargs.pop("node_", None)
+        acqname = kwargs.pop("acqname_", None)
+        acqtype = kwargs.pop("acqtype_", None)
+        # Call _set_info, if necessary
+        # This is only called if there's a table model backing the
+        # info class; i.e. there's something useful to do with the data
+        #
+        # Info returned is merged into kwargs so the peewee model can
+        # ingest it.
+        if path is not None and self.has_model():
+            if node is None:
+                raise ValueError("no node_ specified with path_")
 
-            # This is only called if there's a table model backing the
-            # info class; i.e. there's something useful to do with the data
-            #
-            # Info returned is merged into kwargs so the peewee model can
-            # ingest it.
-            if self.has_model():
-                kwargs |= self._set_info(path, node, acqname, acqtype)
+            kwargs |= self._set_info(path, node, acqtype, acqname)
 
         # Continue init
-        super().__init__(args, kwargs)
+        super().__init__(*args, **kwargs)
 
     @property
     def type(self):
@@ -205,7 +204,7 @@ class info_base:
         """
         return self._type.name
 
-    def _set_info(self, path, node, acqname, acqtype):
+    def _set_info(self, path, node, acqtype, acqname):
         """generate info metadata for this path.
 
         An info subclass's _set_info() method is only called if the class
@@ -220,12 +219,12 @@ class info_base:
             file being imported.
         node : StorageNode
             StorageNode containing the file to be imported.
-        acqname : pathlib.Path or None
-            For acquisitions, this is None.  For files, this is the
-            name of the containing acquisition.
         acqtype : AcqType or None
             For acqusitions, this is None.  For files, this is the
             AcqType of the containing acqusition.
+        acqname : pathlib.Path or None
+            For acquisitions, this is None.  For files, this is the
+            name of the containing acquisition.
 
         Subclasses with a table model must re-implement this method
         to generate metadata by inspecting the acqusition or file on disk
@@ -233,9 +232,13 @@ class info_base:
         path directly; use `node.io.open(path)`.
 
         Any implementation must return a dict containing field data for the
-        table.  The dict will be merged into the dict of keywords passed to
-        the class constructor, and then passed on to the peewee model
-        constructor to populate the new info record being instantiated.
+        table.  The dict will passed to the base_model and used to populate
+        the fields of the new info record being created.
+
+        For acquisitions, implementations should _not_ provide a value for
+        the `acq` field.  For files, implementations should _not_ provide
+        a value for the `file` field.  Appropriate values for these fields
+        will be inserted by alpenhorn after those records are created.
 
         On error, implementations should raise an appropriate exception.
         """
@@ -331,17 +334,12 @@ class _NoInfo(info_base):
 
         # Get the match function to use depending on whether globbing is enabled.
         if cls._glob:
-            import globre
-
             matchfn = globre.match
         else:
-            import re
-
             matchfn = re.match
 
         # Loop over patterns and check for matches
         for pattern in cls._patterns:
-
             if matchfn(pattern, name):
                 return True
 
