@@ -57,7 +57,7 @@ def test_acqtype_model(acqtype):
     }
 
 
-def test_acqtype_acqinfo_importerror(acqtype):
+def test_acqtype_info_importerror(acqtype):
     """Test AcqType.info() raising ImportError."""
 
     ats = [
@@ -72,7 +72,7 @@ def test_acqtype_acqinfo_importerror(acqtype):
 
 
 @pytest.mark.alpenhorn_config({"model": {"acq_info_errors": "skip"}})
-def test_acqtype_acqinfo_skip(set_config, acqtype):
+def test_acqtype_info_skip(set_config, acqtype):
     """Test AcqType.info() with info_errors skip"""
 
     at = acqtype(name="name", info_class="NoClass")
@@ -82,8 +82,8 @@ def test_acqtype_acqinfo_skip(set_config, acqtype):
 
 
 @pytest.mark.alpenhorn_config({"model": {"acq_info_errors": "ignore"}})
-def test_acqtype_acqinfo_ignore(set_config, acqtype):
-    """Test AcqType.info() with info_errors skip"""
+def test_acqtype_info_ignore(set_config, acqtype):
+    """Test AcqType.info() with info_errors ignore"""
 
     at = acqtype(name="name", info_class="NoClass")
 
@@ -195,7 +195,7 @@ def test_filetype_info_skip(set_config, filetype):
 
 @pytest.mark.alpenhorn_config({"model": {"file_info_errors": "ignore"}})
 def test_filetype_info_ignore(set_config, filetype):
-    """Test FileType.info() with info_errors skip"""
+    """Test FileType.info() with info_errors ignore"""
 
     ft = filetype(name="name", info_class="NoClass")
 
