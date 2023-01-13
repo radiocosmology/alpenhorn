@@ -208,14 +208,22 @@ def merge_dict_tree(a, b):
     return b
 
 
-def info_import_errors(acq_type, is_acq):
+def info_import_errors(type_, is_acq):
     global config
 
     try:
-        return (
-            config["model"]["acq_info_errors"][acq_type]
+        # Get the correct dict
+        d = (
+            config["model"]["acq_info_errors"]
             if is_acq
-            else config["model"]["file_info_errors"][acq_type]
+            else config["model"]["file_info_errors"]
         )
+
+        # String? just return it
+        if isinstance(d, str):
+            return d
+
+        # Return the action for this type, or the default action, or the default default.
+        return d.get(type_, d.get("_", "abort"))
     except (KeyError, TypeError):
         return "abort"

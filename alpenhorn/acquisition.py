@@ -11,13 +11,93 @@ from .db import base_model
 log = logging.getLogger(__name__)
 
 
-class AcqType(base_model):
+class type_base(base_model):
+    """Base class for AcqType and FileType (q.v.)."""
+
+    name = pw.CharField(max_length=64, unique=True)
+    priority = pw.IntegerField(default=0, null=False)
+    info_class = pw.CharField(max_length=254, null=True)
+    notes = pw.TextField(null=True)
+    info_config = pw.TextField(null=True)
+
+    # This dict is an atribute on the class, used to hold the loaded info
+    # classes.  Store as a dictionary for easy lookup of handlers by name.
+    _info_classes = dict()
+
+    class Meta:
+        indexes = ((("priority",), False),)  # index speeds ordering
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Get the import_error action for this type
+        self._info_import_errors = config.info_import_errors(self.name, is_acq=True)
+
+    def _get_info_class(self):
+        """Returns the associated Info table for this type."""
+
+        from .info_base import no_info
+
+        # If the info class has already been loaded, just return it.
+        try:
+            return self._info_classes[self.name]
+        except KeyError:
+            pass
+
+        # Not in _info_classes, find the info class
+        if self.info_class is None:
+            class_ = no_info()
+        else:
+            # Separate the module from the classname
+            dot = self.info_class.rfind(".")
+            try:
+                if dot < 0:
+                    # No module, try getting it from the globals, I guess
+                    class_ = globals()[self.info_class]
+                else:
+                    modname = self.info_class[:dot]
+                    classname = self.info_class[dot + 1 :]
+
+                    # Try to import the module
+                    module = importlib.import_module(modname)
+                    class_ = getattr(module, classname)
+            except (KeyError, ImportError, AttributeError) as e:
+                if self._info_import_errors == "skip":
+                    # In this case we've been told to pretend the
+                    # type doesn't exist
+
+                    class_ = no_info()
+                    # Force non-match
+                    class_.is_type = lambda *args, **kwargs: False
+
+                elif self._info_import_errors == "ignore":
+                    # In this case we've been told to pretend that
+                    # the type had self.info_class == None.
+                    class_ = no_info()
+                else:
+                    raise ImportError(
+                        f'Unable to load info class "{self.info_class}" '
+                        f'for {self.__class__.__name__} "{self.name}"'
+                    ) from e
+
+        # Initialise the _class_ with the acq_type
+        class_.set_config(self)
+        self._info_classes[self.name] = class_
+
+        return class_
+
+
+class AcqType(type_base):
     """The type of data that is being taken in the acquisition.
 
     Attributes
     ----------
     name : string
         Name of the acqusition type. e.g. `raw`, `vis`
+    priority : integer
+        Priority of this type.  When performing type-detection, types
+        are tried in descending priority order (largest priority first).
+        Do not assume the sorting is stable.
     info_class : string
         Import path of the associated Python class implementing this
         type's AcqInfo class.  The class specified must be subclassed
@@ -29,22 +109,13 @@ class AcqType(base_model):
         associated AcqInfo class.
     """
 
-    name = pw.CharField(max_length=64, unique=True)
-    info_class = pw.CharField(max_length=254, null=True)
-    notes = pw.TextField(null=True)
-    info_config = pw.TextField(null=True)
-
-    # This dict is an atribute on the class, used to hold the set of registered
-    # handlers. Store as a dictionary for easy lookup of handlers by name.
-    _registered_acq_types = {}
-
     def is_type(self, acqname, node):
         """Does this acquisition type understand this directory?
 
         Parameters
         ----------
-        acqname : string
-            Name of the acquisition we are checking.
+        acqname : pathlib.Path
+            path relative to node.root of the acquisition we are checking.
         node : StorageNode
             The node we are importing from. Needed so we can inspect the actual
             acquisition.
@@ -53,7 +124,7 @@ class AcqType(base_model):
         -------
         is_type : boolean
         """
-        return self.acq_info().is_type(acqname, node)
+        return self.info().is_type(acqname, node)
 
     @classmethod
     def detect(cls, acqname, node):
@@ -91,69 +162,26 @@ class AcqType(base_model):
         # the process with the parent directory of acqname, until we run out of
         # directory segment
         for name in acqname.parents:
-            for acq_type in cls.select():
+            for acq_type in cls.select().order_by(AcqType.priority.desc()):
                 if acq_type.is_type(name, node):
                     return acq_type, name
 
         # No match
         return None
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Get the import_error action for this type
-        self._info_import_errors = config.info_import_errors(self.name, is_acq=True)
-
-    def acq_info(self):
-        """The AcqInfo table for this AcqType."""
-
-        from .info_base import no_info
-
-        # If the info class has already been loaded, just return it.
-        try:
-            return self._registered_acq_types[self.name]
-        except KeyError:
-            pass
-
-        # Not in _registered_acq_types, find the info class
-        if self.info_class is None:
-            class_ = no_info()
-        else:
-            # Separate the module from the classname
-            dot = self.info_class.rfind(".")
-            try:
-                if dot < 0:
-                    # No module, try getting it from the globals, I guess
-                    class_ = globals()[self.info_class]
-                else:
-                    modname = self.info_class[:dot]
-                    classname = self.info_class[dot + 1 :]
-
-                    # Try to import the module
-                    module = importlib.import_module(modname)
-                    class_ = getattr(module, classname)
-            except (KeyError, ImportError, AttributeError) as e:
-                if self._info_import_errors == "skip":
-                    self._registered_acq_types[self.name] = None
-                    return None
-                elif self._info_import_errors == "ignore":
-                    class_ = no_info()
-                else:
-                    raise ImportError(
-                        f'Unable to load info class "{self.info_class}" '
-                        f'for acq type "{self.name}"'
-                    ) from e
-
-        # Initialise the _class_ with the acq_type
-        class_.set_config(self)
-        self._registered_acq_types[self.name] = class_
-
-        return class_
+    def info(self):
+        """Return the Info class for this AcqType."""
+        return self._get_info_class()
 
     @property
     def file_types(self):
-        """The FileTypes supported by this AcqType."""
-        return FileType.select().join(AcqFileTypes).where(AcqFileTypes.acq_type == self)
+        """The FileTypes supported by this AcqType, ordered by priority."""
+        return (
+            FileType.select()
+            .join(AcqFileTypes)
+            .where(AcqFileTypes.acq_type == self)
+            .order_by(FileType.priority.desc())
+        )
 
 
 class ArchiveAcq(base_model):
@@ -163,9 +191,10 @@ class ArchiveAcq(base_model):
     ----------
     name : string
         Name of acquisition.
-    type : foreign key
-        Reference to the data type type.
+    type : foreign key to AcqType
+        The type of this acqusition
     comment : string
+        User-specified comment.
 
     Properties
     ----------
@@ -178,13 +207,17 @@ class ArchiveAcq(base_model):
     comment = pw.TextField(null=True)
 
 
-class FileType(base_model):
+class FileType(type_base):
     """A file type.
 
     Attributes
     ----------
     name : string
         The name of this file type.
+    priority : integer
+        Priority of this type.  When performing type-detection, types
+        are tried in descending priority order (largest priority first).
+        Do not assume the sorting is stable.
     info_class : string
         Import path of the associated Python class implementing this
         type's FileInfo class.  The class specified must be subclassed
@@ -195,15 +228,6 @@ class FileType(base_model):
         An optional JSON blob containing configuration data for the
         associated FileInfo class.
     """
-
-    name = pw.CharField(max_length=64, unique=True)
-    info_class = pw.CharField(max_length=254, null=True)
-    notes = pw.TextField(null=True)
-    info_config = pw.TextField(null=True)
-
-    # This dict is an atribute on the class used to hold the set of registered
-    # handlers. Store as a dictionary for easy lookup of handlers by name.
-    _registered_file_types = {}
 
     def is_type(self, filename, acq_name, node):
         """Check if this file can be handled by this file type.
@@ -222,7 +246,7 @@ class FileType(base_model):
         -------
         is_type : boolean
         """
-        return self.file_info.is_type(filename, acq_name, node)
+        return self.info().is_type(filename, acq_name, node)
 
     @classmethod
     def detect(cls, filename, acqtype, acqname, node):
@@ -251,55 +275,9 @@ class FileType(base_model):
 
         return None
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Get the import_error action for this type
-        self._info_import_errors = config.info_import_errors(self.name, is_acq=False)
-
-    def file_info(self):
-        """The FileInfo table for this FileType."""
-
-        # If the info class has already been loaded, just return it.
-        try:
-            return self._registered_acq_types[self.name]
-        except KeyError:
-            pass
-
-        # Not in _registered_acq_types, find the info class
-        if self.info_class is None:
-            class_ = no_info()
-        else:
-            # Separate the module from the classname
-            dot = self.info_class.rfind(".")
-            try:
-                if dot < 0:
-                    # No module, try getting it from the globals, I guess
-                    class_ = globals()[self.info_class]
-                else:
-                    modname = self.info_class[:dot]
-                    classname = self.info_class[dot + 1 :]
-
-                    # Try to import the module
-                    module = importlib.import_module(modname)
-                    class_ = getattr(module, classname)
-            except (KeyError, ImportError, AttributeError) as e:
-                if self._info_import_errors == "skip":
-                    self._registered_acq_types[self.name] = None
-                    return None
-                elif self._info_import_errors == "ignore":
-                    class_ = no_info()
-                else:
-                    raise ImportError(
-                        f'Unable to load info class "{self.info_class}" '
-                        f'for acq type "{self.name}"'
-                    ) from e
-
-        # Initialise the _class_ with the acq_type
-        class_.set_config(self)
-        self._registered_acq_types[self.name] = class_
-
-        return class_
+    def info(self):
+        """Return the Info class for this FileType."""
+        return self._get_info_class()
 
 
 class AcqFileTypes(base_model):
@@ -326,10 +304,10 @@ class ArchiveFile(base_model):
 
     Attributes
     ----------
-    acq : foreign key
-        Reference to the acquisition this file is part of.
-    type : foreign key
-        Reference to the type of file that this is.
+    acq : foreign key to ArchiveAcq
+        The acqusition containing this file.
+    type : foreign key to FileType
+        The type of this file.
     name : string
         Name of the file.
     size_b : integer
@@ -345,6 +323,8 @@ class ArchiveFile(base_model):
     name = pw.CharField(max_length=255)
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
+    # Note: default here is the now method itself (i.e. "now", not "now()").
+    #       Will be evaulated by peewee at row-creation time.
     registered = pw.DateTimeField(default=datetime.datetime.now)
 
     class Meta:
@@ -386,7 +366,7 @@ def import_info_classes():
     """Iterate through AcqType and FileType to load their associated info classes."""
 
     for acqtype in AcqType.select():
-        acqtype.acq_info()
+        acqtype.info()
 
     for filetype in FileType.select():
-        filetype.file_info()
+        filetype.info()

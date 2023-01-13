@@ -11,6 +11,7 @@ import datetime
 import peewee as pw
 
 from alpenhorn.acquisition import AcqType, ArchiveAcq, ArchiveFile, FileType
+from alpenhorn.info_base import _NoInfo
 
 
 def test_schema(dbproxy, simplefile):
@@ -27,6 +28,7 @@ def test_acqtype_model(acqtype):
     acqtype(name="min")
     acqtype(
         name="max",
+        priority=-1,
         notes="Note",
         info_class="InfoClass",
         info_config='{"info": "config"}',
@@ -43,6 +45,7 @@ def test_acqtype_model(acqtype):
         "info_config": None,
         "notes": None,
         "name": "min",
+        "priority": 0,
     }
     assert AcqType.select().where(AcqType.name == "max").dicts().get() == {
         "id": 2,
@@ -50,7 +53,42 @@ def test_acqtype_model(acqtype):
         "info_config": '{"info": "config"}',
         "notes": "Note",
         "name": "max",
+        "priority": -1,
     }
+
+
+def test_acqtype_acqinfo_importerror(acqtype):
+    """Test AcqType.info() raising ImportError."""
+
+    ats = [
+        acqtype(name="at1", info_class="NoClass"),
+        acqtype(name="at2", info_class="NoModule.Class"),
+        acqtype(name="at3", info_class="alpenhorn.acquisition.NoClass"),
+    ]
+
+    for at in ats:
+        with pytest.raises(ImportError):
+            at.info()
+
+
+@pytest.mark.alpenhorn_config({"model": {"acq_info_errors": "skip"}})
+def test_acqtype_acqinfo_skip(set_config, acqtype):
+    """Test AcqType.info() with info_errors skip"""
+
+    at = acqtype(name="name", info_class="NoClass")
+
+    info = at.info()
+    assert issubclass(info, _NoInfo)
+
+
+@pytest.mark.alpenhorn_config({"model": {"acq_info_errors": "ignore"}})
+def test_acqtype_acqinfo_ignore(set_config, acqtype):
+    """Test AcqType.info() with info_errors skip"""
+
+    at = acqtype(name="name", info_class="NoClass")
+
+    info = at.info()
+    assert issubclass(info, _NoInfo)
 
 
 def test_acqtype_filetypes_empty(simpleacqtype, simplefiletype):
@@ -105,6 +143,7 @@ def test_filetype_model(filetype):
         notes="Note",
         info_class="InfoClass",
         info_config='{"info": "config"}',
+        priority=-1,
     )
 
     # name is unique
@@ -118,6 +157,7 @@ def test_filetype_model(filetype):
         "info_config": None,
         "notes": None,
         "name": "min",
+        "priority": 0,
     }
     assert FileType.select().where(FileType.name == "max").dicts().get() == {
         "id": 2,
@@ -125,7 +165,42 @@ def test_filetype_model(filetype):
         "info_config": '{"info": "config"}',
         "notes": "Note",
         "name": "max",
+        "priority": -1,
     }
+
+
+def test_filetype_info_importerror(filetype):
+    """Test FileType.info() raising ImportError."""
+
+    fts = [
+        filetype(name="ft1", info_class="NoClass"),
+        filetype(name="ft2", info_class="NoModule.Class"),
+        filetype(name="ft3", info_class="alpenhorn.acquisition.NoClass"),
+    ]
+
+    for ft in fts:
+        with pytest.raises(ImportError):
+            ft.info()
+
+
+@pytest.mark.alpenhorn_config({"model": {"file_info_errors": "skip"}})
+def test_filetype_info_skip(set_config, filetype):
+    """Test FileType.info() with info_errors skip"""
+
+    ft = filetype(name="name", info_class="NoClass")
+
+    info = ft.info()
+    assert issubclass(info, _NoInfo)
+
+
+@pytest.mark.alpenhorn_config({"model": {"file_info_errors": "ignore"}})
+def test_filetype_info_ignore(set_config, filetype):
+    """Test FileType.info() with info_errors skip"""
+
+    ft = filetype(name="name", info_class="NoClass")
+
+    info = ft.info()
+    assert issubclass(info, _NoInfo)
 
 
 def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):

@@ -93,3 +93,35 @@ def test_merge():
     }
 
     assert conf_c == test_c
+
+
+@pytest.mark.alpenhorn_config({"model": {"acq_info_errors": "skip"}})
+def test_import_errors_string(set_config):
+    """Test info_import_errors() on with a string value"""
+
+    assert config.info_import_errors("type", is_acq=True) is "skip"
+    assert config.info_import_errors("type", is_acq=False) is "abort"
+
+
+@pytest.mark.alpenhorn_config(
+    {
+        "model": {
+            "acq_info_errors": {
+                "skip_type": "skip",
+                "ignore_type": "ignore",
+                "abort_type": "abort",
+            },
+            "file_info_errors": {"file_type": "skip", "_": "ignore"},
+        }
+    }
+)
+def test_import_errors_dict(set_config):
+    """Test info_import_errors() on with a dict value"""
+
+    assert config.info_import_errors("skip_type", is_acq=True) is "skip"
+    assert config.info_import_errors("ignore_type", is_acq=True) is "ignore"
+    assert config.info_import_errors("abort_type", is_acq=True) is "abort"
+    assert config.info_import_errors("missing_type", is_acq=True) is "abort"
+
+    assert config.info_import_errors("file_type", is_acq=False) is "skip"
+    assert config.info_import_errors("missing_type", is_acq=False) is "ignore"

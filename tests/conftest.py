@@ -6,7 +6,7 @@ import shutil
 from unittest.mock import patch
 
 from alpenhorn import config, db, extensions, util
-from alpenhorn.info_base import NoInfo
+from alpenhorn.info_base import _NoInfo
 from alpenhorn.queue import FairMultiFIFOQueue
 from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.acquisition import (
@@ -492,7 +492,7 @@ def simpleacqtype(acqtype):
 def simpleacqinfo():
     """Create a SimpleAcqInfo class."""
 
-    class SimpleAcqInfo(NoInfo):
+    class SimpleAcqInfo(_NoInfo):
         _type = "simpleacqtype"
         patterns = ["acq"]
 
@@ -519,7 +519,7 @@ def simplefiletype(filetype, acqtype, acqfiletypes):
 def simplefileinfo(simplefiletype):
     """Create a SimpleFileInfo class."""
 
-    class SimpleFileInfo(NoInfo):
+    class SimpleFileInfo(_NoInfo):
         _type = "simplefiletype"
         patterns = ["file"]
 

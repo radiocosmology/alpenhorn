@@ -1,4 +1,54 @@
-"""Acqusition and File info base classes."""
+"""Acqusition and File Info base classes.
+
+Each AcqType and FileType is associated with an Info class.
+
+All Info classes implement the logic to identify the type
+of an acquisition or file from the file's path (see the
+is_type() method).  This is used when importing new data
+into the data index.
+
+_Most_ Info classes also provide facilities for recording
+other metadata to the database, in type-specific Info tables.
+Info classes that provide this functionality need to inherit
+from the table model base class `alpenhorn.db.base_class`.
+
+Because each entry in the AcqType and FileType tables need
+an Info class, and because these types are experiment-specific,
+Info classes are, for the most part, not provided with alpenhorn.
+All Info classes must subclass from one of the base classes
+found here.  There are three levels of base classes implementing
+more and more functionality:
+
+    info_base:
+        Base-class for all info classes.  Does not implement
+        a table model.  Does not distinguish between AcqType and
+        FileType.  Types needed a table model should use the
+        more appropriate acq_info_base or file_info_base.  Subclasses
+        must implement is_type() for type-detection logic.
+
+    acq_info_base and file_info_base:
+        Subclassed from both info_base and base_model to connect
+        it to a database table to store data.  Subclasses must
+        re-implement both is_type(), for type-detection logic, and
+        _set_info(), for data gathering.
+
+    GenericAcqInfo and GenericFileInfo:
+        Subclassed from acq_info_base or file_info_base.  Adds a
+        simple regex or glob matching for is_type().  Subclasses
+        must still re-implement _set_info().
+
+This module also provides the inbo_base subclass _NoInfo which has the
+same is_type() implementation as GenericAcqInfo and GenericFileInfo but
+isn't backed by a table.  This class is used for AcqTypes and FileTypes
+whose info_class is None to provide type-detection without info metadata
+storage.
+
+All the classes defined in this module, including _NoInfo, must be
+subclassed before use.  Putting these base classes directly into the
+info_class field of an AcqType or FileType will result in an error.  This
+module also provides a class factory no_info() which returns _NoInfo
+subclasses.
+"""
 import json
 import logging
 
@@ -13,12 +63,21 @@ log = logging.getLogger(__name__)
 class info_base:
     """Base class for all Info classes.
 
-    Does not implement a table model."""
+    Does not implement a table model.  If one is needed, subclass
+    from acq_info_base or file_info_base instead.
+
+    Subclasses must re-implement is_type() to define type-detection
+    logic."""
 
     # Class properties
     # The AcqType or FileType instance for this info class
     _type = None
     _config = dict()
+
+    @classmethod
+    def has_model(cls):
+        """return boolean: is this class backed by a DB table?"""
+        return issubclass(cls, base_model)
 
     @classmethod
     def get_type(cls):
@@ -34,26 +93,100 @@ class info_base:
         type : AcqType or FileType
             The AcqType or FileType instance associated with this info class.
         """
+        if cls is _NoInfo:
+            raise TypeError(
+                "cannot call set_config on _NoInfo base class.  Sublass first."
+            )
+
         cls._type = type_
 
         if type_.info_config is not None:
             cls._config = json.loads(type_.info_config)
+
+    @classmethod
+    def is_type(cls, path, *args):
+        """Type detection logic.
+
+        Parameters
+        ----------
+
+        Subclasses must re-implement this to provide type-detection logic."""
+        raise NotImplementedError("must be re-implemented by subclass")
+
+    def __init__(self, *args, **kwargs):
+        if self._type is None:
+            raise RuntimeError("attempt to instantiate unconfigured info class")
+
+        # Call _set_info, if necessary
+        path = kwargs.pop("path_", None)
+        if path is not None:
+            try:
+                node = kwargs.pop("node_")
+            except KeyError:
+                # Or TypeError?
+                raise ValueError("no node_ specified with path_")
+            # These are optional
+            acqname = kwargs.pop("acqname_", None)
+            acqtype = kwargs.pop("acqtype_", None)
+
+            # This is only called if there's a table model backing the
+            # info class; i.e. there's something useful to do with the data
+            #
+            # Info returned is merged into kwargs so the peewee model can
+            # ingest it.
+            if self.has_model():
+                kwargs |= self._set_info(path, node, acqname, acqtype)
+
+        # Continue init
+        super().__init__(args, kwargs)
 
     @property
     def type(self):
         """The name of the associated type"""
         return self._type.name
 
+    def _set_info(self, path, node, acqname, acqtype):
+        """generate info metadata for this path.
 
-class acq_info_base(base_model, info_base):
+        An info subclass's _set_info() method is only called if the class
+        is backed by a DB table (i.e. has_table() returns True).  Subclasses
+        retreive info metadata by inspecting the acqusition or file on disk
+        given by `path`.
+
+        Parameters
+        ----------
+        path : pathlib.Path
+            path relative to node.root of the acqusition directory or
+            file being imported.
+        node : StorageNode
+            StorageNode containing the file to be imported.
+        acqname : pathlib.Path or None
+            For acquisitions, this is None.  For files, this is the
+            name of the containing acquisition.
+        acqtype : AcqType or None
+            For acqusitions, this is None.  For files, this is the
+            AcqType of the containing acqusition.
+
+        Any implementation must return a dict containing field data for the
+        table.  The dict will be merged into the dict of keywords passed to
+        the class constructor, and then passed on to the peewee model
+        constructor to populate the new info record being instantiated.
+
+        On error, implementations should raise an appropriate exception.
+        """
+        raise NotImplementedError("must be re-implemented by subclass")
+
+
+# See the note below on GenericAcqInfo on the inhertiance ordering
+class acq_info_base(info_base, base_model):
     """Base class for storing metadata for acquisitions.
 
-    To make a working AcqInfo type you must at a minimum set `_acq_type` to be
-    the name of this acquisition type (this is what is used in the `AcqType`
-    table), and set `_file_types` to be a list of the file types supported by
-    this Acquisition type, as well as provide implementations for `is_type` and
-    `set_info`. Additionally you might want to implement `set_config` to receive
-    configuration information.
+    To make a working AcqInfo type you must at a minimum provide implementations
+    for `is_type` and `_set_info`.
+
+    This class defines one model field (others should be added by subclasses):
+
+        - acq : ForeignKey to ArchiveAcq
     """
 
     acq = pw.ForeignKeyField(ArchiveAcq)
@@ -64,36 +197,37 @@ class acq_info_base(base_model, info_base):
 
         Parameters
         ----------
-        acq_name : string
-            Path to the acquisition directory.
+        acq_name : pathlib.Path
+            Path to the acquisition directory, relative to node.root
         node : StorageNode
             The node containing the acquisition.
         """
-        raise NotImplementedError()
+        raise NotImplementedError("must be re-implemented by subclass")
 
-    def set_info(self, acqpath, node):
-        """Set any metadata from the acquisition directory.
+    def __init__(self, *args, **kwargs):
+        """To instantiate this class from a file on disk (i.e. during import
+        by alpenhorn, pass keyword arguments:
 
-        Abstract method, must be implemented in a derived AcqInfo table.
+        path_ : patlib.Path
+            path relative to node_.root for the acq being imported
+        node_ : StorageNode
+            node containing the acqusition being imported
 
-        Parameters
-        ----------
-        acqpath : string
-            Path to the acquisition directory.
-        node_root : string
-            Path to the root directory for data in the node we are currently on.
+        Other arguments and keyword arguments are passed to parent
+        class initialiser(s).
         """
-        raise NotImplementedError()
 
 
-class file_info_base(base_model, info_base):
+# See the note below on GenericAcqInfo on the inhertiance ordering
+class file_info_base(info_base, base_model):
     """Base class for storing metadata for files.
 
-    To make a working FileInfo type you must at a minimum set `_file_type` to be
-    the name of this file type (this is what is used in the `FileType` table),
-    as well as provide implementations for `is_type` and `set_info`.
-    Additionally you might want to implement `set_config` to receive
-    configuration information.
+    To make a working AcqInfo type you must at a minimum provide implementations
+    for `is_type` and `_set_info`.
+
+    This class defines one model field (others should be added by subclasses):
+
+        - file : ForeignKey to ArchiveFile
     """
 
     file = pw.ForeignKeyField(ArchiveFile)
@@ -111,9 +245,9 @@ class file_info_base(base_model, info_base):
         acq_name : string
             Name of the acquisition.
         """
-        raise NotImplementedError()
+        raise NotImplementedError("must be re-implemented by subclass")
 
-    def set_info(self, filename, acq_root):
+    def _set_info(self, path, node, acqname, acqpath):
         """Set any metadata from the file.
 
         Abstract method, must be implemented in a derived FileInfo table.
@@ -125,10 +259,10 @@ class file_info_base(base_model, info_base):
         acq_root : string
             Path to the root of the the acquisition on the node.
         """
-        raise NotImplementedError()
+        raise NotImplementedError("must be re-implemented by subclass")
 
 
-class NoInfo(info_base):
+class _NoInfo(info_base):
     """An info class not backed by a database table.
 
     This is used as an AcqInfo or FileInfo class stand-in when an
@@ -145,8 +279,7 @@ class NoInfo(info_base):
         regular expressions.
 
     "patterns":
-        A list of regular expressions or globs to match supported
-        acquisitions.
+        A list of regular expressions or globs to match supported paths.
 
     Never instantiate this class directly.  Use a subclass provided
     by the no_info() class factory.
@@ -162,12 +295,23 @@ class NoInfo(info_base):
 
     @classmethod
     def set_config(cls, type_):
-        """Configure the class from a act_type or file_type."""
+        """Configure the class from a AcqType or FileType.
 
-        # Don't pollute the base class
-        if cls is NoInfo:
+        This should be called before creating instances of the class.
+
+        Raises TypeError if called directly on a base class."""
+
+        # Don't pollute base classes
+        if cls in [
+            info_base,
+            _NoInfo,
+            acq_info_base,
+            file_info_base,
+            GenericAcqInfo,
+            GenericFileInfo,
+        ]:
             raise TypeError(
-                "cannot call set_config on NoInfo base class.  Sublass first."
+                f"cannot call set_config on base class `{cls}`.  Sublass first."
             )
 
         super().set_config(type_)
@@ -198,14 +342,74 @@ class NoInfo(info_base):
 
         return False
 
-    def set_info(self, *args):
-        """Does nothing."""
-
 
 def no_info():
-    """A class factory returning NoInfo subclasses."""
+    """A class factory returning _NoInfo subclasses."""
 
-    class _NoInfo(NoInfo):
+    class NoInfo(_NoInfo):
         pass
 
-    return _NoInfo
+    return NoInfo
+
+
+# These two classes have a diamond inheritance, e.g.:
+#
+#    GenericAcqInfo
+#     /       \
+# _NoInfo  acq_info_base
+#     \       /       \
+#     info_base    base_model
+#                      |
+#                   pw.Model
+#
+# The peewee Model class doesn't support multiple inheritance, so
+# it needs to be at the end of the MRO to get the super() chaining to
+# work correctly.  (If it were earlier, it's methods would simply
+# consume all arguments and not call the method of the next class in
+# the MRO.)
+class GenericAcqInfo(_NoInfo, acq_info_base):
+    """An AcqInfo base class providing a simple detection scheme based
+    on matching against the acquisition name.  It needs the following
+    keys in the info_config provided by the corresponding AcqType entry:
+
+    "glob":
+        If `True` (default) we should interpret the patterns as globs (use
+        the extended syntax of `globre`). Otherwise they are treated as
+        regular expressions.
+
+    "patterns":
+        A list of regular expressions or globs to match supported
+        acquisitions."""
+
+    # Without any redefinition, we would end up using _NoInfo.is_type
+    # anyways, but it's better to redefine this with the acq_info_base
+    # calling signature.
+    @classmethod
+    def is_type(cls, acq_name, node):
+        return _NoInfo.is_type(cls, acq_name, node)
+
+    # Also use the acq_info_base docstring
+    is_type.__doc__ = acq_info_base.__doc__
+
+
+class GenericFileInfo(_NoInfo, file_info_base):
+    """A FileInfo base class providing a simple detection scheme based
+    on matching against the file path.  It needs the following keys in
+    the info_config provided by the corresponding FileType entry:
+
+    "glob":
+        If `True` (default) we should interpret the patterns as globs (use
+        the extended syntax of `globre`). Otherwise they are treated as
+        regular expressions.
+
+    "patterns":
+        A list of regular expressions or globs to match supported files."""
+
+    # Use file_info_base signature with _NoInfo body.  See the comment
+    # above for GenericAcqInfo.is_type().
+    @classmethod
+    def is_type(cls, filename, node, acq_name):
+        return _NoInfo.is_type(cls, filename, node, acqname)
+
+    # Also use the file_info_base docstring
+    is_type.__doc__ = file_info_base.__doc__
