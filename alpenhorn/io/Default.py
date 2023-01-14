@@ -130,7 +130,7 @@ class DefaultNodeIO(BaseNodeIO):
 
     def locked(self, acqname, filename):
         """Returns true if "acqname/.filename.lock" exists."""
-        path = pathlib.Path(self.node.root, acqname, "." + filename + ".lock")
+        path = pathlib.Path(self.node.root, acqname, "." + str(filename) + ".lock")
         return path.is_file()
 
     def md5sum_file(self, acqname, filename):

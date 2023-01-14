@@ -231,10 +231,18 @@ def test_filetype_detect(simpleacqtype, acqfiletypes, filetype):
     for ft in fts:
         acqfiletypes(acq_type=simpleacqtype, file_type=ft)
 
+    assert (
+        FileType.detect(pathlib.PurePath("no_match"), None, simpleacqtype, None) == None
+    )
+    assert (
+        FileType.detect(pathlib.PurePath("fi-3-le"), None, simpleacqtype, None)
+        == fts[2]
+    )
+    assert (
+        FileType.detect(pathlib.PurePath("fi-4-le"), None, simpleacqtype, None)
+        == fts[1]
+    )
 
-    assert FileType.detect(pathlib.PurePath("no_match"), None, simpleacqtype, None) == None
-    assert FileType.detect(pathlib.PurePath("fi-3-le"), None, simpleacqtype, None) == fts[2]
-    assert FileType.detect(pathlib.PurePath("fi-4-le"), None, simpleacqtype, None) == fts[1]
 
 def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
     acq1 = archiveacq(name="acq1", type=simpleacqtype)

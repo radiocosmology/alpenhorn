@@ -86,12 +86,6 @@ def _import_file(node, path):
         log.info(f'Skipping unrecognised file "{path}".')
         return
 
-    # Double check that this file doesn't already exist on this node.
-    # Could happen if the task was requeued at the end.
-    if node.named_copy_present(acqname, filename):
-        log.debug(f"Skipping import of {path}: already present")
-        return
-
     # Skip a file if there is still a lock on it.
     if node.io.locked(acqname, filename):
         log.debug(f'Skipping "{path}": locked.')
@@ -109,12 +103,15 @@ def _import_file(node, path):
             # Insert the archive record
             acq = ac.ArchiveAcq.create(name=acqname, type=acqtype)
 
-            # Generate the metadata info
-            acqtype.acq_info().set_info(acq, node)
+            info_class = acqtype.info()
+            if info_class.has_model():
+                # Generate the acqinfo metadata
+                info = info_class(path_=acqname, node_=node, acq=acq)
+                info.save()
             log.info(f'Acquisition "{acqname}" added to DB.')
 
         # Add the file, if necessary.
-        path = path.PurePath(acqname, filename)
+        path = pathlib.PurePath(acqname, filename)
         try:
             file_ = ac.ArchiveFile.get(
                 ac.ArchiveFile.name == filename, ac.ArchiveFile.acq == acq
@@ -122,7 +119,7 @@ def _import_file(node, path):
             log.debug(f'File "{path}" already in DB. Skipping.')
         except pw.DoesNotExist:
             log.debug(f'Computing md5sum of "{path}".')
-            md5sum = node.io.md5sum_file(path)
+            md5sum = node.io.md5sum_file(acqname, filename)
             size_b = node.io.filesize(path)
 
             file_ = ac.ArchiveFile.create(
@@ -133,28 +130,42 @@ def _import_file(node, path):
                 md5sum=md5sum,
             )
 
-            filetype.file_info.new(file_, node)
+            info_class = filetype.info()
+            if info_class.has_model():
+                # Generate the fileinfo metadata
+                info = info_class(
+                    path_=acqname,
+                    node_=node,
+                    acqtype_=acqtype,
+                    acqname_=acqname,
+                    file=file_,
+                )
+                info.save()
             log.info(f'File "{path}" added to DB.')
 
         # If we're importing a file that used to exist on this node, set has_file='M'
         # to trigger a integrity check.  (In this case, we can't have md5'ed it
         # above, because the ArchiveFile must have existed.)
-        try:
-            ar.ArcvhieFile.update(has_file="M").where(
-                ar.ArchiveFile.file == file_, ar.ArchiveFile.node == node
-            ).execute()
-        except pw.DoesNotExist:
+        count = (
+            ar.ArchiveFileCopy.update(has_file="M", wants_file="Y", ready=True)
+            .where(ar.ArchiveFileCopy.file == file_, ar.ArchiveFileCopy.node == node)
+            .execute()
+        )
+        if count > 0:
+            log.warning(
+                f'Imported file "{path}" formerly present on node {node.name}!  Marking suspect.'
+            )
+        else:
             # No existing file copy; create a new one.
-            copy_size_b = node.io.filesize(path, actual=True)
-            ar.ArchiveFile.replace(
+            ar.ArchiveFileCopy.create(
                 file=file_,
                 node=node,
                 has_file="Y",
                 wants_file="Y",
-                prepared=True,
-                size_b=copy_size_b,
+                ready=True,
+                size_b=node.io.filesize(path, actual=True),
             )
-            log.info(f'Registered file copy "{path}" to DB.')
+            log.info(f'Registered file copy "{path}" on node "{node.name}".')
 
 
 # Watchdog stuff

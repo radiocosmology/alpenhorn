@@ -485,7 +485,7 @@ def simplenode(storagenode, storagegroup):
 def simpleacqtype(acqtype):
     """Create a simple AcqType record."""
 
-    return acqtype(name="simpleacqtype")
+    return acqtype(name="simpleacqtype", info_config='{"patterns": ["simpleacq"]}')
 
 
 @pytest.fixture
@@ -508,8 +508,10 @@ def simpleacq(simpleacqtype, archiveacq):
 @pytest.fixture
 def simplefiletype(filetype, acqtype, acqfiletypes):
     """Create a simple FileType record attached to an acqtype."""
-    at = acqtype(name="simplefiletype_acqtype")
-    ft = filetype(name="simplefiletype")
+    at = acqtype(
+        name="simplefiletype_acqtype", info_config='{"patterns": ["simplefile_acq"]}'
+    )
+    ft = filetype(name="simplefiletype", info_config='{"patterns": ["simplefile"]}')
     acqfiletypes(acq_type=at, file_type=ft)
 
     return ft

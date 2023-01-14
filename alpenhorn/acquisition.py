@@ -226,11 +226,11 @@ class FileType(type_base):
         acqname : string
             The name of the acquisition hosting the file.
 
-        Returns the found FileType or None if no FileType understood the file.
+        Returns the detected FileType, or None, if no FileType understood the file.
         """
 
-        # Iterate over all known file types to try and find one that matches
-        # the file being processed
+        # Iterate over all file types associated with acqtype to try and
+        # find one that matches the file being processed
         for file_type in acqtype.file_types:
             if file_type.info().is_type(filename, node, acqtype, acqname):
                 return file_type
