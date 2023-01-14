@@ -221,6 +221,27 @@ class BaseNodeIO:
 
         return new_avail
 
+    def open(self, path, binary=True):
+        """Open the file specified by "path" for reading and return the stream.
+
+        Parameters:
+        -----------
+        path : pathlike
+            Relative to node.root
+        binary : boolean
+            If True, open the file in binary mode, otherwise open the file in
+            text mode.
+
+        The value returned is a standard file object, like those returned by open().
+
+        By default, simply calls open() on the concatenation of node.root and path,
+        or raises ValueError if path is absolute.
+        """
+
+        if pathlib.PurePath(path).is_absolute():
+            raise ValueError("path must be relative to node.root")
+        return open(pathlib.Path(self.node.root, path), mode="rb" if binary else "rt")
+
     def file_walk(self):
         """Iterate over file copies
 

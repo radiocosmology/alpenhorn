@@ -53,6 +53,33 @@ def test_fits(node):
     assert node.io.fits(30000) is False
 
 
+def test_open_absolute(node, fs):
+    """Test DefaultNodeIO.open() on an absolute path."""
+
+    fs.create_file("/node/dir/file", contents="file contents")
+
+    with pytest.raises(ValueError):
+        node.io.open("/node/dir/file")
+
+
+def test_open_binary(node, fs):
+    """Test DefaultNodeIO.open() on binary files."""
+
+    fs.create_file("/node/dir/file", contents="file contents")
+
+    with node.io.open("dir/file", binary=True) as f:
+        assert f.read() == b"file contents"
+
+
+def test_open_text(node, fs):
+    """Test DefaultNodeIO.open() on text files."""
+
+    fs.create_file("/node/dir/file", contents="file contents")
+
+    with node.io.open("dir/file", binary=False) as f:
+        assert f.read() == "file contents"
+
+
 def test_walk(node, fs):
     """test DefaultNodeIO.file_walk()"""
 

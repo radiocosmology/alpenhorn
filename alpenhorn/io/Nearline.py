@@ -163,6 +163,31 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             path = pathlib.Path(self.node.root, path)
         return path.stat().st_size
 
+    def open(self, path, binary=True):
+        """open path for reading.
+
+        Parameters:
+        -----------
+        path : pathlike
+            Relative to node.root
+        binary : boolean
+            If True, open the file in binary mode, otherwise open the file in
+            text mode.
+
+        The value returned is a standard file object, like those returned by open().
+
+        If the file is not recalled, raises OSError.  If path is not relative,
+        raises ValueError."""
+        if pathlib.PurePath(path).is_absolute():
+            raise ValueError("path must be relative to node.root")
+
+        # Make abs path
+        p = pathlib.Path(self.node.root, path)
+
+        if self._lfs.hsm_released(p):
+            raise OSError(f"{path} is not restored.")
+        return open(p, mode="rb" if binary else "rt")
+
     def reserve_bytes(self, size, check_only=False):
         """Returns True."""
         return True
@@ -172,7 +197,14 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         pass
 
     def check(self, copy):
-        """Make sure the file is restored before trying to check it."""
+        """check the integrity of a file copy.
+
+        DB is updated with the results of the check.
+
+        If the file is not restored, this function calls lfs(1) to
+        start restoration and then returns without doing anything else
+        (assuming a subsequent call to this function is going to resolve
+        the issue)."""
 
         # If the file is released, restore it and do nothing
         # further (assuming the update loop will re-call this
