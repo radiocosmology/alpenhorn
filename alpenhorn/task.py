@@ -55,6 +55,18 @@ class Task:
     abort of alpenhornd.
     """
 
+    __slots__ = [
+        "_args",
+        "_cleanup",
+        "_func",
+        "_generator",
+        "_key",
+        "_kwargs",
+        "_name",
+        "_queue",
+        "_requeue",
+    ]
+
     def __init__(
         self, func, queue, key, requeue=False, name="Task", args=tuple(), kwargs=dict()
     ):
@@ -65,7 +77,6 @@ class Task:
         self._queue = queue
         self._key = key
         self._cleanup = deque()
-
         self._requeue = requeue
 
         # a generator returned by calling _func (because it yields)

@@ -22,6 +22,20 @@ from collections import deque
 class FairMultiFIFOQueue:
     """Create a new Fair Multi-FIFO Queue"""
 
+    __slots__ = [
+        "_all_tasks_done",
+        "_deferrals",
+        "_dlock",
+        "_fifos",
+        "_inprogress_counts",
+        "_joining",
+        "_keys_by_inprogress",
+        "_lock",
+        "_not_empty",
+        "_total_inprogress",
+        "_total_queued",
+    ]
+
     def __init__(self):
         # The FIFO dict
         self._fifos = {}

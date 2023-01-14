@@ -14,6 +14,8 @@ class QueryWalker:
     Raises peewee.DoesNotExist if the query produces no results
     """
 
+    __slots__ = ["_model", "_expressions", "_id"]
+
     def __init__(self, model, *expressions):
         self._model = model
         self._expressions = expressions

@@ -173,6 +173,8 @@ class WorkerPool:
         - queue: the FairMultiFIFOQueue task queue
     """
 
+    __slots__ = ["_queue", "_mutex", "_all_workers", "_workers"]
+
     def __init__(self, num_workers, queue):
         self._queue = queue
 
