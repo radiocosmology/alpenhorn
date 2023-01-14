@@ -47,7 +47,7 @@ setup(
             "alpenhornd = alpenhorn.service:cli",
         ]
     },
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     install_requires=requirements,
     tests_require=test_requirements,
     test_suite="tests",
