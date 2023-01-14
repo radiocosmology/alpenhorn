@@ -111,7 +111,22 @@ def test_acqtype_filetypes(simpleacqtype, acqfiletypes, filetype):
     assert list(simpleacqtype.file_types) == filetypes
 
 
+def test_acqtype_detect(acqtype):
+    """Test AcqType.detect."""
+
+    at1 = acqtype(name="at1", info_config='{"patterns": ["acq"]}')
+    at2 = acqtype(name="at2", info_config='{"patterns": ["acq/2"]}')
+    at3 = acqtype(name="at3", priority=1, info_config='{"patterns": ["acq/2/3"]}')
+    at4 = acqtype(name="at4", priority=-1, info_config='{"patterns": ["acq/2/4"]}')
+
+    assert AcqType.detect(pathlib.PurePath("no_match/file"), None) == (None, None)
+    assert AcqType.detect(pathlib.PurePath("acq/2/3/file"), None) == (at3, "acq/2/3")
+    assert AcqType.detect(pathlib.PurePath("acq/2/4/file"), None) == (at2, "acq/2")
+    assert AcqType.detect(pathlib.PurePath("acq/4/file"), None) == (at1, "acq")
+
+
 def test_acq_model(simpleacqtype, archiveacq):
+    """Test the ArchiveAcq table model."""
     archiveacq(name="min", type=simpleacqtype)
     archiveacq(
         name="max", type=simpleacqtype, comment="Comment, apparently, is not a note"
@@ -202,6 +217,24 @@ def test_filetype_info_ignore(set_config, filetype):
     info = ft.info()
     assert issubclass(info, _NoInfo)
 
+
+def test_filetype_detect(simpleacqtype, acqfiletypes, filetype):
+    """Test FileType.file_types()."""
+
+    # Add a bunch of filetypes to the acqtype
+    fts = [
+        filetype(name="ft1", info_config='{"patterns": ["file"]}'),
+        filetype(name="ft2", info_config='{"patterns": ["fi*le"]}'),
+        filetype(name="ft3", priority=1, info_config='{"patterns": ["fi*3*le"]}'),
+        filetype(name="ft4", priority=-1, info_config='{"patterns": ["fi*4*le"]}'),
+    ]
+    for ft in fts:
+        acqfiletypes(acq_type=simpleacqtype, file_type=ft)
+
+
+    assert FileType.detect(pathlib.PurePath("no_match"), None, simpleacqtype, None) == None
+    assert FileType.detect(pathlib.PurePath("fi-3-le"), None, simpleacqtype, None) == fts[2]
+    assert FileType.detect(pathlib.PurePath("fi-4-le"), None, simpleacqtype, None) == fts[1]
 
 def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
     acq1 = archiveacq(name="acq1", type=simpleacqtype)

@@ -111,13 +111,13 @@ class AcqType(type_base):
     """
 
     @classmethod
-    def detect(cls, acqname, node):
+    def detect(cls, path, node):
         """Try to find an acquisition type that understands this directory.
 
         Parameters
         ----------
-        acqname : pathlib.Path
-            Name of the acquisition we are trying to find the type of.
+        path : pathlib.Path
+            Name of the file we are trying to find the acqtype of.
         node : StorageNode
             The node we are importing from. Needed so we can inspect the actual
             acquisition.
@@ -128,26 +128,23 @@ class AcqType(type_base):
 
         If no suitable type was found, both elements are None.  Otherwise, the first
         element will be the matching AcqType and the second element is the name
-        of the acquisition, which will be the path `acqname` or one of its parents.
+        of the acquisition, which will be one of the parents of "path".
         """
 
         # Paths must be relative, otherwise we enter an infinite loop below
-        if acqname.is_absolute():
-            log.error(f"acq name ({acqname}) cannot be absolute.")
+        if path.is_absolute():
+            log.error(f"acq name ({path}) cannot be absolute.")
             return None, None
 
-        # Pre-fetch all the info classes once
-        info_classes = [type_.info() for type_ in cls.select().order_by(AcqType.priority.desc())]
-
         # Iterate over all known acquisition types to try and find one that
-        # can handle the acqname path. If nothing is found, repeat
-        # the process with the parent directory of acqname, until we run out of
-        # directory segments
-        for name in acqname.parents:
-            if name != ".":
-                for info_class in info_classes:
+        # can handle the acquisition path.  For a given type, each time matching fails,
+        # try successive parent paths until we run out of directory segments
+        for type_ in cls.select().order_by(AcqType.priority.desc()):
+            info_class = type_.info()
+            for name in path.parents:
+                if str(name) != ".":
                     if info_class.is_type(name, node):
-                        return info_class.type(), name
+                        return type_, str(name)
 
         # No match
         return None, None
@@ -213,7 +210,7 @@ class FileType(type_base):
     """
 
     @classmethod
-    def detect(cls, filename, acqtype, acqname, node):
+    def detect(cls, filename, node, acqtype, acqname):
         """Try to find a file type that understands this file.
 
         Parameters
@@ -221,13 +218,13 @@ class FileType(type_base):
         filename : string
             Name of the file, relative to acqname, we are trying to find the
             type of.
+        node : StorageNode
+            The node we are importing from. Needed so we can inspect the actual
+            file.
         acqtype : AcqType
             The type of the acquisition hosting the file.
         acqname : string
             The name of the acquisition hosting the file.
-        node : StorageNode
-            The node we are importing from. Needed so we can inspect the actual
-            file.
 
         Returns the found FileType or None if no FileType understood the file.
         """
