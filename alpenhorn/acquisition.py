@@ -20,8 +20,8 @@ class type_base(base_model):
     notes = pw.TextField(null=True)
     info_config = pw.TextField(null=True)
 
-    # This dict is an atribute on the class, used to hold the loaded info
-    # classes.  Store as a dictionary for easy lookup of handlers by name.
+    # This dict is an attribute on the class, used to hold the loaded info
+    # classes.  Store as a dictionary for easy lookup of info classes by name.
     _info_classes = dict()
 
     class Meta:
@@ -34,7 +34,7 @@ class type_base(base_model):
         self._info_import_errors = config.info_import_errors(self.name, is_acq=True)
 
     def _get_info_class(self):
-        """Returns the associated Info table for this type."""
+        """Returns the associated Info class for this type."""
 
         from .info_base import no_info
 
@@ -52,7 +52,7 @@ class type_base(base_model):
             dot = self.info_class.rfind(".")
             try:
                 if dot < 0:
-                    # No module, try getting it from the globals, I guess
+                    # No module? Try getting it from the globals, I guess...?
                     class_ = globals()[self.info_class]
                 else:
                     modname = self.info_class[:dot]
@@ -82,8 +82,9 @@ class type_base(base_model):
 
         # Initialise the _class_ with the acq_type
         class_.set_config(self)
-        self._info_classes[self.name] = class_
 
+        # Remember for next time
+        self._info_classes[self.name] = class_
         return class_
 
 
@@ -109,23 +110,6 @@ class AcqType(type_base):
         associated AcqInfo class.
     """
 
-    def is_type(self, acqname, node):
-        """Does this acquisition type understand this directory?
-
-        Parameters
-        ----------
-        acqname : pathlib.Path
-            path relative to node.root of the acquisition we are checking.
-        node : StorageNode
-            The node we are importing from. Needed so we can inspect the actual
-            acquisition.
-
-        Returns
-        -------
-        is_type : boolean
-        """
-        return self.info().is_type(acqname, node)
-
     @classmethod
     def detect(cls, acqname, node):
         """Try to find an acquisition type that understands this directory.
@@ -140,34 +124,33 @@ class AcqType(type_base):
 
         Returns
         -------
-        (AcqType, str) or None
-            A tuple of acquisition type and name or None if one could not be found
+        A two-element tuple.
 
-        Notes
-        -----
-
-        The returned acquisition name is either equal to the parameter
-        `acqname` or the closest ancestor directory which had a matching
-        `AcqType`.
-
+        If no suitable type was found, both elements are None.  Otherwise, the first
+        element will be the matching AcqType and the second element is the name
+        of the acquisition, which will be the path `acqname` or one of its parents.
         """
 
         # Paths must be relative, otherwise we enter an infinite loop below
         if acqname.is_absolute():
             log.error(f"acq name ({acqname}) cannot be absolute.")
-            return None
+            return None, None
+
+        # Pre-fetch all the info classes once
+        info_classes = [type_.info() for type_ in cls.select().order_by(AcqType.priority.desc())]
 
         # Iterate over all known acquisition types to try and find one that
         # can handle the acqname path. If nothing is found, repeat
         # the process with the parent directory of acqname, until we run out of
-        # directory segment
+        # directory segments
         for name in acqname.parents:
-            for acq_type in cls.select().order_by(AcqType.priority.desc()):
-                if acq_type.is_type(name, node):
-                    return acq_type, name
+            if name != ".":
+                for info_class in info_classes:
+                    if info_class.is_type(name, node):
+                        return info_class.type(), name
 
         # No match
-        return None
+        return None, None
 
     def info(self):
         """Return the Info class for this AcqType."""
@@ -229,25 +212,6 @@ class FileType(type_base):
         associated FileInfo class.
     """
 
-    def is_type(self, filename, acq_name, node):
-        """Check if this file can be handled by this file type.
-
-        Parameters
-        ----------
-        filename : string
-            Name of the file.
-        acq_name : string
-            The name of the acquisition the file is in.
-        node : StorageNode
-            The node we are importing from. Needed so we can inspect the actual
-            acquisition.
-
-        Returns
-        -------
-        is_type : boolean
-        """
-        return self.info().is_type(filename, acq_name, node)
-
     @classmethod
     def detect(cls, filename, acqtype, acqname, node):
         """Try to find a file type that understands this file.
@@ -255,7 +219,8 @@ class FileType(type_base):
         Parameters
         ----------
         filename : string
-            Name of the file we are trying to find the type of.
+            Name of the file, relative to acqname, we are trying to find the
+            type of.
         acqtype : AcqType
             The type of the acquisition hosting the file.
         acqname : string
@@ -267,10 +232,10 @@ class FileType(type_base):
         Returns the found FileType or None if no FileType understood the file.
         """
 
-        # Iterate over all known acquisition types to try and find one that matches
-        # the directory being processed
+        # Iterate over all known file types to try and find one that matches
+        # the file being processed
         for file_type in acqtype.file_types:
-            if file_type.is_type(filename, acqname, node):
+            if file_type.info().is_type(filename, node, acqtype, acqname):
                 return file_type
 
         return None

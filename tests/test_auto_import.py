@@ -9,7 +9,7 @@ from alpenhorn.acquisition import ArchiveAcq
 
 
 def test_import_file_bad_paths(queue, simplenode):
-    """Test that a bad paths are rejected by import_file."""
+    """Test that bad paths are rejected by import_file."""
 
     # Path outside root
     auto_import.import_file(simplenode, queue, pathlib.Path("/bad/path"))

@@ -68,12 +68,10 @@ def _import_file(node, path):
     log.debug(f'Considering "{path}" for import to node {node.name}.')
 
     # Check if we can handle this acquisition, and skip if we can't
-    acq_type_and_name = ac.AcqType.detect(path, node)
-    if acq_type_and_name is None:
+    acqtype, acqname = ac.AcqType.detect(path, node)
+    if acqtype is None:
         log.info(f'Skipping non-acquisition path "{path}".')
         return
-
-    acqtype, acqname = acq_type_and_name
     filename = path.relative_to(acqname)
 
     # If a copy already exists, we're done
@@ -82,7 +80,7 @@ def _import_file(node, path):
         return
 
     # What kind of file do we have?
-    filetype = ac.FileType.detect(filename, acqtype, acqname, node)
+    filetype = ac.FileType.detect(filename, node, acqtype, acqname)
 
     if filetype is None:
         log.info(f'Skipping unrecognised file "{path}".')

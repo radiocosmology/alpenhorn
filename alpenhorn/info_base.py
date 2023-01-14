@@ -82,7 +82,7 @@ class info_base:
         return issubclass(cls, base_model)
 
     @classmethod
-    def get_type(cls):
+    def type(cls):
         """Return the associated AcqType or FileType instance."""
         return cls._type
 
@@ -140,9 +140,9 @@ class info_base:
 
         Implementations _may_ access data on disk if necessary to perform
         type-detection, but remember that this method is called from the
-        Alpenhorn main loop, so expensive I/O operations should be avoided.
-        To access a file on the node, don't open() the path directly; use
-        node.io.open.
+        alpenhorn main loop, potentially several times per imported object,
+        so expensive I/O operations should be avoided.  To access a file
+        on the node, don't open() the path directly; use node.io.open().
 
         For files, implementations should _not_ assume that an ArchiveAcq
         record exists for the acquistion called `acqname`.
@@ -155,7 +155,7 @@ class info_base:
         Initialisation will fail if the class method set_config() has not
         been called to set up the class beforehand.
 
-        In subclasses implementing a table model (ie. when self.has_model()
+        In subclasses that implement a table model (ie. when self.has_model()
         returns True), the values of the keyword parameters: "path_", "node_",
         "acqname_", and "acqtype_" will be passed to the method _set_info().
         The dict returned by _set_info() will be merged with the list of
@@ -197,19 +197,19 @@ class info_base:
         super().__init__(*args, **kwargs)
 
     @property
-    def type(self):
+    def type_name(self):
         """The name of the associated type.
 
-        Equivalent to get_type().name
+        Equivalent to type().name
         """
         return self._type.name
 
     def _set_info(self, path, node, acqtype, acqname):
-        """generate info metadata for this path.
+        """generate info table field data for this path.
 
-        An info subclass's _set_info() method is only called if the class
-        is backed by a DB table (i.e. has_model() returns True).  Calls
-        to this method occur as part of object initialisation during an
+        This method is only called on subclasses which are backed by
+        a DB table (i.e. has_model() returns True).  Calls to this
+        method occur as part of object initialisation during an
         __init__ call.
 
         Parameters
@@ -360,10 +360,10 @@ def no_info():
 #    GenericAcqInfo
 #     /       \
 # _NoInfo  acq_info_base
-#     \       /       \
-#     info_base    base_model
-#                      |
-#                   pw.Model
+#     \       /     \
+#     info_base  base_model
+#                    |
+#                 pw.Model
 #
 # The peewee Model class doesn't support multiple inheritance, so
 # it needs to be at the end of the MRO to get the super() chaining to
