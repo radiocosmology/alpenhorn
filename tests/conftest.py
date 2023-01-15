@@ -319,11 +319,10 @@ def mock_stat(fs):
 
 @pytest.fixture
 def mock_observer():
-    """Mocks watchdog.observers.Observer so its always the PollingObserver"""
-    import watchdog.observers
+    """Mocks the DefaultIO observer so its always the PollingObserver"""
     from watchdog.observers.polling import PollingObserver
 
-    with patch("watchdog.observers.Observer", PollingObserver):
+    with patch("alpenhorn.io.Default.DefaultNodeIO.observer", PollingObserver):
         yield
 
 
