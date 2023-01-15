@@ -216,8 +216,6 @@ _watchers = dict()
 def update_observer(node, queue):
     """Start or stop auto-importing of a node"""
 
-    global _observers
-
     io_class = "Default" if node.io_class is None else node.io_class
 
     if not node.auto_import:
@@ -247,7 +245,10 @@ def update_observer(node, queue):
 
             _observers[io_class] = observer(
                 timeout=config.config["service"]["auto_import_interval"]
-            ).start()
+            )
+
+            _observers[io_class].start()
+            log.debug(f"Started observer for I/O class {io_class}")
 
         # Schedule a new watcher for our observer
         log.info(f'Watching node "{node.name}" root "{node.root}" for auto import.')
@@ -256,8 +257,10 @@ def update_observer(node, queue):
         )
 
 
-def stop():
+def stop_observers():
     """Stop all auto_import watchdogs."""
+
+    global _observers, _watchers
 
     # Stop
     for obs in _observers.values():
@@ -266,6 +269,10 @@ def stop():
     # Wait for termination
     for obs in _observers.values():
         obs.join()
+
+    # Reset globals
+    _observers = dict()
+    _watchers = dict()
 
 
 def catchup(node):
@@ -291,7 +298,7 @@ def catchup(node):
             lastparent = parent
 
         # Skip files already imported
-        if str(file) in already_imported_files:
+        if file in already_imported_files:
             log.debug(f'Skipping already-registered file "{file}".')
         else:
             import_file(node, file)

@@ -3,7 +3,8 @@
 import pytest
 import pathlib
 import peewee as pw
-from unittest.mock import patch
+from unittest.mock import call, patch
+from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn import auto_import
 from alpenhorn.archive import ArchiveFileCopy
@@ -153,3 +154,117 @@ def test_import_file_exists(xfs, dbtables, simplenode, simplefile, archivefileco
         "ready": True,
         "size_b": None,
     }
+
+
+def test_empty_stop_observers():
+    """Test calling stop_observers with nothing running."""
+    assert len(auto_import._observers) == 0
+    assert len(auto_import._watchers) == 0
+    auto_import.stop_observers()
+    assert len(auto_import._observers) == 0
+    assert len(auto_import._watchers) == 0
+
+
+def test_update_observers_start(xfs, simplenode, queue):
+    """Test starting an observer via update_observers()."""
+
+    xfs.create_dir(simplenode.root)
+    simplenode.auto_import = True
+    auto_import.update_observer(simplenode, queue)
+
+    assert isinstance(auto_import._observers["Default"], BaseObserver)
+    assert len(auto_import._observers["Default"].emitters) == 1
+    assert isinstance(auto_import._watchers["simplenode"], ObservedWatch)
+    assert auto_import._watchers["simplenode"].path == simplenode.root
+
+    auto_import.stop_observers()
+    assert len(auto_import._observers) == 0
+    assert len(auto_import._watchers) == 0
+
+
+def test_update_observers_stop(xfs, simplenode, queue):
+    """Test stopping a watcher via update_observers()."""
+
+    # First start
+    xfs.create_dir(simplenode.root)
+    simplenode.auto_import = True
+    auto_import.update_observer(simplenode, queue)
+    assert len(auto_import._observers["Default"].emitters) == 1
+    assert "simplenode" in auto_import._watchers
+
+    # Now stop
+    simplenode.auto_import = False
+    auto_import.update_observer(simplenode, queue)
+    assert len(auto_import._observers["Default"].emitters) == 0
+    assert "simplenode" not in auto_import._watchers
+
+    auto_import.stop_observers()
+
+
+@patch("alpenhorn.auto_import.import_file")
+def test_catchup_new(
+    mocked_import,
+    xfs,
+    dbtables,
+    simplenode,
+):
+    """Test auto_import.catchup with new files."""
+
+    # Make some files to "import"
+    xfs.create_file("/node/acq1/file1")
+    xfs.create_file("/node/acq1/file2")
+    xfs.create_file("/node/acq2/file1")
+
+    auto_import.catchup(simplenode)
+    mocked_import.assert_has_calls(
+        [
+            call(simplenode, pathlib.PurePath("acq1/file1")),
+            call(simplenode, pathlib.PurePath("acq1/file2")),
+            call(simplenode, pathlib.PurePath("acq2/file1")),
+        ],
+    )
+
+
+@patch("alpenhorn.auto_import.import_file")
+def test_catchup_exists(
+    mocked_import,
+    xfs,
+    simplenode,
+    simpleacq,
+    simplefiletype,
+    archivefile,
+    archivefilecopy,
+):
+    """Test auto_import.catchup skips existing copies."""
+
+    # Make files in DB
+    af1 = archivefile(name="file1", acq=simpleacq, type=simplefiletype)
+    af2 = archivefile(name="file2", acq=simpleacq, type=simplefiletype)
+    af3 = archivefile(name="file3", acq=simpleacq, type=simplefiletype)
+    af4 = archivefile(name="file4", acq=simpleacq, type=simplefiletype)
+    af5 = archivefile(name="file5", acq=simpleacq, type=simplefiletype)
+
+    # Make copies in DB
+    archivefilecopy(node=simplenode, file=af1, has_file="Y")
+    archivefilecopy(node=simplenode, file=af2, has_file="M")
+    archivefilecopy(node=simplenode, file=af3, has_file="X")
+    archivefilecopy(node=simplenode, file=af4, has_file="N")
+
+    # Create files to crawl
+    xfs.create_file("/node/simpleacq/file1")  # has_file == 'Y'
+    xfs.create_file("/node/simpleacq/file2")  # has_file == 'M'
+    xfs.create_file("/node/simpleacq/file3")  # has_file == 'X'
+    xfs.create_file("/node/simpleacq/file4")  # has_file == 'N'
+    xfs.create_file("/node/simpleacq/file5")  # no copy but ArchiveFile
+    xfs.create_file("/node/simpleacq/file6")  # no copy or ArchiveFile
+
+    auto_import.catchup(simplenode)
+
+    # Only file1 should be skipped
+    assert mocked_import.mock_calls == [
+        call(simplenode, pathlib.PurePath("simpleacq/file2")),
+        call(simplenode, pathlib.PurePath("simpleacq/file3")),
+        call(simplenode, pathlib.PurePath("simpleacq/file4")),
+        call(simplenode, pathlib.PurePath("simpleacq/file5")),
+        call(simplenode, pathlib.PurePath("simpleacq/file6")),
+    ]

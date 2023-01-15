@@ -12,12 +12,7 @@ import pathlib
 import threading
 import watchdog.utils
 from pathlib import PurePath
-
-# Fallback to the polling observer on platforms which don't support inotify
-try:
-    from watchdog.observers.inotify import InotifyObserver as DefaultObserver
-except watchdog.utils.UnsupportedLibc:
-    from watchdog.observers.polling import PollingObserver as DefaultObserver
+from watchdog.observers import Observer
 
 from .. import util
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
@@ -48,7 +43,9 @@ class DefaultNodeIO(BaseNodeIO):
 
     remote_class = DefaultNodeRemote
 
-    observer = DefaultObserver  # Only works on local filesystems.
+    # Uses the platform-default observer.  On Linux, this will be the InotifyObserver
+    # which doesn't work on NFS mounts (for which use alpenhorn.io.Polling instead).
+    observer = Observer
 
     def __init__(self, node):
         super().__init__(node)

@@ -119,5 +119,5 @@ def cli():
         log.info("Exiting due to SIGINT")
 
     # Attempt to exit cleanly
-    auto_import.stop()
+    auto_import.stop_observers()
     wpool.shutdown()
