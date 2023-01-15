@@ -281,22 +281,28 @@ class NearlineNodeIO(LFSQuotaNodeIO):
             ),
         )
 
-    def ready(self, req):
-        """Recall a file, if necessary, to prepare for a remote pull."""
+    def ready_path(self, path):
+        """Recall the specified path so it can be read."""
 
-        fullpath = pathlib.Path(self.node.root, req.file.path)
+        fullpath = pathlib.Path(self.node.root, path)
         state = self._lfs.hsm_state(fullpath)
-
-        # Update DB based on HSM state
-        ArchiveFileCopy.update(
-            ready=(state == self._lfs.HSM_RESTORED or state == self._lfs.HSM_UNARCHIVED)
-        ).where(
-            ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == req.node_from
-        ).execute()
 
         # If it's restorable, restore it
         if state == self._lfs.HSM_RELEASED:
             self._lfs.hsm_restore(fullpath)
+
+        # Returns True if file is readable.
+        return state == self._lfs.HSM_RESTORED or state == self._lfs.HSM_UNARCHIVED
+
+    def ready_pull(self, req):
+        """Recall a file, if necessary, to prepare for a remote pull."""
+
+        ready = self.ready_path(req.file.path)
+
+        # Update DB based on HSM state
+        ArchiveFileCopy.update(ready=ready).where(
+            ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == self.node
+        ).execute()
 
     def idle_update(self):
         """Update HSM state of copies when idle.

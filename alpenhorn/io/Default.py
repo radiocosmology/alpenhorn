@@ -34,7 +34,7 @@ class DefaultNodeRemote(BaseNodeRemote):
     """DefaultNodeRemote: information about a DefaultIO remote StorageNode."""
 
     def pull_ready(self, file):
-        """Returns True: DefaultIO nodes need to do nothing to ready files."""
+        """Returns True: DefaultIO file copies are always ready."""
         return True
 
 
@@ -249,9 +249,13 @@ class DefaultNodeIO(BaseNodeIO):
             + f" on {self.node.name}",
         )
 
-    def ready(self, req):
-        """Does nothing: DefaultIO file copies are always ready."""
-        pass
+    def ready_path(self, path):
+        """Returns True: DefaultIO file copies are always ready."""
+        return True
+
+    def ready_pull(self, req):
+        """Returns True: DefaultIO file copies are always ready."""
+        return True
 
 
 class DefaultGroupIO(BaseGroupIO):

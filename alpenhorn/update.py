@@ -325,13 +325,13 @@ def update_node(node, queue):
         # Delete any unwanted files to cleanup space
         update_node_delete(node)
 
-        # Process any regular transfers requests from this node
+        # Process any pull requests from this node
         for req in ArchiveFileCopyRequest.select().where(
             ArchiveFileCopyRequest.completed == 0,
             ArchiveFileCopyRequest.cancelled == 0,
             ArchiveFileCopyRequest.node_from == node,
         ):
-            node.io.ready(req)
+            node.io.ready_pull(req)
     else:
         log.info(
             f"Skipping update for node {node.name}:"

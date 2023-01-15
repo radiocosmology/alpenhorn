@@ -1,3 +1,4 @@
+"""StorageNode and StorageGroup table models."""
 import importlib
 import peewee as pw
 from peewee import fn

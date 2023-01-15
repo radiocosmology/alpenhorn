@@ -67,6 +67,13 @@ def _import_file(node, path):
 
     log.debug(f'Considering "{path}" for import to node {node.name}.')
 
+    # Wait for file to become ready
+    while not node.io.ready_path(path):
+        log.debug(
+            f'Path "{path}" not ready for I/O during import.  Waiting 60 seconds.'
+        )
+        yield 60  # wait 60 seconds and re-queue
+
     # Check if we can handle this acquisition, and skip if we can't
     acqtype, acqname = ac.AcqType.detect(path, node)
     if acqtype is None:

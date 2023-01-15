@@ -161,6 +161,42 @@ def test_filesize(xfs, node):
 
 @pytest.mark.lfs_hsm_state(
     {
+        "/node/dir/file1": "released",
+        "/node/dir/file2": "restored",
+    }
+)
+def test_open_binary(xfs, node):
+    """Test binary NearlineNodeIO.open()"""
+
+    xfs.create_file("/node/dir/file2", contents="file contents")
+
+    with pytest.raises(OSError):
+        node.io.open("dir/file1", binary=True)
+
+    with node.io.open("dir/file2", binary=True) as f:
+        assert f.read() == b"file contents"
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/dir/file1": "released",
+        "/node/dir/file2": "restored",
+    }
+)
+def test_open_text(xfs, node):
+    """Test text NearlineNodeIO.open()"""
+
+    xfs.create_file("/node/dir/file2", contents="file contents")
+
+    with pytest.raises(OSError):
+        node.io.open("dir/file1", binary=False)
+
+    with node.io.open("dir/file2", binary=False) as f:
+        assert f.read() == "file contents"
+
+
+@pytest.mark.lfs_hsm_state(
+    {
         "/node/simpleacq/file1": "released",
     }
 )
@@ -294,17 +330,42 @@ def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
 @pytest.mark.lfs_hsm_state(
     {
         "/node/simpleacq/file1": "restored",
+        "/node/simpleacq/file2": "released",
+        "/node/simpleacq/file3": "unarchived",
+        "/node/simpleacq/file4": "missing",
     }
 )
-def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
-    """Test NearlineNodeIO.ready on a restored file that isn't ready."""
+def test_ready_path(mock_lfs, node):
+    """Test NearlineNodeIO.ready_path."""
+
+    # Return indicates readiness before recall
+    assert node.io.ready_path("/node/simpleacq/file1")
+    assert not node.io.ready_path("/node/simpleacq/file2")
+    assert node.io.ready_path("/node/simpleacq/file3")
+    assert not node.io.ready_path("/node/simpleacq/file4")
+
+    # But now released file is recalled.
+    lfs = mock_lfs("")
+    assert lfs.hsm_state("/node/simpleacq/file1") == lfs.HSM_RESTORED
+    assert lfs.hsm_state("/node/simpleacq/file2") == lfs.HSM_RESTORED
+    assert lfs.hsm_state("/node/simpleacq/file3") == lfs.HSM_UNARCHIVED
+    assert lfs.hsm_state("/node/simpleacq/file4") == lfs.HSM_MISSING
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simpleacq/file1": "restored",
+    }
+)
+def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
+    """Test NearlineNodeIO.ready_pull on a restored file that isn't ready."""
 
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
     copy.save()
     afcr = archivefilecopyrequest(file=copy.file, node_from=node, group_to=node.group)
 
-    node.io.ready(afcr)
+    node.io.ready_pull(afcr)
 
     # File is ready
     assert ArchiveFileCopy.get(id=1).ready
@@ -319,13 +380,13 @@ def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
         "/node/simpleacq/file1": "released",
     }
 )
-def test_ready_restored(mock_lfs, node, archivefilecopyrequest):
-    """Test NearlineNodeIO.ready on a restored file that isn't ready."""
+def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
+    """Test NearlineNodeIO.ready on a released file that isn't ready."""
 
     copy = ArchiveFileCopy.get(id=1)
     afcr = archivefilecopyrequest(file=copy.file, node_from=node, group_to=node.group)
 
-    node.io.ready(afcr)
+    node.io.ready_pull(afcr)
 
     # File is not ready (because ready is set before hsm_restore is called)
     assert not ArchiveFileCopy.get(id=1).ready

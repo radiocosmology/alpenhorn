@@ -301,7 +301,16 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def ready(self, req):
+    def ready_path(self, path):
+        """Ready a file for I/O.
+
+        Readies the file specified by path (which is relative to node.root).
+
+        Returns True if the file is ready for I/O, otherwise False.
+        If False, the caller may wait call this method again to try again."""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def ready_pull(self, req):
         """Ready a remote pull specified by req on the source node.
 
         Passed the ArchiveFileCopyRequest req for the transfier

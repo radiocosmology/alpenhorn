@@ -14,7 +14,8 @@ class Task:
     The task is placed in the queue and waits for a worker thread
     to pop and execute it.
 
-    Arguments:
+    Parameters:
+    -----------
     - func : callable
             the code executed by the worker.  The first positional
             argument to func is always the task itself.

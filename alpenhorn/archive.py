@@ -31,11 +31,11 @@ class ArchiveFileCopy(base_model):
         In all cases we try to keep at least two copies of the file around.
     ready : bool
         _Some_ StorageNode I/O classes use this to tell other hosts that
-        files are ready to be pulled.  Other I/O classes do _not_ use this
+        files are ready for access.  Other I/O classes do _not_ use this
         field and assess readiness in some other way, so never check this
-        directly; outside of the I/O class code itself, use
-        StorageNode.remote.pull_ready() to determine whether a remote file
-        is ready for pulling.
+        directly; outside of the I/O-class code itself, use
+        StorageNode.io.ready_path() or StorageNode.remote.pull_ready()
+        to determine whether a remote file is ready for I/O.
     size_b : integer
         Allocated size of file in bytes (i.e. actual size on the Storage
         medium.)

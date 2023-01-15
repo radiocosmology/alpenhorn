@@ -36,10 +36,31 @@ def test_import_file_queue(queue, simplenode):
     assert queue.qsize == 1
 
 
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/acq/file": "released",
+    }
+)
+def test_import_file_not_ready(dbtables, simplenode, mock_lfs):
+    """Test _import_file() on unready file."""
+
+    # Set up node for NearlineIO
+    simplenode.io_class = "Nearline"
+    simplenode.io_config = '{"quota_group": "qgroup", "fixed_quota": 300000}'
+
+    # _import_file is a generator function, so it needs to be interated to run.
+    assert next(auto_import._import_file(simplenode, pathlib.Path("acq/file"))) == 60
+
+    # File has been restored
+    assert not mock_lfs("").hsm_released("/node/acq/file")
+
+
 def test_import_file_bad_acq(dbtables, simplefiletype, simplenode):
     """Test bad acq in _import_file()"""
 
-    auto_import._import_file(simplenode, pathlib.Path("acq/file"))
+    # _import_file is a generator function, so it needs to be interated to run.
+    with pytest.raises(StopIteration):
+        next(auto_import._import_file(simplenode, pathlib.Path("acq/file")))
 
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
@@ -54,7 +75,12 @@ def test_import_file_copy_exists(mock_detect, simplenode, simplefile, archivefil
     # Create the file copy
     archivefilecopy(file=simplefile, node=simplenode, has_file="Y")
 
-    auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/simplefile"))
+    with pytest.raises(StopIteration):
+        next(
+            auto_import._import_file(
+                simplenode, pathlib.Path("simplefile_acq/simplefile")
+            )
+        )
 
     # The copy exists check happens before filetype detection.
     mock_detect.assert_not_called()
@@ -63,7 +89,8 @@ def test_import_file_copy_exists(mock_detect, simplenode, simplefile, archivefil
 def test_import_file_bad_file(dbtables, simplefiletype, simplenode):
     """Test bad file in _import_file()"""
 
-    auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/file"))
+    with pytest.raises(StopIteration):
+        next(auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/file")))
 
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
@@ -76,7 +103,12 @@ def test_import_file_locked(xfs, dbtables, simplefiletype, simplenode):
     # Create lockfile
     xfs.create_file("/node/simplefile_acq/.simplefile.lock")
 
-    auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/simplefile"))
+    with pytest.raises(StopIteration):
+        next(
+            auto_import._import_file(
+                simplenode, pathlib.Path("simplefile_acq/simplefile")
+            )
+        )
 
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
@@ -87,7 +119,12 @@ def test_import_file_create(xfs, dbtables, simplefiletype, simplenode):
     """Test acq, file, copy creation in _import_file()"""
 
     xfs.create_file("/node/simplefile_acq/simplefile")
-    auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/simplefile"))
+    with pytest.raises(StopIteration):
+        next(
+            auto_import._import_file(
+                simplenode, pathlib.Path("simplefile_acq/simplefile")
+            )
+        )
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
@@ -133,7 +170,12 @@ def test_import_file_exists(xfs, dbtables, simplenode, simplefile, archivefileco
     )
     xfs.create_file("/node/simplefile_acq/simplefile")
 
-    auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/simplefile"))
+    with pytest.raises(StopIteration):
+        next(
+            auto_import._import_file(
+                simplenode, pathlib.Path("simplefile_acq/simplefile")
+            )
+        )
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
