@@ -318,9 +318,19 @@ def mock_stat(fs):
 
 
 @pytest.fixture
-def xfs(fs, mock_statvfs, mock_stat):
-    """An extended pyfakefs which patches more os functions
-    for proper behaviour with alpenhorn"""
+def mock_observer():
+    """Mocks watchdog.observers.Observer so its always the PollingObserver"""
+    from watchdog.observers.polling import PollingObserver
+
+    with patch("watchdog.observers.Observer", PollingObserver):
+        yield
+
+
+@pytest.fixture
+def xfs(fs, mock_observer, mock_statvfs, mock_stat):
+    """An extended pyfakefs.
+
+    Patches more stuff for proper behaviour with alpenhorn unittests"""
     return fs
 
 
