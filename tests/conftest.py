@@ -136,12 +136,6 @@ def mock_filesize():
 
 
 @pytest.fixture
-def hostname():
-    """Returns the current hostname."""
-    return util.get_short_hostname()
-
-
-@pytest.fixture
 def queue():
     """A test queue."""
     yield FairMultiFIFOQueue()
