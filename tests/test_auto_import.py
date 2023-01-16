@@ -8,7 +8,8 @@ from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn import auto_import
 from alpenhorn.archive import ArchiveFileCopy
-from alpenhorn.acquisition import ArchiveAcq, ArchiveFile, AcqType
+from alpenhorn.acquisition import ArchiveAcq, ArchiveFile, AcqType, FileType
+from alpenhorn.info_base import GenericAcqInfo, GenericFileInfo
 
 
 def test_import_file_bad_paths(queue, simplenode):
@@ -70,8 +71,6 @@ def test_import_file_bad_acq(dbtables, simplefiletype, simplenode):
 @patch("alpenhorn.acquisition.FileType.detect")
 def test_import_file_copy_exists(mock_detect, simplenode, simplefile, archivefilecopy):
     """Test copy exists in _import_file()"""
-    from alpenhorn.acquisition import FileType
-
     # Create the file copy
     archivefilecopy(file=simplefile, node=simplenode, has_file="Y")
 
@@ -115,10 +114,32 @@ def test_import_file_locked(xfs, dbtables, simplefiletype, simplenode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_file_create(xfs, dbtables, simplefiletype, simplenode):
+def test_import_file_create(xfs, dbproxy, dbtables, simplefiletype, simplenode):
     """Test acq, file, copy creation in _import_file()"""
 
     xfs.create_file("/node/simplefile_acq/simplefile")
+
+    # Shoe-horn in some info classes
+    class AcqInfoTest(GenericAcqInfo):
+        datum = pw.CharField()
+
+        def _set_info(self, path, node, acqtype, acqname):
+            return {"datum": "acq_datum"}
+
+    class FileInfoTest(GenericFileInfo):
+        datum = pw.CharField()
+
+        def _set_info(self, path, node, acqtype, acqname):
+            return {"datum": "file_datum"}
+
+    acqtype = AcqType.get(id=1)
+    AcqType._info_classes[acqtype.name] = AcqInfoTest
+    FileType._info_classes[simplefiletype.name] = FileInfoTest
+    dbproxy.create_tables([AcqInfoTest, FileInfoTest])
+
+    AcqInfoTest.set_config(acqtype)
+    FileInfoTest.set_config(simplefiletype)
+
     with pytest.raises(StopIteration):
         next(
             auto_import._import_file(
@@ -159,6 +180,12 @@ def test_import_file_create(xfs, dbtables, simplefiletype, simplenode):
         "ready": True,
         "size_b": 0,
     }
+
+    ai = AcqInfoTest.get(id=1)
+    assert ai.__data__ == {"id": 1, "acq": acq.id, "datum": "acq_datum"}
+
+    fi = FileInfoTest.get(id=1)
+    assert fi.__data__ == {"id": 1, "file": file.id, "datum": "file_datum"}
 
 
 def test_import_file_exists(xfs, dbtables, simplenode, simplefile, archivefilecopy):
