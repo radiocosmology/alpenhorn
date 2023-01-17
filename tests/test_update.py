@@ -6,327 +6,582 @@ Tests for `alpenhorn.update` module.
 """
 
 import os
-import queue
 import time
-
 import pytest
+from unittest.mock import patch, call, MagicMock
 
-# XXX: broken
-pytest.skip("broken", allow_module_level=True)
+from alpenhorn import config, pool, update
+from alpenhorn.queue import FairMultiFIFOQueue
+from alpenhorn.storage import StorageNode
+from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
 
-import test_import as ti
+def make_afcr(
+    name,
+    filetype,
+    acq,
+    srcnode,
+    srcstate,
+    dstgroup,
+    dstnode,
+    dststate,
+    archivefile,
+    archivefilecopy,
+    archivefilecopyrequest,
+):
+    """Create an ArchiveFileCopyRequest with ArchiveFileCopies on src and dest.
 
-import alpenhorn.acquisition as ac
-import alpenhorn.archive as ar
-import alpenhorn.db as db
-import alpenhorn.storage as st
-import alpenhorn.update as update
-import alpenhorn.config as config
+    Returns a 4-tuple: ArchiveFile, source-ArchiveFileCopy, dest-ArchiveFileCopy, Request
+    """
+    file = archivefile(name=name, type=filetype, acq=acq)
+    srccopy = archivefilecopy(node=srcnode, file=file, has_file=srcstate)
+    if dststate is None:
+        dstcopy = None
+    else:
+        dstcopy = archivefilecopy(node=dstnode, file=file, has_file=dststate)
+    afcr = archivefilecopyrequest(node_from=srcnode, group_to=dstgroup, file=file)
 
-tests_path = os.path.abspath(os.path.dirname(__file__))
-
-# Parameters.
-max_queue_size = 2048
-num_task_threads = 4
+    return file, srccopy, dstcopy, afcr
 
 
 @pytest.fixture
-@pytest.mark.alpenhorn_config(
-    {"database": {"url": "sqlite:///" + str(tmpdir.join("database.sql"))}}
-)
-def fixtures(set_config, tmpdir):
-    """Initializes an Sqlite database on disk with data in tests/fixtures"""
-
-    db.init()
-    db.connect()
-
-    fixtures = ti.load_fixtures(tmpdir)
-
-    # create a valid ALPENHORN_NODE
-    node_file = fixtures["root"].join("ALPENHORN_NODE")
-    node_file.write("x")
-    assert node_file.check()
-
-    yield fixtures
-
-    db.database_proxy.close()
+def emptypool(queue):
+    """Create an empty worker pool."""
+    return pool.EmptyPool()
 
 
-def test_update_node_active(fixtures):
-    tmpdir = fixtures["root"]
-    node = st.StorageNode.get(name="x")
-    assert node.active
+@pytest.fixture
+def fastqueue():
+    """Like FMFQ, but fast.  Because who has time for unittests?"""
 
-    # if there is a valid ALPENHORN_NODE, `update_node_active` should not
-    # change node's active status
-    node_file = tmpdir.join("ALPENHORN_NODE")
-    assert node_file.check()
-    update.update_node_active(node)
-    node = st.StorageNode.get(name="x")
-    assert node.active
+    class Fast_FMFQ(FairMultiFIFOQueue):
+        """Like FMFQ, but get() returns immediately if the queue is empty."""
 
-    # rename ALPENHORN_NODE, and check that `update_node_active` unmounts the node
-    node_file.rename(tmpdir.join("SOMETHING_ELSE"))
-    update.update_node_active(node)
-    node = st.StorageNode.get(name="x")
-    assert not node.active
+        def get(self, timeout=None):
+            if self._total_queued == 0:
+                return None
+            return super().get(timeout)
+
+    return Fast_FMFQ()
 
 
-def test_update_node_active_no_node_file(fixtures):
-    tmpdir = fixtures["root"]
-    node = st.StorageNode.get(name="x")
-    assert node.active
+@pytest.fixture
+def mocknode(storagenode, storagegroup):
+    """A StorageNode fixture with a mocked io class.
 
-    # we start off with no ALPENHORN_NODE, and so `update_node_active` should unmount it
-    node_file = tmpdir.join("ALPENHORN_NODE")
-    node_file.remove()
-    assert not node_file.check()
+    Access the mock via mocknode.mock."""
 
-    update.update_node_active(node)
-    node = st.StorageNode.get(name="x")
-    assert not node.active
+    group = storagegroup(name="mockgroup")
+    node = storagenode(name="mocknode", group=group, root="/mocknode")
+    node.active = True
+    node.mock = MagicMock()
+    node._io = node.mock
 
+    yield node
 
-@patch("os.statvfs")
-def test_update_node_free_space(mock_statvfs, fixtures):
-    node = st.StorageNode.get(name="x")
-    assert node.avail_gb is None
-
-    mock_statvfs.return_value.f_bavail = 42
-    mock_statvfs.return_value.f_bsize = 2**30
-    update.update_node_free_space(node)
-    node = st.StorageNode.get(name="x")
-    assert node.avail_gb == 42
+    del node.mock
+    del node._io
 
 
-def test_update_node_integrity(fixtures):
-    tmpdir = fixtures["root"]
+@pytest.fixture
+def mockgroupandnode(mocknode):
+    """A StorageGroup fixture with a mocked io class.  The
+    group's node is mocknode.
 
-    # we already have some files created by `import`'s fixtures
-    files = os.listdir(str(tmpdir))
-    assert files
+    Yields the group and node."""
 
-    node = st.StorageNode.get(name="x")
+    group = mocknode.group
+    group.mock = MagicMock()
+    group._io = group.mock
 
-    # create a local copy of 'jim' with the correct contents
-    jim_file = ac.ArchiveFile.get(name="jim")
-    jim_file.md5sum = fixtures["files"]["x"]["jim"]["md5"]
-    jim_file.save(only=jim_file.dirty_fields)
+    yield group, mocknode
 
-    jim = ar.ArchiveFileCopy(
-        file=jim_file, node=node, has_file="M", prepared=False, size_b=512
-    )
-    jim.save()
-
-    # create a local copy of 'fred', but with a corrupt contents
-    fred = (
-        ar.ArchiveFileCopy.select()
-        .join(ac.ArchiveFile)
-        .where((ac.ArchiveFile.name == "fred") & (ar.ArchiveFileCopy.node == node))
-        .get()
-    )
-    tmpdir.join(fred.file.acq.name, "fred").write("")
-    fred.has_file = "M"
-    fred.save(only=fred.dirty_fields)
-
-    # create a local copy of 'sheila' but *not* in the local filesystem
-    sheila = (
-        ar.ArchiveFileCopy.select()
-        .join(ac.ArchiveFile)
-        .where((ac.ArchiveFile.name == "sheila") & (ar.ArchiveFileCopy.node == node))
-        .get()
-    )
-    sheila.has_file = "M"
-    sheila.save(only=sheila.dirty_fields)
-
-    # Setup the task queue
-    task_queue = TaskQueue(max_queue_size, num_task_threads)
-
-    # update_node_integrity should make 'jim' good, 'fred' corrupted, and 'sheila' missing
-    update.update_node_integrity(node, task_queue)
-
-    task_queue.queue.join()
-
-    jim = ar.ArchiveFileCopy.get(id=jim.id)
-    assert jim.has_file == "Y"
-    fred = ar.ArchiveFileCopy.get(id=fred.id)
-    assert fred.has_file == "X"
-    sheila = ar.ArchiveFileCopy.get(id=sheila.id)
-    assert sheila.has_file == "N"
+    del group.mock
+    del group._io
 
 
-def test_update_node_delete(fixtures):
-    tmpdir = fixtures["root"]
+@pytest.fixture
+def pull(
+    mockgroupandnode,
+    simplefiletype,
+    simpleacq,
+    simplenode,
+    archivefile,
+    archivefilecopy,
+    archivefilecopyrequest,
+):
+    """A simple ArchiveFileCopyRequest for update_group."""
 
-    # we already have some files created by `import`'s fixtures
-    files = os.listdir(str(tmpdir))
-    assert files
+    # Make source active
+    simplenode.active = True
+    simplenode.save()
 
-    node = st.StorageNode.get(name="x")
-    node.avail_gb = 10
-    node.save()
+    group, node = mockgroupandnode
+    group.mock.before_update = lambda nodes, idle: True
 
-    # create two fake archival nodes where we will keep copies of 'fred' and 'sheila'
-    node2 = st.StorageNode.create(
-        name="w", group=node.group, storage_type="A", min_avail_gb=1, max_avail_gb=2
-    )
-    node3 = st.StorageNode.create(
-        name="z", group=node.group, storage_type="A", min_avail_gb=1, max_avail_gb=2
+    # File doesn't exist on dest
+    group.mock.exists = lambda path: None
+
+    result = make_afcr(
+        "file",
+        simplefiletype,
+        simpleacq,
+        simplenode,
+        "Y",
+        group,
+        node,
+        None,
+        archivefile,
+        archivefilecopy,
+        archivefilecopyrequest,
     )
 
-    copies = (
-        ar.ArchiveFileCopy.select()
-        .join(st.StorageNode)
-        .where(ar.ArchiveFileCopy.node == node)
+    # Don't both returning the dstcopy, which is None
+    return result[0], result[1], result[3]
+
+
+@pytest.fixture
+def loopmocks(dbtables):
+    """Mock some function calls in the main loop.
+
+    Also ensures the loop runs only once.
+    """
+
+    mocks = dict()
+    patches = list()
+
+    # Create the mocks
+    for f in ["serial_io", "global_abort"]:
+        mocks[f] = MagicMock()
+        patches.append(patch(f"alpenhorn.update.{f}", mocks[f]))
+
+    # Ensure the main loop only runs once
+    waited = False
+
+    def _wait(timeout=None):
+        nonlocal waited
+        waited = True
+
+    def _is_set():
+        nonlocal waited
+        return waited
+
+    mocks["global_abort"].wait = _wait
+    mocks["global_abort"].is_set = _is_set
+
+    # Start all the mocks
+    for p in patches:
+        p.start()
+
+    yield mocks
+
+    # Stop all the mocks
+    for p in patches:
+        p.stop()
+
+
+def test_update_abort():
+    """Test update_loop with global_abort set."""
+
+    # Raise global abort
+    pool.global_abort.set()
+
+    # This should do nothing except exit, so passing
+    # a bunch of Nones shouldn't be a problem
+    update.update_loop(None, None, None)
+
+    # Reset
+    pool.global_abort.clear()
+
+
+def test_update_no_nodes(hostname, dbtables, queue, emptypool, loopmocks):
+    """Test update_loop with no active nodes."""
+
+    update.update_loop(hostname, queue, emptypool)
+
+    loopmocks["serial_io"].assert_called_once_with(queue)
+
+
+def test_update_run(hostname, xfs, simplenode, queue, emptypool, loopmocks):
+    """Test update_loop with one active node."""
+
+    # Set up node
+    simplenode.host = hostname
+    simplenode.active = True
+    simplenode.save()
+    simplenode.io.set_queue(queue)
+
+    xfs.create_file("/node/ALPENHORN_NODE", contents="simplenode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    loopmocks["serial_io"].assert_called_once_with(queue)
+
+
+def test_serial_io(fastqueue):
+    """Test serial_io."""
+
+    # This is our task
+    task_count = 0
+
+    def task():
+        nonlocal task_count
+        task_count += 1
+
+    # Put some tasks in the queue
+    fastqueue.put(task, "fifo")
+    fastqueue.put(task, "fifo")
+    fastqueue.put(task, "fifo")
+
+    # Check count
+    assert fastqueue.qsize == 3
+
+    # Run serial_io
+    update.serial_io(fastqueue)
+
+    # Now the queue is empty
+    assert fastqueue.qsize == 0
+
+    # The task was executed three times
+    assert task_count == 3
+
+
+def test_update_group_no_update(mockgroupandnode, hostname, queue):
+    """Test update.update_group not running when before_update returns False."""
+    group, node = mockgroupandnode
+
+    group.mock.before_update = lambda nodes, idle: False
+
+    # update should not have run
+    assert not update.update_group(group, hostname, queue, True)
+
+
+def test_update_group_inactive(mockgroupandnode, hostname, queue, pull, simplenode):
+    """Test running update.update_group with source node inactive."""
+
+    group, node = mockgroupandnode
+    file, copy, afcr = pull
+
+    # Source not active
+    simplenode.active = False
+    simplenode.save()
+
+    # update ran
+    assert update.update_group(group, hostname, queue, True)
+
+    # afcr is not handled
+    assert not ArchiveFileCopyRequest.get(file=file).completed
+    assert not ArchiveFileCopyRequest.get(file=file).cancelled
+    assert call.pull(file) not in group.mock.mock_calls
+
+
+def test_update_group_nosrc(mockgroupandnode, hostname, queue, pull):
+    """Test running update.update_group with source file missing."""
+
+    group, node = mockgroupandnode
+    file, copy, afcr = pull
+
+    # Source not present
+    copy.has_file = "N"
+    copy.save()
+
+    # update ran
+    assert update.update_group(group, hostname, queue, True)
+
+    # afcr is not handled
+    assert not ArchiveFileCopyRequest.get(file=afcr.file).completed
+    assert not ArchiveFileCopyRequest.get(file=afcr.file).cancelled
+    assert call.pull(afcr) not in group.mock.mock_calls
+
+
+def test_update_group_notready(mockgroupandnode, hostname, queue, pull):
+    """Test running update.update_group with source file not ready."""
+
+    group, node = mockgroupandnode
+    file, copy, afcr = pull
+
+    # Force load
+    from alpenhorn.io.Default import DefaultNodeRemote
+
+    # Force source not ready
+    with patch(
+        "alpenhorn.io.Default.DefaultNodeRemote.pull_ready", lambda self, file: False
+    ):
+        # update ran
+        assert update.update_group(group, hostname, queue, True)
+
+    # afcr is not handled
+    assert not ArchiveFileCopyRequest.get(file=file).completed
+    assert not ArchiveFileCopyRequest.get(file=file).cancelled
+    assert call.pull(afcr) not in group.mock.mock_calls
+
+
+def test_update_group_path_exists(mockgroupandnode, hostname, queue, pull):
+    """Test running update.update_group with unexpected existing dest."""
+
+    group, node = mockgroupandnode
+    file, copy, afcr = pull
+
+    # File exists on dest
+    group.mock.exists = lambda path: node
+
+    # This runs twice, to test two possibilities:
+    # - no destination ArchiveFileCopy record
+    # - desitination ArchiveFileCopy present with has_file='N'
+    # It should behave the same both times
+    for missing in [False, True]:
+        # update ran
+        assert update.update_group(group, hostname, queue, True)
+
+        # Dest file copy needs checking
+        dst = ArchiveFileCopy.get(file=file, node=node)
+        assert dst.has_file == "M"
+
+        # Request is still pending
+        assert not ArchiveFileCopyRequest.get(file=file).completed
+        assert not ArchiveFileCopyRequest.get(file=file).cancelled
+
+        # Pull was not executed
+        assert call.pull(afcr) not in group.mock.mock_calls
+
+        # Only need to do this the first time
+        if missing:
+            # "Delete" dest
+            dst.has_file = "N"
+            dst.save()
+
+
+def test_update_group_copy_state(
+    mockgroupandnode,
+    hostname,
+    queue,
+    simplenode,
+    simpleacq,
+    simplefiletype,
+    archivefile,
+    archivefilecopy,
+    archivefilecopyrequest,
+):
+    """Test running update.update_group with different copy states."""
+
+    group, node = mockgroupandnode
+
+    group.mock.before_update = lambda nodes, idle: True
+
+    # Source is active
+    simplenode.active = True
+    simplenode.save()
+
+    # Make some pull requests
+    commonargs = (simplefiletype, simpleacq, simplenode, "Y", group, node)
+    factories = (archivefile, archivefilecopy, archivefilecopyrequest)
+    fileY, srcY, dstY, afcrY = make_afcr("fileY", *commonargs, "Y", *factories)
+    fileM, srcM, dstM, afcrM = make_afcr("fileM", *commonargs, "M", *factories)
+    fileX, srcX, dstX, afcrX = make_afcr("fileX", *commonargs, "X", *factories)
+    fileN, srcN, dstN, afcrN = make_afcr("fileN", *commonargs, "N", *factories)
+
+    # Files don't exist on dest
+    group.mock.exists = lambda path: None
+
+    # update ran
+    assert update.update_group(group, hostname, queue, True)
+
+    # afcrY is cancelled
+    assert not ArchiveFileCopyRequest.get(file=fileY).completed
+    assert ArchiveFileCopyRequest.get(file=fileY).cancelled
+    assert call.pull(afcrY) not in group.mock.mock_calls
+
+    # afcrM is ongoing, but not handled
+    assert not ArchiveFileCopyRequest.get(file=fileM).completed
+    assert not ArchiveFileCopyRequest.get(file=fileM).cancelled
+    assert call.pull(afcrM) not in group.mock.mock_calls
+
+    # afcrX was executed
+    assert not ArchiveFileCopyRequest.get(file=fileX).completed
+    assert not ArchiveFileCopyRequest.get(file=fileX).cancelled
+    assert call.pull(afcrX) in group.mock.mock_calls
+
+    # afcrN was executed
+    assert not ArchiveFileCopyRequest.get(file=fileX).completed
+    assert not ArchiveFileCopyRequest.get(file=fileX).cancelled
+    assert call.pull(afcrN) in group.mock.mock_calls
+
+
+def test_update_node_not_idle(mocknode, queue):
+    """Test update.update_node on non-idle node."""
+
+    mocknode.mock.idle = False
+
+    # update should not have run
+    assert not update.update_node(mocknode, queue)
+
+    # But avail_gb was updated
+    assert call.update_avail_gb() in mocknode.mock.mock_calls
+
+
+def test_update_node_no_update(mocknode, queue):
+    """Test update.update_node with before_update returning False."""
+
+    mocknode.mock.idle = True
+    mocknode.mock.before_update = lambda idle: False
+
+    # update should not have run
+    assert not update.update_node(mocknode, queue)
+
+    # But avail_gb was updated
+    assert call.update_avail_gb() in mocknode.mock.mock_calls
+
+
+def test_update_node_run(
+    mocknode, queue, simplefile, archivefilecopy, archivefilecopyrequest
+):
+    """Test running update.update_node."""
+
+    # Make something to check
+    copy = archivefilecopy(node=mocknode, file=simplefile, has_file="M")
+
+    # And something to pull
+    afcr = archivefilecopyrequest(
+        node_from=mocknode, group_to=mocknode.group, file=simplefile
     )
-    for c in copies:
-        # create a local copy of the file
-        tmpdir.join(c.file.acq.name, c.file.name).write("")
-        c.has_file = "Y"
 
-        # mark the file not wanted locally
-        c.wants_file = "N"
-        c.save(only=c.dirty_fields)
+    mocknode.mock.idle = True
+    mocknode.mock.before_update = lambda idle: True
 
-        # add copies of the file on the archival nodes
-        ar.ArchiveFileCopy.create(
-            file=c.file, node=node2, has_file="Y", prepared=False, size_b=512
-        ).save()
-        ar.ArchiveFileCopy.create(
-            file=c.file, node=node3, has_file="Y", prepared=False, size_b=512
-        ).save()
+    # update ran
+    assert update.update_node(mocknode, queue)
 
-    # Setup the task queue
-    task_queue = TaskQueue(max_queue_size, num_task_threads)
-
-    # update_node_delete should mark these files not present or wanted on the
-    # node, and delete them from the filesystem
-    update.update_node_delete(node, task_queue)
-
-    task_queue.queue.join()
-
-    for c in copies:
-        x = ar.ArchiveFileCopy.get(id=c.id)
-        assert x.has_file == "N"
-        assert x.wants_file == "N"
-
-        # check that the file has been deleted
-        assert not tmpdir.join(c.file.acq.name, c.file.name).check()
-
-    # the rest of `test_import`'s fixtures should be left untouched
-    files = os.listdir(str(tmpdir.join("x")))
-    assert files
+    # Check I/O calls
+    calls = list(mocknode.mock.mock_calls)
+    assert call.update_avail_gb() in calls
+    assert call.check(copy) in calls
+    assert call.ready_pull(afcr) in calls
 
 
-def test_update_node_requests(tmpdir, fixtures):
-    # various joins break if 'address' is NULL
-    x = st.StorageNode.get(name="x")
-    x.address = "foo"
-    x.fs_type = "Disk"
-    x.save()
+def test_update_node_active(simplenode):
+    """Test update.update_node_active."""
 
-    # register a copy of 'jim' on 'x' in the database
-    jim = ac.ArchiveFile.get(name="jim")
-    jim.size_b = 0
-    jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
-    jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(
-        file=jim, node=x, has_file="Y", prepared=False, size_b=512
-    ).save()
+    # Starts out active
+    simplenode.active = True
+    simplenode.save()
+    assert simplenode.active
 
-    # make the 'z' node available locally
-    root_z = tmpdir.join("ROOT_z")
-    root_z.mkdir()
-    z = st.StorageNode.get(name="z")
-    z.root = str(root_z)
-    z.avail_gb = 300
-    z.host = x.host
-    z.fs_type = "Disk"
-    z.save()
+    # Pretend node is actually active
+    with patch.object(simplenode.io, "check_active", lambda: True):
+        assert update.update_node_active(simplenode)
+    assert simplenode.active
+    assert StorageNode.select(StorageNode.active).limit(1).scalar()
 
-    # Setup the task queue
-    task_queue = TaskQueue(max_queue_size, num_task_threads)
-
-    # after catching up with file requests, check that the file has been
-    # created and the request marked completed
-    update.update_node_dest_requests(z, task_queue)
-
-    task_queue.queue.join()
-
-    req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
-
-    assert req.completed
-    assert req.transfer_started
-    assert req.transfer_completed > req.transfer_started
-
-    assert root_z.join("x", "jim").check()
-    assert root_z.join("x", "jim").read() == fixtures["root"].join("x", "jim").read()
+    # Pretend node is actually not active
+    with patch.object(simplenode.io, "check_active", lambda: False):
+        assert not update.update_node_active(simplenode)
+    assert not simplenode.active
+    assert not StorageNode.select(StorageNode.active).limit(1).scalar()
 
 
-def test_update_node_requests_nearline(tmpdir, fixtures):
-    # various joins break if 'address' is NULL
-    x = st.StorageNode.get(name="x")
-    x.address = "foo"
-    x.fs_type = "Nearline"
-    x.save()
+def test_update_node_delete_under_min(
+    simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy
+):
+    """Test update.update_node_delete() when not under min"""
 
-    # register a copy of 'jim' on 'x' in the database
-    jim = ac.ArchiveFile.get(name="jim")
-    jim.size_b = 0
-    jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
-    jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(
-        file=jim, node=x, has_file="Y", prepared=False, size_b=512
-    ).save()
+    copyY = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileY", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+        wants_file="Y",
+    )
+    copyM = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileM", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+        wants_file="M",
+    )
+    copyN = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileN", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+        wants_file="N",
+    )
 
-    # make the 'z' node available locally
-    root_z = tmpdir.join("ROOT_z")
-    root_z.mkdir()
-    z = st.StorageNode.get(name="z")
-    z.root = str(root_z)
-    z.avail_gb = 300
-    z.host = x.host
-    z.fs_type = "Nearline"
-    z.save()
+    # Force under min and not archive
+    simplenode.avail_gb = 5
+    simplenode.min_avail_gb = 10
+    simplenode.storage_type = "F"
+    assert simplenode.under_min()
+    assert not simplenode.archive
 
-    # Setup the task queue
-    task_queue = TaskQueue(max_queue_size, num_task_threads)
+    mock_delete = MagicMock()
+    with patch.object(simplenode.io, "delete", mock_delete):
+        update.update_node_delete(simplenode)
+    mock_delete.assert_called_once_with([copyM, copyN])
 
-    # Try and complete the request when the source file is not prepared
-    update.update_node_src_requests(x, task_queue)
 
-    # Wait for source node task to run
-    task_queue.queue.join()
+def test_update_node_delete_over_min(
+    simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy
+):
+    """Test update.update_node_delete() when not under min"""
 
-    update.update_node_dest_requests(z, task_queue)
+    copyY = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileY", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+        wants_file="Y",
+    )
+    copyM = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileM", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+        wants_file="M",
+    )
+    copyN = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileN", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+        wants_file="N",
+    )
 
-    task_queue.queue.join()
+    mock_delete = MagicMock()
+    with patch.object(simplenode.io, "delete", mock_delete):
+        update.update_node_delete(simplenode)
+    mock_delete.assert_called_once_with([copyN])
 
-    req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
 
-    # Make sure the transfer has not been completed yet
-    assert req.completed == False
+@patch("alpenhorn.io.Default.DefaultNodeIO.auto_verify")
+def test_auto_verify(
+    mock_check, simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy
+):
+    """Test update.auto_verify()"""
 
-    # Complete the request after the source file is ready
-    update.update_node_src_requests(x, task_queue)
+    # Enable auto_verify
+    simplenode.auto_verify = 4
 
-    # Wait for source node to mark file copy as prepared
-    task_queue.queue.join()
+    # Make some files to verify
+    copyY = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileY", acq=simpleacq, type=simplefiletype),
+        has_file="Y",
+    )
+    copyN = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileN", acq=simpleacq, type=simplefiletype),
+        has_file="N",
+    )
+    copyM = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileM", acq=simpleacq, type=simplefiletype),
+        has_file="M",
+    )
+    copyX = archivefilecopy(
+        node=simplenode,
+        file=archivefile(name="fileX", acq=simpleacq, type=simplefiletype),
+        has_file="X",
+    )
 
-    update.update_node_dest_requests(z, task_queue)
+    update.auto_verify(simplenode)
+    calls = list(mock_check.mock_calls)
 
-    task_queue.queue.join()
-
-    req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
-
-    assert req.completed
-    assert req.transfer_started
-    assert req.transfer_completed > req.transfer_started
-
-    assert root_z.join("x", "jim").check()
-    assert root_z.join("x", "jim").read() == fixtures["root"].join("x", "jim").read()
+    # CopyN not checked
+    assert call(copyY) in calls
+    assert call(copyN) not in calls
+    assert call(copyM) in calls
+    assert call(copyX) in calls

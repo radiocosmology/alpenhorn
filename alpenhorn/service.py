@@ -75,12 +75,9 @@ def cli():
     host = util.get_hostname()
 
     # Loop over nodes active on this host looking for auto-imported ones
-    node_have = False
     for node in storage.StorageNode.select().where(
         storage.StorageNode.host == host, storage.StorageNode.active
     ):
-        node_have = True  # we have node
-
         # Skip all this if not auto importing
         if node.auto_import:
             # Init the I/O layer
@@ -92,12 +89,6 @@ def cli():
             # Now catch up with the existing files to see if there are any new ones
             # that should be imported
             auto_import.catchup(node, queue)
-
-    # Warn if there are no active nodes. We used to exit here, but actually
-    # it's useful to keep alpenhornd running for nodes where we exclusively use
-    # transport disks (e.g. jingle)
-    if not node_have:
-        log.warning(f"No nodes on this host ({host}) registered in the DB!")
 
     # Enter main loop.
     #

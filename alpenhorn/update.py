@@ -44,7 +44,7 @@ def update_loop(host, queue, pool):
     while not global_abort.is_set():
         loop_start = time.time()
 
-        # Used to remember the results if idle checks for later.
+        # Used to remember the results of idle checks for later.
         group_idle = dict()
         node_idle = dict()
 
@@ -52,9 +52,19 @@ def update_loop(host, queue, pool):
         #
         # nodes and are re-queried every loop iteration so we can
         # detect changes in available storage media
-        for node in StorageNode.select().where(
-            StorageNode.host == host, StorageNode.active == True
-        ):
+        try:
+            nodes = list(
+                StorageNode.select()
+                .where(StorageNode.host == host, StorageNode.active == True)
+                .execute()
+            )
+        except pw.DoesNotExist:
+            nodes = list()
+
+        if len(nodes) == 0:
+            log.warning(f"No active nodes on host ({host})!")
+
+        for node in nodes:
             # Init I/O, if necessary.
             node.io.set_queue(queue)
 
@@ -113,7 +123,7 @@ def update_loop(host, queue, pool):
 
         # If we have no workers, handle some queued I/O tasks
         if len(pool) == 0:
-            serial_io()
+            serial_io(queue)
 
         # Check the time spent so far
         loop_time = time.time() - loop_start
@@ -121,8 +131,8 @@ def update_loop(host, queue, pool):
 
         # Pool and queue info
         log.info(
-            f"Tasks: {queue.qsize()} queued, {queue.deferred_size()} deferred, "
-            f"{queue.inprogress_size()} in-progress on {len(pool)} workers"
+            f"Tasks: {queue.qsize} queued, {queue.deferred_size} deferred, "
+            f"{queue.inprogress_size} in-progress on {len(pool)} workers"
         )
 
         # Avoid looping too fast.
@@ -173,6 +183,10 @@ def update_group(group, host, queue, idle):
         )
     )
 
+    # Init I/O for all nodes
+    for node in nodes_in_group:
+        node.io.set_queue(queue)
+
     # Call the before update hook
     do_update = group.io.before_update(nodes_in_group, idle)
 
@@ -190,6 +204,9 @@ def update_group(group, host, queue, idle):
             # What's the current situation on the destination?
             copy_state = group.copy_state(req.file)
             if copy_state == "Y":
+                # We mark the AFCR cancelled rather than complete becase
+                # _this_ AFCR clearly hasn't been responsible for creating
+                # the file copy.
                 log.info(
                     f"Cancelling pull request for "
                     f"{req.file.acq.name}/{req.file.name}: "
@@ -226,15 +243,31 @@ def update_group(group, host, queue, idle):
                         f"{req.file.acq.name}/{req.file.name} on node "
                         f"{node.name}."
                     )
-                    # Upsert ArchiveFileCopy to force a check
-                    ArchiveFileCopy.replace(
-                        file=req.file,
-                        node=node,
-                        has_file="M",
-                        wants_file="Y",
-                        prepared=False,
-                        size_b=node.io.filesize(req.file.path, actual=True),
-                    ).execute()
+
+                    # Update/create ArchiveFileCopy to force a check.
+
+                    # ready == False is the safe option here: copy will be readied
+                    # during the subsequent check if needed.
+                    count = (
+                        ArchiveFileCopy.update(
+                            has_file="M", wants_file="Y", ready=False
+                        )
+                        .where(
+                            ArchiveFileCopy.file == req.file,
+                            ArchiveFileCopy.node == node,
+                        )
+                        .execute()
+                    )
+                    if count == 0:
+                        # Create new copy
+                        ArchiveFileCopy.create(
+                            file=req.file,
+                            node=node,
+                            has_file="M",
+                            wants_file="Y",
+                            ready=False,
+                            size_b=node.io.filesize(req.file.path, actual=True),
+                        )
                     continue
             else:
                 # Shouldn't get here
@@ -355,13 +388,13 @@ def update_node_active(node):
         else:
             # Mark the node as inactive in the database
             node.active = False
-            node.save(only=StorageNode.active)
+            node.save(only=[StorageNode.active])
             log.info(
-                f'Correcting the database: node "f{node.name}" is now set to '
+                f'Correcting the database: node "{node.name}" is now set to '
                 "inactive."
             )
     else:
-        log.warning(f'Attempted to update inactive node "f{node.name}"')
+        log.warning(f'Attempted to update inactive node "{node.name}"')
 
     return False
 

@@ -65,7 +65,7 @@ def set_config(request):
     Yields alpenhorn.config.config.
 
     After the test completes, alpenhorn.config.config is set to None."""
-    # If initialise with the default
+    # Initialise with the default
     config.config = config._default_config.copy()
 
     marker = request.node.get_closest_marker("alpenhorn_config")
