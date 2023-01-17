@@ -10,7 +10,6 @@ import os
 import logging
 import pathlib
 import threading
-import watchdog.utils
 from pathlib import PurePath
 from watchdog.observers import Observer
 
