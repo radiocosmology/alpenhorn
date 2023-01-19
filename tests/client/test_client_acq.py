@@ -26,7 +26,7 @@ def fixtures(tmpdir):
     db.init()
     db.connect()
 
-    import test_import as ti
+    ti = None
 
     yield ti.load_fixtures(tmpdir)
 
