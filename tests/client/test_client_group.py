@@ -13,6 +13,7 @@ from click.testing import CliRunner
 import alpenhorn.client as cli
 import alpenhorn.db as db
 import alpenhorn.storage as st
+
 ti = None
 
 # XXX: client is broken
