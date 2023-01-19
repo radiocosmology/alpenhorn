@@ -341,7 +341,6 @@ class NearlineNodeIO(LFSQuotaNodeIO):
         def _async(task, node, lfs, copies):
             for copy in copies:
                 state = lfs.hsm_state(copy.path)
-                log.info(f"{copy.path} = {state}")
                 if state == lfs.HSM_MISSING:
                     # File is unexpectedly gone.
                     log.warning(
@@ -352,13 +351,13 @@ class NearlineNodeIO(LFSQuotaNodeIO):
                     ).execute()
                 elif state == lfs.HSM_RELEASED:
                     if copy.ready:
-                        log.debug("Updating file copy {copy.file.path}: ready -> False")
+                        log.info("Updating file copy {copy.file.path}: ready -> False")
                         ArchiveFileCopy.update(ready=False).where(
                             ArchiveFileCopy.id == copy.id
                         ).execute()
                 else:  # i.e. RESTORED or UNARCHIVED
                     if not copy.ready:
-                        log.debug("Updating file copy {copy.file.path}: ready -> True")
+                        log.info("Updating file copy {copy.file.path}: ready -> True")
                         ArchiveFileCopy.update(ready=True).where(
                             ArchiveFileCopy.id == copy.id
                         ).execute()

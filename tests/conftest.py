@@ -3,9 +3,9 @@ import os
 import pytest
 import pathlib
 import shutil
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
-from alpenhorn import config, db, extensions, util
+from alpenhorn import config, db, extensions, update, util
 from alpenhorn.info_base import _NoInfo
 from alpenhorn.queue import FairMultiFIFOQueue
 from alpenhorn.storage import StorageGroup, StorageNode
@@ -16,7 +16,7 @@ from alpenhorn.acquisition import (
     FileType,
     AcqFileTypes,
 )
-from alpenhorn.archive import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 
 
 def pytest_configure(config):
@@ -145,12 +145,16 @@ def queue():
 def have_lfs():
     """Mock shutil.which to indicate "lfs" is present."""
 
+    original_which = shutil.which
+
     def _mocked_which(cmd, mode=os.F_OK | os.X_OK, path=None):
         """A mock of shutil.which that points to our test LFS command."""
+
+        nonlocal original_which
         if cmd == "lfs":
             return "LFS"
 
-        return shutil.which(cmd, mode, path)
+        return original_which(cmd, mode, path)
 
     with patch("shutil.which", _mocked_which):
         yield
@@ -390,6 +394,29 @@ def dbtables(dbproxy):
             ArchiveFileCopyRequest,
         ]
     )
+
+
+@pytest.fixture
+def loop_once(dbtables):
+    """Ensure the main loop runs at most once."""
+
+    waited = False
+
+    def _wait(timeout=None):
+        nonlocal waited
+        waited = True
+
+    def _is_set():
+        nonlocal waited
+        return waited
+
+    mock = MagicMock()
+    mock.wait = _wait
+    mock.is_set = _is_set
+
+    # This mocks the imported global_abort in update.py
+    with patch("alpenhorn.update.global_abort", mock):
+        yield mock
 
 
 # Data table fixtures.  Each of these will add a row with the specified

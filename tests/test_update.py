@@ -141,43 +141,12 @@ def pull(
 
 
 @pytest.fixture
-def loopmocks(dbtables):
-    """Mock some function calls in the main loop.
+def mock_serial_io(dbtables):
+    """Mock the serial_io() call so no I/O actually happens."""
 
-    Also ensures the loop runs only once.
-    """
-
-    mocks = dict()
-    patches = list()
-
-    # Create the mocks
-    for f in ["serial_io", "global_abort"]:
-        mocks[f] = MagicMock()
-        patches.append(patch(f"alpenhorn.update.{f}", mocks[f]))
-
-    # Ensure the main loop only runs once
-    waited = False
-
-    def _wait(timeout=None):
-        nonlocal waited
-        waited = True
-
-    def _is_set():
-        nonlocal waited
-        return waited
-
-    mocks["global_abort"].wait = _wait
-    mocks["global_abort"].is_set = _is_set
-
-    # Start all the mocks
-    for p in patches:
-        p.start()
-
-    yield mocks
-
-    # Stop all the mocks
-    for p in patches:
-        p.stop()
+    mock = MagicMock()
+    with patch("alpenhorn.update.serial_io", mock):
+        yield mock
 
 
 def test_update_abort():
@@ -194,15 +163,19 @@ def test_update_abort():
     pool.global_abort.clear()
 
 
-def test_update_no_nodes(hostname, dbtables, queue, emptypool, loopmocks):
+def test_update_no_nodes(
+    hostname, dbtables, queue, emptypool, loop_once, mock_serial_io
+):
     """Test update_loop with no active nodes."""
 
     update.update_loop(hostname, queue, emptypool)
 
-    loopmocks["serial_io"].assert_called_once_with(queue)
+    mock_serial_io.assert_called_once_with(queue)
 
 
-def test_update_run(hostname, xfs, simplenode, queue, emptypool, loopmocks):
+def test_update_run(
+    hostname, xfs, simplenode, queue, emptypool, loop_once, mock_serial_io
+):
     """Test update_loop with one active node."""
 
     # Set up node
@@ -215,7 +188,7 @@ def test_update_run(hostname, xfs, simplenode, queue, emptypool, loopmocks):
 
     update.update_loop(hostname, queue, emptypool)
 
-    loopmocks["serial_io"].assert_called_once_with(queue)
+    mock_serial_io.assert_called_once_with(queue)
 
 
 def test_serial_io(fastqueue):

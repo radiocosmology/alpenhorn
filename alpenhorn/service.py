@@ -1,9 +1,8 @@
 """Alpenhorn service."""
 
-import logging
 import sys
-
 import click
+import logging
 
 from .queue import FairMultiFIFOQueue
 
@@ -15,15 +14,13 @@ from . import (
     extensions,
     logger,
     pool,
+    queue,
     storage,
     update,
     util,
 )
 
 log = logging.getLogger(__name__)
-
-# Default number of workers.
-default_num_workers = 4
 
 # Register Hook to Log Exception
 # ==============================
@@ -63,7 +60,9 @@ def cli():
 
     # If we can be multithreaded, start the worker pool
     if db.threadsafe:
-        wpool = pool.WorkerPool(num_workers=default_num_workers, queue=queue)
+        wpool = pool.WorkerPool(
+            num_workers=config.config["service"]["num_workers"], queue=queue
+        )
     else:
         # EmptyPool acts like WorkerPool, but always has zero workers
         wpool = pool.EmptyPool()
@@ -74,30 +73,7 @@ def cli():
     # Get the name of this host
     host = util.get_hostname()
 
-    # Loop over nodes active on this host looking for auto-imported ones
-    for node in storage.StorageNode.select().where(
-        storage.StorageNode.host == host, storage.StorageNode.active
-    ):
-        # Skip all this if not auto importing
-        if node.auto_import:
-            # Init the I/O layer
-            node.io.set_queue(queue)
-
-            # Start the observer to watch the nodes for new files
-            auto_import.update_observer(node, queue)
-
-            # Now catch up with the existing files to see if there are any new ones
-            # that should be imported
-            auto_import.catchup(node, queue)
-
     # Enter main loop.
-    #
-    # At this point, if any auto_import.catchup happened, the queue may be
-    # crammed full of import_file tasks.  If that's the case, it may take a
-    # few main loops to work through the backlog during which time not much
-    # actual updating is going to happen, but that's not worse than the old
-    # way which would simply delay starting the main loop until the crawl
-    # was complete.
     try:
         update.update_loop(host, queue, wpool)
 

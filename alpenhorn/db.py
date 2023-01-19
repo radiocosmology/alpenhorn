@@ -175,17 +175,23 @@ class RetryOperationalError(object):
     Source: https://github.com/coleifer/peewee/issues/1472
     """
 
-    def execute_sql(self, sql, params=None, commit=True):
+    def execute_sql(self, sql, params=None, commit=pw.SENTINEL):
         try:
-            cursor = super(RetryOperationalError, self).execute_sql(sql, params, commit)
+            cursor = super().execute_sql(sql, params, commit)
         except pw.OperationalError:
+            # If we're in a transaction or the database isn't
+            # set to autoconnect, there's not much we can do,
+            # so just continue to crash
+            if not self.autoconnect or self.in_transaction():
+                raise
+
+            # Close the broken connector
             if not self.is_closed():
                 self.close()
-            with pw.__exception_wrapper__:
-                cursor = self.cursor()
-                cursor.execute(sql, params or ())
-                if commit and not self.in_transaction():
-                    self.commit()
+
+            # Otherwise, retry.  This will re-open the DB because
+            # we've just closed it and autoconnect is set.
+            cursor = super().execute_sql(sql, params, commit)
         return cursor
 
 

@@ -78,6 +78,9 @@ Example config:
 
     # Configure the operation of the local service
     service:
+        # Default number of worker threads
+        num_workers: 4
+
         # Minimum time length (in seconds) between updates
         update_interval: 60
 
@@ -97,7 +100,7 @@ config = None
 _default_config = {
     "logging": {"level": "warning", "module_levels": {"alpenhorn": "info"}},
     "model": {"acq_info_errors": "abort", "file_info_errors": "abort"},
-    "service": {"update_interval": 60, "auto_import_interval": 30},
+    "service": {"num_workers": 0, "update_interval": 60, "auto_import_interval": 30},
 }
 
 
@@ -136,7 +139,8 @@ def load_config():
         with open(absfile, "r") as fh:
             conf = yaml.safe_load(fh)
 
-        config = merge_dict_tree(config, conf)
+        if conf is not None:
+            config = merge_dict_tree(config, conf)
 
     if not any_exist:
         raise RuntimeError("No configuration files available.")

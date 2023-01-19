@@ -50,7 +50,9 @@ def test_import_file_not_ready(dbtables, simplenode, mock_lfs):
     simplenode.io_config = '{"quota_group": "qgroup", "fixed_quota": 300000}'
 
     # _import_file is a generator function, so it needs to be interated to run.
-    assert next(auto_import._import_file(simplenode, pathlib.Path("acq/file"))) == 60
+    assert (
+        next(auto_import._import_file(None, simplenode, pathlib.Path("acq/file"))) == 60
+    )
 
     # File has been restored
     assert not mock_lfs("").hsm_released("/node/acq/file")
@@ -61,7 +63,7 @@ def test_import_file_bad_acq(dbtables, simplefiletype, simplenode):
 
     # _import_file is a generator function, so it needs to be interated to run.
     with pytest.raises(StopIteration):
-        next(auto_import._import_file(simplenode, pathlib.Path("acq/file")))
+        next(auto_import._import_file(None, simplenode, pathlib.Path("acq/file")))
 
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
@@ -77,7 +79,7 @@ def test_import_file_copy_exists(mock_detect, simplenode, simplefile, archivefil
     with pytest.raises(StopIteration):
         next(
             auto_import._import_file(
-                simplenode, pathlib.Path("simplefile_acq/simplefile")
+                None, simplenode, pathlib.Path("simplefile_acq/simplefile")
             )
         )
 
@@ -89,7 +91,11 @@ def test_import_file_bad_file(dbtables, simplefiletype, simplenode):
     """Test bad file in _import_file()"""
 
     with pytest.raises(StopIteration):
-        next(auto_import._import_file(simplenode, pathlib.Path("simplefile_acq/file")))
+        next(
+            auto_import._import_file(
+                None, simplenode, pathlib.Path("simplefile_acq/file")
+            )
+        )
 
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
@@ -105,7 +111,7 @@ def test_import_file_locked(xfs, dbtables, simplefiletype, simplenode):
     with pytest.raises(StopIteration):
         next(
             auto_import._import_file(
-                simplenode, pathlib.Path("simplefile_acq/simplefile")
+                None, simplenode, pathlib.Path("simplefile_acq/simplefile")
             )
         )
 
@@ -143,7 +149,7 @@ def test_import_file_create(xfs, dbproxy, dbtables, simplefiletype, simplenode):
     with pytest.raises(StopIteration):
         next(
             auto_import._import_file(
-                simplenode, pathlib.Path("simplefile_acq/simplefile")
+                None, simplenode, pathlib.Path("simplefile_acq/simplefile")
             )
         )
 
@@ -200,7 +206,7 @@ def test_import_file_exists(xfs, dbtables, simplenode, simplefile, archivefileco
     with pytest.raises(StopIteration):
         next(
             auto_import._import_file(
-                simplenode, pathlib.Path("simplefile_acq/simplefile")
+                None, simplenode, pathlib.Path("simplefile_acq/simplefile")
             )
         )
 
@@ -234,10 +240,10 @@ def test_empty_stop_observers():
     assert len(auto_import._watchers) == 0
 
 
-def test_update_observers_start(xfs, simplenode, queue):
+def test_update_observers_start(xfs, dbtables, simplenode, queue):
     """Test starting an observer via update_observers()."""
 
-    xfs.create_dir(simplenode.root)
+    xfs.create_file("/node/acq/file", contents="")
     simplenode.auto_import = True
     auto_import.update_observer(simplenode, queue)
 
@@ -251,7 +257,7 @@ def test_update_observers_start(xfs, simplenode, queue):
     assert len(auto_import._watchers) == 0
 
 
-def test_update_observers_stop(xfs, simplenode, queue):
+def test_update_observers_stop(xfs, dbtables, simplenode, queue):
     """Test stopping a watcher via update_observers()."""
 
     # First start
@@ -271,12 +277,7 @@ def test_update_observers_stop(xfs, simplenode, queue):
 
 
 @patch("alpenhorn.auto_import.import_file")
-def test_catchup_new(
-    mocked_import,
-    xfs,
-    dbtables,
-    simplenode,
-):
+def test_catchup_new(mocked_import, xfs, dbtables, simplenode, queue):
     """Test auto_import.catchup with new files."""
 
     # Make some files to "import"
@@ -284,12 +285,12 @@ def test_catchup_new(
     xfs.create_file("/node/acq1/file2")
     xfs.create_file("/node/acq2/file1")
 
-    auto_import.catchup(simplenode)
+    auto_import.catchup(simplenode, queue)
     mocked_import.assert_has_calls(
         [
-            call(simplenode, pathlib.PurePath("acq1/file1")),
-            call(simplenode, pathlib.PurePath("acq1/file2")),
-            call(simplenode, pathlib.PurePath("acq2/file1")),
+            call(simplenode, queue, pathlib.PurePath("acq1/file1")),
+            call(simplenode, queue, pathlib.PurePath("acq1/file2")),
+            call(simplenode, queue, pathlib.PurePath("acq2/file1")),
         ],
     )
 
@@ -298,6 +299,7 @@ def test_catchup_new(
 def test_catchup_exists(
     mocked_import,
     xfs,
+    queue,
     simplenode,
     simpleacq,
     simplefiletype,
@@ -327,13 +329,13 @@ def test_catchup_exists(
     xfs.create_file("/node/simpleacq/file5")  # no copy but ArchiveFile
     xfs.create_file("/node/simpleacq/file6")  # no copy or ArchiveFile
 
-    auto_import.catchup(simplenode)
+    auto_import.catchup(simplenode, queue)
 
     # Only file1 should be skipped
     assert mocked_import.mock_calls == [
-        call(simplenode, pathlib.PurePath("simpleacq/file2")),
-        call(simplenode, pathlib.PurePath("simpleacq/file3")),
-        call(simplenode, pathlib.PurePath("simpleacq/file4")),
-        call(simplenode, pathlib.PurePath("simpleacq/file5")),
-        call(simplenode, pathlib.PurePath("simpleacq/file6")),
+        call(simplenode, queue, pathlib.PurePath("simpleacq/file2")),
+        call(simplenode, queue, pathlib.PurePath("simpleacq/file3")),
+        call(simplenode, queue, pathlib.PurePath("simpleacq/file4")),
+        call(simplenode, queue, pathlib.PurePath("simpleacq/file5")),
+        call(simplenode, queue, pathlib.PurePath("simpleacq/file6")),
     ]

@@ -36,8 +36,13 @@ def import_file(node, queue, path):
             path = path.relative_to(node.root)
         except ValueError:
             # Not rooted under node.root
-            log.debug(f"skipping import of {path}: not rooted under node {node.root}")
+            log.warning(f"skipping import of {path}: not rooted under node {node.root}")
             return
+
+    # Ignore the node info file
+    if str(path) == "ALPENHORN_NODE":
+        log.debug(f"ignoring ALPENHORN_NODE file during import")
+        return
 
     # New import task.  It's better to do this in a worker
     # because the worker pool will take care of DB connection loss.
@@ -46,7 +51,7 @@ def import_file(node, queue, path):
         queue=queue,
         key=node.name,
         args=(node, path),
-        name=f"Import {path} into {node.name}",
+        name=f"Import {path} on {node.name}",
         # If the job fails due to DB connection loss, re-start the
         # task because unlike tasks made in the main loop, we're
         # never going to revisit this.
@@ -54,11 +59,13 @@ def import_file(node, queue, path):
     )
 
 
-def _import_file(node, path):
+def _import_file(task, node, path):
     """Import a file into the DB.  This is run by a worker.
 
     Parameters
     ----------
+    task : task.Task
+        The task running this function
     node : storage.StorageNode
         The node we are processing.
     path : pathlib.PurePath
@@ -113,7 +120,7 @@ def _import_file(node, path):
             info_class = acqtype.info()
             if info_class.has_model():
                 # Generate the acqinfo metadata
-                info = info_class(path_=acqname, node_=node, acq=acq)
+                info = info_class(path_=pathlib.Path(acqname), node_=node, acq=acq)
                 info.save()
             log.info(f'Acquisition "{acqname}" added to DB.')
 
@@ -141,7 +148,7 @@ def _import_file(node, path):
             if info_class.has_model():
                 # Generate the fileinfo metadata
                 info = info_class(
-                    path_=acqname,
+                    path_=path,
                     node_=node,
                     acqtype_=acqtype,
                     acqname_=acqname,
@@ -263,6 +270,10 @@ def update_observer(node, queue):
             RegisterFile(node, queue), node.root, recursive=True
         )
 
+        # Now catch up with the existing files to see if there are any new ones
+        # that should be imported
+        catchup(node, queue)
+
 
 def stop_observers():
     """Stop all auto_import watchdogs."""
@@ -282,7 +293,7 @@ def stop_observers():
     _watchers = dict()
 
 
-def catchup(node):
+def catchup(node, queue):
     """Traverse the node directory for new files and importem"""
 
     # Get list of all files that exist on the node
@@ -308,4 +319,4 @@ def catchup(node):
         if file in already_imported_files:
             log.debug(f'Skipping already-registered file "{file}".')
         else:
-            import_file(node, file)
+            import_file(node, queue, file)

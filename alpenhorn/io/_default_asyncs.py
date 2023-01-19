@@ -194,7 +194,7 @@ def delete_async(task, node, copies):
                 # dirname is empty; delete it.
                 try:
                     os.rmdir(dirname)
-                    log.info("Removed directory {dirname} on {node.name}")
+                    log.info(f"Removed directory {dirname} on {node.name}")
                 except OSError as e:
                     log.warning(
                         f"Error deleting directory {dirname} on {node.name}: {e}"

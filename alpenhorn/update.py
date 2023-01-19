@@ -68,6 +68,10 @@ def update_loop(host, queue, pool):
             # Init I/O, if necessary.
             node.io.set_queue(queue)
 
+            # Check if the node is actually active
+            if not update_node_active(node):
+                continue  # Not active
+
             # Update group_idle.  As we loop through the nodes, this builds up
             # a list of which groups are available on this host and whether they
             # were idle before node I/O happened.
@@ -161,10 +165,10 @@ def serial_io(queue):
         # Run the task
         task, key = item
 
-        log.debug(f"Beginning task {task}")
+        log.info(f"Beginning task {task}")
         task()
         queue.task_done(key)
-        log.debug(f"Finished task {task}")
+        log.info(f"Finished task {task}")
 
 
 def update_group(group, host, queue, idle):
@@ -333,15 +337,12 @@ def update_node(node, queue):
     # Pre-update hook
     do_update = node.io.before_update(idle)
 
+    # Check and update the amount of free space
+    # This is always done, even if skipping the update
+    node.io.update_avail_gb()
+
     if idle and do_update:
         log.info(f'Updating node "{node.name}".')
-
-        # Check if the node is actually active
-        if not update_node_active(node):
-            return
-
-        # Check and update the amount of free space
-        node.io.update_avail_gb()
 
         # Check the integrity of any questionable files (has_file=M)
         for copy in ArchiveFileCopy.select().where(
@@ -370,9 +371,6 @@ def update_node(node, queue):
             f"Skipping update for node {node.name}:"
             f"idle={idle} do_update={do_update}"
         )
-
-    # Update the amount of free space, again; this is always done
-    node.io.update_avail_gb()
 
     return idle and do_update
 
