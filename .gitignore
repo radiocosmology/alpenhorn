@@ -68,3 +68,7 @@ target/
 # pyenv
 .python-version
 
+# Editor rubble
+*~
+.*sw*
+\#*\#
