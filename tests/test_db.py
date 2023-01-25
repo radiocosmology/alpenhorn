@@ -1,64 +1,99 @@
-"""
-test_db
--------
+"""Tests of alpenhorn.db module."""
 
-Tests for `alpenhorn.db` module.
-"""
-
-import peewee as pw
 import pytest
+import peewee as pw
+import threading
 
-import alpenhorn.db as db
-import test_import as ti
-
-# try:
-#     from unittest.mock import patch, call
-# except ImportError:
-#     from mock import patch, call
+from alpenhorn import db
 
 
-class FailingSqliteDatabase(pw.SqliteDatabase):
-    def execute_sql(self, sql, *args, **kwargs):
-        self.fail ^= True
-        if self.fail:
-            self.fail_count += 1
-            raise pw.OperationalError("Fail every other time")
-        else:
-            return super(FailingSqliteDatabase, self).execute_sql(sql, *args, **kwargs)
-
-    def close(self):
-        if not self.fail:
-            return super(FailingSqliteDatabase, self).close()
+def test_db(dbproxy):
+    """Test starting the default DB."""
+    assert not db.threadsafe
+    assert issubclass(dbproxy.obj.__class__, pw.Database)
 
 
-@pytest.fixture
-def fixtures(tmpdir):
-    db._connect()
-
-    # the database connection will fail to execute a statement every other time
-    db.database_proxy.obj.__class__ = type(
-        "FailingRetryableDatabase",
-        (db.RetryOperationalError, FailingSqliteDatabase),
-        {},
-    )
-    db.database_proxy.obj.fail_count = 0
-    db.database_proxy.obj.fail = False
-
-    yield ti.load_fixtures(tmpdir)
-
-    assert db.database_proxy.obj.fail_count > 0
-    db.database_proxy.close()
+def test_chimedb(use_chimedb, dbproxy):
+    """Test starting the default DB."""
+    assert db.threadsafe
+    assert issubclass(dbproxy.obj.__class__, pw.Database)
 
 
-def test_schema(fixtures):
-    setup_fail_count = db.database_proxy.obj.fail_count
-    ti.test_schema(fixtures)
-    # we have had more failures during test_import
-    assert db.database_proxy.obj.fail_count > setup_fail_count
+def test_chimedb_concurrency(use_chimedb, dbproxy):
+    """Test concurrency in the chimedb db module."""
+
+    # Test table
+    class Values(db.base_model):
+        value = pw.IntegerField()
+
+    # Create and populate
+    dbproxy.create_tables([Values])
+    assert dbproxy.get_tables() == ["values"]
+    Values.insert_many([{"value": 12}, {"value": 34}, {"value": 56}]).execute()
+
+    # Verify database before test
+    assert list(Values.select().dicts()) == [
+        {"id": 1, "value": 12},
+        {"id": 2, "value": 34},
+        {"id": 3, "value": 56},
+    ]
+
+    # Threads
+    def worker1():
+        nonlocal Values
+
+        # Init this thread
+        db.connect()
+        assert dbproxy.get_tables() == ["values"]
+
+        # Start a transaction
+        with db.database_proxy.atomic():
+            Values.update(value=123).where(Values.id == 1).execute()
+            Values.update(value=456).where(Values.id == 3).execute()
+
+    def worker2():
+        nonlocal Values
+        # Init this thread
+        db.connect()
+        assert dbproxy.get_tables() == ["values"]
+
+        Values.update(value=0).where(Values.id == 2).execute()
+        Values.insert(value=89).execute()
+
+    t1 = threading.Thread(target=worker1, daemon=True)
+    t2 = threading.Thread(target=worker2, daemon=True)
+
+    t1.start()
+    t2.start()
+
+    t1.join()
+    t2.join()
+
+    assert list(Values.select().dicts()) == [
+        {"id": 1, "value": 123},
+        {"id": 2, "value": 0},
+        {"id": 3, "value": 456},
+        {"id": 4, "value": 89},
+    ]
 
 
-def test_model(fixtures):
-    setup_fail_count = db.database_proxy.obj.fail_count
-    ti.test_import(fixtures)
-    # we have had more failures during test_import
-    assert db.database_proxy.obj.fail_count > setup_fail_count
+def test_enum(dbproxy):
+    """Test the EnumField"""
+
+    class Enummery(db.base_model):
+        abcd = db.EnumField(["a", "b", "c", "d"], default="a")
+        efgh = db.EnumField(["ef", "gh"], null=True)
+
+    dbproxy.create_tables([Enummery])
+
+    Enummery.insert(abcd="b", efgh="ef").execute()
+    Enummery.insert(efgh=None).execute()
+
+    # Bad values
+    with pytest.raises(ValueError):
+        Enummery.insert(abcd="e", efgh="a").execute()
+
+    assert list(Enummery.select().dicts()) == [
+        {"id": 1, "abcd": "b", "efgh": "ef"},
+        {"id": 2, "abcd": "a", "efgh": None},
+    ]

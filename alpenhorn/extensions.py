@@ -7,8 +7,8 @@ alpenhorn configuration as fully qualified python name. They must have a
 functionality they provide. There are currently three supported keys:
 
 `database`
-    A function that returns a `peewee.Database` instance. The function receives
-    any `'database'` section of the config as an argument (or an empty `dict`).
+    A dict providing capabilities of a database extension.  See the db module
+    for details.  At most one database extension is permitted.
 `acq_types`
     The acquisition type extensions, given as a list of `AcqInfoBase` subclasses.
 `file_types`
@@ -23,21 +23,34 @@ used. Similarly, only the last `database` specification matters.
 import importlib
 import logging
 
-from . import acquisition, config
+from . import config
 
 log = logging.getLogger(__name__)
 
 
-# Internal variable for holding the extension references
+# Internal variables for holding the extension references
 _ext = None
+_db_ext = None
 
 
-def load_extensions():
+def load_extensions() -> None:
     """Load any extension modules specified in the configuration.
 
     Inspects the `'extensions'` section in the configuration for full resolved
     Python module names, and then registers any extension types and database
     connections.
+
+    Raises
+    ------
+    ModuleNotFoundError
+        A extension module could not be found
+    RuntimeError
+        An extension module was missing the register_extension function.
+    TypeError
+        A database module provided a non-dict for the "database" key
+    ValueError
+        More than one database extension was specified in the alpenhorn
+        config.
     """
 
     global _ext
@@ -55,46 +68,55 @@ def load_extensions():
 
         try:
             ext_module = importlib.import_module(name)
-        except ImportError:
-            raise ImportError("Extension module %s not found", name)
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError(f"extension module {name} not found")
 
         try:
             extension_dict = ext_module.register_extension()
         except AttributeError:
             raise RuntimeError(
-                "Module %s is not a valid alpenhorn extension (no register_extension hook).",
-                name,
+                f"extension {name} is not a valid alpenhorn extension "
+                "(no register_extension hook).",
             )
 
         extension_dict["name"] = name
         extension_dict["module"] = ext_module
 
+        if "database" in extension_dict:
+            # Check for database capability dict
+            if not isinstance(extension_dict["database"], dict):
+                raise TypeError(
+                    '"database" key returned by extension module '
+                    f"{name} must provide a dict."
+                )
+
+            # Don't allow more than one database extension
+            global _db_ext
+            if _db_ext is None:
+                _db_ext = extension_dict
+            else:
+                raise ValueError(
+                    "more than one database extension in config "
+                    f"({_db_ext['name']} and {name})"
+                )
+
         _ext.append(extension_dict)
 
 
-def connect_database_extension():
-    """Find and connect a database found in an extension.
+def database_extension() -> dict:
+    """Find and return a database extension capability dict.
 
     Returns
     -------
-    db : `peewee.Database`
-        A connected `peewee.Database` instance or `None` if there was no
-        database extension specified.
+    capabilities : dict or None
+        A dict providing the capabilites of the database module, or None,
+        if there was no database extension specified in the config.
     """
-
-    dbconnect = None
-
-    for ext_dict in _ext:
-        if "database" in ext_dict:
-            log.debug("Found database helper in extension %s", ext_dict["name"])
-            dbconnect = ext_dict["database"]
-
-    if dbconnect is not None:
-        log.info("Using external database helper")
-        conf = config.config.get("database", {})
-        return dbconnect(conf)
-    else:
+    if _db_ext is None:
         return None
+
+    log.info(f"Using database extension {_db_ext['name']}")
+    return _db_ext["database"]
 
 
 def register_type_extensions():
@@ -113,6 +135,8 @@ def register_type_extensions():
 
 
 def _register_acq_extensions(acq_types):
+    from . import acquisition
+
     for acq_type in acq_types:
         name = acq_type._acq_type
         log.info("Registering new acquisition type %s", name)
@@ -127,6 +151,8 @@ def _register_acq_extensions(acq_types):
 
 
 def _register_file_extensions(file_types):
+    from . import acquisition
+
     for file_type in file_types:
         name = file_type._file_type
         log.info("Registering new file type %s", name)
