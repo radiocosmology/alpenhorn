@@ -6,7 +6,6 @@ from alpenhorn import config
 
 
 def merge_dict(a, b):
-
     c = a.copy()
     c.update(b)
 

@@ -346,7 +346,6 @@ def catchup(node_list):
             for dirpath, d, f_list in os.walk(node.root):
                 log.info('Crawling "%s".', dirpath)
                 for file_name in sorted(f_list):
-
                     if file_name in already_imported_files:
                         log.debug('Skipping already-registered file "%s".', file_name)
                     else:

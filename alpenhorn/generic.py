@@ -100,7 +100,6 @@ class GenericFileInfo(ac.FileInfoBase):
 
 
 def register_extension():
-
     ext_dict = {"acq_types": [GenericAcqInfo], "file_types": [GenericFileInfo]}
 
     return ext_dict
@@ -119,7 +118,6 @@ def _check_match(name, patterns, glob):
 
     # Loop over patterns and check for matches
     for pattern in patterns:
-
         if matchfn(pattern, name):
             return True
 

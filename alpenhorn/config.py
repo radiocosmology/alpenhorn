@@ -94,7 +94,6 @@ def load_config():
     any_exist = False
 
     for cfile in config_files:
-
         # Expand the configuration file path
         absfile = os.path.abspath(os.path.expanduser(os.path.expandvars(cfile)))
 

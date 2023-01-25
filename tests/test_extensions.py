@@ -10,7 +10,6 @@ from alpenhorn import acquisition, extensions, generic
 
 @pytest.fixture
 def fixtures():
-
     from alpenhorn import db
 
     db._connect()

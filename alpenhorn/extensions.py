@@ -51,7 +51,6 @@ def load_extensions():
     extension_list = list(config.config["extensions"])
 
     for name in extension_list:
-
         log.info("Loading extension %s", name)
 
         try:
@@ -86,7 +85,6 @@ def connect_database_extension():
     dbconnect = None
 
     for ext_dict in _ext:
-
         if "database" in ext_dict:
             log.debug("Found database helper in extension %s", ext_dict["name"])
             dbconnect = ext_dict["database"]
@@ -107,7 +105,6 @@ def register_type_extensions():
     """
 
     for ext_dict in _ext:
-
         if "acq_types" in ext_dict:
             _register_acq_extensions(ext_dict["acq_types"])
 
@@ -116,7 +113,6 @@ def register_type_extensions():
 
 
 def _register_acq_extensions(acq_types):
-
     for acq_type in acq_types:
         name = acq_type._acq_type
         log.info("Registering new acquisition type %s", name)
@@ -131,7 +127,6 @@ def _register_acq_extensions(acq_types):
 
 
 def _register_file_extensions(file_types):
-
     for file_type in file_types:
         name = file_type._file_type
         log.info("Registering new file type %s", name)

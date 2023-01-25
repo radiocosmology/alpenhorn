@@ -135,7 +135,6 @@ def sync(
     # If the target option has been specified, only copy nodes also not
     # available there...
     if target is not None:
-
         # Fetch a reference to the target group
         try:
             target_group = st.StorageGroup.get(name=target)
@@ -189,7 +188,6 @@ def sync(
 
     # If requested, limit query to a specific acquisition...
     if acq is not None:
-
         # Fetch acq if specified
         try:
             acq = ac.ArchiveAcq.get(name=acq)
@@ -233,7 +231,6 @@ def sync(
 
     # Perform update in a transaction to avoid any clobbering from concurrent updates
     with ar.ArchiveFileCopyRequest._meta.database.atomic():
-
         # Get a list of all the file ids for the copies we should perform
         files_ids = [c.file_id for c in copy]
 
@@ -261,7 +258,6 @@ def sync(
 
         # Insert any new requests
         if len(files_out) > 0:
-
             # Construct a list of all the rows to insert
             insert = [
                 {
@@ -341,7 +337,7 @@ def status(all):
             if total_count and file_size
             else None
         )
-        file_size_tb = (float(file_size) / 2 ** 40.0) if file_count else None
+        file_size_tb = (float(file_size) / 2**40.0) if file_count else None
         node_path = "%s:%s" % (node_host, node_root)
         data.append(
             [node_name, file_count, file_size_tb, pct_count, pct_size, node_path]

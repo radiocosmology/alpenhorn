@@ -271,7 +271,6 @@ class FileType(base_model):
         # Iterate over all known acquisition types to try and find one that matches
         # the directory being processed
         for file_type in acq.type.file_types:
-
             if file_type.is_type(filename, acq, node):
                 return file_type
 

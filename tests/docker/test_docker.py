@@ -141,7 +141,6 @@ def workers(db, network, images, tmpdir_factory):
     workers = []
 
     for i in range(3):
-
         hostname = "container-%i" % i
         print("Creating alpenhorn container %s" % hostname)
 
@@ -238,7 +237,6 @@ def _recurse_acq(f, root=""):
     acqlist = []
 
     for name, sub in f.items():
-
         new_root = join(root, name)
 
         if _type(new_root) is not None:
@@ -269,7 +267,6 @@ def _recurse_files(f, root=""):
     filelist = []
 
     for name, sub in f.items():
-
         new_root = join(root, name)
 
         if "md5" in sub:
@@ -283,11 +280,8 @@ def _recurse_files(f, root=""):
 
 
 def _make_files(acqs, base, skip_lock=True):
-
     for acq in acqs:
-
         for file_ in acq["files"]:
-
             path = join(base, acq["name"], file_["name"])
 
             if not exists(dirname(path)):
@@ -322,7 +316,6 @@ def _verify_db(acqs, copies_on_node=None, wants_on_node="Y", has_on_node="Y"):
     # Loop over all acquisitions and files and check that they have been
     # correctly added to the database
     for acq in acqs:
-
         # Test that the acquisition exists
         acq_query = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == acq["name"])
         assert acq_query.count() == 1
@@ -332,7 +325,6 @@ def _verify_db(acqs, copies_on_node=None, wants_on_node="Y", has_on_node="Y"):
         assert acq_obj.type.name == acq["type"]
 
         for file_ in acq["files"]:
-
             # Test that the file exists
             file_query = ac.ArchiveFile.select().where(
                 ac.ArchiveFile.acq == acq_obj, ac.ArchiveFile.name == file_["name"]
@@ -421,7 +413,6 @@ def test_status(workers, network):
 
 
 def test_sync_all(workers, network, test_files):
-
     # Request sync onto a different node
     client.containers.run(
         "alpenhorn",
@@ -439,7 +430,6 @@ def test_sync_all(workers, network, test_files):
 
 
 def test_sync_acq(workers, network, test_files):
-
     for acq in test_files:
         # Request sync of a single acq onto a different node
         client.containers.run(
@@ -499,7 +489,6 @@ def _verify_clean(acqs, worker, unclean=False, check_empty=False):
 
 
 def test_clean(workers, network, test_files):
-
     # Simplest clean request
     node_to_clean = workers[1]["node"]
     client.containers.run(
@@ -549,7 +538,6 @@ def test_clean(workers, network, test_files):
 
 # === Test that the node file is being checked successfully
 def test_node_active(workers):
-
     data_dir0 = workers[1]["dir"]
     os.rename(data_dir0 + "/ALPENHORN_NODE", data_dir0 + "/DIFFERENT_NAME")
     print("Changed name of ALPENHORN_NODE file in directory", data_dir0)
@@ -578,7 +566,6 @@ def test_node_active(workers):
     reason=("Set PLAYGROUND to leave alpenhorn alive for interactive fun."),
 )
 def test_playground(workers):
-
     print(
         """
 To connect the alpenhorn database to this instance run:

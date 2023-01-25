@@ -33,7 +33,6 @@ def start_logging():
     # should bring that back
 
     def _check_level(level):
-
         if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             raise RuntimeError("Log level %s is not valid" % level)
 
@@ -45,7 +44,6 @@ def start_logging():
 
     # Apply any module specific logging levels
     for name, level in config.config["logging"]["module_levels"].items():
-
         logger = logging.getLogger(name)
         level = level.upper()
 

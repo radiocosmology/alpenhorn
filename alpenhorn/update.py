@@ -125,7 +125,7 @@ def update_node_free_space(node):
 
     # Check with the OS how much free space there is
     x = os.statvfs(node.root)
-    avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
+    avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
 
     # Update the DB with the free space. Save only the dirty fields to ensure we
     # don't clobber changes made manually to the database
@@ -197,7 +197,6 @@ def update_node_delete(node):
     # Process candidates for deletion
     del_count = 0  # Counter for no. of deletions (limits no. per node update)
     for fcopy in del_files.order_by(ar.ArchiveFileCopy.id):
-
         # Limit number of deletions to 500 per main loop iteration.
         if del_count >= 500:
             break
@@ -219,7 +218,6 @@ def update_node_delete(node):
 
         # If at least two other copies we can delete the file.
         if ncopies >= 2:
-
             # Use transaction such that errors thrown in the os.remove do not leave
             # the database inconsistent.
             with db.database_proxy.transaction():
@@ -278,7 +276,7 @@ def update_node_requests(node):
     )
 
     size = size_query.scalar(as_tuple=True)[0]
-    current_size_gb = float(0.0 if size is None else size) / 2 ** 30.0
+    current_size_gb = float(0.0 if size is None else size) / 2**30.0
 
     # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
     if current_size_gb > node.max_total_gb and node.max_total_gb > 0.0:
@@ -306,7 +304,6 @@ def update_node_requests(node):
     requests = requests.join(st.StorageNode).where(st.StorageNode.address != "HPSS")
 
     for req in requests:
-
         if time.time() - start_time > max_time_per_node_operation:
             break  # Don't hog all the time.
 
@@ -364,7 +361,7 @@ def update_node_requests(node):
             continue
 
         # Check that there is enough space available.
-        if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
+        if node.avail_gb * 2**30.0 < 2.0 * req.file.size_b:
             log.warning(
                 'Node "%s" is full: not adding datafile "%s/%s".'
                 % (node.name, req.file.acq.name, req.file.name)
@@ -374,7 +371,6 @@ def update_node_requests(node):
         # Constuct the origin and destination paths.
         from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name, req.file.name)
         if req.node_from.host != node.host:
-
             if req.node_from.username is None or req.node_from.address is None:
                 log.error(
                     "Source node (%s) not properly configured (username=%s, address=%s)",
@@ -410,7 +406,6 @@ def update_node_requests(node):
 
         # First we need to check if we are copying over the network
         if req.node_from.host != node.host:
-
             # First try bbcp which is a fast multistream transfer tool. bbcp can
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
@@ -523,7 +518,6 @@ def update_node_requests(node):
 
         # Okay, great we're just doing a local transfer.
         else:
-
             # First try to just hard link the file. This will only work if we
             # are on the same filesystem. As there's no actual copying it's
             # probably unecessary to calculate the md5 check sum, so we'll just
@@ -595,7 +589,7 @@ def update_node_requests(node):
 
         # Check integrity.
         if md5sum == req.file.md5sum:
-            size_mb = req.file.size_b / 2 ** 20.0
+            size_mb = req.file.size_b / 2**20.0
             copy_size_b = os.stat(to_file).st_blocks * 512
             trans_time = end_time - start_time
             rate = size_mb / trans_time
@@ -652,7 +646,7 @@ def update_node_requests(node):
                 done_transport_this_cycle = True
 
             # Update local estimate of available space
-            avail_gb = avail_gb - req.file.size_b / 2 ** 30.0
+            avail_gb = avail_gb - req.file.size_b / 2**30.0
 
         else:
             log.error(
