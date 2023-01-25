@@ -52,7 +52,7 @@ def fixtures():
 
 
 def test_schema(fixtures):
-    assert set(db.database_proxy.get_tables()) == {u"storagegroup", u"storagenode"}
+    assert set(db.database_proxy.get_tables()) == {"storagegroup", "storagenode"}
 
 
 def test_model(fixtures):

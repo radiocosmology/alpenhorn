@@ -341,7 +341,7 @@ def status(all):
             if total_count and file_size
             else None
         )
-        file_size_tb = (float(file_size) / 2 ** 40.0) if file_count else None
+        file_size_tb = (float(file_size) / 2**40.0) if file_count else None
         node_path = "%s:%s" % (node_host, node_root)
         data.append(
             [node_name, file_count, file_size_tb, pct_count, pct_size, node_path]

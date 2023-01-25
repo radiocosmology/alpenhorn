@@ -65,10 +65,10 @@ def fixtures():
 
 def test_schema(fixtures):
     assert set(db.database_proxy.get_tables()) == {
-        u"acqtype",
-        u"archiveacq",
-        u"filetype",
-        u"archivefile",
+        "acqtype",
+        "archiveacq",
+        "filetype",
+        "archivefile",
     }
 
 
