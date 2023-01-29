@@ -19,7 +19,8 @@ Example config:
     base:
         hostname: alpenhost
 
-    # Configure the data base connection with a peewee db_url
+    # Configure the database connection with a peewee db_url.  If using a database
+    # extension, that may require different data in this section.
     database:
         url: peewee_url
 
@@ -42,11 +43,19 @@ Example config:
 
     # Configure the operation of the local service
     service:
+        # Default number of worker threads
+        num_workers: 4
+
         # Minimum time length (in seconds) between updates
         update_interval: 60
 
         # Timescale on which to poll the filesystem for new data to import
         auto_import_interval: 30
+
+        # Maximum time (in seconds) to run serial I/O per update loop (these
+        # are I/O run tasks in the main thread, in cases when there are no
+        # worker threads
+        serial_io_timeout: 900
 
     # Set any configuration for acquisition type extensions
     acq_types:
@@ -73,8 +82,13 @@ log = logging.getLogger(__name__)
 config = None
 
 _default_config = {
-    "service": {"update_interval": 60, "auto_import_interval": 30},
     "logging": {"level": "warning", "module_levels": {"alpenhorn": "info"}},
+    "service": {
+        "auto_import_interval": 30,
+        "num_workers": 0,
+        "serial_io_timeout": 900,
+        "update_interval": 60,
+    },
 }
 
 
@@ -112,7 +126,8 @@ def load_config():
         with open(absfile, "r") as fh:
             conf = yaml.safe_load(fh)
 
-        config = merge_dict_tree(config, conf)
+        if conf is not None:
+            config = merge_dict_tree(config, conf)
 
     if not any_exist:
         raise RuntimeError("No configuration files available.")

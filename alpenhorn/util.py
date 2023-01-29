@@ -111,6 +111,49 @@ def get_hostname() -> str:
     return socket.gethostname().split(".")[0]
 
 
+def pretty_deltat(seconds: float) -> str:
+    """Return a nicely formatted time delta.
+
+    Parameters
+    ----------
+    seconds : float
+        The time delta, in seconds
+
+    Returns
+    -------
+    pretty_deltat : str
+        A human-readable indication of the time delta.
+
+    Raises
+    ------
+    TypeError
+        `seconds` was non-numeric
+    ValueError
+        `seconds` was less than zero
+    """
+
+    # Reject weird stuff
+    try:
+        seconds = float(seconds)
+    except (TypeError, ValueError):
+        raise TypeError("non-numeric time delta")
+
+    if seconds < 0:
+        # If the delta is negative, just print it
+        return f"{seconds:.1f}s"
+
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+
+    if hours > 0:
+        return f"{int(hours)}h{int(minutes):02}m{int(seconds):02}s"
+    if minutes > 0:
+        return f"{int(minutes)}m{int(seconds):02}s"
+
+    # For short durations, include tenths of a second
+    return f"{seconds:.1f}s"
+
+
 def alpenhorn_node_check(node):
     """Check for valid ALPENHORN_NODE file contents
 

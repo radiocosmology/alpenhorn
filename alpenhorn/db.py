@@ -156,7 +156,7 @@ def connect() -> None:
     if isinstance(db, pw.MySQLDatabase):
         CurrentTimestampField = pw.TimestampField(
             null=True,
-            constraints=[SQL("ON UPDATE CURRENT_TIMESTAMP")],
+            constraints=[pw.SQL("ON UPDATE CURRENT_TIMESTAMP")],
         )
 
 
