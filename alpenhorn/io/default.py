@@ -8,12 +8,13 @@ explicitly specify `io_class` (as well as being used explicitly when `io_class`
 has the value "Default").
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, IO
 
 import os
 import logging
 import pathlib
 import threading
+from watchdog.observers import Observer
 
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 from .updownlock import UpDownLock
@@ -24,6 +25,7 @@ from ..task import Task
 from ._default_asyncs import pull_async, check_async, delete_async
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from ..acquisition import ArchiveFile
     from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
@@ -63,6 +65,10 @@ class DefaultNodeIO(BaseNodeIO):
     # SETUP
 
     remote_class = DefaultNodeRemote
+
+    # Uses the platform-default observer.  On Linux, this will be the InotifyObserver
+    # which doesn't work on NFS mounts (for which use alpenhorn.io.polling instead).
+    observer = Observer
 
     def __init__(
         self, node: StorageNode, queue: FairMultiFIFOQueue, config: dict
@@ -131,20 +137,21 @@ class DefaultNodeIO(BaseNodeIO):
             False otherwise.
         """
 
-        file_path = pathlib.Path(self.node.root, "ALPENHORN_NODE")
         try:
-            with open(file_path, "r") as f:
+            with self.open("ALPENHORN_NODE", binary=False) as f:
                 first_line = f.readline()
                 # Check if the actual node name is in the textfile
                 if self.node.name == first_line.rstrip():
                     # Great! Everything is as expected.
                     return True
                 log.warning(
-                    f"Node name in file {file_path} does not match expected: "
-                    f"{self.node.name}."
+                    f'Node name in file "{self.node.root}/ALPENHORN_NODE" does not '
+                    f"match expected: {self.node.name}."
                 )
         except IOError:
-            log.warning(f"Node file {file_path} could not be read.")
+            log.warning(
+                f'Node file "{self.node.root}/ALPENHORN_NODE" could not be read.'
+            )
 
         return False
 
@@ -198,6 +205,28 @@ class DefaultNodeIO(BaseNodeIO):
         # Apparent size
         return path.stat().st_size
 
+    def file_walk(self) -> Iterator[pathlib.PurePath]:
+        """An iterator over all regular files under node.root
+
+        pathlib.PurePaths returned by the iterator are absolute
+        """
+
+        def _walk(path):
+            """Recurse through directory path, yielding files"""
+
+            # We use os.scandir instead of os.walk because it gives
+            # us DirEntry objects which have useful metadata in them
+            for entry in os.scandir(path):
+                if entry.is_dir():
+                    # Recurse
+                    for subentry in _walk(entry):
+                        yield subentry
+                # is_file() on a symlink to a file returns true, so we need both
+                elif entry.is_file() and not entry.is_symlink():
+                    yield pathlib.PurePath(entry)
+
+        return _walk(self.node.root)
+
     def fits(self, size_b: int) -> bool:
         """Does `size_b` bytes fit on this node?
 
@@ -214,6 +243,30 @@ class DefaultNodeIO(BaseNodeIO):
             True if `size_b` fits on the node.  False otherwise.
         """
         return self.reserve_bytes(size_b, check_only=True)
+
+    def locked(self, path: os.PathLike) -> bool:
+        """Is file `path` locked?
+
+        A file with path `dir/subdir/name.ext` is locked if a file named
+        `dir/subdir/.name.ext.lock` exists.
+
+        Parameters
+        ----------
+        path : path-like
+            The path to check.  May be relative or absolute.
+
+        Returns
+        -------
+        locked : bool
+            True if `path` is locked; False otherwise.
+        """
+
+        # Ensure we have an absolute pathlib.Path
+        path = pathlib.Path(path)
+        if not path.is_absolute():
+            path = pathlib.Path(self.node.root, path)
+
+        return path.with_name("." + path.name + ".lock").exists()
 
     def md5(self, path: str | pathlib.Path, *segments) -> str:
         """Compute the MD5 hash of the file at the specified path.
@@ -234,6 +287,32 @@ class DefaultNodeIO(BaseNodeIO):
             the base64-encoded MD5 hash value
         """
         return util.md5sum_file(pathlib.Path(self.node.root, path, *segments))
+
+    def open(self, path: os.PathLike | str, binary: bool = True) -> IO:
+        """Open the file specified by `path` for reading.
+
+        Parameters:
+        -----------
+        path : pathlike
+            Relative to `node.root`
+        binary : bool, optional
+            If True, open the file in binary mode, otherwise open the file in
+            text mode.
+
+        Returns
+        -------
+        file : file-like
+            An open, read-only file.
+
+        Raises
+        -------
+        ValueError
+            `path` was absolute
+        """
+
+        if pathlib.PurePath(path).is_absolute():
+            raise ValueError("path must be relative to node.root")
+        return open(pathlib.Path(self.node.root, path), mode="rb" if binary else "rt")
 
     def pull(self, req: ArchiveFileCopyRequest) -> None:
         """Pull file specified by copy request `req` onto `self.node`.
@@ -329,6 +408,21 @@ class DefaultNodeIO(BaseNodeIO):
                 _reserved_bytes[self.node.name] += size
 
             return True
+
+    def ready_path(self, path):
+        """Ready a file at `path` for I/O.
+
+        Parameters
+        ----------
+        path : path-like
+            The path that we want to perform I/O on.
+
+        Returns
+        -------
+        True
+            DefaultIO files are always ready for I/O.
+        """
+        return True
 
     def ready_pull(self, req: ArchiveFileCopyRequest) -> None:
         """Ready a file to be pulled as specified by `req`.

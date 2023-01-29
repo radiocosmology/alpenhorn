@@ -1,6 +1,7 @@
 """An end-to-end test of the alpenhorn daemon.
 
 Things that this end-to-end test does:
+    - auto-imports a file
     - pulls a file onto the Transport group
     - checks a corrupt file
     - deletes a file
@@ -71,6 +72,7 @@ def e2e_db(xfs, hostname):
         root="/dft",
         host=hostname,
         active=True,
+        auto_import=True,
     )
     xfs.create_file("/dft/ALPENHORN_NODE", contents="dftnode")
 
@@ -146,6 +148,9 @@ def e2e_db(xfs, hostname):
     xfs.create_file("/sf/acq1/delete.me")
     xfs.create_file("/tp/one/acq1/delete.me")
 
+    # A file to auto-import
+    xfs.create_file("/dft/acq2/find.me", contents="")
+
     yield
 
 
@@ -213,6 +218,10 @@ def test_cli(e2e_db, e2e_config, mock_rsync, loop_once):
     assert result.exit_code == 0
 
     # Check results
+
+    # find.me has been imported
+    assert ArchiveAcq.get(name="acq2")
+    assert ArchiveFile.get(name="find.me")
 
     # pull.me has been pulled
     tp1 = StorageNode.get(name="tp1")

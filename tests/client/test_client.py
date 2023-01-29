@@ -18,7 +18,6 @@ import alpenhorn.archive as ar
 import alpenhorn.client as cli
 import alpenhorn.db as db
 import alpenhorn.storage as st
-import test_import as ti
 
 
 @pytest.fixture

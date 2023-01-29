@@ -7,12 +7,14 @@ something even remotely resembling a POSIX filesystem may be better served
 by subclassing from DefaultIO instead of from here directly.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, IO
 
 import logging
 import pathlib
 
 if TYPE_CHECKING:
+    import os
+    from collections.abc import Iterator
     from ..acquisition import ArchiveFile
     from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
@@ -125,6 +127,14 @@ class BaseNodeIO:
 
     # Subclasses should set this to a BaseNodeRemote-derived class.
     remote_class = BaseNodeRemote
+
+    # A class compatible with watchdog.observers.api.BaseObserver which will
+    # be used as the auto import observer.
+    #
+    # This can be set to None if no observation is possible, though the
+    # platform-independent watchdog.observers.polling.PollingObserver
+    # will work in the vast majority of cases, if others do not.
+    observer = None
 
     def __init__(
         self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
@@ -282,6 +292,15 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def file_walk(self) -> Iterator[pathlib.PurePath]:
+        """Iterate over file copies
+
+        Should successively yield a pathlib.PurePath for each file copy on the
+        node.  The returned path may either be absolute (i.e have node.root
+        pre-pended) or else be relative to node.root.  The former is preferred.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
     def fits(self, size_b: int) -> bool:
         """Does `size_b` bytes fit on this node?
 
@@ -294,6 +313,23 @@ class BaseNodeIO:
         -------
         fits : bool
             True if `size_b` fits on the node.  False otherwise.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def locked(self, path: os.PathLike) -> bool:
+        """Is file `path` locked?
+
+        Locked files cannot be imported.
+
+        Parameters
+        ----------
+        path : path-like
+            The path to check.  May be relative or absolute.
+
+        Returns
+        -------
+        locked : bool
+            True if `path` is locked; False otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -315,6 +351,24 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def open(self, path: os.PathLike | str, binary: bool = True) -> IO:
+        """Open the file specified by `path` for reading.
+
+        Parameters:
+        -----------
+        path : pathlike
+            Relative to `node.root`
+        binary : bool, optional
+            If True, open the file in binary mode, otherwise open the file in
+            text mode.
+
+        Returns
+        -------
+        file : file-like
+            An open, read-only file.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
     def pull(self, req: ArchiveFileCopyRequest) -> None:
         """Pull file specified by copy request `req` onto `self.node`.
 
@@ -325,6 +379,28 @@ class BaseNodeIO:
         req : ArchiveFileCopyRequest
             the copy request to fulfill.  We are the destination node (i.e.
             `req.group_to == self.node.group`).
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def ready_path(self, path: os.PathLike) -> bool:
+        """Ready a file at `path` for I/O.
+
+        Implementations may assume `path` exists, but are not required to.
+
+        Parameters
+        ----------
+        path : path-like
+            The path that we want to perform I/O on.
+
+        Returns
+        -------
+        ready : bool
+            True if `path` is ready for I/O.  False otherwise.
+
+        Notes
+        -----
+        If this returns False, the caller may wait and then call this
+        method again to try again.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 

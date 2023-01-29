@@ -8,7 +8,7 @@ import time
 import logging
 import peewee as pw
 
-from . import config, util
+from . import auto_import, config, util
 from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from .extensions import io_module
 from .pool import global_abort, WorkerPool, EmptyPool
@@ -335,6 +335,9 @@ class UpdateableNode(updateable_base):
         # Pre-update hook
         do_update = self.io.before_update(idle)
 
+        # Update (start or stop) an auto-import observer for this node if needed
+        auto_import.update_observer(self, self._queue)
+
         # Check and update the amount of free space
         # This is always done, even if skipping the update
         self.update_free_space()
@@ -605,17 +608,13 @@ class UpdateableGroup(updateable_base):
             self.io.idle_update()
 
 
-def update_loop(
-    host: str, queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool
-) -> None:
+def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None:
     """Main loop of alepnhornd.
 
     This is the main update loop for the alpenhorn daemon.
 
     Parameters
     ----------
-    host : string
-        the name of the host we're running on (must match the value in the DB)
     queue : FairMultiFIFOQueue
         the task manager
     pool : WorkerPool
@@ -633,6 +632,9 @@ def update_loop(
     During a clean exit, alpenhornd will try to finish in-progress tasks before
     shutting down.
     """
+
+    # Get the name of this host
+    host = util.get_hostname()
 
     # The nodes and groups we're working on.  These will be updated
     # each time through the main loop, whenever the underlying storage objects
@@ -664,6 +666,9 @@ def update_loop(
         # Drop any nodes that have gone away
         for name in nodes:
             if name not in new_nodes:
+                # Stop auto-import, if running
+                auto_import.update_observer(nodes[name], queue, force_stop=True)
+
                 log.info(f'Node "{name}" no longer available.')
                 del nodes[name]
 

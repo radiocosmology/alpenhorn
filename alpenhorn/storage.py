@@ -193,10 +193,11 @@ class StorageNode(base_model):
             return False
         return self.get_total_gb() >= self.max_total_gb
 
-    def named_copy_present(self, acqname: str, filename: str) -> bool:
-        """Is an ArchiveFileCopy named `acqname/filename` present?
+    def named_copy_tracked(self, acqname: str, filename: str) -> bool:
+        """Is an ArchiveFileCopy named `acqname/filename` being tracked?
 
-        Both the file and the acquisition must exist in the database.
+        "Tracked" here means an `ArchiveFileCopy` record exists for the
+        file on this node with `has_file!='N'`.
 
         Parameters
         ----------
@@ -207,28 +208,31 @@ class StorageNode(base_model):
 
         Returns
         -------
-        named_copy_present : bool
-            True if there is an ArchiveFileCopy with `has_file=='Y'`
+        named_copy_tracked : bool
+            True if there is an ArchiveFileCopy with `has_file!='N'`
             for the specified path.  False otherwise.
         """
         from .acquisition import ArchiveFile, ArchiveAcq
+        from .archive import ArchiveFileCopy
 
         # Try to find the ArchiveFile record
         try:
-            file = (
-                ArchiveFile.select()
+            copy = (
+                ArchiveFileCopy.select()
+                .join(ArchiveFile)
                 .join(ArchiveAcq)
                 .where(
                     ArchiveAcq.name == acqname,
                     ArchiveFile.name == filename,
+                    ArchiveFileCopy.node == self,
                 )
                 .get()
             )
         except pw.DoesNotExist:
             return False
 
-        # And then pass it to filecopy_present
-        return self.filecopy_present(file)
+        # Check has_file
+        return copy.has_file != "N"
 
     def filecopy_present(self, file: ArchiveFile) -> bool:
         """Is a copy of ArchiveFile `file` present on this node?
@@ -285,22 +289,61 @@ class StorageNode(base_model):
 
         return 0.0 if size is None else float(size) / 2**20
 
-    def get_all_files(self) -> set[pathlib.PurePath]:
-        """Return a set of paths to all files existing on the node.
+    def get_all_files(
+        self,
+        present: bool = True,
+        corrupt: bool = False,
+        unknown: bool = False,
+        removed: bool = False,
+    ) -> set[pathlib.PurePath]:
+        """Return a set of paths to files in the specified state on the node.
+
+        By default, only files present (`has_file=='Y'`) are returned.
+
+        Parameters
+        ----------
+        present : bool, optional
+            If True, file copies with `has_file=='Y'` are included in the list.
+        corrupt : bool, optional
+            If True, file copies with `has_file=='X'` are included in the list.
+        unknown : bool, optional
+            If True, file copies with `has_file=='M'` are included in the list.
+        removed : bool, optional
+            If True, file copies with `has_file=='N'` are included in the list.
 
         Returns
         -------
         all_files : set of pathlib.PurePath
-            a set of paths relative to `root` for all file copies
-            exsiting on the node.
+            A set of paths relative to `root` for all files with the
+            requested criteria.  If all parameters are set to `False`,
+            an empty set is returned without raising an error.
         """
         from .archive import ArchiveFileCopy
 
+        # Which filecopy states are we looking for?
+        states = list()
+
+        if present:
+            states.append("Y")
+        if corrupt:
+            states.append("X")
+        if unknown:
+            states.append("M")
+        if removed:
+            states.append("N")
+
+        # No need for a DB query if the caller has asked for nothing
+        if not len(states):
+            return set()
+
+        # This is a set and not a list because the primary thing alpenhornd
+        # does with the output of this function is test to see if some path is
+        # in the returned set.
         return {
             copy.file.path
             for copy in (
                 ArchiveFileCopy.select().where(
-                    ArchiveFileCopy.node == self, ArchiveFileCopy.has_file == "Y"
+                    ArchiveFileCopy.node == self, ArchiveFileCopy.has_file << states
                 )
             )
         }
