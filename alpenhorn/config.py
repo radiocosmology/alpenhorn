@@ -56,20 +56,6 @@ Example config:
         # are I/O run tasks in the main thread, in cases when there are no
         # worker threads
         serial_io_timeout: 900
-
-    # Set any configuration for acquisition type extensions
-    acq_types:
-        generic:
-            patterns:
-                - ".*/.*"
-
-    # Set any configuration for file type extensions
-    file_types:
-        generic:
-            patterns:
-                - ".*\.h5"
-                - ".*\.log"
-
 """
 
 import logging

@@ -1,7 +1,7 @@
 """Tests for `alpenhorn.acquisition` module."""
 
-import pathlib
 import pytest
+import pathlib
 import datetime
 import peewee as pw
 
@@ -10,48 +10,41 @@ from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 
 def test_schema(dbproxy, simplefile):
     assert set(dbproxy.get_tables()) == {
-        "acqtype",
         "archiveacq",
-        "filetype",
         "archivefile",
     }
 
 
-def test_acq_model(simpleacqtype, archiveacq):
+def test_acq_model(archiveacq):
     """Test the ArchiveAcq table model."""
-    archiveacq(name="min", type=simpleacqtype)
-    archiveacq(
-        name="max", type=simpleacqtype, comment="Comment, apparently, is not a note"
-    )
+    archiveacq(name="min")
+    archiveacq(name="max", comment="Comment, apparently, is not a note")
 
     # name is unique
     with pytest.raises(pw.IntegrityError):
-        archiveacq(name="min", type=simpleacqtype)
+        archiveacq(name="min")
 
     # Check records in DB
     assert ArchiveAcq.select().where(ArchiveAcq.name == "min").dicts().get() == {
         "id": 1,
         "name": "min",
-        "type": simpleacqtype.id,
         "comment": None,
     }
     assert ArchiveAcq.select().where(ArchiveAcq.name == "max").dicts().get() == {
         "id": 2,
         "name": "max",
-        "type": simpleacqtype.id,
         "comment": "Comment, apparently, is not a note",
     }
 
 
-def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
-    acq1 = archiveacq(name="acq1", type=simpleacqtype)
+def test_file_model(archiveacq, archivefile):
+    acq1 = archiveacq(name="acq1")
     before = datetime.datetime.now().replace(microsecond=0)
-    archivefile(name="min", acq=acq1, type=simplefiletype)
+    archivefile(name="min", acq=acq1)
     after = datetime.datetime.now()
     archivefile(
         name="max",
         acq=acq1,
-        type=simplefiletype,
         md5sum="123456789",
         registered=after,
         size_b=45,
@@ -69,7 +62,6 @@ def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
         "id": 1,
         "acq": acq1.id,
         "name": "min",
-        "type": simpleacqtype.id,
         "md5sum": None,
         "size_b": None,
     }
@@ -77,7 +69,6 @@ def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
         "id": 2,
         "acq": acq1.id,
         "name": "max",
-        "type": simpleacqtype.id,
         "md5sum": "123456789",
         "registered": after,
         "size_b": 45,
@@ -85,15 +76,15 @@ def test_file_model(simpleacqtype, archiveacq, simplefiletype, archivefile):
 
     # (acq, name) is unique
     with pytest.raises(pw.IntegrityError):
-        archivefile(name="min", acq=acq1, type=simplefiletype)
+        archivefile(name="min", acq=acq1)
     # But this should work
-    acq2 = archiveacq(name="acq2", type=simpleacqtype)
-    archivefile(name="min", acq=acq2, type=simplefiletype)
+    acq2 = archiveacq(name="acq2")
+    archivefile(name="min", acq=acq2)
 
 
-def test_file_path(simpleacq, archivefile, simplefiletype):
+def test_file_path(simpleacq, archivefile):
     """Test ArchiveFile.path."""
-    file = archivefile(name="file", acq=simpleacq, type=simplefiletype)
+    file = archivefile(name="file", acq=simpleacq)
 
     assert file.path == pathlib.PurePath(simpleacq.name, "file")
 

@@ -18,12 +18,7 @@ from alpenhorn.service import cli
 from alpenhorn.db import database_proxy, EnumField
 from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.acquisition import (
-    AcqType,
-    ArchiveAcq,
-    ArchiveFile,
-    FileType,
-)
+from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 
 
 # database URI for a shared in-memory database
@@ -43,12 +38,10 @@ def e2e_db(xfs, hostname):
     # Create tables
     db.create_tables(
         [
-            AcqType,
             ArchiveAcq,
             ArchiveFile,
             ArchiveFileCopy,
             ArchiveFileCopyRequest,
-            FileType,
             StorageGroup,
             StorageNode,
         ]

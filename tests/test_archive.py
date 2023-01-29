@@ -12,9 +12,7 @@ def test_schema(dbproxy, simplecopy, simplerequest):
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
-        "acqtype",
         "archiveacq",
-        "filetype",
         "archivefile",
         "archivefilecopyrequest",
         "archivefilecopy",
@@ -22,12 +20,12 @@ def test_schema(dbproxy, simplecopy, simplerequest):
 
 
 def test_archivefilecopy_model(
-    simplegroup, storagenode, simpleacq, simplefiletype, archivefile, archivefilecopy
+    simplegroup, storagenode, simpleacq, archivefile, archivefilecopy
 ):
     """Test ArchiveFileCopy table model."""
     node = storagenode(name="n1", group=simplegroup)
-    minfile = archivefile(name="min", acq=simpleacq, type=simplefiletype)
-    maxfile = archivefile(name="max", acq=simpleacq, type=simplefiletype)
+    minfile = archivefile(name="min", acq=simpleacq)
+    maxfile = archivefile(name="max", acq=simpleacq)
 
     archivefilecopy(file=minfile, node=node)
     archivefilecopy(

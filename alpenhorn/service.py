@@ -50,9 +50,6 @@ def cli():
     # Connect to the database
     db.connect()
 
-    # Register any extension types
-    extensions.register_type_extensions()
-
     # Set up the task queue
     queue = FairMultiFIFOQueue()
 

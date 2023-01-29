@@ -114,35 +114,33 @@ def test_local(simplenode, hostname):
     assert not simplenode.local
 
 
-def test_copy_state(
-    simplenode, simpleacq, archivefile, simplefiletype, archivefilecopy
-):
+def test_copy_state(simplenode, simpleacq, archivefile, archivefilecopy):
     """Test group.filecopy_state()."""
     group = simplenode.group
 
-    filen = archivefile(name="filen", acq=simpleacq, type=simplefiletype, size_b=1)
+    filen = archivefile(name="filen", acq=simpleacq, size_b=1)
     archivefilecopy(file=filen, node=simplenode, has_file="N")
     assert group.filecopy_state(filen) == "N"
 
-    filey = archivefile(name="filey", acq=simpleacq, type=simplefiletype, size_b=1)
+    filey = archivefile(name="filey", acq=simpleacq, size_b=1)
     archivefilecopy(file=filey, node=simplenode, has_file="Y")
     assert group.filecopy_state(filey) == "Y"
 
-    filex = archivefile(name="filex", acq=simpleacq, type=simplefiletype, size_b=1)
+    filex = archivefile(name="filex", acq=simpleacq, size_b=1)
     archivefilecopy(file=filex, node=simplenode, has_file="X")
     assert group.filecopy_state(filex) == "X"
 
-    filem = archivefile(name="filem", acq=simpleacq, type=simplefiletype, size_b=1)
+    filem = archivefile(name="filem", acq=simpleacq, size_b=1)
     archivefilecopy(file=filem, node=simplenode, has_file="M")
     assert group.filecopy_state(filem) == "M"
 
     # Non-existent file returns 'N'
-    missing = archivefile(name="missing", acq=simpleacq, type=simplefiletype, size_b=1)
+    missing = archivefile(name="missing", acq=simpleacq, size_b=1)
     assert group.filecopy_state(missing) == "N"
 
 
 def test_copy_state_multi(
-    simplegroup, storagenode, simpleacq, archivefile, simplefiletype, archivefilecopy
+    simplegroup, storagenode, simpleacq, archivefile, archivefilecopy
 ):
     """Test group.filecopy_state() with mutliple copies on the node."""
 
@@ -153,14 +151,14 @@ def test_copy_state_multi(
     nodeY = storagenode(name="Y", group=simplegroup)
 
     # X wins over N
-    fileXN = archivefile(name="XN", acq=simpleacq, type=simplefiletype)
+    fileXN = archivefile(name="XN", acq=simpleacq)
     archivefilecopy(file=fileXN, node=nodeN, has_file="N")
     archivefilecopy(file=fileXN, node=nodeX, has_file="X")
 
     assert simplegroup.filecopy_state(fileXN) == "X"
 
     # M wins over M and N
-    fileMXN = archivefile(name="MXN", acq=simpleacq, type=simplefiletype)
+    fileMXN = archivefile(name="MXN", acq=simpleacq)
     archivefilecopy(file=fileMXN, node=nodeN, has_file="N")
     archivefilecopy(file=fileMXN, node=nodeX, has_file="X")
     archivefilecopy(file=fileMXN, node=nodeM, has_file="M")
@@ -168,7 +166,7 @@ def test_copy_state_multi(
     assert simplegroup.filecopy_state(fileMXN) == "M"
 
     # Y wins over X, M and N
-    fileYMXN = archivefile(name="YMXN", acq=simpleacq, type=simplefiletype)
+    fileYMXN = archivefile(name="YMXN", acq=simpleacq)
     archivefilecopy(file=fileYMXN, node=nodeN, has_file="N")
     archivefilecopy(file=fileYMXN, node=nodeX, has_file="X")
     archivefilecopy(file=fileYMXN, node=nodeM, has_file="M")
@@ -281,15 +279,15 @@ def test_copypresent(simplegroup, storagenode, simplefile, archivefilecopy):
     assert node.filecopy_present(simplefile) is False
 
 
-def test_allfiles(simplenode, simpleacq, simplefiletype, archivefile, archivefilecopy):
+def test_allfiles(simplenode, simpleacq, archivefile, archivefilecopy):
     """Test StorageNode.get_all_files()."""
 
     # Empty
-    file = archivefile(name="file1", acq=simpleacq, type=simplefiletype)
+    file = archivefile(name="file1", acq=simpleacq)
     archivefilecopy(file=file, node=simplenode, has_file="N")
     assert simplenode.get_all_files() == set()
 
-    file = archivefile(name="file2", acq=simpleacq, type=simplefiletype)
+    file = archivefile(name="file2", acq=simpleacq)
     archivefilecopy(file=file, node=simplenode, has_file="Y")
     assert simplenode.get_all_files() == set(
         [pathlib.PurePath(simpleacq.name, "file2")]
