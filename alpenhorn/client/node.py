@@ -474,7 +474,6 @@ def scan(node_name, verbose, acq, register_new, dry):
                 not_acqs.append(d)
 
     with click.progressbar(acq_files, label="Scanning acquisitions") as acq_iter:
-
         for acq_name in acq_iter:
             try:
                 acq = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == acq_name).get()
@@ -715,7 +714,6 @@ def verify(node_name, md5, fixdb, acq):
 
     with click.progressbar(lfiles.tuples(), label="Scanning files") as lfiles_iter:
         for filename, acqname, filesize, md5sum, fc_id in lfiles_iter:
-
             nfiles += 1
 
             filepath = this_node.root + "/" + acqname + "/" + filename
@@ -759,7 +757,6 @@ def verify(node_name, md5, fixdb, acq):
     # Fix up the database by marking files as missing, and marking
     # corrupt files for verification by alpenhornd.
     if fixdb:
-
         # TODO: ensure write access to the database
         # # We need to write to the database.
         # di.connect_database(read_write=True)
@@ -882,7 +879,6 @@ def clean(node_name, days, cancel, force, now, target, acq):
 
     # If the target option has been specified, only clean files also available there...
     if target is not None:
-
         # Fetch a reference to the target group
         try:
             target_group = st.StorageGroup.get(name=target)
@@ -910,7 +906,6 @@ def clean(node_name, days, cancel, force, now, target, acq):
     # If --days has been set we need to restrict to files older than the given
     # time. This only works for a few particular file types
     if days is not None and days > 0:
-
         # TODO: how to handle file types now?
         raise "'--days' feature has not been implemented yet"
 
@@ -949,7 +944,6 @@ def clean(node_name, days, cancel, force, now, target, acq):
 
     # If days is not set, then just select all files that meet the requirements so far
     else:
-
         file_ids = [f for f in files]
         count = files.count()
 

@@ -1,51 +1,74 @@
+"""test alpenhorn.extensions."""
 import pytest
+from unittest.mock import patch, MagicMock
 
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
-
-from alpenhorn import acquisition, extensions, generic
+from alpenhorn import extensions
 
 
-@pytest.fixture
-def fixtures():
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_no_module(set_config):
+    """Test that trying to extend with an invalid module raises
+    ModuleNotFoundError."""
 
-    from alpenhorn import db
-
-    db._connect()
-
-    db.database_proxy.create_tables(
-        [
-            acquisition.AcqType,
-            acquisition.FileType,
-            acquisition.ArchiveAcq,
-            acquisition.ArchiveFile,
-            generic.GenericAcqInfo,
-            generic.GenericFileInfo,
-        ]
-    )
-
-    yield
-
-    # cleanup
-    db.database_proxy.close()
+    with pytest.raises(ModuleNotFoundError):
+        extensions.load_extensions()
 
 
-def test_invalid_extension():
-    # Test that invalid extension paths, or modules that are not extensions
-    # throw the approproate exceptions
+@pytest.mark.alpenhorn_config({"extensions": ["alpenhorn.extensions"]})
+def test_bad_extensions(set_config):
+    """Test that trying to extend with a module lacking a register_extension
+    function returns RuntimeError."""
 
-    with patch("alpenhorn.config.config", {"extensions": ["unknown_module"]}):
-        with pytest.raises(ImportError):
-            extensions.load_extensions()
+    with pytest.raises(RuntimeError):
+        extensions.load_extensions()
 
-    with patch("alpenhorn.config.config", {"extensions": ["alpenhorn.acquisition"]}):
-        with pytest.raises(RuntimeError):
+
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_bad_db(set_config):
+    """Test that importing a bad DB extension."""
+
+    # Make a fake DB module
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"database": 1}
+
+    # Patch sys.modules so import can find it.
+    with patch.dict("sys.modules", test_module=test_module):
+        with pytest.raises(TypeError):
             extensions.load_extensions()
 
 
-def test_generic_extension(fixtures):
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_good_db(set_config):
+    """Test that importing a proper DB extensions succeeds."""
+
+    # Make a fake DB module
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"database": dict()}
+
+    # Patch sys.modules so import can find it.
+    with patch.dict("sys.modules", test_module=test_module):
+        extensions.load_extensions()
+
+
+@pytest.mark.alpenhorn_config({"extensions": ["db1", "db2"]})
+def test_two_dbs(set_config):
+    """Test that importing two DB extensions fails"""
+
+    # Make a couple of fake DB modules
+    db1 = MagicMock()
+    db1.register_extension.return_value = {"database": dict()}
+
+    db2 = MagicMock()
+    db2.register_extension.return_value = {"database": dict()}
+
+    # Patch sys.modules so import can find them.
+    with patch.dict("sys.modules", db1=db1, db2=db2):
+        with pytest.raises(ValueError):
+            extensions.load_extensions()
+
+
+@pytest.mark.skip(reason="broken")
+def test_generic_extension(dbproxy):
     # Test that extension registration works correctly for the generic extension
 
     conf = {

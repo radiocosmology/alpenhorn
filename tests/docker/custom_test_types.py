@@ -43,7 +43,6 @@ class LogInfo(ge.GenericFileInfo):
 
 
 def register_extension():
-
     ext_dict = {"acq_types": [ZabInfo, QuuxInfo], "file_types": [ZxcInfo, LogInfo]}
 
     return ext_dict
