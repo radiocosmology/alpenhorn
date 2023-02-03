@@ -187,7 +187,7 @@ def close() -> None:
 # =================================
 
 
-class RetryOperationalError(object):
+class RetryOperationalError:
     """Updated rewrite of the former `peewee.shortcuts.RetryOperationalError` mixin
 
     See: https://github.com/coleifer/peewee/issues/1472
