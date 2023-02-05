@@ -12,6 +12,7 @@ from . import auto_import, config, util
 from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from .extensions import io_module
 from .pool import global_abort, WorkerPool, EmptyPool
+from .querywalker import QueryWalker
 from .storage import StorageNode, StorageGroup
 
 if TYPE_CHECKING:
@@ -225,6 +226,30 @@ class UpdateableNode(updateable_base):
         self.db = None
         self.reinit(node)
 
+    def reinit(self, node: StorageNode) -> bool:
+        """Re-initialise the instance with a new database object.
+
+        Called once per update loop.
+
+        Parameters
+        ----------
+        node : StorageNode
+            The new StorageNode.
+
+        Returns
+        -------
+        did_reinit : bool
+            True if re-init happened.
+        """
+        # Most of the work is done in the base class reinit()
+        did_reinit = super().reinit(node)
+
+        if did_reinit:
+            # QueryWalker for auto-verifcation, if enabled
+            self._av_walker = None
+
+        return did_reinit
+
     @property
     def idle(self) -> bool:
         """Is I/O occurring on this node?
@@ -269,6 +294,51 @@ class UpdateableNode(updateable_base):
         # This is always a slow call
         self.db.update_avail_gb(self.io.bytes_avail(fast=False))
 
+    def run_auto_verify(self) -> None:
+        """Run auto-verification on this node.
+
+        This is a single iteration of auto-verification.  The number of
+        files which will be auto-verfied in this iteration is equal to
+        `self.db.auto_verify`.
+        """
+
+        if self._av_walker is None:
+            try:
+                self._av_walker = QueryWalker(
+                    ArchiveFileCopy,
+                    ArchiveFileCopy.node == self.db,
+                    ArchiveFileCopy.has_file != "N",
+                )
+            except pw.DoesNotExist:
+                return  # No files to verify
+
+        # Get some files to re-verify
+        try:
+            copies = self._av_walker.get(self.db.auto_verify)
+        except pw.DoesNotExist:
+            # No files to verify; delete query walker to trigger re-init next time
+            self._av_walker = None
+            return
+
+        done = set()  # Set of copies being verified already
+        for copy in copies:
+            # No need to check the same file more than once in a single update
+            if copy in done:
+                continue
+
+            done.add(copy)
+
+            copy_age_days = (time.time() - copy.last_update.timestamp()) / 86400.0
+            if copy_age_days <= config.config["service"]["auto_verify_min_days"]:
+                continue  # Too new to re-verify
+
+            log.info(
+                f'Auto-verifing copy "{copy.file.acq.name}/{copy.file.name}" on node'
+                f" {self.name}."
+            )
+
+            self.io.auto_verify(copy)
+
     def update_idle(self) -> None:
         """Perform idle updates, if appropriate.
 
@@ -278,6 +348,10 @@ class UpdateableNode(updateable_base):
         if self._updated and self.idle:
             # Do any I/O class idle updates
             self.io.idle_update()
+
+            # Run auto-verify, if requested
+            if self.db.auto_verify > 0:
+                self.run_auto_verify()
 
     def update_delete(self) -> None:
         """Process this node for files to delete."""

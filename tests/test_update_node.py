@@ -157,6 +157,210 @@ def test_update_free_space(unode):
     assert node.avail_gb_last_checked >= now
 
 
+def test_auto_verify(unode, simpleacq, archivefile, archivefilecopy):
+    """Test UpdateableNode.run_auto_verify()"""
+
+    # Enable auto_verify
+    unode.db.auto_verify = 4
+
+    # Last Update time to permit auto verification
+    last_update = datetime.datetime.now() - datetime.timedelta(days=10)
+
+    # Make some files to verify
+    copyY = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileY", acq=simpleacq),
+        has_file="Y",
+        last_update=last_update,
+    )
+    copyN = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileN", acq=simpleacq),
+        has_file="N",
+        last_update=last_update,
+    )
+    copyM = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileM", acq=simpleacq),
+        has_file="M",
+        last_update=last_update,
+    )
+    copyX = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileX", acq=simpleacq),
+        has_file="X",
+        last_update=last_update,
+    )
+
+    mock = MagicMock()
+    with patch.object(unode.io, "auto_verify", mock):
+        unode.run_auto_verify()
+    calls = list(mock.mock_calls)
+
+    # CopyN not checked
+    assert call(copyY) in calls
+    assert call(copyN) not in calls
+    assert call(copyM) in calls
+    assert call(copyX) in calls
+
+
+def test_auto_verify_dups(unode, simpleacq, archivefile, archivefilecopy):
+    """Test getting duplicates in UpdateableNode.run_auto_verify()"""
+
+    # Enable auto_verify
+    unode.db.auto_verify = 4
+
+    # Last Update time to permit auto verification
+    last_update = datetime.datetime.now() - datetime.timedelta(days=10)
+
+    # Only one file
+    copyY = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileY", acq=simpleacq),
+        has_file="Y",
+        last_update=last_update,
+    )
+
+    mock = MagicMock()
+    with patch.object(unode.io, "auto_verify", mock):
+        unode.run_auto_verify()
+
+    # auto_verify only should be called once
+    mock.assert_called_once_with(copyY)
+
+
+def test_auto_verify_time(unode, simpleacq, archivefile, archivefilecopy):
+    """Test checking time in UpdateableNode.run_auto_verify()"""
+
+    # Enable auto_verify
+    unode.db.auto_verify = 4
+
+    # Last Update time to permit auto verification
+    last_update = datetime.datetime.now() - datetime.timedelta(days=10)
+
+    # Files with different last update times
+    copy9 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="file9", acq=simpleacq),
+        has_file="Y",
+        last_update=datetime.datetime.now() - datetime.timedelta(days=9),
+    )
+    copy8 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="file8", acq=simpleacq),
+        has_file="Y",
+        last_update=datetime.datetime.now() - datetime.timedelta(days=8),
+    )
+    copy6 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="file6", acq=simpleacq),
+        has_file="Y",
+        last_update=datetime.datetime.now() - datetime.timedelta(days=6),
+    )
+    copy5 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="file5", acq=simpleacq),
+        has_file="Y",
+        last_update=datetime.datetime.now() - datetime.timedelta(days=5),
+    )
+
+    mock = MagicMock()
+    with patch.object(unode.io, "auto_verify", mock):
+        unode.run_auto_verify()
+    calls = list(mock.mock_calls)
+
+    # Only old files have been checked
+    assert call(copy9) in calls
+    assert call(copy8) in calls
+    assert call(copy6) not in calls
+    assert call(copy5) not in calls
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simplefile_acq/simplefile": "released",
+    }
+)
+def test_auto_verify_released(
+    mock_lfs, xfs, queue, simplenode, simplefile, archivefilecopy
+):
+    """Shouldn't auto-verify a released file twice."""
+
+    simplenode.io_class = "LustreHSM"
+    simplenode.io_config = '{"quota_group": "qgroup", "headroom": 300000}'
+
+    # Enable auto_verify
+    simplenode.auto_verify = 1
+
+    # Create file
+    xfs.create_file("/node/simplefile_acq/simplefile")
+
+    # Make the node
+    unode = UpdateableNode(queue, simplenode)
+
+    # Files with different last update times
+    copy = archivefilecopy(
+        node=unode.db,
+        file=simplefile,
+        has_file="Y",
+        last_update=datetime.datetime.now() - datetime.timedelta(days=10),
+    )
+
+    unode.run_auto_verify()
+    unode.run_auto_verify()
+
+    # There should be one deferred put
+    assert queue.qsize == 1
+
+
+def test_update_idle(unode, queue):
+    """Test UpdateableNode.update_idle()"""
+
+    # Ensure auto_verify is off
+    assert unode.db.auto_verify == 0
+
+    rav = MagicMock()
+    ioiu = MagicMock()
+    with patch.object(unode, "run_auto_verify", rav):
+        with patch.object(unode.io, "idle_update", ioiu):
+            unode._updated = False
+            unode.update_idle()
+
+            # did not run because update didn't happen
+            assert len(rav.mock_calls) == 0
+            assert len(ioiu.mock_calls) == 0
+
+            unode._updated = True
+            unode.update_idle()
+
+            # now ran, but no auto_verify
+            assert len(rav.mock_calls) == 0
+            assert len(ioiu.mock_calls) == 1
+
+            queue.put(None, unode.name)
+            unode.update_idle()
+
+            # didn't run because not idle
+            assert len(rav.mock_calls) == 0
+            assert len(ioiu.mock_calls) == 1
+
+            # Empty the queue
+            queue.get()
+            queue.task_done(unode.name)
+            unode.update_idle()
+
+            # idle again, so ran again
+            assert len(rav.mock_calls) == 0
+            assert len(ioiu.mock_calls) == 2
+
+            # Turn on auto_verify
+            unode.db.auto_verify = 1
+            unode.update_idle()
+
+            assert len(rav.mock_calls) == 1
+            assert len(ioiu.mock_calls) == 3
+
+
 def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy):
     """Test UpdateableNode.update_delete() when not under min"""
 

@@ -1,8 +1,10 @@
 """Test LustreHSMNodeIO."""
 
 import pytest
+from unittest.mock import MagicMock
 
 from alpenhorn.archive import ArchiveFileCopy
+from alpenhorn.io import lustrehsm
 from alpenhorn.update import UpdateableNode
 
 
@@ -51,6 +53,18 @@ def test_init_no_headroom(have_lfs, simplenode):
     simplenode.io_config = '{"quota_group": "qgroup"}'
 
     with pytest.raises(KeyError):
+        UpdateableNode(None, simplenode)
+
+
+def test_init_bad_release_count(simplenode, have_lfs):
+    """Check for bad realse_check_count."""
+
+    simplenode.io_class = "LustreHSM"
+    simplenode.io_config = (
+        '{"quota_group": "qgroup", "headroom": 300000, "release_check_count": -1}'
+    )
+
+    with pytest.raises(ValueError):
         UpdateableNode(None, simplenode)
 
 
@@ -204,6 +218,101 @@ def test_check_restored(queue, mock_lfs, node):
     assert queue.qsize == 1
 
 
+def test_auto_verify_missing(queue, node):
+    """Test auto_verification on a missing file."""
+    node.io.auto_verify(ArchiveFileCopy.get(id=1))
+
+    # Queue is empty
+    assert queue.qsize == 0
+
+    # File has been marked as missing
+    assert ArchiveFileCopy.get(id=1).has_file == "N"
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simpleacq/file1": "restored",
+    }
+)
+def test_auto_verify_restored(xfs, node):
+    """Test auto_verification on a restored file."""
+
+    # Mock the Default IO's check function which we don't need to test here
+    from alpenhorn.io.default import DefaultNodeIO
+
+    DefaultNodeIO.check = MagicMock()
+
+    xfs.create_file("/node/simpleacq/file1")
+    copy = ArchiveFileCopy.get(id=1)
+
+    node.io.auto_verify(copy)
+    DefaultNodeIO.check.assert_called_once_with(copy)
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simpleacq/file1": "released",
+    }
+)
+def test_auto_verify_released(xfs, queue, mock_lfs, node):
+    """Test auto_verification on a released file."""
+
+    # Mock the Default IO's check_async after it gets imported into lustrehsm.py
+    lustrehsm.check_async = MagicMock()
+
+    xfs.create_file("/node/simpleacq/file1")
+
+    copy = ArchiveFileCopy.get(id=1)
+    copy.ready = False
+    copy.save()
+    node.io.auto_verify(copy)
+
+    # Task in queue
+    assert queue.qsize == 1
+
+    # Run task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    lustrehsm.check_async.assert_called_once()
+
+    # File has been re-released
+    lfs = mock_lfs("")
+    assert lfs.hsm_state(copy.path) == lfs.HSM_RELEASED
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simpleacq/file1": "released",
+    }
+)
+def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
+    """Test auto_verification on a released file that's ready."""
+
+    # Mock the Default IO's check_async after it gets imported into lustrehsm.py
+    lustrehsm.check_async = MagicMock()
+
+    xfs.create_file("/node/simpleacq/file1")
+
+    copy = ArchiveFileCopy.get(id=1)
+    node.io.auto_verify(copy)
+
+    # Task in queue
+    assert queue.qsize == 1
+
+    # Run task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    lustrehsm.check_async.assert_called_once()
+
+    # File has _not_ been re-released
+    lfs = mock_lfs("")
+    assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
+
+
 @pytest.mark.lfs_hsm_state(
     {
         "/node/simpleacq/file1": "restored",
@@ -275,3 +384,89 @@ def test_ready_pull_released(mock_lfs, node, archivefilecopyrequest):
     # File is restored
     lfs = mock_lfs("")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
+
+
+def test_idle_update_empty(queue, mock_lfs, node):
+    """Test LustreHSMNodeIO.idle_update with no files."""
+
+    # Delete all copies
+    ArchiveFileCopy.update(has_file="N").execute()
+
+    node.io.idle_update()
+
+    # QW has not been initialised
+    assert node.io._release_qw is None
+
+    # No item in queue
+    assert queue.qsize == 0
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simpleacq/file1": "released",
+        "/node/simpleacq/file2": "restored",
+        "/node/simpleacq/file3": "unarchived",
+        "/node/simpleacq/file4": "missing",
+    }
+)
+def test_idle_update_ready(xfs, queue, mock_lfs, node):
+    """Test LustreHSMNodeIO.idle_update with copies ready"""
+
+    node.io.idle_update()
+
+    # QW has been initialised
+    assert node.io._release_qw is not None
+
+    # Item in queue
+    assert queue.qsize == 1
+
+    # Run the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # check readiness
+    assert not ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=2).ready
+    assert ArchiveFileCopy.get(id=3).ready
+    assert not ArchiveFileCopy.get(id=4).ready
+
+    # Copy four is no longer on node
+    assert ArchiveFileCopy.get(id=4).has_file == "N"
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/simpleacq/file1": "released",
+        "/node/simpleacq/file2": "restored",
+        "/node/simpleacq/file3": "unarchived",
+        "/node/simpleacq/file4": "missing",
+    }
+)
+def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
+    """Test LustreHSMNodeIO.idle_update with copies not ready"""
+
+    # Update all copies
+    ArchiveFileCopy.update(ready=False).execute()
+
+    node.io.idle_update()
+
+    # QW has been initialised
+    assert node.io._release_qw is not None
+
+    # Item in queue
+    assert queue.qsize == 1
+
+    # Run the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # check readiness
+    assert not ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=2).ready
+    assert ArchiveFileCopy.get(id=3).ready
+    assert not ArchiveFileCopy.get(id=4).ready
+
+    # Copy four is no longer on node
+    assert ArchiveFileCopy.get(id=4).has_file == "N"

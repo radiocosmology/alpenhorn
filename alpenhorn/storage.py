@@ -114,6 +114,10 @@ class StorageNode(base_model):
         Is the node active?
     auto_import : bool
         Should files that appear on this node be automatically added?
+    auto_verify : integer
+        If greater than zero, automatically re-verify file copies on this
+        node during times of no other activity.  The value is the maximum
+        number of files that will be re-verified per update loop.
     storage_type : enum
         What is the type of storage?
         - 'A': archival storage
@@ -149,6 +153,7 @@ class StorageNode(base_model):
     group = pw.ForeignKeyField(StorageGroup, backref="nodes")
     active = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
+    auto_verify = pw.IntegerField(default=0)
     storage_type = EnumField(["A", "T", "F"], default="A")
     max_total_gb = pw.FloatField(null=True)
     min_avail_gb = pw.FloatField(default=0)
