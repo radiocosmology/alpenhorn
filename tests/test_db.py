@@ -38,6 +38,10 @@ def test_chimedb_concurrency(use_chimedb, dbproxy):
         {"id": 3, "value": 56},
     ]
 
+    # Barriers
+    before = threading.Barrier(2)
+    after = threading.Barrier(2)
+
     # Threads
     def worker1():
         nonlocal Values
@@ -46,10 +50,16 @@ def test_chimedb_concurrency(use_chimedb, dbproxy):
         db.connect()
         assert dbproxy.get_tables() == ["values"]
 
+        # Wait
+        before.wait()
+
         # Start a transaction
         with db.database_proxy.atomic():
             Values.update(value=123).where(Values.id == 1).execute()
             Values.update(value=456).where(Values.id == 3).execute()
+
+        # Synchronise
+        after.wait()
 
     def worker2():
         nonlocal Values
@@ -58,6 +68,11 @@ def test_chimedb_concurrency(use_chimedb, dbproxy):
         assert dbproxy.get_tables() == ["values"]
 
         Values.update(value=0).where(Values.id == 2).execute()
+
+        # Wait
+        before.wait()
+        after.wait()
+
         Values.insert(value=89).execute()
 
     t1 = threading.Thread(target=worker1, daemon=True)

@@ -2,6 +2,7 @@
 import pytest
 
 from alpenhorn import config, db, extensions
+from alpenhorn.queue import FairMultiFIFOQueue
 
 
 def pytest_configure(config):
@@ -39,6 +40,12 @@ def set_config(request):
     config.config = None
     extensions._db_ext = None
     extensions._ext = None
+
+
+@pytest.fixture
+def queue():
+    """A test queue."""
+    yield FairMultiFIFOQueue()
 
 
 @pytest.fixture
