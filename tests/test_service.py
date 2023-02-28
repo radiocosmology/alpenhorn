@@ -2,6 +2,7 @@
 
 Things that this end-to-end test does:
     - checks a corrupt file
+    - deletes a file
 
 The purpose of this test isn't to exhaustively exercise all parts
 of the daemon, but to check the connectivity of the high-level blocks
@@ -68,6 +69,25 @@ def e2e_db(xfs, hostname):
     )
     xfs.create_file("/dft/ALPENHORN_NODE", contents="dftnode")
 
+    # Future PR will turn this into a transport fleet
+    fleet = StorageGroup.create(name="fleet")
+    tp1 = StorageNode.create(
+        name="tp1",
+        storage_type="T",
+        group=fleet,
+        root="/tp/one",
+        host=hostname,
+        active=True,
+    )
+    xfs.create_file("/tp/one/ALPENHORN_NODE", contents="tp1")
+
+    # A future PR will turn this into a Nearline group
+    nlgrp = StorageGroup.create(name="nl1")
+    sf1 = StorageNode.create(
+        name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True
+    )
+    xfs.create_file("/sf1/ALPENHORN_NODE", contents="sf1")
+
     # The only acqtype
     pattern_importer.AcqType.create(name="acqtype", glob=True, patterns='["acq?"]')
 
@@ -75,7 +95,7 @@ def e2e_db(xfs, hostname):
     acq1 = ArchiveAcq.create(name="acq1")
 
     # The only filetype
-    pattern_importer.FileType.create(
+    filetype = pattern_importer.FileType.create(
         name="filetype",
         glob=True,
         patterns='["*.me"]',
@@ -87,6 +107,21 @@ def e2e_db(xfs, hostname):
         file=checkme, node=dftnode, has_file="M", wants_file="Y", ready=True
     )
     xfs.create_file("/dft/acq1/check.me")
+
+    # A file to delete -- also need two archive copies to allow deletion
+    deleteme = ArchiveFile.create(name="delete.me", type=filetype, acq=acq1, size_b=0)
+    ArchiveFileCopy.create(
+        file=deleteme, node=dftnode, has_file="Y", wants_file="Y", ready=True
+    )
+    ArchiveFileCopy.create(
+        file=deleteme, node=sf1, has_file="Y", wants_file="Y", ready=True
+    )
+    ArchiveFileCopy.create(
+        file=deleteme, node=tp1, has_file="Y", wants_file="N", ready=True
+    )
+    xfs.create_file("/dft/acq1/delete.me")
+    xfs.create_file("/sf/acq1/delete.me")
+    xfs.create_file("/tp/one/acq1/delete.me")
 
     yield
 
@@ -124,6 +159,14 @@ def test_cli(e2e_db, e2e_config, loop_once):
 
     # Check results
 
+    tp1 = StorageNode.get(name="tp1")
+
     # check.me is corrupt
     checkme = ArchiveFile.get(name="check.me")
     assert ArchiveFileCopy.get(file=checkme).has_file == "X"
+
+    # delete.me is gone from tp1
+    deleteme = ArchiveFile.get(name="delete.me")
+    copy = ArchiveFileCopy.get(file=deleteme, node=tp1)
+    assert copy.has_file == "N"
+    assert not copy.path.exists()

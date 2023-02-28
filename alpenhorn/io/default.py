@@ -19,7 +19,7 @@ from .base import BaseNodeIO, BaseGroupIO
 from ..task import Task
 
 # The asyncs are over here:
-from ._default_asyncs import check_async
+from ._default_asyncs import check_async, delete_async
 
 if TYPE_CHECKING:
     from ..archive import ArchiveFileCopy
@@ -102,6 +102,23 @@ class DefaultNodeIO(BaseNodeIO):
             log.warning(f"Node file {file_path} could not be read.")
 
         return False
+
+    def delete(self, copies: list[ArchiveFileCopy]) -> None:
+        """Queue a single asynchronous I/O task to delete the list of file copies."""
+
+        # Nothing to do
+        if len(copies) == 0:
+            return
+
+        Task(
+            func=delete_async,
+            queue=self._queue,
+            key=self.node.name,
+            args=(copies,),
+            name="Delete copies "
+            + str([copy.id for copy in copies])
+            + f" from {self.node.name}",
+        )
 
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
         """Return size in bytes of the file given by `path`.
