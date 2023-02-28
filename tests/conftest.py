@@ -44,7 +44,8 @@ def set_config(request):
     # Reset globals
     config.config = None
     extensions._db_ext = None
-    extensions._ext = None
+    extensions._id_ext = None
+    extensions._io_ext = dict()
 
 
 @pytest.fixture
@@ -224,13 +225,13 @@ def mockio():
     # This is our mock I/O module
     class MockIO:
         # The I/O "classes"
-        def NodeIO(*args, **kwargs):
+        def MockNodeIO(*args, **kwargs):
             nonlocal node
             node._instance_args = args
             node._instance_kwargs = kwargs
             return node
 
-        def GroupIO(*args, **kwargs):
+        def MockGroupIO(*args, **kwargs):
             nonlocal group
             group._instance_args = args
             node._instance_kwargs = kwargs
@@ -239,8 +240,8 @@ def mockio():
     MockIO.node = node
     MockIO.group = group
 
-    # Patch sys.modules so import can find our module.
-    with patch.dict("sys.modules", MockIO=MockIO):
+    # Patch extensions._io_ext so alpenhorn can find our module
+    with patch.dict("alpenhorn.extensions._io_ext", mock=MockIO):
         yield MockIO
 
 
@@ -251,14 +252,14 @@ def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
     Yields the group and node.
     """
 
-    stgroup = storagegroup(name="mockgroup", io_class="MockIO.GroupIO")
+    stgroup = storagegroup(name="mockgroup", io_class="Mock")
     stnode = storagenode(
         name="mocknode",
         group=stgroup,
         root="/mocknode",
         host=hostname,
         active=True,
-        io_class="MockIO.NodeIO",
+        io_class="Mock",
     )
 
     # Fix set_nodes

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 import logging
 
 if TYPE_CHECKING:
+    import pathlib
+    from ..archive import ArchiveFileCopy
     from ..queue import FairMultiFIFOQueue
     from ..storage import StorageNode, StorageGroup
     from ..update import UpdateableNode
@@ -45,7 +47,7 @@ class BaseNodeIO:
     def update(self, node: StorageNode) -> None:
         """Update the cached StorageNode instance.
 
-                Called once per update loop on pre-existing I/O instances to
+        Called once per update loop on pre-existing I/O instances to
         replace their `self.node` with a new instance fetched from
         the database.  The new `node` instance reflects changes made
         to the database record outside of alpenhornd.
@@ -109,6 +111,85 @@ class BaseNodeIO:
         """
         # Do nothing
         pass
+
+    # I/O METHODS
+
+    def bytes_avail(self, fast: bool = False) -> int | None:
+        """bytes_avail: Return amount of free space (in bytes) of the node, or
+        None if that cannot be determined.
+
+        Note: this is a measure of free space on the underlying storage system,
+        not how close to node.max_total_gb the value of self.size_bytes() is.
+        The value returned may exceed node.max_total_gb.
+
+        Parameters
+        ----------
+        fast : bool
+            If True, then this is a fast call, and I/O classes for which
+            checking available space is expensive may skip it by returning None.
+
+        Returns
+        -------
+        bytes_avail : int or None
+            the total bytes available on the storage system, or None if that
+            can't be or wasn't determined.
+        """
+        return None
+
+    def check(self, copy: ArchiveFileCopy) -> None:
+        """Check whether ArchiveFileCopy `copy` is corrupt.
+
+        Parameters
+        ----------
+        copy : ArchiveFileCopy
+            the file copy to check
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def check_active(self) -> bool:
+        """Check that this is an active node.
+
+        This check should be done by inspecting the storage system, rather than
+        checking the database, because is meant to catch instances where the
+        "active" bit in the database is incorrect.
+
+        Returns True if the node is active, or False if inactive.
+
+        If this can't be determined, it should return self.node.active (i.e.
+        assume the database is correct), which is the default behaviour."""
+        return self.node.active
+
+    def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
+        """Return size in bytes of the file given by `path`.
+
+        Parameters
+        ----------
+        path: path-like
+            The filepath to check the size of.  May be absolute or relative
+            to `node.root`.
+        actual: bool, optional
+            If True, return the amount of space the file actually takes
+            up on the storage system.  Otherwise return apparent size.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def md5(self, path: str | pathlib.Path, *segments) -> str:
+        """Compute the MD5 hash of the file at the specified path.
+
+        Parameters
+        ----------
+        path : PathLike
+            path (or first part of the, path if other `segments` provided) to
+            the file to hash.  Relative to `node.root`.
+        *segments : iterable, optional
+            other path segments path-concatenated and appended to `path`.
+
+        Returns
+        -------
+        md5sum : str
+            the base64-encoded MD5 hash value
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
 
 
 class BaseGroupIO:

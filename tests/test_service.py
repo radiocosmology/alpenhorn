@@ -1,13 +1,14 @@
 """An end-to-end test of the alpenhorn daemon.
 
 Things that this end-to-end test does:
-   - nothing! (none of the I/O has been fixed)
+    - checks a corrupt file
 
 The purpose of this test isn't to exhaustively exercise all parts
 of the daemon, but to check the connectivity of the high-level blocks
 of the main update loop.
 """
 
+import sys
 import yaml
 import pytest
 import peewee as pw
@@ -20,6 +21,10 @@ from alpenhorn.storage import StorageGroup, StorageNode
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 
+from examples import pattern_importer
+
+# Make it easy for alpenhornd to find the extension
+sys.modules["pattern_importer"] = pattern_importer
 
 # database URI for a shared in-memory database
 DB_URI = "file:e2edb?mode=memory&cache=shared"
@@ -38,12 +43,14 @@ def e2e_db(xfs, hostname):
     # Create tables
     db.create_tables(
         [
-            ArchiveAcq,
-            ArchiveFile,
             ArchiveFileCopy,
             ArchiveFileCopyRequest,
             StorageGroup,
             StorageNode,
+            pattern_importer.AcqType,
+            pattern_importer.FileType,
+            pattern_importer.ExtendedAcq,
+            pattern_importer.ExtendedFile,
         ]
     )
 
@@ -52,16 +59,34 @@ def e2e_db(xfs, hostname):
 
     # A Default-IO group with one node
     dftgrp = StorageGroup.create(name="dftgroup")
-    StorageNode.create(
+    dftnode = StorageNode.create(
         name="dftnode",
         group=dftgrp,
         root="/dft",
         host=hostname,
         active=True,
-        min_avail_gb=0,
-        max_total_gb=-1.0,
     )
     xfs.create_file("/dft/ALPENHORN_NODE", contents="dftnode")
+
+    # The only acqtype
+    pattern_importer.AcqType.create(name="acqtype", glob=True, patterns='["acq?"]')
+
+    # The only (existing) acq
+    acq1 = ArchiveAcq.create(name="acq1")
+
+    # The only filetype
+    pattern_importer.FileType.create(
+        name="filetype",
+        glob=True,
+        patterns='["*.me"]',
+    )
+
+    # A file to check
+    checkme = ArchiveFile.create(name="check.me", acq=acq1, size_b=0, md5sum="0")
+    ArchiveFileCopy.create(
+        file=checkme, node=dftnode, has_file="M", wants_file="Y", ready=True
+    )
+    xfs.create_file("/dft/acq1/check.me")
 
     yield
 
@@ -79,6 +104,9 @@ def e2e_config(xfs, hostname):
     # netloc.
     config = {
         "base": {"hostname": hostname},
+        "extensions": [
+            "pattern_importer",
+        ],
         "database": {"url": "sqlite:///?database=" + urlquote(DB_URI) + "&uri=true"},
         "service": {"num_workers": 4},
     }
@@ -93,3 +121,9 @@ def test_cli(e2e_db, e2e_config, loop_once):
     result = runner.invoke(cli, catch_exceptions=False)
 
     assert result.exit_code == 0
+
+    # Check results
+
+    # check.me is corrupt
+    checkme = ArchiveFile.get(name="check.me")
+    assert ArchiveFileCopy.get(file=checkme).has_file == "X"

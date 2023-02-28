@@ -2,6 +2,7 @@
 
 import pytest
 import pathlib
+import datetime
 import peewee as pw
 
 from alpenhorn.storage import StorageGroup, StorageNode
@@ -292,3 +293,23 @@ def test_allfiles(simplenode, simpleacq, archivefile, archivefilecopy):
     assert simplenode.get_all_files() == set(
         [pathlib.PurePath(simpleacq.name, "file2")]
     )
+
+
+def test_update_avail_gb(simplenode):
+    """test StorageNode.update_avail_gb()"""
+
+    # The test node initially doesn't have this set
+    assert simplenode.avail_gb is None
+
+    # Test a number
+    start = datetime.datetime.now()
+    simplenode.update_avail_gb(10000)
+    # Now the value is set
+    node = StorageNode.get(id=simplenode.id)
+
+    assert node.avail_gb == 10000.0 / 2.0**30
+    assert node.avail_gb_last_checked >= start
+
+    # Test None
+    simplenode.update_avail_gb(None)
+    assert StorageNode.get(id=simplenode.id).avail_gb is None

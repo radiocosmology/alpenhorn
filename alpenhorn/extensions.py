@@ -4,7 +4,7 @@ Extensions are simply python packages or modules providing extra functionality
 to alpenhorn. They should be specified in the `'extension'` section of the
 alpenhorn configuration as fully qualified python name. They must have a
 `'register_extension'` function that returns a `dict` specifying the extra
-functionality they provide. There are currently two supported keys:
+functionality they provide. There are currently three supported keys:
 
 `database`
     A dict providing capabilities of a database extension.  See the db module
@@ -44,6 +44,24 @@ functionality they provide. There are currently two supported keys:
 
     If multiple `import-detect` extensions are provided, they will be called in the
     order given in the config file until one of them indicates a successful match.
+`io-modules`
+    A dict providing I/O modules to augment the default modules provided in
+    `alpenhorn.io`.  Each I/O module should have a node I/O or group I/O class
+    (or both).  I/O class names and dict keys must adhere to the following naming
+    conventions:
+      * For a StorageNode with `io_class` equal to "IOClassName", the node I/O class
+        implementing this I/O class must be called `IOClassNameNodeIO`.
+      * Similarly, a StorageGroup with `io_class == "IOClassName" must be named
+        `IOClassNameGroupIO`.
+      * In the `io-modules` dict, the key whose value is a module containing either
+        (or both) of the above classes must be "ioclassname" (i.e. equivalent to the
+        `io_class` of the group and/or node after conversion to lower case).  So,
+        the above example classes would both be in a module associated with the dict
+        key `ioclassname`.
+
+    Multiple `io-modules` extensions may be provided; no two extensions may provide
+    the same dict keys, nor may any extension provide a key which is the name of an
+    existing `alpenhorn.io` submodule.
 
 If other keys are present in the dictionary returned by `register_extension`, they
 are ignored.
@@ -58,6 +76,7 @@ from . import config
 
 if TYPE_CHECKING:
     import pathlib
+    from types import ModuleType
     from collections.abc import Callable
 
     from .alpenhorn import ArchiveAcq, ArchiveFile
@@ -77,6 +96,7 @@ log = logging.getLogger(__name__)
 # Internal variables for holding the extension references
 _db_ext = None
 _id_ext = None
+_io_ext = dict()
 
 
 def load_extensions() -> None:
@@ -97,9 +117,7 @@ def load_extensions() -> None:
     TypeError
         `register_extension` provided data of the wrong type.
     ValueError
-        More than one database extension was specified in the alpenhorn
-        config or the object provided by an import-detect extension was
-        not callable.
+        The data returned by register_extension was not usable.
     """
 
     # Initialise globals
@@ -162,6 +180,32 @@ def load_extensions() -> None:
 
             _id_ext.append(extension_dict["import-detect"])
 
+        if "io-modules" in extension_dict:
+            useful_extension = True
+
+            for modname, extmod in extension_dict["io-modules"].items():
+                # Check if this module is present in a previously imported
+                # extension.  This test is easier to do then the alpenhorn.io
+                # check, so we do it first
+                if modname in _io_ext:
+                    raise ValueError(
+                        f'I/O module "{modname}" in extension {name} already '
+                        "imported from an earlier extension module."
+                    )
+
+                # Second, check if this module already exists in alpenhorn.io
+                try:
+                    importlib.import_module("alpenhorn.io." + modname)
+                    raise ValueError(
+                        f'I/O module "{modname}" in extension {name} duplicates '
+                        f'existing module "alpenhorn.io.{modname}"'
+                    )
+                except ImportError:
+                    pass
+
+                # Otherwise, add it to the list
+                _io_ext[modname] = extmod
+
         if not useful_extension:
             log.warning(f"Ignoring extension {name} with no useable functionality!")
 
@@ -199,3 +243,38 @@ def import_detection() -> list[ImportDetect]:
         log.warning("Attempt to import file with no import detect extensions.")
 
     return _id_ext
+
+
+def io_module(name: str) -> ModuleType:
+    """Returns the module supporting I/O class named `name`.
+
+    Parameters
+    ----------
+    name : str
+        The I/O class to find the module for.  Usually the value of
+        `StorageNode.io_class` or `StorageGroup.io_class`.  This may
+        not be "base", ignoring case.
+
+    Returns
+    -------
+    iomod : module or None
+        The Python module providing the implementation of the named I/O class.
+        It is either a submodule of `alpenhorn.io` or else a module
+        provided by one of the io-module extensions.
+
+        This will be None if no I/O module could be found.
+    """
+
+    # Module names are always lower case
+    name = name.lower()
+
+    # Loading the I/O base is not allowed
+    if name == "base":
+        return None
+
+    # Try to load the module from alpenhorn.io
+    try:
+        return importlib.import_module("alpenhorn.io." + name)
+    except ImportError:
+        # No alpenhorn.io module, maybe it's an extension module
+        return _io_ext.get(name)

@@ -1,11 +1,9 @@
-"""Utility functions.
-"""
+"""Utility functions."""
+from __future__ import annotations
 
-
-import logging
-import os.path
-import re
 import socket
+import hashlib
+import logging
 
 from . import config
 
@@ -50,11 +48,6 @@ def run_command(cmd, **kwargs):
     )
 
 
-def is_md5_hash(h):
-    """Is this the correct format to be an md5 hash."""
-    return re.match("[a-f0-9]{32}", h) is not None
-
-
 def command_available(cmd):
     """Is this command available on the system."""
     from distutils import spawn
@@ -62,7 +55,7 @@ def command_available(cmd):
     return spawn.find_executable(cmd) is not None
 
 
-def md5sum_file(filename, hr=True, cmd_line=False):
+def md5sum_file(filename: str, hr: bool = True) -> str:
     """Find the md5sum of a given file.
 
     Output should reproduce that of UNIX md5sum command.
@@ -73,31 +66,20 @@ def md5sum_file(filename, hr=True, cmd_line=False):
         Name of file to checksum.
     hr: boolean, optional
         Should output be a human readable hexstring (default is True).
-    cmd_line: boolean, optional
-        If True, then simply do an os call to md5sum (default is False).
 
     See Also
     --------
-    http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-
-    python
+    http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-python
     """
-    if cmd_line:
-        ret, stdout, stderr = run_command(["md5sum", filename])
-        md5 = stdout.split()[0]
-        assert len(md5) == 32
-        return md5
-    else:
-        import hashlib
+    block_size = 256 * 128
 
-        block_size = 256 * 128
-
-        md5 = hashlib.md5()
-        with open(filename, "rb") as f:
-            for chunk in iter(lambda: f.read(block_size), b""):
-                md5.update(chunk)
-        if hr:
-            return md5.hexdigest()
-        return md5.digest()
+    md5 = hashlib.md5()
+    with open(filename, "rb") as f:
+        for chunk in iter(lambda: f.read(block_size), b""):
+            md5.update(chunk)
+    if hr:
+        return md5.hexdigest()
+    return md5.digest()
 
 
 def get_hostname() -> str:
@@ -109,6 +91,48 @@ def get_hostname() -> str:
         return config.config["base"]["hostname"]
 
     return socket.gethostname().split(".")[0]
+
+
+def pretty_bytes(num: int) -> str:
+    """Return a nicely formatted string describing a size in bytes.
+
+    Parameters
+    ----------
+    num : int
+        Number of bytes
+
+    Returns
+    -------
+    pretty_bytes : str
+        A formatted string using power-of-two prefixes,
+        e.g. "103.4 GiB"
+
+    Raises
+    ------
+    TypeError
+        `num` was non-numeric
+    ValueError
+        `num` was less than zero
+    """
+
+    # Reject weird stuff
+    try:
+        if num < 0:
+            raise ValueError("negative size")
+    except TypeError:
+        raise TypeError("non-numeric size")
+
+    if num < 2**10:
+        return f"{num} B"
+
+    for x, p in enumerate("kMGTPE"):
+        if num < 2 ** ((2 + x) * 10):
+            num /= 2 ** ((1 + x) * 10)
+            return f"{num:.1f} {p}iB"
+
+    # overflow or something: in this case lets just go
+    # with what we were given and get on with our day.
+    return f"{num} B"
 
 
 def pretty_deltat(seconds: float) -> str:
@@ -152,33 +176,3 @@ def pretty_deltat(seconds: float) -> str:
 
     # For short durations, include tenths of a second
     return f"{seconds:.1f}s"
-
-
-def alpenhorn_node_check(node):
-    """Check for valid ALPENHORN_NODE file contents
-
-    Return
-    ------
-
-    True if ALPENHORN_NODE is present in `node.root` directory and contains the
-    contains node name as its first line, False otherwise.
-
-    .. Note:: The caller needs to ensure the StorageNode has the appropriate
-    `active` status.
-    """
-
-    file_path = os.path.join(node.root, "ALPENHORN_NODE")
-    try:
-        with open(file_path, "r") as f:
-            first_line = f.readline()
-            # Check if the actual node name is in the textfile
-            if node.name == first_line.rstrip():
-                # Great! Everything is as expected.
-                return True
-            log.debug(
-                f"Node name in file {file_path} does not match expected {node.name}."
-            )
-    except IOError:
-        log.debug(f"Node file {file_path} could not be read.")
-
-    return False
