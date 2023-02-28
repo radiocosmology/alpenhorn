@@ -282,6 +282,21 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def fits(self, size_b: int) -> bool:
+        """Does `size_b` bytes fit on this node?
+
+        Parameters
+        ----------
+        size_b : int
+            The size of the file we're trying to fit
+
+        Returns
+        -------
+        fits : bool
+            True if `size_b` fits on the node.  False otherwise.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
     def md5(self, path: str | pathlib.Path, *segments) -> str:
         """Compute the MD5 hash of the file at the specified path.
 

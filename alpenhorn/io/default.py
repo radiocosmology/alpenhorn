@@ -198,6 +198,23 @@ class DefaultNodeIO(BaseNodeIO):
         # Apparent size
         return path.stat().st_size
 
+    def fits(self, size_b: int) -> bool:
+        """Does `size_b` bytes fit on this node?
+
+        Takes into account reserved space.
+
+        Parameters
+        ----------
+        size_b : int
+            The size of the file we're trying to fit
+
+        Returns
+        -------
+        fits : bool
+            True if `size_b` fits on the node.  False otherwise.
+        """
+        return self.reserve_bytes(size_b, check_only=True)
+
     def md5(self, path: str | pathlib.Path, *segments) -> str:
         """Compute the MD5 hash of the file at the specified path.
 

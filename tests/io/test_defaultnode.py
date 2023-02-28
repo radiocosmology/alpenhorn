@@ -45,6 +45,16 @@ def test_filesize(unode, xfs):
     assert unode.io.filesize("dir/file1", actual=True) == 1024
 
 
+def test_fits(unode, xfs):
+    """test DefaultNodeIO.fits()."""
+
+    xfs.create_dir("/node")
+    xfs.set_disk_usage(10000)
+
+    assert unode.io.fits(3000) is True
+    assert unode.io.fits(30000) is False
+
+
 def test_md5(unode, xfs):
     """test DefaultNodeIO.md5()"""
     xfs.create_file("/node/dir/file1")

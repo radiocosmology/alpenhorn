@@ -171,7 +171,7 @@ def test_serial_io(fastqueue, set_config):
 def test_ioload(storagegroup, storagenode):
     """Test instantiation of the I/O classes"""
 
-    for ioclass in ["Default", None]:
+    for ioclass in ["Default", "Transport", None]:
         group = storagegroup(
             name="none" if ioclass is None else ioclass, io_class=ioclass
         )
