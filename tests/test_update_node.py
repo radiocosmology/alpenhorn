@@ -2,7 +2,7 @@
 
 import pytest
 import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import call, patch, MagicMock
 
 from alpenhorn.storage import StorageNode
 from alpenhorn.update import UpdateableNode
@@ -218,3 +218,34 @@ def test_update_delete_over_min(unode, simpleacq, archivefile, archivefilecopy):
     with patch.object(unode.io, "delete", mock_delete):
         unode.update_delete()
     mock_delete.assert_called_once_with([copyN])
+
+
+def test_update_node_run(
+    unode, queue, simplegroup, simplefile, archivefilecopy, archivefilecopyrequest
+):
+    """Test running UpdateableNode.update_node."""
+
+    # Make something to check
+    copy = archivefilecopy(node=unode.db, file=simplefile, has_file="M")
+
+    # And something to pull
+    afcr = archivefilecopyrequest(
+        node_from=unode.db, group_to=simplegroup, file=simplefile
+    )
+
+    mock = MagicMock()
+    mock.before_update.return_value = True
+    mock.bytes_avail.return_value = None
+    with patch.object(unode, "io", mock):
+        # update runs
+        unode.update()
+
+    assert unode._updated is True
+
+    # Check I/O calls
+    calls = list(mock.mock_calls)
+    assert len(calls) == 5
+    assert call.bytes_avail(fast=False) in calls
+    assert call.check(copy) in calls
+    assert call.delete([]) in calls
+    assert call.ready_pull(afcr) in calls

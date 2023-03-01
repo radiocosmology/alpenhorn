@@ -438,7 +438,7 @@ def simplecopy(
     acq = archiveacq(name="simplecopy_acq")
     file = archivefile(name="simplecopy_file", acq=acq, size_b=2**20)
     group = storagegroup(name="simplecopy_group")
-    node = storagenode(name="simplecopy_node", group=group)
+    node = storagenode(name="simplecopy_node", group=group, root="/simplecopy_node")
     return archivefilecopy(file=file, node=node)
 
 

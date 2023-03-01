@@ -3,19 +3,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-import os
 import json
 import time
 import logging
 import peewee as pw
-import datetime as dt
-from peewee import fn
 
-from . import acquisition as ac
-from . import archive as ar
-from . import storage as st
 from . import config, util
-from .archive import ArchiveFileCopy
+from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from .extensions import io_module
 from .pool import global_abort, WorkerPool, EmptyPool
 from .storage import StorageNode, StorageGroup
@@ -24,12 +18,6 @@ if TYPE_CHECKING:
     from .queue import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
-
-# Parameters.
-max_time_per_node_operation = 300  # Don't let node operations hog time.
-
-# Globals.
-done_transport_this_cycle = False
 
 
 class updateable_base:
@@ -191,6 +179,27 @@ class updateable_base:
         return False
 
 
+class RemoteNode(updateable_base):
+    """Remote storage node.
+
+    This represents a (potentially) non-local node used
+    as the source-side of a pull request.
+
+    Parameters
+    ----------
+    node : StorageNode
+        The underlying StorageNode instance
+    """
+
+    is_group = False
+
+    def __init__(self, node: StorageNode) -> None:
+        self.db = node
+        self.io_class = self._get_io_class()
+        config = self._parse_io_config(node.io_config)
+        self.io = self.io_class.remote_class(node, config)
+
+
 class UpdateableNode(updateable_base):
     """Updateable storage node
 
@@ -348,9 +357,13 @@ class UpdateableNode(updateable_base):
             # Delete any unwanted files to cleanup space
             self.update_delete()
 
-            # Process any regular transfers requests onto this node
-            # XXX Commented out until future PR.
-            # update_node_requests(node)
+            # Prepare files for pulls out from this node
+            for req in ArchiveFileCopyRequest.select().where(
+                ArchiveFileCopyRequest.completed == 0,
+                ArchiveFileCopyRequest.cancelled == 0,
+                ArchiveFileCopyRequest.node_from == self.db,
+            ):
+                self.io.ready_pull(req)
 
             self._updated = True
         else:
@@ -436,6 +449,119 @@ class UpdateableGroup(updateable_base):
 
         return True
 
+    def update_pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Process pull request `req`.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            The pull request to process.
+        """
+        # What's the current situation on the destination?
+        copy_state = self.db.filecopy_state(req.file)
+        if copy_state == "Y":
+            # We mark the AFCR cancelled rather than complete becase
+            # _this_ AFCR clearly hasn't been responsible for creating
+            # the file copy.
+            log.info(
+                f"Cancelling pull request for "
+                f"{req.file.acq.name}/{req.file.name}: "
+                f"already present in group {self.name}."
+            )
+            ArchiveFileCopyRequest.update(cancelled=True).where(
+                ArchiveFileCopyRequest.id == req.id
+            ).execute()
+            return
+        elif copy_state == "M":
+            log.warning(
+                f"Skipping pull request for "
+                f"{req.file.acq.name}/{req.file.name}: "
+                f"existing copy in group {self.name} needs check."
+            )
+            return
+        elif copy_state == "X":
+            # If the file is corrupt, we continue with the
+            # pull to overwrite the corrupt file
+            pass
+        elif copy_state == "N":
+            # Check whether an actual file exists on the target.
+            node = self.io.exists(req.file.path)
+            if node is not None:
+                # file on disk: create/update the ArchiveFileCopy
+                # to force a check next pass
+                log.warning(
+                    f"Skipping pull request for "
+                    f"{req.file.acq.name}/{req.file.name}: "
+                    f"file already on disk in group {self.name}."
+                )
+                log.info(
+                    f"Requesting check of "
+                    f"{req.file.acq.name}/{req.file.name} on node "
+                    f"{node.name}."
+                )
+
+                # Update/create ArchiveFileCopy to force a check.
+
+                # ready == False is the safe option here: copy will be readied
+                # during the subsequent check if needed.
+                count = (
+                    ArchiveFileCopy.update(has_file="M", wants_file="Y", ready=False)
+                    .where(
+                        ArchiveFileCopy.file == req.file,
+                        ArchiveFileCopy.node == node.db,
+                    )
+                    .execute()
+                )
+                if count == 0:
+                    # Create new copy
+                    ArchiveFileCopy.create(
+                        file=req.file,
+                        node=node.db,
+                        has_file="M",
+                        wants_file="Y",
+                        ready=False,
+                        size_b=node.io.filesize(req.file.path, actual=True),
+                    )
+                return
+        else:
+            # Shouldn't get here
+            log.error(
+                f"Unexpected copy state: '{copy_state}' "
+                f"for file ID={req.file.id} in group {self.name}."
+            )
+            return
+
+        # Skip request unless the source node is active
+        if not req.node_from.active:
+            log.warning(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                f" source node {req.node_from.name} is not active."
+            )
+            return
+
+        # If the source file doesn't exist, skip the request.
+        #
+        # XXX Cancel instead?
+        if not req.node_from.filecopy_present(req.file):
+            log.warning(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                f" not available on node {req.node_from.name}. "
+                f"[file_id={req.file.id}]"
+            )
+            return
+
+        # If the source file is not ready, skip the request.
+        node_from = RemoteNode(req.node_from)
+        if not node_from.io.pull_ready(req.file):
+            log.info(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                f" not ready on node {req.node_from.name}."
+            )
+            return
+
+        # Early checks passed: dispatch this request to the Group I/O layer
+        self.io.pull(req)
+
     def update(self) -> None:
         """Perform I/O updates on the group"""
 
@@ -453,7 +579,13 @@ class UpdateableGroup(updateable_base):
         if self._init_idle and do_update:
             log.info(f'Updating group "{self.name}".')
 
-            # TODO: do group I/O here.
+            # Process pulls into this group
+            for req in ArchiveFileCopyRequest.select().where(
+                ArchiveFileCopyRequest.completed == 0,
+                ArchiveFileCopyRequest.cancelled == 0,
+                ArchiveFileCopyRequest.group_to == self.db,
+            ):
+                self.update_pull(req)
 
             # Check for idleness at the end
             self._do_idle_updates = self.idle
@@ -501,7 +633,6 @@ def update_loop(
     During a clean exit, alpenhornd will try to finish in-progress tasks before
     shutting down.
     """
-    global done_transport_this_cycle
 
     # The nodes and groups we're working on.  These will be updated
     # each time through the main loop, whenever the underlying storage objects
@@ -512,7 +643,6 @@ def update_loop(
 
     while not global_abort.is_set():
         loop_start = time.time()
-        done_transport_this_cycle = False
 
         # Nodes are re-queried every loop iteration so we can
         # detect changes in available storage media
@@ -674,203 +804,3 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
         task()
         queue.task_done(key)
         log.info(f"Finished task {task}")
-
-
-def update_node_requests(node):
-    """Process file copy requests onto this node."""
-    import shutil
-    from .io import ioutil
-
-    global done_transport_this_cycle
-
-    # TODO: Fix up HPSS support
-    # Ensure we are not on an HPSS node
-    # if is_hpss_node(node):
-    #     log.error("Cannot process HPSS node here.")
-    #     return
-
-    avail_gb = node.avail_gb
-
-    # Skip if node is too full
-    if avail_gb < (node.min_avail_gb + 10):
-        log.info("Node %s is nearly full. Skip transfers." % node.name)
-        return
-
-    # Calculate the total archive size from the database
-    size_query = (
-        ac.ArchiveFile.select(fn.Sum(ac.ArchiveFile.size_b))
-        .join(ar.ArchiveFileCopy)
-        .where(ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y")
-    )
-
-    size = size_query.scalar(as_tuple=True)[0]
-    current_size_gb = float(0.0 if size is None else size) / 2**30.0
-
-    # Stop if the current archive size is bigger than the maximum (if set, i.e. > 0)
-    if current_size_gb > node.max_total_gb and node.max_total_gb > 0.0:
-        log.info(
-            "Node %s has reached maximum size (current: %.1f GB, limit: %.1f GB)"
-            % (node.name, current_size_gb, node.max_total_gb)
-        )
-        return
-
-    # ... OR if this is a transport node quit if the transport cycle is done.
-    if node.storage_type == "T" and done_transport_this_cycle:
-        log.info("Ignoring transport node %s" % node.name)
-        return
-
-    start_time = time.time()
-
-    # Fetch requests to process from the database
-    requests = ar.ArchiveFileCopyRequest.select().where(
-        ~ar.ArchiveFileCopyRequest.completed,
-        ~ar.ArchiveFileCopyRequest.cancelled,
-        ar.ArchiveFileCopyRequest.group_to == node.group,
-    )
-
-    # Add in constraint that node_from cannot be an HPSS node
-    requests = requests.join(st.StorageNode).where(st.StorageNode.address != "HPSS")
-
-    for req in requests:
-        if time.time() - start_time > max_time_per_node_operation:
-            break  # Don't hog all the time.
-
-        # By default, if a copy fails, we mark the source file as suspect
-        # so it gets re-MD5'd on the source node.
-        check_source_on_err = True
-
-        # Only continue if the node is actually active
-        if not req.node_from.active:
-            continue
-
-        # For transport disks we should only copy onto the transport
-        # node if the from_node is local, this should prevent pointlessly
-        # rsyncing across the network
-        if node.storage_type == "T" and node.host != req.node_from.host:
-            log.debug(
-                "Skipping request for %s/%s from remote node [%s] onto local "
-                "transport disks"
-                % (req.file.acq.name, req.file.name, req.node_from.name)
-            )
-            continue
-
-        # Only proceed if the destination file does not already exist.
-        try:
-            ar.ArchiveFileCopy.get(
-                ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == node,
-                ar.ArchiveFileCopy.has_file == "Y",
-            )
-            log.info(
-                "Skipping request for %s/%s since it already exists on "
-                'this node ("%s"), and updating DB to reflect this.'
-                % (req.file.acq.name, req.file.name, node.name)
-            )
-            ar.ArchiveFileCopyRequest.update(completed=True).where(
-                ar.ArchiveFileCopyRequest.file == req.file
-            ).where(ar.ArchiveFileCopyRequest.group_to == node.group).execute()
-            continue
-        except pw.DoesNotExist:
-            pass
-
-        # Only proceed if the source file actually exists (and is not corrupted).
-        try:
-            ar.ArchiveFileCopy.get(
-                ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == req.node_from,
-                ar.ArchiveFileCopy.has_file == "Y",
-            )
-        except pw.DoesNotExist:
-            log.error(
-                "Skipping request for %s/%s since it is not available on "
-                'node "%s". [file_id=%i]'
-                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
-            )
-            continue
-
-        # Check that there is enough space available.
-        if node.avail_gb * 2**30.0 < 2.0 * req.file.size_b:
-            log.warning(
-                'Node "%s" is full: not adding datafile "%s/%s".'
-                % (node.name, req.file.acq.name, req.file.name)
-            )
-            continue
-
-        # Constuct the origin and destination paths.
-        from_path = "%s/%s/%s" % (req.node_from.root, req.file.acq.name, req.file.name)
-        if req.node_from.host != node.host:
-            if req.node_from.username is None or req.node_from.address is None:
-                log.error(
-                    "Source node (%s) not properly configured (username=%s, address=%s)",
-                    req.node_from.name,
-                    req.node_from.username,
-                    req.node_from.address,
-                )
-                continue
-
-            from_path = "%s@%s:%s" % (
-                req.node_from.username,
-                req.node_from.address,
-                from_path,
-            )
-
-        to_file = os.path.join(node.root, req.file.acq.name, req.file.name)
-        to_dir = os.path.dirname(to_file)
-        if not os.path.isdir(to_dir):
-            log.info('Creating directory "%s".' % to_dir)
-            os.makedirs(to_dir)
-
-        # For the potential error message later
-        stderr = None
-
-        # Giddy up!
-        log.info('Transferring file "%s/%s".' % (req.file.acq.name, req.file.name))
-        start_time = time.time()
-        req.transfer_started = dt.datetime.fromtimestamp(start_time)
-        req.save(only=req.dirty_fields)
-
-        # Attempt to transfer the file. Each of the methods below needs to set a
-        # return code `ret` and give an `md5sum` of the transferred file.
-
-        # First we need to check if we are copying over the network
-        if req.node_from.host != node.host:
-            # First try bbcp which is a fast multistream transfer tool. bbcp can
-            # calculate the md5 hash as it goes, so we'll do that to save doing
-            # it at the end.
-            if shutil.which("bbcp") is not None:
-                ioresult = ioutil.bbcp(from_path, to_dir, req.file.size_b)
-            # Next try rsync over ssh.
-            elif shutil.which("rsync") is not None:
-                ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, False)
-            # If we get here then we have no idea how to transfer the file...
-            else:
-                log.warn("No commands available to complete this transfer.")
-                check_source_on_err = False
-                ret = -1
-
-        # Okay, great we're just doing a local transfer.
-        else:
-            # First try to just hard link the file. This will only work if we
-            # are on the same filesystem. As there's no actual copying it's
-            # probably unecessary to calculate the md5 check sum, so we'll just
-            # fake it.
-            ioresult = ioutil.hardlink(from_path, to_dir, req.file.name)
-
-            # If we couldn't just link the file, try copying it with rsync.
-            if ioresult is None:
-                if shutil.which("rsync") is not None:
-                    ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, True)
-                else:
-                    log.warn("No commands available to complete this transfer.")
-                    check_source_on_err = False
-                    ret = -1
-
-        ioutil.copy_request_done(
-            req,
-            node.io,
-            check_src=ioresult.get("check_src", True),
-            md5ok=ioresult.get("md5sum", None),
-            start_time=start_time,
-            stderr=ioresult.get("stderr", None),
-            success=(ioresult["ret"] == 0),
-        )

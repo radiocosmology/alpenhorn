@@ -1,6 +1,7 @@
 """An end-to-end test of the alpenhorn daemon.
 
 Things that this end-to-end test does:
+    - pulls a file
     - checks a corrupt file
     - deletes a file
 
@@ -9,10 +10,14 @@ of the daemon, but to check the connectivity of the high-level blocks
 of the main update loop.
 """
 
+import os
 import sys
 import yaml
 import pytest
+import shutil
+import pathlib
 import peewee as pw
+from unittest.mock import patch
 from click.testing import CliRunner
 from urllib.parse import quote as urlquote
 
@@ -101,6 +106,14 @@ def e2e_db(xfs, hostname):
         patterns='["*.me"]',
     )
 
+    # A file that needs to be pulled onto the Transport group
+    pullme = ArchiveFile.create(name="pull.me", type=filetype, acq=acq1, size_b=0)
+    ArchiveFileCopy.create(
+        file=pullme, node=dftnode, has_file="Y", wants_file="Y", size_b=0, ready=False
+    )
+    ArchiveFileCopyRequest.create(file=pullme, node_from=dftnode, group_to=fleet)
+    xfs.create_file("/dft/acq1/pull.me")
+
     # A file to check
     checkme = ArchiveFile.create(name="check.me", acq=acq1, size_b=0, md5sum="0")
     ArchiveFileCopy.create(
@@ -127,6 +140,38 @@ def e2e_db(xfs, hostname):
 
 
 @pytest.fixture
+def mock_rsync(xfs):
+    """Mocks rsync."""
+
+    original_which = shutil.which
+
+    def _mocked_which(cmd, mode=os.F_OK | os.X_OK, path=None):
+        """A mock of shutil.which that fakes having rsync."""
+
+        nonlocal original_which
+        if cmd == "rsync":
+            return "RSYNC"
+
+        return original_which(cmd, mode, path)
+
+    def _mocked_rsync(from_path, to_dir, size_b, local):
+        """An ioutil.rsync mock."""
+
+        nonlocal xfs
+
+        filename = pathlib.PurePath(from_path).name
+        destpath = pathlib.Path(to_dir, filename)
+
+        xfs.create_file(destpath)
+
+        return {"ret": 0, "stdout": "", "md5sum": True}
+
+    with patch("shutil.which", _mocked_which):
+        with patch("alpenhorn.io.ioutil.rsync", _mocked_rsync):
+            yield
+
+
+@pytest.fixture
 def e2e_config(xfs, hostname):
     """Fixture creating the config file for the end-to-end test."""
 
@@ -150,7 +195,7 @@ def e2e_config(xfs, hostname):
     xfs.create_file("/etc/alpenhorn/alpenhorn.conf", contents=yaml.dump(config))
 
 
-def test_cli(e2e_db, e2e_config, loop_once):
+def test_cli(e2e_db, e2e_config, mock_rsync, loop_once):
     runner = CliRunner()
 
     result = runner.invoke(cli, catch_exceptions=False)
@@ -159,7 +204,14 @@ def test_cli(e2e_db, e2e_config, loop_once):
 
     # Check results
 
+    # pull.me has been pulled
     tp1 = StorageNode.get(name="tp1")
+    pullme = ArchiveFile.get(name="pull.me")
+    afcr = ArchiveFileCopyRequest.get(file=pullme)
+    assert afcr.completed
+    assert not afcr.cancelled
+    copy = ArchiveFileCopy(file=pullme, node=tp1)
+    assert copy.path.exists()
 
     # check.me is corrupt
     checkme = ArchiveFile.get(name="check.me")
