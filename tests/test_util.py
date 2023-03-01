@@ -4,6 +4,36 @@ import pytest
 from alpenhorn import util
 
 
+def test_run_retval0():
+    """Test getting success from run_command."""
+    retval, stdout, stderr = util.run_command(["true"])
+    assert retval == 0
+
+
+def test_run_retval1():
+    """Test getting failure from run_command."""
+    retval, stdout, stderr = util.run_command(["false"])
+    assert retval != 0
+
+
+def test_run_stdout():
+    """Test getting stdout from run_command."""
+    retval, stdout, stderr = util.run_command(["echo", "stdout"])
+    assert stderr == ""
+    assert stdout == "stdout\n"
+    assert retval == 0
+
+
+def test_run_stderr():
+    """Test getting stdout from run_command."""
+    retval, stdout, stderr = util.run_command(
+        ["python3", "-c", "import os; os.write(2, b'stderr')"]
+    )
+    assert stderr == "stderr"
+    assert stdout == ""
+    assert retval == 0
+
+
 def test_md5sum_file(tmp_path):
     """Test util.md5sum_file"""
 

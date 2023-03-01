@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import os
-import re
 import json
 import time
 import logging
@@ -14,9 +13,8 @@ from peewee import fn
 
 from . import acquisition as ac
 from . import archive as ar
-from . import config, db
 from . import storage as st
-from . import util
+from . import config, util
 from .archive import ArchiveFileCopy
 from .extensions import io_module
 from .pool import global_abort, WorkerPool, EmptyPool
@@ -29,17 +27,6 @@ log = logging.getLogger(__name__)
 
 # Parameters.
 max_time_per_node_operation = 300  # Don't let node operations hog time.
-
-RSYNC_OPTS = [
-    "--quiet",
-    "--times",
-    "--protect-args",
-    "--perms",
-    "--group",
-    "--owner",
-    "--copy-links",
-    "--sparse",
-]
 
 # Globals.
 done_transport_this_cycle = False
@@ -438,15 +425,12 @@ class UpdateableGroup(updateable_base):
 
         False whenever any consitiuent node is not idle."""
 
-        log.warning(f"GI: {self._nodes}")
-
         # A group with no nodes is not idle.
         if self._nodes is None:
             return False
 
         # If any node is not idle, the group is not idle.
         for node in self._nodes:
-            log.warning(f"node: {node} {node.idle}")
             if not node.idle:
                 return False
 
@@ -485,7 +469,6 @@ class UpdateableGroup(updateable_base):
         The idle updates are run if the regular update() ran but
         the group was idle when it finished.
         """
-        log.warning(f"UI: {self._do_idle_updates}")
         if self._do_idle_updates:
             self.io.idle_update()
 
@@ -695,6 +678,8 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
 
 def update_node_requests(node):
     """Process file copy requests onto this node."""
+    import shutil
+    from .io import ioutil
 
     global done_transport_this_cycle
 
@@ -852,107 +837,11 @@ def update_node_requests(node):
             # First try bbcp which is a fast multistream transfer tool. bbcp can
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
-            if util.command_available("bbcp"):
-                ret, stdout, stderr = util.run_command(
-                    [  # See: https://www.slac.stanford.edu/~abh/bbcp/
-                        "bbcp",
-                        #
-                        #
-                        # -V (AKA --vverbose, with two v's) is here because bbcp
-                        # bbcp is weirdly broken.
-                        #
-                        # I have discovered a truly marvelous proof of this
-                        # which this comment is too narrow to contain.
-                        "-V",
-                        #
-                        #
-                        # force: delete an existing destination file before
-                        # transfer
-                        "-f",
-                        #
-                        #
-                        # Use a reverse connection to get through a firewall
-                        # (This may not be appropriate everywhere -- more reason
-                        # we need an edge table in the database.)
-                        "-z",
-                        #
-                        #
-                        # Port to use
-                        "--port",
-                        "4200",
-                        #
-                        #
-                        # TCP window size.  4M is what Linux typically limits
-                        # you to (cf. /proc/sys/net/ipv4/tcp_wmem)
-                        "-W",
-                        "4M",
-                        #
-                        #
-                        # Number of streams
-                        "-s",
-                        "16",
-                        #
-                        #
-                        # Do block-level checksumming to detect transmission
-                        # errors
-                        "-e",
-                        #
-                        #
-                        # Calculate _and print_ a MD5 checksum of the whole file
-                        # on the source.  MD5ing is done on the source to avoid
-                        # the need for the file transfer to occur in order
-                        # (which can cause bbcp to lock up).
-                        #
-                        # See https://www.slac.stanford.edu/~abh/bbcp/#_Toc392015140
-                        # and https://github.com/chime-experiment/alpenhorn/pull/15
-                        "-E",
-                        "%md5=",
-                        from_path,
-                        to_dir,
-                    ]
-                )
-
-                # Attempt to parse STDERR for the md5 hash
-                if ret == 0:
-                    mo = re.search("md5 ([a-f0-9]{32})", stderr)
-                    if mo is None:
-                        log.error(
-                            "BBCP transfer has gone awry. STDOUT: %s\n STDERR: %s"
-                            % (stdout, stderr)
-                        )
-                        ret = -1
-                    md5sum = mo.group(1)
-                else:
-                    md5sum = None
-
+            if shutil.which("bbcp") is not None:
+                ioresult = ioutil.bbcp(from_path, to_dir, req.file.size_b)
             # Next try rsync over ssh.
-            elif util.command_available("rsync"):
-                ret, stdout, stderr = util.run_command(
-                    ["rsync", "--compress"]
-                    + RSYNC_OPTS
-                    + [
-                        "--rsync-path=ionice -c2 -n4 rsync",
-                        "--rsh=ssh -q",
-                        from_path,
-                        to_dir,
-                    ]
-                )
-
-                md5sum = util.md5sum_file(to_file) if ret == 0 else None
-
-                # If the rsync error occured during `mkstemp` this is a
-                # problem on the destination, not the source
-                if ret and "mkstemp" in stderr:
-                    log.warn('rsync file creation failed on "{0}"'.format(node.name))
-                    check_source_on_err = False
-                elif "write failed on" in stderr:
-                    log.warn(
-                        'rsync failed to write to "{0}": {1}'.format(
-                            node.name, stderr[stderr.rfind(":") + 2 :].strip()
-                        )
-                    )
-                    check_source_on_err = False
-
+            elif shutil.which("rsync") is not None:
+                ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, False)
             # If we get here then we have no idea how to transfer the file...
             else:
                 log.warn("No commands available to complete this transfer.")
@@ -965,147 +854,23 @@ def update_node_requests(node):
             # are on the same filesystem. As there's no actual copying it's
             # probably unecessary to calculate the md5 check sum, so we'll just
             # fake it.
-            try:
-                link_path = os.path.join(node.root, req.file.acq.name, req.file.name)
-
-                # Check explicitly if link already exists as this and
-                # being unable to link will both raise OSError and get
-                # confused.
-                if os.path.exists(link_path):
-                    log.error("File %s already exists. Clean up manually." % link_path)
-                    check_source_on_err = False
-                    ret = -1
-                else:
-                    os.link(from_path, link_path)
-                    ret = 0
-                    md5sum = (
-                        req.file.md5sum
-                    )  # As we're linking the md5sum can't change. Skip the check here...
+            ioresult = ioutil.hardlink(from_path, to_dir, req.file.name)
 
             # If we couldn't just link the file, try copying it with rsync.
-            except OSError:
-                if util.command_available("rsync"):
-                    ret, stdout, stderr = util.run_command(
-                        ["rsync"] + RSYNC_OPTS + [from_path, to_dir]
-                    )
-
-                    md5sum = util.md5sum_file(to_file) if ret == 0 else None
-
-                    # If the rsync error occured during `mkstemp` this is a
-                    # problem on the destination, not the source
-                    if ret and "mkstemp" in stderr:
-                        log.warn(
-                            'rsync file creation failed on "{0}"'.format(node.name)
-                        )
-                        check_source_on_err = False
-                    elif "write failed on" in stderr:
-                        log.warn(
-                            'rsync failed to write to "{0}": {1}'.format(
-                                node.name, stderr[stderr.rfind(":") + 2 :].strip()
-                            )
-                        )
-                        check_source_on_err = False
+            if ioresult is None:
+                if shutil.which("rsync") is not None:
+                    ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, True)
                 else:
                     log.warn("No commands available to complete this transfer.")
                     check_source_on_err = False
                     ret = -1
 
-        # Check the return code...
-        if ret:
-            if check_source_on_err:
-                # If the copy didn't work, then the remote file may be corrupted.
-                log.error(
-                    "Copy failed: {0}. Marking source file suspect.".format(
-                        stderr if stderr is not None else "Unspecified error."
-                    )
-                )
-                ar.ArchiveFileCopy.update(has_file="M").where(
-                    ar.ArchiveFileCopy.file == req.file,
-                    ar.ArchiveFileCopy.node == req.node_from,
-                ).execute()
-            else:
-                # An error occurred that can't be due to the source
-                # being corrupt
-                log.error("Copy failed.")
-            continue
-        end_time = time.time()
-
-        # Check integrity.
-        if md5sum == req.file.md5sum:
-            size_mb = req.file.size_b / 2**20.0
-            copy_size_b = os.stat(to_file).st_blocks * 512
-            trans_time = end_time - start_time
-            rate = size_mb / trans_time
-            log.info(
-                "Pull complete (md5sum correct). Transferred %.1f MB in %i "
-                "seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate)
-            )
-
-            # Update the FileCopy (if exists), or insert a new FileCopy
-            try:
-                done = False
-                while not done:
-                    try:
-                        fcopy = (
-                            ar.ArchiveFileCopy.select()
-                            .where(
-                                ar.ArchiveFileCopy.file == req.file,
-                                ar.ArchiveFileCopy.node == node,
-                            )
-                            .get()
-                        )
-                        fcopy.has_file = "Y"
-                        fcopy.wants_file = "Y"
-                        fcopy.size_b = copy_size_b
-                        fcopy.save()
-                        done = True
-                    except pw.OperationalError:
-                        log.error(
-                            "MySQL connexion dropped. Will attempt to reconnect in "
-                            "five seconds."
-                        )
-                        time.sleep(5)
-                        db.config_connect()
-            except pw.DoesNotExist:
-                ar.ArchiveFileCopy.insert(
-                    file=req.file,
-                    node=node,
-                    has_file="Y",
-                    wants_file="Y",
-                    size_b=copy_size_b,
-                ).execute()
-
-            # Mark any FileCopyRequest for this file as completed
-            ar.ArchiveFileCopyRequest.update(
-                completed=True, transfer_completed=dt.datetime.fromtimestamp(end_time)
-            ).where(ar.ArchiveFileCopyRequest.file == req.file).where(
-                ar.ArchiveFileCopyRequest.group_to == node.group,
-                ~ar.ArchiveFileCopyRequest.completed,
-                ~ar.ArchiveFileCopyRequest.cancelled,
-            ).execute()
-
-            if node.storage_type == "T":
-                # This node is getting the transport king.
-                done_transport_this_cycle = True
-
-            # Update local estimate of available space
-            avail_gb = avail_gb - req.file.size_b / 2**30.0
-
-        else:
-            log.error(
-                'Error with md5sum check: %s on node "%s", but %s on '
-                'this node, "%s".'
-                % (req.file.md5sum, req.node_from.name, md5sum, node.name)
-            )
-            log.error('Removing file "%s".' % to_file)
-            try:
-                os.remove(to_file)
-            except Exception:
-                log.error("Could not remove file.")
-
-            # Since the md5sum failed, the remote file may be corrupted.
-            log.error("Marking source file suspect.")
-            ar.ArchiveFileCopy.update(has_file="M").where(
-                ar.ArchiveFileCopy.file == req.file,
-                ar.ArchiveFileCopy.node == req.node_from,
-            ).execute()
+        ioutil.copy_request_done(
+            req,
+            node.io,
+            check_src=ioresult.get("check_src", True),
+            md5ok=ioresult.get("md5sum", None),
+            start_time=start_time,
+            stderr=ioresult.get("stderr", None),
+            success=(ioresult["ret"] == 0),
+        )

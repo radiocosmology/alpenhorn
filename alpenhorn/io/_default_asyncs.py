@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import errno
 import logging
+from datetime import datetime
 
 from ..archive import ArchiveFileCopy
 
@@ -69,6 +70,7 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     log.info(
         f"Updating file copy #{copy.id} for file {copyname} on node {io.node.name}."
     )
+    copy.last_update = datetime.now()
     copy.save()
 
 
@@ -145,6 +147,6 @@ def delete_async(task: Task, copies: list[ArchiveFileCopy]) -> None:
             dirname = dirname.parent
 
         # Update the DB
-        ArchiveFileCopy.update(has_file="N", wants_file="N").where(
-            ArchiveFileCopy.id == copy.id
-        ).execute()
+        ArchiveFileCopy.update(
+            has_file="N", wants_file="N", last_update=datetime.now()
+        ).where(ArchiveFileCopy.id == copy.id).execute()

@@ -56,6 +56,17 @@ Example config:
         # are I/O run tasks in the main thread, in cases when there are no
         # worker threads
         serial_io_timeout: 900
+
+        # These two optional parameters control how long a pull job is
+        # allowed to run before being forceably killed.  The timeout (in
+        # seconds) for a pull of a file of size "size_b" bytes is:
+        #
+        #   pull_timeout_base + size_b / pull_bytes_per_second
+        #
+        # If pull_bytes_per_second is zero, the timeout is disabled (the
+        # job will rum forever if it doesn't exit; not recommended).
+        pull_timeout_base: 300
+        pull_bytes_per_second: 20000000
 """
 
 import logging
