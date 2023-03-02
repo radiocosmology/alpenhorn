@@ -3,6 +3,14 @@ import pytest
 
 from alpenhorn import config, db, extensions
 from alpenhorn.queue import FairMultiFIFOQueue
+from alpenhorn.storage import StorageGroup, StorageNode
+from alpenhorn.acquisition import (
+    AcqType,
+    ArchiveAcq,
+    ArchiveFile,
+    FileType,
+)
+from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 
 
 def pytest_configure(config):
@@ -49,6 +57,19 @@ def queue():
 
 
 @pytest.fixture
+def hostname(set_config):
+    """Ensure our hostname is set.
+
+    Returns the hostname."""
+
+    config.config = config.merge_dict_tree(
+        set_config, {"base": {"hostname": "alpenhost"}}
+    )
+
+    return "alpenhost"
+
+
+@pytest.fixture
 def use_chimedb(set_config):
     """Use chimedb, if possible.
 
@@ -92,3 +113,173 @@ def dbproxy(set_config):
     yield db.database_proxy
 
     db.close()
+
+
+# Data table fixtures.  Each of these will add a row with the specified
+# data to the appropriate table in the DB, creating the table first if
+# necessary
+
+
+@pytest.fixture
+def factory_factory(dbproxy):
+    """Fixture which creates a factory which, in turn, creates a factory fixture
+    for inserting data into the database."""
+
+    def _factory_factory(model):
+        nonlocal dbproxy
+
+        def _factory(**kwargs):
+            nonlocal dbproxy
+            nonlocal model
+
+            # This does nothing if the table already exists
+            dbproxy.create_tables([model])
+
+            # Add and return the record
+            return model.create(**kwargs)
+
+        return _factory
+
+    return _factory_factory
+
+
+@pytest.fixture
+def storagegroup(factory_factory):
+    return factory_factory(StorageGroup)
+
+
+@pytest.fixture
+def storagenode(factory_factory):
+    return factory_factory(StorageNode)
+
+
+@pytest.fixture
+def acqtype(factory_factory):
+    return factory_factory(AcqType)
+
+
+@pytest.fixture
+def archiveacq(factory_factory):
+    return factory_factory(ArchiveAcq)
+
+
+@pytest.fixture
+def filetype(factory_factory):
+    return factory_factory(FileType)
+
+
+@pytest.fixture
+def archivefile(factory_factory):
+    return factory_factory(ArchiveFile)
+
+
+@pytest.fixture
+def archivefilecopy(factory_factory):
+    return factory_factory(ArchiveFileCopy)
+
+
+@pytest.fixture
+def archivefilecopyrequest(factory_factory):
+    return factory_factory(ArchiveFileCopyRequest)
+
+
+# Generic versions of the above.  When you just want a record, but don't care
+# what it is.
+
+
+@pytest.fixture
+def simplegroup(storagegroup):
+    """Create a simple StorageGroup record."""
+    return storagegroup(name="simplegroup")
+
+
+@pytest.fixture
+def simplenode(storagenode, storagegroup):
+    """Create a simple StorageNode record.
+
+    Creates all necessary backrefs.
+    """
+    group = storagegroup(name="simplenode_group")
+    return storagenode(name="simplenode", group=group, root="/node")
+
+
+@pytest.fixture
+def simpleacqtype(acqtype):
+    """Create a simple AcqType record."""
+
+    return acqtype(name="simpleacqtype")
+
+
+@pytest.fixture
+def simpleacq(simpleacqtype, archiveacq):
+    """Create a simple ArchiveAcq record."""
+    return archiveacq(name="simpleacq", type=simpleacqtype)
+
+
+@pytest.fixture
+def simplefiletype(filetype, acqtype):
+    """Create a simple FileType record attached to an acqtype."""
+    return filetype(name="simplefiletype")
+
+
+@pytest.fixture
+def simplefile(simpleacqtype, archiveacq, simplefiletype, archivefile):
+    """Create a simple ArchiveFile record.
+
+    Creates all necessary backrefs.
+    """
+    acq = archiveacq(name="simplefile_acq", type=simpleacqtype)
+    return archivefile(
+        name="simplefile",
+        acq=acq,
+        type=simplefiletype,
+        md5sum="d41d8cd98f00b204e9800998ecf8427e",
+        size_b=2**20,
+    )
+
+
+@pytest.fixture
+def simplecopy(
+    simpleacqtype,
+    archiveacq,
+    simplefiletype,
+    archivefile,
+    archivefilecopy,
+    storagenode,
+    storagegroup,
+):
+    """Create a simple ArchiveFileCopy record.
+
+    Creates all necessary backrefs.
+    """
+    acq = archiveacq(name="simplecopy_acq", type=simpleacqtype)
+    file = archivefile(
+        name="simplecopy_file", acq=acq, type=simplefiletype, size_b=2**20
+    )
+    group = storagegroup(name="simplecopy_group")
+    node = storagenode(name="simplecopy_node", group=group)
+    return archivefilecopy(file=file, node=node)
+
+
+@pytest.fixture
+def simplerequest(
+    simpleacqtype,
+    archiveacq,
+    simplefiletype,
+    archivefile,
+    archivefilecopyrequest,
+    storagenode,
+    storagegroup,
+):
+    """Create a simple ArchiveFileCopyRequest record.
+
+    Creates all necessary backrefs.
+    """
+    acq = archiveacq(name="simplerequest_acq", type=simpleacqtype)
+    file = archivefile(
+        name="simplerequest_file", acq=acq, type=simplefiletype, size_b=2**20
+    )
+    group1 = storagegroup(name="simplerequest_group1")
+    group2 = storagegroup(name="simplerequest_group2")
+    node = storagenode(name="simplerequest_node", group=group1)
+    return archivefilecopyrequest(file=file, node_from=node, group_to=group2)

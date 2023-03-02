@@ -1,6 +1,7 @@
-import datetime
+import os
+import pathlib
 import logging
-from os import path
+import datetime
 
 import peewee as pw
 
@@ -111,7 +112,7 @@ class AcqType(base_model):
         """
 
         # Paths must be relative, otherwise we enter an infinite loop below
-        if path.isabs(acqname):
+        if os.path.isabs(acqname):
             log.error(
                 "acqname (%s) is absolute path. Must be relative to node root.", acqname
             )
@@ -125,7 +126,7 @@ class AcqType(base_model):
             for acq_type in cls.select():
                 if acq_type.is_type(acqname, node):
                     return acq_type, acqname
-            acqname = path.dirname(acqname)
+            acqname = os.path.dirname(acqname)
 
         return None
 
@@ -160,17 +161,13 @@ class ArchiveAcq(base_model):
     ----------
     name : string
         Name of acquisition.
-    type : foreign key
-        Reference to the data type type.
+    type : foreign key to AcqType
+        The type of this acqusition
     comment : string
-
-    Properties
-    ----------
-    timed_files
-    n_timed_files
+        User-specified comment.
     """
 
-    name = pw.CharField(max_length=64)
+    name = pw.CharField(max_length=64, unique=True)
     type = pw.ForeignKeyField(AcqType, backref="acqs")
     comment = pw.TextField(null=True)
 
@@ -251,7 +248,7 @@ class FileType(base_model):
         -------
         is_type : boolean
         """
-        return self.file_info._is_type(filename, path.join(node.root, acq.name))
+        return self.file_info._is_type(filename, os.path.join(node.root, acq.name))
 
     @classmethod
     def detect(cls, filename, acq, node):
@@ -287,10 +284,10 @@ class ArchiveFile(base_model):
 
     Attributes
     ----------
-    acq : foreign key
-        Reference to the acquisition this file is part of.
-    type : foreign key
-        Reference to the type of file that this is.
+    acq : foreign key to ArchiveAcq
+        The acqusition containing this file.
+    type : foreign key to FileType
+        The type of this file.
     name : string
         Name of the file.
     size_b : integer
@@ -306,7 +303,39 @@ class ArchiveFile(base_model):
     name = pw.CharField(max_length=255)
     size_b = pw.BigIntegerField(null=True)
     md5sum = pw.CharField(null=True, max_length=32)
+    # Note: default here is the now method itself (i.e. "now", not "now()").
+    #       Will be evaulated by peewee at row-creation time.
     registered = pw.DateTimeField(default=datetime.datetime.now)
+
+    class Meta:
+        # (acq,name) is unique
+        indexes = ((("acq", "name"), True),)
+
+    @property
+    def path(self) -> pathlib.PurePath:
+        """The relative path to the file copy.
+
+        Simply the path concatenation of `acq.name` and `name`.
+        """
+        # This is a PurePath: it can't be concrete until a node.root
+        # is prepended.
+        return pathlib.PurePath(self.acq.name, self.name)
+
+    @property
+    def archive_count(self) -> int:
+        """The total number of archived copies of this file"""
+        from .archive import ArchiveFileCopy
+        from .storage import StorageNode
+
+        return (
+            self.copies.join(StorageNode)
+            .select()
+            .where(
+                StorageNode.storage_type == "A",
+                ArchiveFileCopy.has_file == "Y",
+            )
+            .count()
+        )
 
 
 class AcqInfoBase(base_model, ConfigClass):
@@ -427,7 +456,7 @@ class FileInfoBase(base_model, ConfigClass):
         file_info.file = file
 
         # Call the method on the derived class to set its metadata
-        acqpath = path.join(node.root, file.acq.name)
+        acqpath = os.path.join(node.root, file.acq.name)
         file_info.set_info(file.name, acqpath)
 
         # Save the changes and return the FileInfo object
