@@ -3,16 +3,15 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pathlib
-    from .acquisition import ArchiveFile
-
-
 import peewee as pw
 from peewee import fn
 
 from .db import EnumField, base_model
 from . import util
+
+if TYPE_CHECKING:
+    import pathlib
+    from .acquisition import ArchiveFile
 
 
 class StorageGroup(base_model):
@@ -22,12 +21,34 @@ class StorageGroup(base_model):
     ----------
     name : string
         The group that this node belongs to (Scinet, DRAO hut, . . .).
+    io_class : string
+        The I/O class for this node.  See below.  If this is NULL,
+        the value "Default" is used.
     notes : string
         Any notes about this storage group.
+    io_config : string
+        An optional JSON blob of configuration data interpreted by the
+        I/O class.  If given, must be a JSON object literal.
+
+    If `io_class` includes at least one `.`, then it's assumed to be
+    the full import path to a class.
+
+    Otherwise, the I/O module is assumed to be part of the
+    `alpenhorn.io` package.  The class itself, then, is the final
+    component of io_class with `GroupIO` appended.
+
+    So:
+    * if `io_class` is "Nearline", alpenhorn will import the class
+        "NearlineGroupIO" from the module `alpenhorn.io.Nearline`.
+    * if `io_class` is `mypackage.custom_alpenhorn.MyIOClass`, alpenhorn
+        will import the class `MyIOClass` from the module
+        `mypackage.custom_alpenhorn`.
     """
 
     name = pw.CharField(max_length=64, unique=True)
+    io_class = pw.CharField(max_length=255, null=True)
     notes = pw.TextField(null=True)
+    io_config = pw.TextField(null=True)
 
     def filecopy_state(self, file: ArchiveFile) -> str:
         """Return the state of a copy of `file` in the group.
@@ -89,6 +110,9 @@ class StorageNode(base_model):
         The hostname that this node lives on.
     address : string
         The internet address for the host (e.g., mistaya.phas.ubc.ca)
+    io_class : string
+        The I/O class for this node.  See below.  If this is NULL,
+        the value "Default" is used.
     group : foreign key
         The group to which this node belongs.
     active : bool
@@ -103,13 +127,31 @@ class StorageNode(base_model):
     max_total_gb : float
         The maximum amout of storage we should use.
     min_avail_gb : float
-        What is the minimum amount of free space we should leave on this node?
+        What is the minimum amount of free space we should leave on this
+        node?
     avail_gb : float
         How much free space is there on this node?
     avail_gb_last_checked : datetime
         When was the amount of free space last checked?
     notes : string
         Any notes or comments about this node.
+    io_config : string
+        An optional JSON blob of configuration data interpreted by the
+        I/O class.  If given, must be a JSON object literal.
+
+    If `io_class` includes at least one `.`, then it's assumed to be
+    the full import path to a class.
+
+    Otherwise, the I/O module is assumed to be part of the
+    `alpenhorn.io` package.  The class itself, then, is the final
+    component of io_class with `NodeIO` appended.
+
+    So:
+    * if `io_class` is "Nearline", alpenhorn will import the class
+        "NearlineNodeIO" from the module `alpenhorn.io.Nearline`.
+    * if `io_class` is `mypackage.custom_alpenhorn.MyIOClass`, alpenhorn
+        will import the class `MyIOClass` from the module
+        `mypackage.custom_alpenhorn`.
     """
 
     name = pw.CharField(max_length=64, unique=True)
@@ -117,6 +159,7 @@ class StorageNode(base_model):
     host = pw.CharField(max_length=64, null=True)
     username = pw.CharField(max_length=64, null=True)
     address = pw.CharField(max_length=255, null=True)
+    io_class = pw.CharField(max_length=255, null=True)
     group = pw.ForeignKeyField(StorageGroup, backref="nodes")
     active = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
@@ -126,6 +169,7 @@ class StorageNode(base_model):
     avail_gb = pw.FloatField(null=True)
     avail_gb_last_checked = pw.DateTimeField(null=True)
     notes = pw.TextField(null=True)
+    io_config = pw.TextField(null=True)
 
     @property
     def local(self) -> bool:

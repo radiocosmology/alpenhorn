@@ -1,11 +1,15 @@
 """Routines for updating the state of a node.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
-import datetime as dt
-import logging
 import os
 import re
+import json
 import time
+import logging
+import importlib
+import datetime as dt
 
 import peewee as pw
 from peewee import fn
@@ -15,6 +19,11 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
+from .pool import global_abort, WorkerPool, EmptyPool
+from .storage import StorageNode, StorageGroup
+
+if TYPE_CHECKING:
+    from .queue import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
 
@@ -36,104 +45,603 @@ RSYNC_OPTS = [
 done_transport_this_cycle = False
 
 
-def update_loop(host):
-    """Loop over nodes performing any updates needed."""
+class updateable_base:
+    """Abstract base class for UpdateableNode and UpdateableGroup.
+
+    After instantiation, these subclasses provide access to the I/O instance
+    via the `io` attribute and the underlying database object (StorageNode
+    or StorageGroup) via the `db` attribute.
+    """
+
+    # Set to True or False in subclasses
+    is_group = None
+
+    def __init__(self) -> None:
+        raise NotImplementedError("updateable_base cannot be instantiated directly.")
+
+    @property
+    def name(self) -> str:
+        """The name of this instance."""
+        return self.db.name
+
+    def _check_io_reinit(self, new: StorageNode | StorageGroup) -> bool:
+        """Do we need to re-initialise our I/O instance?
+
+        Parameters
+        ----------
+        new : StorageNode or StorageGrou
+            The new storage object for this update loop iteration
+
+        Returns
+        -------
+        do_reinit : bool
+            True if re-init needs to happen.
+        """
+
+        # db is None if this is a new instance
+        if self.db is None:
+            return True
+
+        if self.db.id != new.id:
+            return True
+
+        if self.db.io_config != new.io_config:
+            return True
+
+        if self.db.io_class != new.io_class:
+            return True
+
+        return False
+
+    def _parse_io_config(self, config_json: str | None) -> dict:
+        """Parse and return the I/O config.
+
+        Parameters
+        ----------
+        config_json : str or None
+            The I/O config JSON string
+
+        Returns
+        -------
+        io_config : dict
+            The parsed I/O config, or an empty dict() if `config_json`
+            was `None.  This value is also assigned to `self._io_config`.
+
+        Raises
+        ------
+        ValueError
+            `config_json` did not evaluate to a dict.
+        """
+        if config_json is None:
+            self._io_config = dict()
+        else:
+            self._io_config = json.loads(config_json)
+
+            if not isinstance(self._io_config, dict):
+                raise ValueError(f'Invalid io_config: "{config_json}".')
+
+        return self._io_config
+
+    def _get_io_class(self):
+        """Return the I/O class for our Storage object."""
+
+        # If no io_class is specified, the Default I/O classes are used
+        io_name = "Default" if self.db.io_class is None else self.db.io_class
+
+        # We assume StorageNode if not StorageGroup
+        if self.is_group:
+            obj_type = "StorageGroup"
+            io_suffix = "GroupIO"
+        else:
+            obj_type = "StorageNode"
+            io_suffix = "NodeIO"
+
+        # Separate package and module
+        dot = io_name.rfind(".")
+        if dot < 0:
+            # If there's no package, assume it's part of alpenhorn.io
+            io_module = "alpenhorn.io." + io_name.lower()
+            io_name += io_suffix
+        else:
+            # Otherwise, separate the module name for later
+            io_module = io_name[:dot]
+            io_name = io_name[dot + 1 :]
+
+        # Load the module
+        try:
+            module = importlib.import_module(io_module)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f'Unable to find I/O module "{io_module}" for {obj_type} {self.name}.'
+            ) from e
+
+        # Within the module, find the class
+        try:
+            class_ = getattr(module, io_name)
+        except AttributeError as e:
+            raise ImportError(
+                f'I/O class "{io_name}" not found in module "{io_module}". '
+                f"Required for {obj_type} {self.name}."
+            ) from e
+
+        # return the class
+        return class_
+
+    def reinit(self, storage: StorageNode | StorageGroup) -> bool:
+        """Re-initialise the instance with a new database object.
+
+        Called once per update loop.
+
+        Parameters
+        ----------
+        storage : StorageNode or StorageGroup
+            The newly-fetched database storage instance
+
+        Returns
+        -------
+        did_reinit : bool
+            True if the I/O object was re-initialised
+        """
+        # Does I/O instance need to be re-instantiated?
+        if self._check_io_reinit(storage):
+            self.db = storage
+            self.io_class = self._get_io_class()
+
+            # Parse I/O config if present
+            config = self._parse_io_config(storage.io_config)
+
+            if self.is_group:
+                self.io = self.io_class(storage, config)
+            else:
+                # Nodes also need the queue
+                self.io = self.io_class(storage, config, self._queue)
+
+            return True
+
+        # No re-init, update I/O instance's Storage object
+        self.db = storage
+        self.io.update(storage)
+        return False
+
+
+class UpdateableNode(updateable_base):
+    """Updateable storage node
+
+    This is a container class which combines a StorageNode
+    and its I/O class, and implements the update logic
+    for the node.
+
+    Parameters
+    ----------
+    queue : FairMultiFIFOQueue
+        The task queue/scheduler
+    node : StorageNode
+        The underlying StorageNode instance
+    """
+
+    is_group = False
+
+    def __init__(self, queue: FairMultiFIFOQueue, node: StorageNode) -> None:
+        self._queue = queue
+        self._updated = False
+
+        # Set in reinit()
+        self.db = None
+        self.reinit(node)
+
+    @property
+    def idle(self) -> bool:
+        """Is I/O occurring on this node?
+
+        True whenever the queue FIFO associated with this node is empty;
+        False otherwise."""
+        return self._queue.fifo_size(self.name) == 0
+
+    def update_active(self) -> bool:
+        """Check if we are actually active on the host.
+
+        This is an I/O check, rather than a database check.
+
+        Returns
+        -------
+        active : bool
+            Whether or not the node is active.
+        """
+
+        if self.db.active:
+            if util.alpenhorn_node_check(self.db):
+                return True
+            else:
+                # Mark the node as inactive in the database
+                self.db.active = False
+                self.db.save(only=[StorageNode.active])
+                log.info(
+                    f'Correcting the database: node "{self.name}" is now set to '
+                    "inactive."
+                )
+        else:
+            log.warning(f'Attempted to update inactive node "{self.name}"')
+
+        return False
+
+    def update_free_space(self) -> None:
+        """Calculate and record free space."""
+        # Check with the OS how much free space there is
+        x = os.statvfs(self.db.root)
+        avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
+
+        # Update the DB with the free space. Save only the dirty fields to ensure we
+        # don't clobber changes made manually to the database
+        self.db.avail_gb = avail_gb
+        self.db.avail_gb_last_checked = dt.datetime.now()
+        self.db.save(only=self.db.dirty_fields)
+
+        log.info('Node "%s" has %.2f GB available.' % (self.name, avail_gb))
+
+    def update_idle(self) -> None:
+        """Perform idle updates, if appropriate.
+
+        The idle updates are run if the regular update() ran but
+        the node is currently idle.
+        """
+        if self._updated and self.idle:
+            # Do any I/O class idle updates
+            self.io.idle_update()
+
+    def update(self) -> None:
+        """Perform I/O updates on this node.
+
+        Sets self._updated to indicate whether the update happened or
+        not.
+        """
+
+        # Is this node's FIFO empty?  If not, we'll skip this
+        # update since we can't know whether we'd duplicate tasks
+        # or not
+        idle = self.idle
+
+        # Pre-update hook
+        do_update = self.io.before_update(idle)
+
+        # Check and update the amount of free space
+        # This is always done, even if skipping the update
+        self.update_free_space()
+
+        if idle and do_update:
+            log.info(f'Updating node "{self.name}".')
+
+            # Check the integrity of any questionable files (has_file=M)
+            # XXX Commented out until future PR.
+            # update_node_integrity(node)
+
+            # Delete any unwanted files to cleanup space
+            # XXX Commented out until future PR.
+            # update_node_delete(node)
+
+            # Process any regular transfers requests onto this node
+            # XXX Commented out until future PR.
+            # update_node_requests(node)
+
+            self._updated = True
+        else:
+            log.info(
+                f"Skipping update for node {self.name}: "
+                f"idle={idle} do_update={do_update}"
+            )
+            self._updated = False
+
+
+class UpdateableGroup(updateable_base):
+    """Updateable Group
+
+    This is a container class which combines a StorageGroup
+    and its I/O class, and implements the update logic
+    for the group.
+
+    Parameters
+    ----------
+    group : StorageGroup
+        The underlying StorageGroup instance
+    nodes : list of UpdateableNodes
+        The nodes active on this host in this group
+    idle : bool
+        Were all nodes in `nodes` idle at the start of the
+        current update loop?
+    """
+
+    is_group = True
+
+    def __init__(
+        self, *, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
+    ) -> None:
+        # Set in reinit()
+        self.db = None
+        self._do_idle_updates = False
+
+        self.reinit(group, nodes, idle)
+
+    def reinit(
+        self, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
+    ) -> None:
+        """Re-initialise the UpdateableGroup.
+
+        Called once per update loop.
+
+        Parameters
+        ----------
+        group : StorageGroup
+            The newly-fetched StorageGroup instance
+        nodes : list of UpdateableNodes
+            The nodes active on this host in this group
+        idle : bool
+            Were all nodes in `nodes` idle at the start of the
+            current update loop?
+        """
+        self._init_idle = idle
+
+        # Takes care of I/O re-init
+        super().reinit(group)
+
+        try:
+            self._nodes = self.io.set_nodes(nodes)
+        except ValueError as e:
+            # I/O layer didn't like the nodes we gave it
+            log.warning(str(e))
+            self._nodes = None
+
+    @property
+    def idle(self) -> bool:
+        """Is this group idle?
+
+        False whenever any consitiuent node is not idle."""
+
+        log.warning(f"GI: {self._nodes}")
+
+        # A group with no nodes is not idle.
+        if self._nodes is None:
+            return False
+
+        # If any node is not idle, the group is not idle.
+        for node in self._nodes:
+            log.warning(f"node: {node} {node.idle}")
+            if not node.idle:
+                return False
+
+        return True
+
+    def update(self) -> None:
+        """Perform I/O updates on the group"""
+
+        self._do_idle_updates = False
+
+        # If the available nodes weren't acceptable to the I/O layer, do nothing
+        if self._nodes is None:
+            return
+
+        # Call the before update hook
+        do_update = self.io.before_update(self._init_idle)
+
+        # Update only happens if the queue is empty and the I/O layer hasn't
+        # cancelled the update
+        if self._init_idle and do_update:
+            log.info(f'Updating group "{self.name}".')
+
+            # TODO: do group I/O here.
+
+            # Check for idleness at the end
+            self._do_idle_updates = self.idle
+        else:
+            log.info(
+                f"Skipping update for group {self.name}: "
+                f"idle={self._init_idle} do_update={do_update}"
+            )
+
+    def update_idle(self) -> None:
+        """Perform idle updates, if appropriate.
+
+        The idle updates are run if the regular update() ran but
+        the group was idle when it finished.
+        """
+        log.warning(f"UI: {self._do_idle_updates}")
+        if self._do_idle_updates:
+            self.io.idle_update()
+
+
+def update_loop(
+    host: str, queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool
+) -> None:
+    """Main loop of alepnhornd.
+
+    This is the main update loop for the alpenhorn daemon.
+
+    Parameters
+    ----------
+    host : string
+        the name of the host we're running on (must match the value in the DB)
+    queue : FairMultiFIFOQueue
+        the task manager
+    pool : WorkerPool
+        the pool of worker threads (may be empty)
+
+    The daemon cycles through the update loop until it is terminated in
+    one of three ways:
+
+    - receiving SIGINT (AKA KeyboardInterrupt).  This causes a clean exit.
+    - a global abort caused by an uncaught exception in a worker thread.  This
+        causes a clean exit.
+    - a crash due to an uncaught exception in the main thread.  This does _not_
+        cause a clean exit.
+
+    During a clean exit, alpenhornd will try to finish in-progress tasks before
+    shutting down.
+    """
     global done_transport_this_cycle
 
-    while True:
+    # The nodes and groups we're working on.  These will be updated
+    # each time through the main loop, whenever the underlying storage objects
+    # change.  These are stored as dicts with keys being the name of the node
+    # or group for faster look-up
+    nodes = dict()
+    groups = dict()
+
+    while not global_abort.is_set():
         loop_start = time.time()
         done_transport_this_cycle = False
 
-        # Iterate over nodes and perform each update (perform a new query
-        # each time in case we get a new node, e.g. transport disk)
-        for node in st.StorageNode.select().where(st.StorageNode.host == host):
-            update_node(node)
+        # Nodes are re-queried every loop iteration so we can
+        # detect changes in available storage media
+        try:
+            new_nodes = {
+                node.name: node
+                for node in (
+                    StorageNode.select()
+                    .where(StorageNode.host == host, StorageNode.active == True)
+                    .execute()
+                )
+            }
+        except pw.DoesNotExist:
+            new_nodes = dict()
 
-        # Check the time spent so far, and wait if needed
+        if len(new_nodes) == 0:
+            log.warning(f"No active nodes on host ({host})!")
+
+        # Drop any nodes that have gone away
+        for name in nodes:
+            if name not in new_nodes:
+                log.info(f'Node "{name}" no longer available.')
+                del nodes[name]
+
+        # List of groups present this update loop
+        new_groups = dict()
+
+        # Update the list of nodes:
+        for name in new_nodes:
+            if name in nodes:
+                # Update the existing UpdateableNode.
+                # This may result in the I/O instance for the
+                # node being re-instantiated.
+                nodes[name].reinit(new_nodes[name])
+            else:
+                # No existing node: create a new one.
+                log.info(f'Node "{name}" now available.')
+                nodes[name] = UpdateableNode(queue, new_nodes[name])
+
+            node = nodes[name]
+
+            # Check if the node is actually active
+            if not node.update_active():
+                continue  # Not active
+
+            # Now update the list of new groups. This builds up a list of
+            # groups which are currently active on this host and whether they
+            # were idle before node I/O happened.
+            group_name = node.db.group.name
+            if group_name not in new_groups:
+                new_groups[group_name] = {
+                    "group": node.db.group,
+                    "nodes": [node],
+                    "idle": node.idle,
+                }
+            else:
+                new_groups[group_name]["nodes"].append(node)
+                new_groups[group_name]["idle"] = (
+                    new_groups[group_name]["idle"] and node.io.idle
+                )
+
+        # Drop groups that are no longer available
+        for name in groups:
+            if name not in new_groups:
+                log.info(f'Group "{name}" no longer available.')
+                del groups[name]
+
+        # Update the list of groups:
+        for name in new_groups:
+            if name in groups:
+                # Update the existing UpdateableGroup.
+                # This may result in the I/O instance for the
+                # group being re-instantiated.
+                groups[name].reinit(**new_groups[name])
+            else:
+                # No existing group: create a new one.
+                log.info(f'Group "{name}" now available.')
+                groups[name] = UpdateableGroup(**new_groups[name])
+
+        # Node updates
+        for node in nodes.values():
+            # Perform the node update, maybe
+            node.update()
+
+        # Group updates
+        for group in groups.values():
+            group.update()
+
+        # Regular I/O updates are done.  If any nodes or groups are idle after that,
+        # run the idle updates, but only if the update happened for that group.
+
+        for node in nodes.values():
+            node.update_idle()
+
+        # Ditto for groups, but we can also run the after-update hook already
+        for group in groups.values():
+            group.update_idle()
+            group.io.after_update()
+
+        # loop over all the nodes again and run their after-update hooks
+        for node in nodes.values():
+            node.io.after_update()
+
+        # Done with the I/O updates, do some housekeeping:
+
+        # Respawn workers that have exited (due to DB error)
+        pool.check()
+
+        # If we have no workers, handle some queued I/O tasks
+        if len(pool) == 0:
+            serial_io(queue)
+
+        # Check the time spent so far
         loop_time = time.time() - loop_start
-        log.info("Main loop execution was %d sec.", loop_time)
+        log.info(f"Main loop execution was {util.pretty_deltat(loop_time)}.")
+
+        # Pool and queue info
+        log.info(
+            f"Tasks: {queue.qsize} queued, {queue.deferred_size} deferred, "
+            f"{queue.inprogress_size} in-progress on {len(pool)} workers"
+        )
+
+        # Avoid looping too fast.
         remaining = config.config["service"]["update_interval"] - loop_time
-        if remaining > 1:
-            time.sleep(remaining)
+        if remaining > 0:
+            global_abort.wait(remaining)  # Stops waiting if a global abort is triggered
+
+    # Warn on exit
+    log.warning("Exiting due to global abort")
 
 
-def update_node(node):
-    """Update the status of the node, and process eligible transfers onto it."""
+def serial_io(queue: FairMultiFIFOQueue) -> None:
+    """Execute I/O tasks from the queue
 
-    # TODO: bring back HPSS support
-    # Check if this is an HPSS node, and if so call the special handler
-    # if is_hpss_node(node):
-    #     update_node_hpss_inbound(node)
-    #     return
+    This function is only called when alpenhorn has no worker threads.  It runs
+    I/O tasks in the main loop for a limited period of time.
+    """
+    start_time = time.time()
 
-    # Make sure this node is usable.
-    if not node.active:
-        log.debug('Skipping inactive node "%s".', node.name)
-        return
-    if node.suspect:
-        log.debug('Skipping suspected node "%s".', node.name)
+    # Handle tasks for, say, 15 minutes at most
+    while time.time() - start_time < config.config["service"]["serial_io_timeout"]:
+        # Get a task
+        item = queue.get(timeout=1)
 
-    log.info('Updating node "%s".', node.name)
+        # Out of things to do
+        if item is None:
+            break
 
-    # Check if the node is actually active
-    check_node = update_node_active(node)
+        # Run the task
+        task, key = item
 
-    if not check_node:
-        return
-
-    # Check and update the amount of free space then reload the instance for use
-    # in later routines
-    update_node_free_space(node)
-
-    # Check the integrity of any questionable files (has_file=M)
-    update_node_integrity(node)
-
-    # Delete any upwanted files to cleanup space
-    update_node_delete(node)
-
-    # Process any regular transfers requests onto this node
-    update_node_requests(node)
-
-    # TODO: bring back HPSS support
-    # Process any tranfers out of HPSS onto this node
-    # update_node_hpss_outbound(node)
-
-
-def update_node_active(node):
-    """Check if a node is actually active in the filesystem"""
-
-    if node.active:
-        if util.alpenhorn_node_check(node):
-            return True
-        else:
-            log.error(
-                'Node "%s" does not have the expected ALPENHORN_NODE file', node.name
-            )
-    else:
-        log.error('Node "%s" is not active', node.name)
-
-    # Mark the node as inactive in the database
-    node.active = False
-    node.save(only=node.dirty_fields)  # save only fields that have been updated
-    log.info('Correcting the database: node "%s" is now set to inactive.', node.name)
-
-    return False
-
-
-def update_node_free_space(node):
-    """Calculate the free space on the node and update the database with it."""
-
-    # Check with the OS how much free space there is
-    x = os.statvfs(node.root)
-    avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
-
-    # Update the DB with the free space. Save only the dirty fields to ensure we
-    # don't clobber changes made manually to the database
-    node.avail_gb = avail_gb
-    node.avail_gb_last_checked = dt.datetime.now()
-    node.save(only=node.dirty_fields)
-
-    log.info('Node "%s" has %.2f GB available.' % (node.name, avail_gb))
+        log.info(f"Beginning task {task}")
+        task()
+        queue.task_done(key)
+        log.info(f"Finished task {task}")
 
 
 def update_node_integrity(node):

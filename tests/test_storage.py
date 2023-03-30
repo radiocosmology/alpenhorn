@@ -13,7 +13,7 @@ def test_schema(dbproxy, simplenode):
 
 def test_group_model(storagegroup):
     storagegroup(name="min")
-    storagegroup(name="max", notes="Notes")
+    storagegroup(name="max", io_class="IOClass", io_config="{ioconfig}", notes="Notes")
 
     # name is unique
     with pytest.raises(pw.IntegrityError):
@@ -23,11 +23,15 @@ def test_group_model(storagegroup):
     assert StorageGroup.select().where(StorageGroup.name == "min").dicts().get() == {
         "id": 1,
         "name": "min",
+        "io_class": None,
+        "io_config": None,
         "notes": None,
     }
     assert StorageGroup.select().where(StorageGroup.name == "max").dicts().get() == {
         "id": 2,
         "name": "max",
+        "io_class": "IOClass",
+        "io_config": "{ioconfig}",
         "notes": "Notes",
     }
 
@@ -44,6 +48,8 @@ def test_storage_model(storagegroup, storagenode):
         avail_gb=2.2,
         avail_gb_last_checked=3.3,
         host="host.host",
+        io_class="IOClass",
+        io_config="{ioconfig}",
         max_total_gb=4.4,
         min_avail_gb=5.5,
         notes="Notes",
@@ -67,6 +73,8 @@ def test_storage_model(storagegroup, storagenode):
         "avail_gb": None,
         "avail_gb_last_checked": None,
         "host": None,
+        "io_class": None,
+        "io_config": None,
         "max_total_gb": None,
         "min_avail_gb": 0,
         "notes": None,
@@ -85,6 +93,8 @@ def test_storage_model(storagegroup, storagenode):
         "avail_gb": 2.2,
         "avail_gb_last_checked": 3.3,
         "host": "host.host",
+        "io_class": "IOClass",
+        "io_config": "{ioconfig}",
         "max_total_gb": 4.4,
         "min_avail_gb": 5.5,
         "notes": "Notes",

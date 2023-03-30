@@ -1,14 +1,24 @@
 """Alpenhorn service."""
 
-import logging
 import sys
-
 import click
+import logging
 
-from . import auto_import, config, db, extensions, logger, storage, update, util
+from .queue import FairMultiFIFOQueue
+
+from . import (
+    auto_import,
+    config,
+    db,
+    extensions,
+    logger,
+    pool,
+    storage,
+    update,
+    util,
+)
 
 log = logging.getLogger(__name__)
-
 
 # Register Hook to Log Exception
 # ==============================
@@ -31,17 +41,35 @@ def cli():
     # Set up logging
     logger.start_logging()
 
-    # Attempt to load any alpenhor extensions
+    # Load alpenhorn extensions
     extensions.load_extensions()
 
-    # Connect to the database using the loaded config
-    db.config_connect()
+    # Initialise the database framework
+    db.init()
 
-    # Regsiter any extension types
+    # Connect to the database
+    db.connect()
+
+    # Register any extension types
     extensions.register_type_extensions()
 
+    # Set up the task queue
+    queue = FairMultiFIFOQueue()
+
+    # If we can be multithreaded, start the worker pool
+    if db.threadsafe:
+        wpool = pool.WorkerPool(
+            num_workers=config.config["service"]["num_workers"], queue=queue
+        )
+    else:
+        # EmptyPool acts like WorkerPool, but always has zero workers
+        wpool = pool.EmptyPool()
+
+    # Set up worker increment/decrement signals
+    pool.setsignals(wpool)
+
     # Get the name of this host
-    host = util.get_short_hostname()
+    host = util.get_hostname()
 
     # Get the list of currently nodes active
     node_list = list(
@@ -50,27 +78,22 @@ def cli():
         )
     )
 
-    # Warn if there are no active nodes. We used to exit here, but actually
-    # it's useful to keep alpenhornd running for nodes where we exclusively use
-    # transport disks (e.g. jingle)
-    if len(node_list) == 0:
-        log.warn('No nodes on this host ("%s") registered in the DB!' % host)
-
     # Setup the observers to watch the nodes for new files
+    # See https://github.com/radiocosmology/alpenhorn/issues/15
     auto_import.setup_observers(node_list)
 
     # Now catch up with the existing files to see if there are any new ones
     # that should be imported
     auto_import.catchup(node_list)
 
-    # Enter main loop performing node updates
+    # Enter main loop
     try:
-        update.update_loop(host)
-
-    # Exit cleanly on a keyboard interrupt
+        update.update_loop(host, queue, wpool)
+    # Catch keyboard interrupt
     except KeyboardInterrupt:
-        log.info("Exiting...")
-        auto_import.stop_observers()
+        log.info("Exiting due to SIGINT")
 
-    # Wait for watchdog threads to terminate
+    # Attempt to exit cleanly
+    auto_import.stop_observers()
     auto_import.join_observers()
+    wpool.shutdown()

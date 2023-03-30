@@ -1,230 +1,312 @@
-"""
-test_update
-------------------
-
-Tests for `alpenhorn.update` module.
-"""
-
-import os
+"""Tests for the alpenhorn.update module."""
 
 import pytest
+from unittest.mock import patch, MagicMock
 
-# XXX: broken
-pytest.skip("broken", allow_module_level=True)
-
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
-
-import alpenhorn.acquisition as ac
-import alpenhorn.archive as ar
-import alpenhorn.db as db
-import alpenhorn.storage as st
-import alpenhorn.update as update
-import test_import as ti
-
-tests_path = os.path.abspath(os.path.dirname(__file__))
+from alpenhorn import pool, update
+from alpenhorn.io.base import BaseGroupIO, BaseNodeIO
+from alpenhorn.queue import FairMultiFIFOQueue
+from alpenhorn.storage import StorageGroup, StorageNode
 
 
 @pytest.fixture
-def fixtures(tmpdir):
-    """Initializes an in-memory Sqlite database with data in tests/fixtures"""
-    db._connect()
-
-    fixtures = ti.load_fixtures(tmpdir)
-
-    # create a valid ALPENHORN_NODE
-    node_file = fixtures["root"].join("ALPENHORN_NODE")
-    node_file.write("x")
-    assert node_file.check()
-
-    yield fixtures
-
-    db.database_proxy.close()
+def emptypool(queue):
+    """Create an empty worker pool."""
+    return pool.EmptyPool()
 
 
-def test_update_node_active(fixtures):
-    tmpdir = fixtures["root"]
-    node = st.StorageNode.get(name="x")
-    assert node.active
+@pytest.fixture
+def fastqueue():
+    """Like FMFQ, but fast.  Because who has time for unittests?"""
 
-    # if there is a valid ALPENHORN_NODE, `update_node_active` should not
-    # change node's active status
-    node_file = tmpdir.join("ALPENHORN_NODE")
-    assert node_file.check()
-    update.update_node_active(node)
-    node = st.StorageNode.get(name="x")
-    assert node.active
+    class Fast_FMFQ(FairMultiFIFOQueue):
+        """Like FMFQ, but get() returns immediately if the queue is empty."""
 
-    # rename ALPENHORN_NODE, and check that `update_node_active` unmounts the node
-    node_file.rename(tmpdir.join("SOMETHING_ELSE"))
-    update.update_node_active(node)
-    node = st.StorageNode.get(name="x")
-    assert not node.active
+        def get(self, timeout=None):
+            if self._total_queued == 0:
+                return None
+            return super().get(timeout)
+
+    return Fast_FMFQ()
 
 
-def test_update_node_active_no_node_file(fixtures):
-    tmpdir = fixtures["root"]
-    node = st.StorageNode.get(name="x")
-    assert node.active
+@pytest.fixture
+def mock_serial_io(dbtables):
+    """Mock the serial_io() call so no I/O actually happens.
 
-    # we start off with no ALPENHORN_NODE, and so `update_node_active` should unmount it
-    node_file = tmpdir.join("ALPENHORN_NODE")
-    node_file.remove()
-    assert not node_file.check()
+    As a side benefit, the mocked function is faster at
+    doing nothing.
+    """
 
-    update.update_node_active(node)
-    node = st.StorageNode.get(name="x")
-    assert not node.active
+    mock = MagicMock()
+    with patch("alpenhorn.update.serial_io", mock):
+        yield mock
 
 
-@patch("os.statvfs")
-def test_update_node_free_space(mock_statvfs, fixtures):
-    node = st.StorageNode.get(name="x")
-    assert node.avail_gb is None
+def test_update_abort():
+    """Test update_loop with global_abort set."""
 
-    mock_statvfs.return_value.f_bavail = 42
-    mock_statvfs.return_value.f_bsize = 2**30
-    update.update_node_free_space(node)
-    node = st.StorageNode.get(name="x")
-    assert node.avail_gb == 42
+    # Raise global abort
+    pool.global_abort.set()
 
+    # This should do nothing except exit, so passing
+    # a couple of Nones shouldn't be a problem
+    update.update_loop(None, None, None)
 
-def test_update_node_integrity(fixtures):
-    tmpdir = fixtures["root"]
-
-    # we already have some files created by `import`'s fixtures
-    files = os.listdir(str(tmpdir))
-    assert files
-
-    node = st.StorageNode.get(name="x")
-
-    # create a local copy of 'jim' with the correct contents
-    jim_file = ac.ArchiveFile.get(name="jim")
-    jim_file.md5sum = fixtures["files"]["x"]["jim"]["md5"]
-    jim_file.save(only=jim_file.dirty_fields)
-
-    jim = ar.ArchiveFileCopy(file=jim_file, node=node, has_file="M", size_b=512)
-    jim.save()
-
-    # create a local copy of 'fred', but with a corrupt contents
-    fred = (
-        ar.ArchiveFileCopy.select()
-        .join(ac.ArchiveFile)
-        .where((ac.ArchiveFile.name == "fred") & (ar.ArchiveFileCopy.node == node))
-        .get()
-    )
-    tmpdir.join(fred.file.acq.name, "fred").write("")
-    fred.has_file = "M"
-    fred.save(only=fred.dirty_fields)
-
-    # create a local copy of 'sheila' but *not* in the local filesystem
-    sheila = (
-        ar.ArchiveFileCopy.select()
-        .join(ac.ArchiveFile)
-        .where((ac.ArchiveFile.name == "sheila") & (ar.ArchiveFileCopy.node == node))
-        .get()
-    )
-    sheila.has_file = "M"
-    sheila.save(only=sheila.dirty_fields)
-
-    # update_node_integrity should make 'jim' good, 'fred' corrupted, and 'sheila' missing
-    update.update_node_integrity(node)
-    jim = ar.ArchiveFileCopy.get(id=jim.id)
-    assert jim.has_file == "Y"
-    fred = ar.ArchiveFileCopy.get(id=fred.id)
-    assert fred.has_file == "X"
-    sheila = ar.ArchiveFileCopy.get(id=sheila.id)
-    assert sheila.has_file == "N"
+    # Reset
+    pool.global_abort.clear()
 
 
-def test_update_node_delete(fixtures):
-    tmpdir = fixtures["root"]
+def test_update_no_nodes(
+    hostname, dbtables, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with no active nodes."""
 
-    # we already have some files created by `import`'s fixtures
-    files = os.listdir(str(tmpdir))
-    assert files
+    update.update_loop(hostname, queue, emptypool)
 
-    node = st.StorageNode.get(name="x")
-    node.avail_gb = 10
-    node.save()
-
-    # create two fake archival nodes where we will keep copies of 'fred' and 'sheila'
-    node2 = st.StorageNode.create(
-        name="w", group=node.group, storage_type="A", min_avail_gb=1, max_avail_gb=2
-    )
-    node3 = st.StorageNode.create(
-        name="z", group=node.group, storage_type="A", min_avail_gb=1, max_avail_gb=2
-    )
-
-    copies = (
-        ar.ArchiveFileCopy.select()
-        .join(st.StorageNode)
-        .where(ar.ArchiveFileCopy.node == node)
-    )
-    for c in copies:
-        # create a local copy of the file
-        tmpdir.join(c.file.acq.name, c.file.name).write("")
-        c.has_file = "Y"
-
-        # mark the file not wanted locally
-        c.wants_file = "N"
-        c.save(only=c.dirty_fields)
-
-        # add copies of the file on the archival nodes
-        ar.ArchiveFileCopy.create(
-            file=c.file, node=node2, has_file="Y", size_b=512
-        ).save()
-        ar.ArchiveFileCopy.create(
-            file=c.file, node=node3, has_file="Y", size_b=512
-        ).save()
-
-    # update_node_delete should mark these files not present or wanted on the
-    # node, and delete them from the filesystem
-    update.update_node_delete(node)
-    for c in copies:
-        x = ar.ArchiveFileCopy.get(id=c.id)
-        assert x.has_file == "N"
-        assert x.wants_file == "N"
-
-        # check that the file has been deleted
-        assert not tmpdir.join(c.file.acq.name, c.file.name).check()
-
-    # the rest of `test_import`'s fixtures should be left untouched
-    files = os.listdir(str(tmpdir.join("x")))
-    assert files
+    mock_serial_io.assert_called_once_with(queue)
 
 
-def test_update_node_requests(tmpdir, fixtures):
-    # various joins break if 'address' is NULL
-    x = st.StorageNode.get(name="x")
-    x.address = "foo"
-    x.save()
+def test_update_node_not_idle(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with a not idle node."""
+    mockio, _, node = mockgroupandnode
 
-    # register a copy of 'jim' on 'x' in the database
-    jim = ac.ArchiveFile.get(name="jim")
-    jim.size_b = 0
-    jim.md5sum = fixtures["files"]["x"]["jim"]["md5"]
-    jim.save(only=jim.dirty_fields)
-    ar.ArchiveFileCopy(file=jim, node=x, has_file="Y", size_b=512).save()
+    # Set up the I/O mock
+    mockio.node.before_update.return_value = True
 
-    # make the 'z' node available locally
-    root_z = tmpdir.join("ROOT_z")
-    root_z.mkdir()
-    z = st.StorageNode.get(name="z")
-    z.root = str(root_z)
-    z.avail_gb = 300
-    z.host = x.host
-    z.save()
+    # Ensure queue non-idle
+    queue.put(None, node.name)
 
-    # after catching up with file requests, check that the file has been
-    # created and the request marked completed
-    update.update_node_requests(z)
-    req = ar.ArchiveFileCopyRequest.get(file=jim, group_to=z.group, node_from=x)
-    assert req.completed
-    assert req.transfer_started
-    assert req.transfer_completed > req.transfer_started
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    assert root_z.join("x", "jim").check()
-    assert root_z.join("x", "jim").read() == fixtures["root"].join("x", "jim").read()
+    update.update_loop(hostname, queue, emptypool)
+
+    # Node update started
+    mockio.node.before_update.assert_called_once()
+
+    # Idle update didn't happen
+    mockio.node.idle_update.assert_not_called()
+
+    # After update hook called
+    mockio.node.after_update.assert_called_once()
+
+
+def test_update_node_idle(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with an idle node."""
+
+    mockio = mockgroupandnode[0]
+
+    # Set up the I/O mock
+    mockio.node.before_update.return_value = True
+
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    # Node update started
+    mockio.node.before_update.assert_called_once()
+
+    # Idle update happened
+    mockio.node.idle_update.assert_called_once()
+
+    # After update hook called
+    mockio.node.after_update.assert_called_once()
+
+
+def test_update_node_cancelled(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with a node that cancels the update."""
+    mockio = mockgroupandnode[0]
+
+    # Set up the I/O mock
+    mockio.node.before_update.return_value = False
+
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    # Node update started
+    mockio.node.before_update.assert_called_once()
+
+    # Idle update didn't happen
+    mockio.node.idle_update.assert_not_called()
+
+    # After update hook called
+    mockio.node.after_update.assert_called_once()
+
+
+def test_serial_io(fastqueue, set_config):
+    """Test serial_io."""
+
+    # This is our task
+    task_count = 0
+
+    def task():
+        nonlocal task_count
+        task_count += 1
+
+    # Put some tasks in the queue
+    fastqueue.put(task, "fifo")
+    fastqueue.put(task, "fifo")
+    fastqueue.put(task, "fifo")
+
+    # Check count
+    assert fastqueue.qsize == 3
+
+    # Run serial_io
+    update.serial_io(fastqueue)
+
+    # Now the queue is empty
+    assert fastqueue.qsize == 0
+
+    # The task was executed three times
+    assert task_count == 3
+
+
+def test_ioload(storagegroup, storagenode):
+    """Test instantiation of the I/O classes"""
+
+    for ioclass in ["Default", None]:
+        group = storagegroup(
+            name="none" if ioclass is None else ioclass, io_class=ioclass
+        )
+
+    for ioclass, ioconfig in [
+        ("Default", None),
+        (None, None),
+    ]:
+        storagenode(
+            name="none" if ioclass is None else ioclass,
+            group=group,
+            io_class=ioclass,
+            io_config=ioconfig,
+        )
+
+    for node in StorageNode.select().execute():
+        unode = update.UpdateableNode(None, node)
+        assert isinstance(unode.io, BaseNodeIO)
+
+    for group in StorageGroup.select().execute():
+        ugroup = update.UpdateableGroup(group=group, nodes=[], idle=True)
+        assert isinstance(ugroup.io, BaseGroupIO)
+
+
+def test_update_group_not_idle_node(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with a not idle group.
+
+    Here the node is not idle, so the group update is skipped.
+    As a result, the group idle check doesn't happen (group idle
+    is forced to be False in this instance)."""
+
+    mockio, _, node = mockgroupandnode
+
+    # Set up the I/O mock
+    mockio.node.before_update.return_value = True
+    mockio.group.before_update.return_value = True
+
+    # Node not idle
+    queue.put(None, node.name)
+
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    # Node update started
+    mockio.node.before_update.assert_called_once()
+
+    # Idle update didn't happen
+    mockio.group.idle_update.assert_not_called()
+
+    # After update hook called
+    mockio.node.after_update.assert_called_once()
+
+
+def test_update_group_not_idle_group(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with a not idle group.
+
+    Here the update happens because the node is idle,
+    but we force the group to appear non-idle after
+    the update."""
+
+    mockio, group, node = mockgroupandnode
+
+    # This function adds something to the queue so that after the
+    # node update, it's not idle
+    def node_before_update(idle):
+        nonlocal queue, node
+        queue.put(None, node.name)
+
+        return True
+
+    # Set up the I/O mock
+    mockio.node.before_update = node_before_update
+    mockio.group.before_update.return_value = True
+
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    # Idle update didn't happen
+    mockio.group.idle_update.assert_not_called()
+
+    # After update hook called
+    mockio.node.after_update.assert_called_once()
+
+
+def test_update_group_idle(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with an idle group."""
+
+    mockio = mockgroupandnode[0]
+
+    # Set up the I/O mock
+    mockio.node.before_update.return_value = True
+    mockio.group.before_update.return_value = True
+
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    # Group update started
+    mockio.group.before_update.assert_called_once()
+
+    # Idle update happened
+    mockio.group.idle_update.assert_called_once()
+
+    # After update hook called
+    mockio.group.after_update.assert_called_once()
+
+
+def test_update_group_cancelled(
+    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+):
+    """Test update_loop with a group that cancels the update."""
+
+    mockio = mockgroupandnode[0]
+
+    # Set up the I/O mock
+    mockio.node.before_update.return_value = True
+    mockio.group.before_update.return_value = False
+
+    xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
+
+    update.update_loop(hostname, queue, emptypool)
+
+    # Group update started
+    mockio.group.before_update.assert_called_once()
+
+    # Idle update didn't happen
+    mockio.group.idle_update.assert_not_called()
+
+    # After update hook called
+    mockio.group.after_update.assert_called_once()
