@@ -1,5 +1,6 @@
 """test alpenhorn.extensions."""
 import pytest
+
 from unittest.mock import patch, MagicMock
 
 from alpenhorn import extensions
@@ -67,43 +68,59 @@ def test_two_dbs(set_config):
             extensions.load_extensions()
 
 
-@pytest.mark.skip(reason="broken")
-def test_generic_extension(dbproxy):
-    # Test that extension registration works correctly for the generic extension
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_importdetect_not_callalbe(set_config):
+    """Providing a non-callable import-detect object is an error."""
 
-    conf = {
-        "extensions": ["alpenhorn.generic"],
-        "acq_types": {"generic": {"patterns": "*.zxc", "file_types": ["generic"]}},
-        "file_types": {"generic": {"patterns": "*.zxc"}},
-    }
+    # Fake extension
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"import-detect": None}
 
-    # Load the extensions. This should cause the acq/file info types to be registered
-    with patch("alpenhorn.config.config", conf):
+    # Patch sys.modules so import can find it.
+    with patch.dict("sys.modules", test_module=test_module):
+        with pytest.raises(ValueError):
+            extensions.load_extensions()
+
+
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_importdetect_good(set_config):
+    """Test good import-detect module"""
+
+    # Fake extension
+    func = MagicMock()
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"import-detect": func}
+
+    # Patch sys.modules so import can find it.
+    with patch.dict("sys.modules", test_module=test_module):
         extensions.load_extensions()
 
-        extensions.register_type_extensions()
+    assert extensions._id_ext == [func]
 
-    # Check that we have registered every known type
-    acquisition.AcqType.check_registration()
-    acquisition.FileType.check_registration()
 
-    # Check that the correct entries have appeared
-    assert "generic" in acquisition.AcqType._registered_acq_types
-    assert "generic" in acquisition.FileType._registered_file_types
-    assert (
-        generic.GenericAcqInfo is acquisition.AcqType._registered_acq_types["generic"]
-    )
-    assert (
-        generic.GenericFileInfo
-        is acquisition.FileType._registered_file_types["generic"]
-    )
+@pytest.mark.alpenhorn_config({"extensions": ["id1", "id2", "id3", "id4"]})
+def test_importdetect_multi(set_config):
+    """Test multiple import-detect modules"""
 
-    # Do a few look ups mapping betweeb the AcqType entry and the AcqInfo tables
-    # back and forth
-    assert acquisition.AcqType.get(name="generic").acq_info is generic.GenericAcqInfo
-    assert generic.GenericAcqInfo.get_acq_type().acq_info is generic.GenericAcqInfo
+    # Fake extensions
+    func1 = MagicMock()
+    id1 = MagicMock()
+    id1.register_extension.return_value = {"import-detect": func1}
 
-    # Check that the file_types registration works out
-    reg_file_types = generic.GenericAcqInfo.get_acq_type().file_types
-    assert reg_file_types.count() == 1
-    assert reg_file_types.get().file_info is generic.GenericFileInfo
+    func2 = MagicMock()
+    id2 = MagicMock()
+    id2.register_extension.return_value = {"import-detect": func2}
+
+    func3 = MagicMock()
+    id3 = MagicMock()
+    id3.register_extension.return_value = {"import-detect": func3}
+
+    func4 = MagicMock()
+    id4 = MagicMock()
+    id4.register_extension.return_value = {"import-detect": func4}
+
+    # Patch sys.modules so import can find it.
+    with patch.dict("sys.modules", id1=id1, id2=id2, id3=id3, id4=id4):
+        extensions.load_extensions()
+
+    assert extensions._id_ext == [func1, func2, func3, func4]

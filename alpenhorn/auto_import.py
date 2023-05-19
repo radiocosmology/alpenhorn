@@ -10,7 +10,7 @@ from watchdog.observers.polling import PollingObserver
 
 from . import acquisition as ac
 from . import archive as ar
-from . import config, db, util
+from . import config, db, extensions, util
 
 log = logging.getLogger(__name__)
 
@@ -94,34 +94,34 @@ def _import_file(node, file_path):
         log.debug('Skipping "%s", which is locked by ch_master.py.', file_path)
         return
 
-    # Check if we can handle this acquisition, and skip if we can't
-    acq_type_name = ac.AcqType.detect(relpath, node)
-    if acq_type_name is None:
+    # Step through the detection extensions to find one that's willing
+    # to handle this file
+    for detector in extensions.import_detection():
+        acq_name, callback = detector(abspath)
+        if acq_name is not None:
+            break
+
+    # Was detection successful?
+    if acq_name is None:
         log.info('Skipping non-acquisition path "%s".', file_path)
         return
 
     # Figure out which acquisition this is; add if necessary.
-    acq_type, acq_name = acq_type_name
     try:
         acq = ac.ArchiveAcq.get(ac.ArchiveAcq.name == acq_name)
+        new_acq = None
         log.debug('Acquisition "%s" already in DB. Skipping.', acq_name)
     except pw.DoesNotExist:
-        acq = add_acq(acq_type, acq_name, node)
+        acq = ac.ArchiveAcq.create(name=name)
+        new_acq = acq
         log.info('Acquisition "%s" added to DB.', acq_name)
-
-    # What kind of file do we have?
-    file_name = os.path.relpath(relpath, acq_name)
-    ftype = ac.FileType.detect(file_name, acq, node)
-
-    if ftype is None:
-        log.info('Skipping unrecognised file "%s/%s".', acq_name, file_name)
-        return
 
     # Add the file, if necessary.
     try:
         file_ = ac.ArchiveFile.get(
             ac.ArchiveFile.name == file_name, ac.ArchiveFile.acq == acq
         )
+        new_file = None
         log.debug('File "%s/%s" already in DB. Skipping.', acq_name, file_name)
 
     except pw.DoesNotExist:
@@ -135,13 +135,10 @@ def _import_file(node, file_path):
                 with db.database_proxy.atomic():
                     file_ = ac.ArchiveFile.create(
                         acq=acq,
-                        type=ftype,
                         name=file_name,
                         size_b=size_b,
                         md5sum=md5sum,
                     )
-
-                    ftype.file_info.new(file_, node)
 
                 done = True
             except pw.OperationalError as e:
@@ -154,6 +151,7 @@ def _import_file(node, file_path):
 
                 # TODO: re-implement
                 # di.connect_database(True)
+        new_file = file_
         log.info('File "%s/%s" added to DB.', acq_name, file_name)
 
     # Register the copy of the file here on the collection server, if (1) it
@@ -185,56 +183,15 @@ def _import_file(node, file_path):
         copy.wants_file = "Y"
         copy.save()
 
+    # Run the extension module's callback, if necessary
+    if callable(callback):
+        callback(copy, new_file, new_acq, node)
+
     # TODO: imported files caching
     # if import_done is not None:
     #     bisect.insort_left(import_done, file_path)
     #     with open(LOCAL_IMPORT_RECORD, "w") as fp:
     #         fp.write("\n".join(import_done))
-
-
-# Routines for registering files, acquisitions, copies and info in the DB.
-# ========================================================================
-
-
-def add_acq(acq_type, name, node, comment=""):
-    """Add an aquisition to the database.
-
-    This looks for an appropriate acquisition type, and if successful creates
-    the ArchiveAcq and AcqInfo entries for the acquisition.
-
-    Parameters
-    ----------
-    acq_type : AcqType
-        Type of the acquisition
-    name : string
-        Name of the acquisition directory.
-    node : StorageNode
-        Node that the acquisition is on.
-    comment : string, optional
-        An optional comment.
-
-    Returns
-    -------
-    acq : ArchiveAcq
-        The ArchiveAcq entry.
-    acqinfo : AcqInfoBase
-        The AcqInfo entry.
-    """
-
-    # Is the acquisition already in the database?
-    if ac.ArchiveAcq.select(ac.ArchiveAcq.id).where(ac.ArchiveAcq.name == name).count():
-        raise AlreadyExists('Acquisition "%s" already exists in DB.' % name)
-
-    # Create the ArchiveAcq entry and the AcqInfo entry for the acquisition. Run
-    # in a transaction so we don't end up with inconsistency.
-    with db.database_proxy.atomic():
-        # Insert the archive record
-        acq = ac.ArchiveAcq.create(name=name, type=acq_type, comment=comment)
-
-        # Generate the metadata table
-        acq_type.acq_info.new(acq, node)
-
-    return acq
 
 
 # Exceptions

@@ -5,12 +5,7 @@ from unittest.mock import patch, MagicMock
 from alpenhorn import config, db, extensions
 from alpenhorn.queue import FairMultiFIFOQueue
 from alpenhorn.storage import StorageGroup, StorageNode
-from alpenhorn.acquisition import (
-    AcqType,
-    ArchiveAcq,
-    ArchiveFile,
-    FileType,
-)
+from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.update import UpdateableNode, UpdateableGroup
 
@@ -178,9 +173,7 @@ def dbtables(dbproxy):
         [
             StorageGroup,
             StorageNode,
-            AcqType,
             ArchiveAcq,
-            FileType,
             ArchiveFile,
             ArchiveFileCopy,
             ArchiveFileCopyRequest,
@@ -314,18 +307,8 @@ def storagenode(factory_factory):
 
 
 @pytest.fixture
-def acqtype(factory_factory):
-    return factory_factory(AcqType)
-
-
-@pytest.fixture
 def archiveacq(factory_factory):
     return factory_factory(ArchiveAcq)
-
-
-@pytest.fixture
-def filetype(factory_factory):
-    return factory_factory(FileType)
 
 
 @pytest.fixture
@@ -364,35 +347,21 @@ def simplenode(storagenode, storagegroup):
 
 
 @pytest.fixture
-def simpleacqtype(acqtype):
-    """Create a simple AcqType record."""
-
-    return acqtype(name="simpleacqtype")
-
-
-@pytest.fixture
-def simpleacq(simpleacqtype, archiveacq):
+def simpleacq(archiveacq):
     """Create a simple ArchiveAcq record."""
-    return archiveacq(name="simpleacq", type=simpleacqtype)
+    return archiveacq(name="simpleacq")
 
 
 @pytest.fixture
-def simplefiletype(filetype, acqtype):
-    """Create a simple FileType record attached to an acqtype."""
-    return filetype(name="simplefiletype")
-
-
-@pytest.fixture
-def simplefile(simpleacqtype, archiveacq, simplefiletype, archivefile):
+def simplefile(archiveacq, archivefile):
     """Create a simple ArchiveFile record.
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="simplefile_acq", type=simpleacqtype)
+    acq = archiveacq(name="simplefile_acq")
     return archivefile(
         name="simplefile",
         acq=acq,
-        type=simplefiletype,
         md5sum="d41d8cd98f00b204e9800998ecf8427e",
         size_b=2**20,
     )
@@ -400,9 +369,7 @@ def simplefile(simpleacqtype, archiveacq, simplefiletype, archivefile):
 
 @pytest.fixture
 def simplecopy(
-    simpleacqtype,
     archiveacq,
-    simplefiletype,
     archivefile,
     archivefilecopy,
     storagenode,
@@ -412,10 +379,8 @@ def simplecopy(
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="simplecopy_acq", type=simpleacqtype)
-    file = archivefile(
-        name="simplecopy_file", acq=acq, type=simplefiletype, size_b=2**20
-    )
+    acq = archiveacq(name="simplecopy_acq")
+    file = archivefile(name="simplecopy_file", acq=acq, size_b=2**20)
     group = storagegroup(name="simplecopy_group")
     node = storagenode(name="simplecopy_node", group=group)
     return archivefilecopy(file=file, node=node)
@@ -423,9 +388,7 @@ def simplecopy(
 
 @pytest.fixture
 def simplerequest(
-    simpleacqtype,
     archiveacq,
-    simplefiletype,
     archivefile,
     archivefilecopyrequest,
     storagenode,
@@ -435,10 +398,8 @@ def simplerequest(
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="simplerequest_acq", type=simpleacqtype)
-    file = archivefile(
-        name="simplerequest_file", acq=acq, type=simplefiletype, size_b=2**20
-    )
+    acq = archiveacq(name="simplerequest_acq")
+    file = archivefile(name="simplerequest_file", acq=acq, size_b=2**20)
     group1 = storagegroup(name="simplerequest_group1")
     group2 = storagegroup(name="simplerequest_group2")
     node = storagenode(name="simplerequest_node", group=group1)
