@@ -8,10 +8,8 @@ import re
 import json
 import time
 import logging
-import importlib
-import datetime as dt
-
 import peewee as pw
+import datetime as dt
 from peewee import fn
 
 from . import acquisition as ac
@@ -19,6 +17,8 @@ from . import archive as ar
 from . import config, db
 from . import storage as st
 from . import util
+from .archive import ArchiveFileCopy
+from .extensions import io_module
 from .pool import global_abort, WorkerPool, EmptyPool
 from .storage import StorageNode, StorageGroup
 
@@ -82,6 +82,10 @@ class updateable_base:
         if self.db is None:
             return True
 
+        # io is None if the I/O class wasn't found
+        if self.io is None:
+            return True
+
         if self.db.id != new.id:
             return True
 
@@ -136,31 +140,22 @@ class updateable_base:
             obj_type = "StorageNode"
             io_suffix = "NodeIO"
 
-        # Separate package and module
-        dot = io_name.rfind(".")
-        if dot < 0:
-            # If there's no package, assume it's part of alpenhorn.io
-            io_module = "alpenhorn.io." + io_name.lower()
-            io_name += io_suffix
-        else:
-            # Otherwise, separate the module name for later
-            io_module = io_name[:dot]
-            io_name = io_name[dot + 1 :]
-
         # Load the module
-        try:
-            module = importlib.import_module(io_module)
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                f'Unable to find I/O module "{io_module}" for {obj_type} {self.name}.'
-            ) from e
+        module = io_module(io_name)
+        if module is None:
+            log.error(
+                f'No module for I/O class "{io_name}".  Ignoring {obj_type} {self.name}.'
+            )
+            return None
+
+        io_name += io_suffix
 
         # Within the module, find the class
         try:
             class_ = getattr(module, io_name)
         except AttributeError as e:
             raise ImportError(
-                f'I/O class "{io_name}" not found in module "{io_module}". '
+                f'I/O class "{io_name}" not found in module "{module}". '
                 f"Required for {obj_type} {self.name}."
             ) from e
 
@@ -186,6 +181,11 @@ class updateable_base:
         if self._check_io_reinit(storage):
             self.db = storage
             self.io_class = self._get_io_class()
+
+            if self.io_class is None:
+                # Error locating I/O module
+                self.io = None
+                return False
 
             # Parse I/O config if present
             config = self._parse_io_config(storage.io_config)
@@ -249,7 +249,7 @@ class UpdateableNode(updateable_base):
         """
 
         if self.db.active:
-            if util.alpenhorn_node_check(self.db):
+            if self.io.check_active():
                 return True
             else:
                 # Mark the node as inactive in the database
@@ -265,18 +265,13 @@ class UpdateableNode(updateable_base):
         return False
 
     def update_free_space(self) -> None:
-        """Calculate and record free space."""
-        # Check with the OS how much free space there is
-        x = os.statvfs(self.db.root)
-        avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
+        """Calculate and record free space.
 
-        # Update the DB with the free space. Save only the dirty fields to ensure we
-        # don't clobber changes made manually to the database
-        self.db.avail_gb = avail_gb
-        self.db.avail_gb_last_checked = dt.datetime.now()
-        self.db.save(only=self.db.dirty_fields)
-
-        log.info('Node "%s" has %.2f GB available.' % (self.name, avail_gb))
+        The free space is found by calling `self.io.bytes_avail()`
+        and saved to the database via `self.db.update_avail_gb()`
+        """
+        # This is always a slow call
+        self.db.update_avail_gb(self.io.bytes_avail(fast=False))
 
     def update_idle(self) -> None:
         """Perform idle updates, if appropriate.
@@ -311,8 +306,16 @@ class UpdateableNode(updateable_base):
             log.info(f'Updating node "{self.name}".')
 
             # Check the integrity of any questionable files (has_file=M)
-            # XXX Commented out until future PR.
-            # update_node_integrity(node)
+            for copy in ArchiveFileCopy.select().where(
+                ArchiveFileCopy.node == self.db, ArchiveFileCopy.has_file == "M"
+            ):
+                log.info(
+                    f'Checking copy "{copy.file.acq.name}/{copy.file.name}" '
+                    f"on node {self.name}."
+                )
+
+                # Dispatch integrity check to I/O layer
+                self.io.check(copy)
 
             # Delete any unwanted files to cleanup space
             # XXX Commented out until future PR.
@@ -528,9 +531,15 @@ def update_loop(
 
             node = nodes[name]
 
+            # Check if we found the I/O class for this node:
+            if node.io_class is None:
+                del nodes[name]  # Can't do anything with this
+                continue
+
             # Check if the node is actually active
             if not node.update_active():
-                continue  # Not active
+                del nodes[name]  # Not active
+                continue
 
             # Now update the list of new groups. This builds up a list of
             # groups which are currently active on this host and whether they
@@ -642,40 +651,6 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
         task()
         queue.task_done(key)
         log.info(f"Finished task {task}")
-
-
-def update_node_integrity(node):
-    """Check the integrity of file copies on the node."""
-
-    # Find suspect file copies in the database
-    fcopy_query = (
-        ar.ArchiveFileCopy.select()
-        .where(ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "M")
-        .limit(25)
-    )
-
-    # Loop over these file copies and check their md5sum
-    for fcopy in fcopy_query:
-        fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
-        log.info('Checking file "%s" on node "%s".' % (fullpath, node.name))
-
-        # If the file exists calculate its md5sum and check against the DB
-        if os.path.exists(fullpath):
-            if util.md5sum_file(fullpath) == fcopy.file.md5sum:
-                log.info("File is A-OK!")
-                fcopy.has_file = "Y"
-                copy_size_b = os.stat(fullpath).st_blocks * 512
-                fcopy.size_b = copy_size_b
-            else:
-                log.error("File is corrupted!")
-                fcopy.has_file = "X"
-        else:
-            log.error("File does not exist!")
-            fcopy.has_file = "N"
-
-        # Update the copy status
-        log.info("Updating file copy status [id=%i]." % fcopy.id)
-        fcopy.save()
 
 
 def update_node_delete(node):

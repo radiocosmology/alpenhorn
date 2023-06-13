@@ -124,3 +124,68 @@ def test_importdetect_multi(set_config):
         extensions.load_extensions()
 
     assert extensions._id_ext == [func1, func2, func3, func4]
+
+
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_io_module_internal_name(set_config):
+    """io-module with an internal name must be rejected."""
+
+    # Also a fake extension module
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"io-modules": {"default": None}}
+
+    with patch.dict("sys.modules", test_module=test_module):
+        with pytest.raises(ValueError):
+            extensions.load_extensions()
+
+
+@pytest.mark.alpenhorn_config({"extensions": ["mod1", "mod2"]})
+def test_io_module_duplicate(set_config):
+    """Reject duplicated I/O modules."""
+
+    # Also a fake extension module
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"io-modules": {"iomod": None}}
+
+    with patch.dict("sys.modules", mod1=test_module, mod2=test_module):
+        with pytest.raises(ValueError):
+            extensions.load_extensions()
+
+
+@pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
+def test_io_module_external(set_config):
+    """Test io_module() returning an external io module."""
+
+    # This is our fake IO module
+    iomod = MagicMock()
+
+    # Also a fake extension module
+    test_module = MagicMock()
+    test_module.register_extension.return_value = {"io-modules": {"iomod": iomod}}
+
+    # Patch sys.modules so import can find it.
+    with patch.dict("sys.modules", test_module=test_module):
+        # Load the extension
+        extensions.load_extensions()
+
+    # Module should be returned
+    assert iomod is extensions.io_module("IOMod")
+
+
+def test_io_module_internal():
+    """Test io_module() returning an internal io module."""
+    import alpenhorn.io.default
+
+    assert alpenhorn.io.default is extensions.io_module("Default")
+
+
+def test_io_module_missing():
+    """Test a failed load in io_module()."""
+
+    assert extensions.io_module("Missing") is None
+
+
+def test_io_module_base():
+    """Loading the I/O base in io_module() is not allowed."""
+
+    assert extensions.io_module("base") is None

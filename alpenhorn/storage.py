@@ -3,6 +3,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+import logging
+import datetime
 import peewee as pw
 from peewee import fn
 
@@ -12,6 +14,8 @@ from . import util
 if TYPE_CHECKING:
     import pathlib
     from .acquisition import ArchiveFile
+
+log = logging.getLogger(__name__)
 
 
 class StorageGroup(base_model):
@@ -30,19 +34,10 @@ class StorageGroup(base_model):
         An optional JSON blob of configuration data interpreted by the
         I/O class.  If given, must be a JSON object literal.
 
-    If `io_class` includes at least one `.`, then it's assumed to be
-    the full import path to a class.
-
-    Otherwise, the I/O module is assumed to be part of the
-    `alpenhorn.io` package.  The class itself, then, is the final
-    component of io_class with `GroupIO` appended.
-
-    So:
-    * if `io_class` is "Nearline", alpenhorn will import the class
-        "NearlineGroupIO" from the module `alpenhorn.io.Nearline`.
-    * if `io_class` is `mypackage.custom_alpenhorn.MyIOClass`, alpenhorn
-        will import the class `MyIOClass` from the module
-        `mypackage.custom_alpenhorn`.
+    If `io_class` is, say, "IOClassName" then there must be a group I/O
+    class called `IOClassNameGroupIO` in either:
+     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
+     * an I/O module named "ioclassname" provided by an "io-module" extension.
     """
 
     name = pw.CharField(max_length=64, unique=True)
@@ -139,19 +134,10 @@ class StorageNode(base_model):
         An optional JSON blob of configuration data interpreted by the
         I/O class.  If given, must be a JSON object literal.
 
-    If `io_class` includes at least one `.`, then it's assumed to be
-    the full import path to a class.
-
-    Otherwise, the I/O module is assumed to be part of the
-    `alpenhorn.io` package.  The class itself, then, is the final
-    component of io_class with `NodeIO` appended.
-
-    So:
-    * if `io_class` is "Nearline", alpenhorn will import the class
-        "NearlineNodeIO" from the module `alpenhorn.io.Nearline`.
-    * if `io_class` is `mypackage.custom_alpenhorn.MyIOClass`, alpenhorn
-        will import the class `MyIOClass` from the module
-        `mypackage.custom_alpenhorn`.
+    If `io_class` is, say, "IOClassName" then there must be a node I/O
+    class called `IOClassNameNodeIO` in either:
+     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
+     * an I/O module named "ioclassname" provided by an "io-module" extension.
     """
 
     name = pw.CharField(max_length=64, unique=True)
@@ -318,3 +304,25 @@ class StorageNode(base_model):
                 )
             )
         }
+
+    def update_avail_gb(self, new_avail: int | None) -> None:
+        """Update `avail_gb` and record the update time.
+
+        Parameters
+        ----------
+        new_avail : integer or None
+            The amount of available space in bytes
+        """
+        # The value in the database is in GiB (2**30 bytes)
+        if new_avail is None:
+            self.avail_gb = None
+        else:
+            self.avail_gb = new_avail / 2**30
+        self.avail_gb_last_checked = datetime.datetime.now()
+
+        # Update the DB with the free space but don't clobber changes made
+        # manually to the database
+        self.save(only=[StorageNode.avail_gb, StorageNode.avail_gb_last_checked])
+
+        if new_avail is None:
+            log.info(f'Unable to determine available space for "{self.name}".')

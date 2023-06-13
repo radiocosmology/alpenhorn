@@ -1,6 +1,8 @@
 """Tests for UpdateableNode."""
 
 import pytest
+import datetime
+from unittest.mock import patch
 
 from alpenhorn.storage import StorageNode
 from alpenhorn.update import UpdateableNode
@@ -10,12 +12,9 @@ def test_bad_ioclass(simplenode):
     """A missing I/O class is a problem."""
 
     simplenode.io_class = "Missing"
-    with pytest.raises(ModuleNotFoundError):
-        UpdateableNode(None, simplenode)
-
-    simplenode.io_class = "alpenhorn.update.Missing"
-    with pytest.raises(ImportError):
-        UpdateableNode(None, simplenode)
+    unode = UpdateableNode(None, simplenode)
+    assert unode.io_class is None
+    assert unode.io is None
 
 
 def test_reinit(storagenode, simplegroup, queue):
@@ -117,3 +116,42 @@ def test_idle(unode, queue):
 
     # Now idle again
     assert unode.idle is True
+
+
+def test_update_active(unode):
+    """Test UpdateableNode.update_active."""
+
+    # Starts out active
+    unode.db.active = True
+    unode.db.save()
+    assert unode.db.active
+
+    # Pretend node is actually active
+    with patch.object(unode.io, "check_active", lambda: True):
+        assert unode.update_active()
+    assert unode.db.active
+    assert StorageNode.select(StorageNode.active).limit(1).scalar()
+
+    # Pretend node is actually not active
+    with patch.object(unode.io, "check_active", lambda: False):
+        assert not unode.update_active()
+    assert not unode.db.active
+    assert not StorageNode.select(StorageNode.active).limit(1).scalar()
+
+
+def test_update_free_space(unode):
+    """Test UpdateableNode.update_free_space."""
+
+    # Set the avail_gb to something
+    unode.db.avail_gb = 3
+    unode.db.save()
+
+    now = datetime.datetime.now()
+    # 2 ** 32 bytes is 4 GiB
+    with patch.object(unode.io, "bytes_avail", lambda fast: 2**32):
+        unode.update_free_space()
+
+    # Node has been updated.
+    node = StorageNode.get(id=unode.db.id)
+    assert node.avail_gb == 4
+    assert node.avail_gb_last_checked >= now

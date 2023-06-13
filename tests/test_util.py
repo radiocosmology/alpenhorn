@@ -4,6 +4,17 @@ import pytest
 from alpenhorn import util
 
 
+def test_md5sum_file(tmp_path):
+    """Test util.md5sum_file"""
+
+    file = tmp_path.joinpath("tmp")
+    file.write_text("")
+    assert util.md5sum_file(file) == "d41d8cd98f00b204e9800998ecf8427e"
+
+    file.write_text("The quick brown fox jumps over the lazy dog")
+    assert util.md5sum_file(file) == "9e107d9d372bb6826bd81d3542a419d6"
+
+
 def test_gethostname_config(hostname):
     """Test util.get_hostname with config"""
 
@@ -15,6 +26,42 @@ def test_gethostname_default():
     host = util.get_hostname()
     assert "." not in host
     assert len(host) > 0
+
+
+def test_pretty_bytes():
+    """Test util.pretty_bytes."""
+    with pytest.raises(ValueError):
+        util.pretty_bytes(-1)
+
+    with pytest.raises(TypeError):
+        util.pretty_bytes(None)
+
+    # This is an overflow
+    assert util.pretty_bytes(1234567890123456789012) == "1234567890123456789012 B"
+
+    # Regular behaviour
+    assert util.pretty_bytes(123456789012345678901) == "107.1 EiB"
+    assert util.pretty_bytes(12345678901234567890) == "10.7 EiB"
+    assert util.pretty_bytes(1234567890123456789) == "1.1 EiB"
+    assert util.pretty_bytes(123456789012345678) == "109.7 PiB"
+    assert util.pretty_bytes(12345678901234567) == "11.0 PiB"
+    assert util.pretty_bytes(1234567890123456) == "1.1 PiB"
+    assert util.pretty_bytes(123456789012345) == "112.3 TiB"
+    assert util.pretty_bytes(12345678901234) == "11.2 TiB"
+    assert util.pretty_bytes(1234567890123) == "1.1 TiB"
+    assert util.pretty_bytes(123456789012) == "115.0 GiB"
+    assert util.pretty_bytes(12345678901) == "11.5 GiB"
+    assert util.pretty_bytes(1234567890) == "1.1 GiB"
+    assert util.pretty_bytes(123456789) == "117.7 MiB"
+    assert util.pretty_bytes(12345678) == "11.8 MiB"
+    assert util.pretty_bytes(1234567) == "1.2 MiB"
+    assert util.pretty_bytes(123456) == "120.6 kiB"
+    assert util.pretty_bytes(12345) == "12.1 kiB"
+    assert util.pretty_bytes(1234) == "1.2 kiB"
+    assert util.pretty_bytes(123) == "123 B"
+    assert util.pretty_bytes(12) == "12 B"
+    assert util.pretty_bytes(1) == "1 B"
+    assert util.pretty_bytes(0) == "0 B"
 
 
 def test_pretty_deltat():
