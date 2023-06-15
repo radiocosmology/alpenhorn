@@ -159,6 +159,16 @@ class BaseNodeIO:
         assume the database is correct), which is the default behaviour."""
         return self.node.active
 
+    def delete(self, copies: list[ArchiveFileCopy]) -> None:
+        """Delete the ArchiveFileCopy list `copies` from the node.
+
+        Parameters
+        ----------
+        copies : list of ArchiveFileCopy
+            The list of copies to delete.  May be empty.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
         """Return size in bytes of the file given by `path`.
 

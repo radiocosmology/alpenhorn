@@ -2,7 +2,7 @@
 
 import pytest
 import datetime
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from alpenhorn.storage import StorageNode
 from alpenhorn.update import UpdateableNode
@@ -155,3 +155,66 @@ def test_update_free_space(unode):
     node = StorageNode.get(id=unode.db.id)
     assert node.avail_gb == 4
     assert node.avail_gb_last_checked >= now
+
+
+def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy):
+    """Test UpdateableNode.update_delete() when not under min"""
+
+    archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileY", acq=simpleacq),
+        has_file="Y",
+        wants_file="Y",
+    )
+    copyM = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileM", acq=simpleacq),
+        has_file="Y",
+        wants_file="M",
+    )
+    copyN = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileN", acq=simpleacq),
+        has_file="Y",
+        wants_file="N",
+    )
+
+    # Force under min and not archive
+    unode.db.avail_gb = 5
+    unode.db.min_avail_gb = 10
+    unode.db.storage_type = "F"
+    assert unode.db.under_min
+    assert not unode.db.archive
+
+    mock_delete = MagicMock()
+    with patch.object(unode.io, "delete", mock_delete):
+        unode.update_delete()
+    mock_delete.assert_called_once_with([copyM, copyN])
+
+
+def test_update_delete_over_min(unode, simpleacq, archivefile, archivefilecopy):
+    """Test UpdateableNode.update_delete() when not under min"""
+
+    archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileY", acq=simpleacq),
+        has_file="Y",
+        wants_file="Y",
+    )
+    archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileM", acq=simpleacq),
+        has_file="Y",
+        wants_file="M",
+    )
+    copyN = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileN", acq=simpleacq),
+        has_file="Y",
+        wants_file="N",
+    )
+
+    mock_delete = MagicMock()
+    with patch.object(unode.io, "delete", mock_delete):
+        unode.update_delete()
+    mock_delete.assert_called_once_with([copyN])

@@ -283,6 +283,47 @@ class UpdateableNode(updateable_base):
             # Do any I/O class idle updates
             self.io.idle_update()
 
+    def update_delete(self) -> None:
+        """Process this node for files to delete."""
+
+        # Find all file copies needing deletion on this node
+        #
+        # If we have less than the minimum available space, we should consider all
+        # files not explicitly wanted (i.e. wants_file != 'Y') as candidates for
+        # deletion, provided the copy is not on an archive node. If we have more
+        # than the minimum space, or we are on archive node then only those
+        # explicitly marked (wants_file == 'N') will be removed.
+        if self.db.under_min and not self.db.archive:
+            log.info(
+                f"Hit minimum available space on {self.name} -- "
+                "considering all unwanted files for deletion!"
+            )
+            dfclause = ArchiveFileCopy.wants_file != "Y"
+        else:
+            dfclause = ArchiveFileCopy.wants_file == "N"
+
+        # Search db for candidates on this node to delete.
+        del_copies = list()
+        for copy in (
+            ArchiveFileCopy.select()
+            .where(
+                dfclause,
+                ArchiveFileCopy.node == self.db,
+                ArchiveFileCopy.has_file == "Y",
+            )
+            .order_by(ArchiveFileCopy.id)
+        ):
+            # Group a bunch of these together to reduce the number of I/O Tasks
+            # created.  TODO: figure out if this actually helps
+            if len(del_copies) >= 10:
+                self.io.delete(del_copies)
+                del_copies = [copy]
+            else:
+                del_copies.append(copy)
+
+        # Handle the partial group at the end (which may be empty)
+        self.io.delete(del_copies)
+
     def update(self) -> None:
         """Perform I/O updates on this node.
 
@@ -318,8 +359,7 @@ class UpdateableNode(updateable_base):
                 self.io.check(copy)
 
             # Delete any unwanted files to cleanup space
-            # XXX Commented out until future PR.
-            # update_node_delete(node)
+            self.update_delete()
 
             # Process any regular transfers requests onto this node
             # XXX Commented out until future PR.
@@ -651,86 +691,6 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
         task()
         queue.task_done(key)
         log.info(f"Finished task {task}")
-
-
-def update_node_delete(node):
-    """Process this node for files to delete."""
-
-    # If we have less than the minimum available space, we should consider all files
-    # not explicitly wanted (i.e. wants_file != 'Y') as candidates for deletion, provided
-    # the copy is not on an archive node. If we have more than the minimum space, or
-    # we are on archive node then only those explicitly marked (wants_file == 'N')
-    # will be removed.
-    #
-    # A file will never be removed if there exist less than two copies available elsewhere.
-    if node.avail_gb < node.min_avail_gb and node.storage_type != "A":
-        log.info(
-            "Hit minimum available space on %s -- considering all unwanted "
-            "files for deletion!" % (node.name)
-        )
-        dfclause = ar.ArchiveFileCopy.wants_file != "Y"
-    else:
-        dfclause = ar.ArchiveFileCopy.wants_file == "N"
-
-    # Search db for candidates on this node to delete.
-    del_files = ar.ArchiveFileCopy.select().where(
-        dfclause, ar.ArchiveFileCopy.node == node, ar.ArchiveFileCopy.has_file == "Y"
-    )
-
-    # Process candidates for deletion
-    del_count = 0  # Counter for no. of deletions (limits no. per node update)
-    for fcopy in del_files.order_by(ar.ArchiveFileCopy.id):
-        # Limit number of deletions to 500 per main loop iteration.
-        if del_count >= 500:
-            break
-
-        # Get all the *other* copies.
-        other_copies = fcopy.file.copies.where(
-            ar.ArchiveFileCopy.id != fcopy.id, ar.ArchiveFileCopy.has_file == "Y"
-        )
-
-        # Get the number of copies on archive nodes
-        ncopies = (
-            other_copies.join(st.StorageNode)
-            .where(st.StorageNode.storage_type == "A")
-            .count()
-        )
-
-        shortname = "%s/%s" % (fcopy.file.acq.name, fcopy.file.name)
-        fullpath = "%s/%s/%s" % (node.root, fcopy.file.acq.name, fcopy.file.name)
-
-        # If at least two other copies we can delete the file.
-        if ncopies >= 2:
-            # Use transaction such that errors thrown in the os.remove do not leave
-            # the database inconsistent.
-            with db.database_proxy.transaction():
-                if os.path.exists(fullpath):
-                    os.remove(fullpath)  # Remove the actual file
-
-                    # Check if the acquisition directory or containing directories are now empty,
-                    # and remove if they are.
-                    dirname = os.path.dirname(fullpath)
-                    while dirname != node.root:
-                        if not os.listdir(dirname):
-                            log.info(
-                                "Removing acquisition directory %s on %s"
-                                % (fcopy.file.acq.name, fcopy.node.name)
-                            )
-                            os.rmdir(dirname)
-                            dirname = os.path.dirname(dirname)
-                        else:
-                            break
-
-                fcopy.has_file = "N"
-                fcopy.wants_file = "N"  # Set in case it was 'M' before
-                fcopy.save()  # Update the FileCopy in the database
-
-                log.info("Removed file copy: %s" % shortname)
-
-            del_count += 1
-
-        else:
-            log.info("Too few backups to delete %s" % shortname)
 
 
 def update_node_requests(node):
