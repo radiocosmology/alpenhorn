@@ -35,10 +35,11 @@ After `init()` has been called, database access is possible.  Each thread
 needing database access must separately call `connect()` to initialise the
 database proxy.
 """
-import logging
-import datetime
-import peewee as pw
+from __future__ import annotations
 from typing import Any
+
+import logging
+import peewee as pw
 from playhouse import db_url
 
 from . import config, extensions
@@ -55,11 +56,6 @@ _db_ext = None
 
 database_proxy = pw.Proxy()
 threadsafe = None
-
-# A peewee Timestamp field which auto-updates to the
-# current time when the row is updated in MySQL, but
-# does nothing special in other Database types
-CurrentTimestampField = pw.TimestampField(default=datetime.datetime.now)
 
 
 def _capability(key: str) -> Any:
@@ -131,8 +127,6 @@ def connect() -> None:
     Should be called per-thread before any database operations are attempted.
     """
 
-    global CurrentTimestampField
-
     # If fetch the database config, if present
     if "database" in config.config:
         database_config = config.config["database"]
@@ -152,12 +146,6 @@ def connect() -> None:
         EnumField.native = True
     else:
         EnumField.native = False
-
-    if isinstance(db, pw.MySQLDatabase):
-        CurrentTimestampField = pw.TimestampField(
-            null=True,
-            constraints=[pw.SQL("ON UPDATE CURRENT_TIMESTAMP")],
-        )
 
 
 def _connect(config: dict) -> pw.Database:

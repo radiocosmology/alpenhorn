@@ -15,6 +15,12 @@ def pytest_configure(config):
 
     config.addinivalue_line(
         "markers",
+        "run_command_result(ret, stdout, stderr): "
+        "used on tests which mock alpenhorn.util.run_command to "
+        "set the desired return value for the mocked call.",
+    )
+    config.addinivalue_line(
+        "markers",
         "alpenhorn_config(*config_dict): "
         "used to set the alpenhorn.config for testing.  config_dict"
         "is merged with the default config.",
@@ -46,6 +52,55 @@ def set_config(request):
     extensions._db_ext = None
     extensions._id_ext = None
     extensions._io_ext = dict()
+
+
+@pytest.fixture
+def mock_run_command(request, set_config):
+    """Mock alpenhorn.util.run_command to _not_ run a command.
+
+    The value returned by run_command() can be set by the test via the
+    run_command_result mark.
+
+    This fixture yields a function which returns a dictionary containing
+    the arguments passed to run_command.
+    """
+    run_command_report = dict()
+
+    marker = request.node.get_closest_marker("run_command_result")
+    if marker is None:
+        run_command_result = (0, "", "")
+    else:
+        run_command_result = tuple(marker.args)
+
+    def _mocked_run_command(cmd, timeout=None, **kwargs):
+        nonlocal run_command_report
+        nonlocal run_command_result
+
+        # This just reports its input
+        run_command_report["cmd"] = cmd
+        run_command_report["timeout"] = timeout
+        run_command_report["kwargs"] = kwargs
+
+        # Return the requested value (or maybe the default)
+        return run_command_result
+
+    def _get_run_command_report():
+        nonlocal run_command_report
+        return run_command_report
+
+    with patch("alpenhorn.util.run_command", _mocked_run_command):
+        yield _get_run_command_report
+
+
+@pytest.fixture
+def mock_filesize():
+    """Mocks DefaultNodeIO.filesize to return a fake file size."""
+
+    def _mock_filesize(self, path, actual=False):
+        return 512 * 3 if actual else 1234
+
+    with patch("alpenhorn.io.default.DefaultNodeIO.filesize", _mock_filesize):
+        yield
 
 
 @pytest.fixture

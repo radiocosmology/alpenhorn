@@ -5,7 +5,7 @@ import peewee as pw
 from alpenhorn.acquisition import ArchiveFile
 from alpenhorn.storage import StorageGroup, StorageNode
 
-from .db import EnumField, CurrentTimestampField, base_model
+from .db import EnumField, base_model
 
 
 class ArchiveFileCopy(base_model):
@@ -39,10 +39,8 @@ class ArchiveFileCopy(base_model):
     size_b : integer
         Allocated size of file in bytes (i.e. actual size on the Storage
         medium.)
-    last_update : timestamp
-        The time at which this record was last updated.  If using
-        a MySQL database, this property is automatically set to the
-        current time whenever the row is updated.
+    last_update : datetime
+        The time at which this record was last updated.
     """
 
     file = pw.ForeignKeyField(ArchiveFile, backref="copies")
@@ -51,7 +49,7 @@ class ArchiveFileCopy(base_model):
     wants_file = EnumField(["Y", "M", "N"], default="Y")
     ready = pw.BooleanField(default=False)
     size_b = pw.BigIntegerField(null=True)
-    last_update = CurrentTimestampField
+    last_update = pw.DateTimeField(default=datetime.datetime.now)
 
     @property
     def path(self) -> pathlib.Path:

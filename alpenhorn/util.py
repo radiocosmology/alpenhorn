@@ -10,49 +10,52 @@ from . import config
 log = logging.getLogger(__name__)
 
 
-def run_command(cmd, **kwargs):
+def run_command(
+    cmd: list[str], timeout: float | None = None, **kwargs
+) -> tuple(int | None, str, str):
     """Run a command.
 
     Parameters
     ----------
-    cmd : array
+    cmd : list of strings
         A command as a list of strings including all arguments.
-    kwargs : dict
-        Passed directly onto `subprocess.Popen.`
+    timeout : float or None
+        Number of seconds to wait before forceably killing the process,
+        or None to wait forever.
+
+    Other keyword args are passed directly on to subprocess.Popen
 
     Returns
     -------
-    retval : int
-        Return code.
-    stdout_val : string
+    retval : int or None
+        Return code, or None if the process was killed after timing out.
+    stdout : string
         Value of stdout.
-    stderr_val : string
+    stderr : string
         Value of stderr.
     """
 
     import subprocess
 
-    log.debug('Running command "%s"', " ".join(cmd))
+    log.debug(f"Running command [timeout={timeout}]: " + " ".join(cmd))
 
     # run using Popen
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
     )
-    stdout_val, stderr_val = proc.communicate()
-    retval = proc.returncode
+    try:
+        stdout_val, stderr_val = proc.communicate(timeout=timeout)
+        retval = proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout_val, stderr_val = proc.communicate()
+        retval = None
 
     return (
         retval,
         stdout_val.decode(errors="replace"),
         stderr_val.decode(errors="replace"),
     )
-
-
-def command_available(cmd):
-    """Is this command available on the system."""
-    from distutils import spawn
-
-    return spawn.find_executable(cmd) is not None
 
 
 def md5sum_file(filename: str, hr: bool = True) -> str:
