@@ -1,7 +1,7 @@
 """An end-to-end test of the alpenhorn daemon.
 
 Things that this end-to-end test does:
-    - pulls a file
+    - pulls a file onto the Transport group
     - checks a corrupt file
     - deletes a file
 
@@ -74,8 +74,8 @@ def e2e_db(xfs, hostname):
     )
     xfs.create_file("/dft/ALPENHORN_NODE", contents="dftnode")
 
-    # Future PR will turn this into a transport fleet
-    fleet = StorageGroup.create(name="fleet")
+    # A transport fleet
+    fleet = StorageGroup.create(name="fleet", io_class="Transport")
     tp1 = StorageNode.create(
         name="tp1",
         storage_type="T",
@@ -84,7 +84,17 @@ def e2e_db(xfs, hostname):
         host=hostname,
         active=True,
     )
+    StorageNode.create(
+        name="tp2",
+        storage_type="T",
+        group=fleet,
+        root="/tp/two",
+        host=hostname,
+        active=True,
+        auto_verify=1,
+    )
     xfs.create_file("/tp/one/ALPENHORN_NODE", contents="tp1")
+    xfs.create_file("/tp/two/ALPENHORN_NODE", contents="tp2")
 
     # A future PR will turn this into a Nearline group
     nlgrp = StorageGroup.create(name="nl1")

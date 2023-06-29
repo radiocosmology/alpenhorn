@@ -707,7 +707,7 @@ def update_loop(
             else:
                 new_groups[group_name]["nodes"].append(node)
                 new_groups[group_name]["idle"] = (
-                    new_groups[group_name]["idle"] and node.io.idle
+                    new_groups[group_name]["idle"] and node.idle
                 )
 
         # Drop groups that are no longer available
