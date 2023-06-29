@@ -227,20 +227,20 @@ def database_extension() -> dict:
 
 
 def import_detection() -> list[ImportDetect]:
-    """Returns the list of registered import detect callables.
+    """Returns the list of registered import-detect callables.
 
     Returns
     -------
     import_detectors
         The list of import detection functions.  May be empty, if no
-        import detect extensions have been loaded.
+        import-detect extensions have been loaded.
     """
 
     global _id_ext
 
     # Warn about no extensions
-    if len(_id_ext) == 0:
-        log.warning("Attempt to import file with no import detect extensions.")
+    if not len(_id_ext):
+        log.error("Attempt to import file with no import-detect extensions.")
 
     return _id_ext
 

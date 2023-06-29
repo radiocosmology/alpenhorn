@@ -248,21 +248,29 @@ def test_overmax(simplegroup, storagenode, simplefile, archivefilecopy):
     assert node.check_over_max() is False
 
 
-def test_namedcopypresent(simplegroup, storagenode, simplefile, archivefilecopy):
-    """Test StorageNode.named_copy_present()."""
+def test_namedcopytracked(simplegroup, storagenode, simplefile, archivefilecopy):
+    """Test StorageNode.named_copy_tracked()."""
     acqname = simplefile.acq.name
     filename = simplefile.name
 
     node = storagenode(name="present", group=simplegroup)
     archivefilecopy(file=simplefile, node=node, has_file="Y")
-    assert node.named_copy_present(acqname, filename) is True
+    assert node.named_copy_tracked(acqname, filename) is True
 
     node = storagenode(name="corrupt", group=simplegroup)
     archivefilecopy(file=simplefile, node=node, has_file="X")
-    assert node.named_copy_present(acqname, filename) is False
+    assert node.named_copy_tracked(acqname, filename) is True
+
+    node = storagenode(name="unknown", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="M")
+    assert node.named_copy_tracked(acqname, filename) is True
+
+    node = storagenode(name="removed", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="N")
+    assert node.named_copy_tracked(acqname, filename) is False
 
     node = storagenode(name="missing", group=simplegroup)
-    assert node.named_copy_present(acqname, filename) is False
+    assert node.named_copy_tracked(acqname, filename) is False
 
 
 def test_copypresent(simplegroup, storagenode, simplefile, archivefilecopy):
@@ -283,16 +291,51 @@ def test_copypresent(simplegroup, storagenode, simplefile, archivefilecopy):
 def test_allfiles(simplenode, simpleacq, archivefile, archivefilecopy):
     """Test StorageNode.get_all_files()."""
 
-    # Empty
-    file = archivefile(name="file1", acq=simpleacq)
+    # Make some files
+    file = archivefile(name="fileN", acq=simpleacq)
     archivefilecopy(file=file, node=simplenode, has_file="N")
-    assert simplenode.get_all_files() == set()
 
-    file = archivefile(name="file2", acq=simpleacq)
+    file = archivefile(name="fileM", acq=simpleacq)
+    archivefilecopy(file=file, node=simplenode, has_file="M")
+
+    file = archivefile(name="fileX", acq=simpleacq)
+    archivefilecopy(file=file, node=simplenode, has_file="X")
+
+    file = archivefile(name="fileY", acq=simpleacq)
     archivefilecopy(file=file, node=simplenode, has_file="Y")
-    assert simplenode.get_all_files() == set(
-        [pathlib.PurePath(simpleacq.name, "file2")]
-    )
+
+    pathN = pathlib.PurePath(simpleacq.name, "fileN")
+    pathM = pathlib.PurePath(simpleacq.name, "fileM")
+    pathX = pathlib.PurePath(simpleacq.name, "fileX")
+    pathY = pathlib.PurePath(simpleacq.name, "fileY")
+
+    # Default case
+    assert simplenode.get_all_files() == {pathY}
+
+    # Try all the combinations
+    for present in [True, False]:
+        for corrupt in [True, False]:
+            for unknown in [True, False]:
+                for removed in [True, False]:
+                    result = set()
+                    if present:
+                        result.add(pathY)
+                    if corrupt:
+                        result.add(pathX)
+                    if unknown:
+                        result.add(pathM)
+                    if removed:
+                        result.add(pathN)
+
+                    assert (
+                        simplenode.get_all_files(
+                            present=present,
+                            corrupt=corrupt,
+                            unknown=unknown,
+                            removed=removed,
+                        )
+                        == result
+                    )
 
 
 def test_update_avail_gb(simplenode):

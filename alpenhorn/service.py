@@ -13,9 +13,7 @@ from . import (
     extensions,
     logger,
     pool,
-    storage,
     update,
-    util,
 )
 
 log = logging.getLogger(__name__)
@@ -65,32 +63,13 @@ def cli():
     # Set up worker increment/decrement signals
     pool.setsignals(wpool)
 
-    # Get the name of this host
-    host = util.get_hostname()
-
-    # Get the list of currently nodes active
-    node_list = list(
-        storage.StorageNode.select().where(
-            storage.StorageNode.host == host, storage.StorageNode.active
-        )
-    )
-
-    # Setup the observers to watch the nodes for new files
-    # See https://github.com/radiocosmology/alpenhorn/issues/15
-    auto_import.setup_observers(node_list)
-
-    # Now catch up with the existing files to see if there are any new ones
-    # that should be imported
-    auto_import.catchup(node_list)
-
     # Enter main loop
     try:
-        update.update_loop(host, queue, wpool)
+        update.update_loop(queue, wpool)
     # Catch keyboard interrupt
     except KeyboardInterrupt:
         log.info("Exiting due to SIGINT")
 
     # Attempt to exit cleanly
     auto_import.stop_observers()
-    auto_import.join_observers()
     wpool.shutdown()

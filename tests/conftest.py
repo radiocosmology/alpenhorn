@@ -155,7 +155,16 @@ def mock_stat(fs):
 
 
 @pytest.fixture
-def xfs(fs, mock_statvfs, mock_stat):
+def mock_observer():
+    """Mocks the DefaultIO observer so its always the PollingObserver"""
+    from watchdog.observers.polling import PollingObserver
+
+    with patch("alpenhorn.io.default.DefaultNodeIO.observer", PollingObserver):
+        yield
+
+
+@pytest.fixture
+def xfs(fs, mock_observer, mock_statvfs, mock_stat):
     """An extended pyfakefs.
 
     Patches more stuff for proper behaviour with alpenhorn unittests"""

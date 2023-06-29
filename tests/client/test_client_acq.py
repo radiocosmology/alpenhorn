@@ -25,8 +25,6 @@ def fixtures(tmpdir):
     """Initializes an in-memory Sqlite database with data in tests/fixtures"""
     db._connect()
 
-    import test_import as ti
-
     yield ti.load_fixtures(tmpdir)
 
     db.database_proxy.close()

@@ -51,7 +51,7 @@ def test_update_abort():
 
     # This should do nothing except exit, so passing
     # a couple of Nones shouldn't be a problem
-    update.update_loop(None, None, None)
+    update.update_loop(None, None)
 
     # Reset
     pool.global_abort.clear()
@@ -62,7 +62,7 @@ def test_update_no_nodes(
 ):
     """Test update_loop with no active nodes."""
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     mock_serial_io.assert_called_once_with(queue)
 
@@ -81,7 +81,7 @@ def test_update_node_not_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -94,7 +94,7 @@ def test_update_node_not_idle(
 
 
 def test_update_node_idle(
-    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+    xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with an idle node."""
 
@@ -105,7 +105,7 @@ def test_update_node_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -118,7 +118,7 @@ def test_update_node_idle(
 
 
 def test_update_node_cancelled(
-    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+    xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with a node that cancels the update."""
     mockio = mockgroupandnode[0]
@@ -128,7 +128,7 @@ def test_update_node_cancelled(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -178,6 +178,7 @@ def test_ioload(storagegroup, storagenode):
 
     for ioclass, ioconfig in [
         ("Default", None),
+        ("Polling", None),
         (None, None),
     ]:
         storagenode(
@@ -197,7 +198,7 @@ def test_ioload(storagegroup, storagenode):
 
 
 def test_update_group_not_idle_node(
-    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+    xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with a not idle group.
 
@@ -216,7 +217,7 @@ def test_update_group_not_idle_node(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -229,7 +230,7 @@ def test_update_group_not_idle_node(
 
 
 def test_update_group_not_idle_group(
-    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+    xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with a not idle group.
 
@@ -253,7 +254,7 @@ def test_update_group_not_idle_group(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Idle update didn't happen
     mockio.group.idle_update.assert_not_called()
@@ -263,7 +264,7 @@ def test_update_group_not_idle_group(
 
 
 def test_update_group_idle(
-    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+    xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with an idle group."""
 
@@ -275,7 +276,7 @@ def test_update_group_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Group update started
     mockio.group.before_update.assert_called_once()
@@ -288,7 +289,7 @@ def test_update_group_idle(
 
 
 def test_update_group_cancelled(
-    hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
+    xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with a group that cancels the update."""
 
@@ -300,7 +301,7 @@ def test_update_group_cancelled(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(hostname, queue, emptypool)
+    update.update_loop(queue, emptypool)
 
     # Group update started
     mockio.group.before_update.assert_called_once()
