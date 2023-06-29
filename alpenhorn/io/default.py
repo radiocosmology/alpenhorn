@@ -13,23 +13,68 @@ from typing import TYPE_CHECKING
 import os
 import logging
 import pathlib
+import threading
 
+from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
+from .updownlock import UpDownLock
 from .. import util
-from .base import BaseNodeIO, BaseGroupIO
 from ..task import Task
 
 # The asyncs are over here:
-from ._default_asyncs import check_async, delete_async
+from ._default_asyncs import pull_async, check_async, delete_async
 
 if TYPE_CHECKING:
-    from ..archive import ArchiveFileCopy
+    from ..acquisition import ArchiveFile
+    from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
+    from ..queue import FairMultiFIFOQueue
+    from ..storage import StorageNode
     from ..update import UpdateableNode
 
 log = logging.getLogger(__name__)
 
+# Reserved byte counts are stored here, indexed by node name and protected
+# by the mutex
+_mutex = threading.Lock()
+_reserved_bytes = dict()
+
+
+class DefaultNodeRemote(BaseNodeRemote):
+    """I/O class for a remote DefaultIO StorageNode."""
+
+    def pull_ready(self, file: ArchiveFile) -> bool:
+        """Is `file` ready for pulling from this remote node?
+
+        Parameters
+        ----------
+        file : ArchiveFile
+            the file being checked
+
+        Returns
+        -------
+        True
+            Files on Default nodes are always ready.
+        """
+        return True
+
 
 class DefaultNodeIO(BaseNodeIO):
     """A simple StorageNode backed by a regular POSIX filesystem."""
+
+    # SETUP
+
+    remote_class = DefaultNodeRemote
+
+    def __init__(
+        self, node: StorageNode, queue: FairMultiFIFOQueue, config: dict
+    ) -> None:
+        super().__init__(node, queue, config)
+
+        # The directory tree modification lock
+        self.tree_lock = UpDownLock()
+
+        # Set up a reservation for ourself if necessary
+        with _mutex:
+            _reserved_bytes.setdefault(node.name, 0)
 
     # I/O METHODS
 
@@ -114,11 +159,21 @@ class DefaultNodeIO(BaseNodeIO):
             func=delete_async,
             queue=self._queue,
             key=self.node.name,
-            args=(copies,),
+            args=(self.tree_lock, copies),
             name="Delete copies "
             + str([copy.id for copy in copies])
             + f" from {self.node.name}",
         )
+
+    def exists(self, path: pathlib.PurePath) -> bool:
+        """Does `path` exist?
+
+        Parameters
+        ----------
+        path : pathlib.PurePath
+            path relative to `node.root`
+        """
+        return pathlib.Path(self.node.root, path).is_file()
 
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
         """Return size in bytes of the file given by `path`.
@@ -163,6 +218,109 @@ class DefaultNodeIO(BaseNodeIO):
         """
         return util.md5sum_file(pathlib.Path(self.node.root, path, *segments))
 
+    def pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Pull file specified by copy request `req` onto `self.node`.
+
+        Most of the work happens in an asynchronous I/O task.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the copy request to fulfill.  We are the destination node (i.e.
+            `req.group_to == self.node.group`).
+        """
+
+        if self.node.under_min:
+            log.info(
+                f"Skipping pull for StorageNode {self.node.name}: hit minimum free space: "
+                f"({self.node.avail_gb:.2f} GiB < {self.node.min_avail_gb:.2f} GiB)"
+            )
+            return
+
+        if self.node.check_over_max():
+            log.info(
+                f"Skipping pull for StorageNode {self.node.name}: node full. "
+                f"({self.node.get_total_gb():.2f} GiB >= {self.node.max_total_gb:.2f} GiB)"
+            )
+            return
+
+        # Check that there is enough space available (and reserve what we need)
+        if not self.reserve_bytes(req.file.size_b):
+            log.warning(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}: "
+                f"insufficient space on node {self.node.name}."
+            )
+            return
+
+        Task(
+            func=pull_async,
+            queue=self._queue,
+            key=self.node.name,
+            args=(self, self.tree_lock, req),
+            name=f"AFCR#{req.id}: {req.node_from.name} -> {self.node.name}",
+        )
+
+    # This is the reservation fudge factor.  XXX Is it correct?
+    reserve_factor = 2
+
+    def release_bytes(self, size: int) -> None:
+        """Release space previously reserved with `reserve_bytes`.
+
+        Parameters
+        ----------
+        size : integer
+            the number of bytes to release
+
+        Raises
+        ------
+        ValueError
+            `size` was greater than the total amount of reserved
+            space.
+        """
+        size *= self.reserve_factor
+        with _mutex:
+            if _reserved_bytes[self.node.name] < size:
+                raise ValueError(
+                    f"attempted to release too many bytes: {_reserved_bytes[self.node.name]} < {size}"
+                )
+            _reserved_bytes[self.node.name] -= size
+
+    def reserve_bytes(self, size: int, check_only: bool = False) -> bool:
+        """Attempt to reserve `size` bytes of space on the filesystem.
+
+        Parameters
+        ----------
+        size : int
+            the number of bytes to reserve
+        check_only : bool, optional
+            If True, no reservation is made, and the only effect is
+            the return value.
+
+        Returns
+        -------
+        success : bool
+            False if there was insufficient space to make the reservation.
+            True otherwise.
+        """
+        size *= self.reserve_factor
+        with _mutex:
+            bavail = self.bytes_avail()
+            if bavail is not None and bavail - _reserved_bytes[self.node.name] < size:
+                return False  # Insufficient space
+
+            if not check_only:
+                _reserved_bytes[self.node.name] += size
+
+            return True
+
+    def ready_pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Ready a file to be pulled as specified by `req`.
+
+        This method does nothing: DefaultIO file copies are
+        always ready.
+        """
+        pass
+
 
 class DefaultGroupIO(BaseGroupIO):
     """A simple StorageGroup.
@@ -200,3 +358,39 @@ class DefaultGroupIO(BaseGroupIO):
 
         self.node = nodes[0]
         return nodes
+
+    # I/O METHODS
+
+    def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
+        """Check whether the file `path` exists in this group.
+
+
+        Parameters
+        ----------
+        path : pathlib.PurePath
+            the path, relative to node `root` of the file to
+            search for.
+
+        Returns
+        -------
+        node : UpdateableNode or None
+            If the file exists, returns the node in the group.
+            If the file doesn't exist in the group, this is None.
+        """
+        if self.node.io.exists(path):
+            return self.node
+
+        return None
+
+    def pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+
+        Simply passes the `req` on to the node in the group.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the request to fulfill.  We are the destination group (i.e.
+            `req.group_to == self.group`).
+        """
+        self.node.io.pull(req)

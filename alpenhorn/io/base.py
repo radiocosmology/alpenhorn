@@ -10,15 +10,101 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import logging
+import pathlib
 
 if TYPE_CHECKING:
-    import pathlib
-    from ..archive import ArchiveFileCopy
+    from ..acquisition import ArchiveFile
+    from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
     from ..storage import StorageNode, StorageGroup
     from ..update import UpdateableNode
 
 log = logging.getLogger(__name__)
+
+
+# Comment from DVW:
+#
+# Separating BaseNodeIO and BaseNodeRemote is primarily to avoid the temptaiton
+# of accidentally writing code that tries to perform I/O operations on non-local
+# nodes.
+class BaseNodeRemote:
+    """Base I/O class for a remote StorageNode.
+
+    The remote I/O modules provide read-only information about a possibly
+    non-local StorageNode.
+
+    Parameters
+    ----------
+    node : StorageNode
+        the remote node
+    config : dict
+        the parsed `node.io_config`. If `node.io_config` is None,
+        this is an empty `dict`.
+    """
+
+    def __init__(self, node: StorageNode, config: dict) -> None:
+        self.node = node
+        self.config = config
+
+    def file_addr(self, file: ArchiveFile) -> str:
+        """Return an remote file address suitable for use with rsync.
+
+        i.e., a string of the form: <username>@<host>:<path>
+
+        Parameters
+        ----------
+        file : ArchiveFile
+            The file to return the address for.
+
+        Returns
+        -------
+        addr : str
+            The file address
+
+        Raises
+        ------
+        ValueError
+            `node.username` or `node.address` were not set.
+        """
+        if self.node.username is None:
+            raise ValueError("missing username")
+        if self.node.address is None:
+            raise ValueError("missing address")
+
+        return f"{self.node.username}@{self.node.address}:{self.file_path(file)}"
+
+    def file_path(self, file: ArchiveFile) -> str:
+        """Return a path on the remote node pointing to ArchiveFile `file`.
+
+        By default, returns the path contcatenation of `node.root` and
+        `file.path`.
+
+        Parameters:
+        -----------
+        file : ArchiveFile
+            The file to return the path for.
+
+        Returns:
+        --------
+        path : str
+            the remote path
+        """
+        return str(pathlib.PurePath(self.node.root, file.path))
+
+    def pull_ready(self, file: ArchiveFile) -> bool:
+        """Is `file` ready for pulling from this remote node?
+
+        Parameters
+        ----------
+        file : ArchiveFile
+            the file being checked
+
+        Returns
+        -------
+        ready : bool
+            True if `file` is ready on the node; False otherwise.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
 
 
 class BaseNodeIO:
@@ -36,6 +122,9 @@ class BaseNodeIO:
     """
 
     # SETUP
+
+    # Subclasses should set this to a BaseNodeRemote-derived class.
+    remote_class = BaseNodeRemote
 
     def __init__(
         self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
@@ -169,6 +258,16 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def exists(self, path: pathlib.PurePath) -> bool:
+        """Does `path` exist?
+
+        Parameters
+        ----------
+        path : pathlib.PurePath
+            path relative to `node.root`
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
         """Return size in bytes of the file given by `path`.
 
@@ -198,6 +297,37 @@ class BaseNodeIO:
         -------
         md5sum : str
             the base64-encoded MD5 hash value
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Pull file specified by copy request `req` onto `self.node`.
+
+        In this case, `node` is the destination.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the copy request to fulfill.  We are the destination node (i.e.
+            `req.group_to == self.node.group`).
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def ready_pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Ready a file to be pulled as specified by `req`.
+
+        This method is called for all pending requests, even ones that are
+        impossible due to the file being corrupt, missing, or some other calamity.
+
+        If such an impossibility arises, this method _may_ cancel the request,
+        but that's not required.  (It's the responsibility of the pulling
+        alpenhornd to resolve the request.)
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the copy request to ready.  We are the source node (i.e.
+            `req.node_from == self.node`).
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -266,7 +396,8 @@ class BaseGroupIO:
         Parameters
         ----------
         idle : boolean
-                If False, the group update is going to be skipped.
+                True if all the `nodes` were idle when the current
+                update loop started.
 
         Returns
         -------
@@ -299,3 +430,41 @@ class BaseGroupIO:
         """
         # Do nothing
         pass
+
+    # I/O METHODS
+
+    def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
+        """Check whether the file `path` exists in this group.
+
+        If the file exists on more than one node in the group,
+        implementations may use any method to choose which node
+        to return.
+
+        Parameters
+        ----------
+        path : pathlib.PurePath
+            the path, relative to a node `root` of the file to
+            search for.
+
+        Returns
+        -------
+        node : UpdateableNode or None
+            If the file exists, the node containing it.  This should be
+            one of the `UpdateableNode` instances provided to `set_nodes`.
+            If the file doesn't exist in the group, this is None.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+
+        In general, implementations should choose which node in the group
+        to handle the request, and pass `req` to that node's `io.pull` method.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the request to fulfill.  We are the destination group (i.e.
+            `req.group_to == self.group`).
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")

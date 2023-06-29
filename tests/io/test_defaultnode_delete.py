@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from alpenhorn.archive import ArchiveFileCopy
 from alpenhorn.io._default_asyncs import delete_async
+from alpenhorn.io.updownlock import UpDownLock
 
 
 @pytest.fixture
@@ -185,8 +186,8 @@ def test_delete_dirs(
     delete_copies = copies.copy()
     del delete_copies[2]
 
-    # Call async directly for simplicity.
-    delete_async(None, delete_copies)
+    # Call async directly with a fake UpDownLock
+    delete_async(None, UpDownLock(), delete_copies)
 
     # Only copies[2] remains
     assert ArchiveFileCopy.select().where(ArchiveFileCopy.has_file == "Y").count() == 1
