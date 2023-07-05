@@ -2,13 +2,15 @@
 
 import pytest
 import pathlib
+import datetime
 import peewee as pw
-from unittest.mock import call, patch, Mock
+from unittest.mock import call, patch
 from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn import auto_import
 from alpenhorn.archive import ArchiveFileCopy
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.update import UpdateableNode
 
 
 def test_import_file_bad_paths(queue, unode):
@@ -34,6 +36,26 @@ def test_import_file_queue(queue, unode):
 
     # job in queue
     assert queue.qsize == 1
+
+
+@pytest.mark.lfs_hsm_state(
+    {
+        "/node/acq/file": "released",
+    }
+)
+def test_import_file_not_ready(dbtables, queue, simplenode, mock_lfs):
+    """Test _import_file() on unready file."""
+
+    # Set up node for LustreHSMIO
+    simplenode.io_class = "LustreHSM"
+    simplenode.io_config = '{"quota_group": "qgroup", "headroom": 300000}'
+    unode = UpdateableNode(queue, simplenode)
+
+    # _import_file is a generator function, so it needs to be interated to run.
+    assert next(auto_import._import_file(None, unode, pathlib.PurePath("acq/file"))) > 0
+
+    # File has been restored
+    assert not mock_lfs("").hsm_released("/node/acq/file")
 
 
 def test_import_file_no_ext(dbtables, unode):
@@ -83,6 +105,10 @@ def test_import_file_create(xfs, dbtables, unode):
 
     xfs.create_file("/node/simplefile_acq/simplefile")
 
+    before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
+        microsecond=0
+    )
+
     with patch(
         "alpenhorn.extensions._id_ext", [lambda path, node: ("simplefile_acq", None)]
     ):
@@ -92,6 +118,8 @@ def test_import_file_create(xfs, dbtables, unode):
                     None, unode, pathlib.PurePath("simplefile_acq/simplefile")
                 )
             )
+
+    after = datetime.datetime.now() + datetime.timedelta(seconds=1)
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
@@ -103,6 +131,9 @@ def test_import_file_create(xfs, dbtables, unode):
 
     file = ArchiveFile.get(name="simplefile", acq=acq)
     file_data = file.__data__
+
+    assert file_data["registered"] >= before
+    assert file_data["registered"] <= after
     del file_data["registered"]
     assert file_data == {
         "id": 1,
@@ -114,7 +145,11 @@ def test_import_file_create(xfs, dbtables, unode):
 
     copy = ArchiveFileCopy.get(file=file, node=unode.db)
     copy_data = copy.__data__
+
+    assert copy_data["last_update"] >= before
+    assert copy_data["last_update"] <= after
     del copy_data["last_update"]
+
     assert copy_data == {
         "id": 1,
         "node": 1,
@@ -126,7 +161,7 @@ def test_import_file_create(xfs, dbtables, unode):
     }
 
 
-def test_import_file_create(xfs, dbtables, unode):
+def test_import_file_callback(xfs, dbtables, unode):
     """Test _import_file() with callback"""
 
     xfs.create_file("/node/simplefile_acq/simplefile")
@@ -165,9 +200,18 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
 
     # Create the file copy
     archivefilecopy(
-        file=simplefile, node=unode.db, has_file="N", wants_file="N", ready=False
+        file=simplefile,
+        node=unode.db,
+        has_file="N",
+        wants_file="N",
+        ready=False,
+        last_update=datetime.datetime(2000, 1, 1, 0, 0, 0),
     )
     xfs.create_file("/node/simplefile_acq/simplefile")
+
+    before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
+        microsecond=0
+    )
 
     with patch(
         "alpenhorn.extensions._id_ext", [lambda path, node: ("simplefile_acq", None)]
@@ -179,6 +223,8 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
                 )
             )
 
+    after = datetime.datetime.now() + datetime.timedelta(seconds=1)
+
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
     assert acq == simplefile.acq
@@ -188,7 +234,11 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
 
     copy = ArchiveFileCopy.get(file=file, node=unode.db)
     copy_data = copy.__data__
+
+    assert copy_data["last_update"] >= before
+    assert copy_data["last_update"] <= after
     del copy_data["last_update"]
+
     assert copy_data == {
         "id": 1,
         "node": 1,

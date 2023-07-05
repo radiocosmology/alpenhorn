@@ -168,10 +168,10 @@ def test_serial_io(fastqueue, set_config):
     assert task_count == 3
 
 
-def test_ioload(storagegroup, storagenode):
+def test_ioload(storagegroup, storagenode, mock_lfs):
     """Test instantiation of the I/O classes"""
 
-    for ioclass in ["Default", "Transport", None]:
+    for ioclass in ["Default", "Transport", "LustreHSM", None]:
         group = storagegroup(
             name="none" if ioclass is None else ioclass, io_class=ioclass
         )
@@ -179,6 +179,8 @@ def test_ioload(storagegroup, storagenode):
     for ioclass, ioconfig in [
         ("Default", None),
         ("Polling", None),
+        ("LustreQuota", '{"quota_group": "qgroup"}'),
+        ("LustreHSM", '{"quota_group": "qgroup", "headroom": 100000}'),
         (None, None),
     ]:
         storagenode(

@@ -2,6 +2,7 @@
 
 Things that this end-to-end test does:
     - auto-imports a file
+    - recalls a released file out of LustreHSM
     - pulls a file onto the Transport group
     - checks a corrupt file
     - deletes a file
@@ -98,8 +99,20 @@ def e2e_db(xfs, hostname):
     xfs.create_file("/tp/one/ALPENHORN_NODE", contents="tp1")
     xfs.create_file("/tp/two/ALPENHORN_NODE", contents="tp2")
 
-    # A future PR will turn this into a Nearline group
-    nlgrp = StorageGroup.create(name="nl1")
+    # A HSM group
+    nlgrp = StorageGroup.create(
+        name="nl1", io_class="LustreHSM", io_config='{"threshold": 1000}'
+    )
+    nl1 = StorageNode.create(
+        name="nl1",
+        group=nlgrp,
+        io_class="LustreHSM",
+        root="/nl1",
+        host=hostname,
+        active=True,
+        # This is mostly ignored
+        io_config='{"quota_group": "qgroup", "headroom": 10}',
+    )
     sf1 = StorageNode.create(
         name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True
     )
@@ -112,19 +125,31 @@ def e2e_db(xfs, hostname):
     acq1 = ArchiveAcq.create(name="acq1")
 
     # The only filetype
-    filetype = pattern_importer.FileType.create(
+    pattern_importer.FileType.create(
         name="filetype",
         glob=True,
         patterns='["*.me"]',
     )
 
     # A file that needs to be pulled onto the Transport group
-    pullme = ArchiveFile.create(name="pull.me", type=filetype, acq=acq1, size_b=0)
+    pullme = ArchiveFile.create(name="pull.me", acq=acq1, size_b=0)
     ArchiveFileCopy.create(
         file=pullme, node=dftnode, has_file="Y", wants_file="Y", size_b=0, ready=False
     )
     ArchiveFileCopyRequest.create(file=pullme, node_from=dftnode, group_to=fleet)
     xfs.create_file("/dft/acq1/pull.me")
+
+    # A file needing recall from HSM to be pulled to Transport
+    restoreme = ArchiveFile.create(
+        name="restore.me",
+        acq=acq1,
+        size_b=0,
+    )
+    ArchiveFileCopy.create(
+        file=restoreme, node=nl1, has_file="Y", wants_file="Y", size_b=0, ready=False
+    )
+    ArchiveFileCopyRequest.create(file=restoreme, node_from=nl1, group_to=fleet)
+    xfs.create_file("/nl1/acq1/restore.me")
 
     # A file to check
     checkme = ArchiveFile.create(name="check.me", acq=acq1, size_b=0, md5sum="0")
@@ -134,7 +159,7 @@ def e2e_db(xfs, hostname):
     xfs.create_file("/dft/acq1/check.me")
 
     # A file to delete -- also need two archive copies to allow deletion
-    deleteme = ArchiveFile.create(name="delete.me", type=filetype, acq=acq1, size_b=0)
+    deleteme = ArchiveFile.create(name="delete.me", acq=acq1, size_b=0)
     ArchiveFileCopy.create(
         file=deleteme, node=dftnode, has_file="Y", wants_file="Y", ready=True
     )
@@ -210,18 +235,34 @@ def e2e_config(xfs, hostname):
     xfs.create_file("/etc/alpenhorn/alpenhorn.conf", contents=yaml.dump(config))
 
 
-def test_cli(e2e_db, e2e_config, mock_rsync, loop_once):
+@pytest.mark.lfs_quota_remaining(2000)
+@pytest.mark.lfs_hsm_state(
+    {
+        "/nl2/acq1/correct.me": "restored",
+        "/nl1/acq1/restore.me": "released",
+        "/nl1/acq1/release.me": "restored",
+    }
+)
+def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
     runner = CliRunner()
 
     result = runner.invoke(cli, catch_exceptions=False)
 
     assert result.exit_code == 0
 
+    # Check HSM
+    lfs = mock_lfs(quota_group="qgroup")
+    assert lfs.hsm_state("/nl1/acq1/restore.me") == lfs.HSM_RESTORED
+
     # Check results
 
     # find.me has been imported
     assert ArchiveAcq.get(name="acq2")
     assert ArchiveFile.get(name="find.me")
+
+    # restore.me is not ready (because the main loop only ran once).
+    restoreme = ArchiveFile.get(name="restore.me")
+    assert not ArchiveFileCopy.get(file=restoreme).ready
 
     # pull.me has been pulled
     tp1 = StorageNode.get(name="tp1")
