@@ -52,6 +52,10 @@ Example config:
         # Timescale on which to poll the filesystem for new data to import
         auto_import_interval: 30
 
+        # Minimum number of days to wait from the last update of a file copy
+        # record before auto-verifying the file
+        auto_verify_min_days: 7
+
         # Maximum time (in seconds) to run serial I/O per update loop (these
         # are I/O run tasks in the main thread, in cases when there are no
         # worker threads
@@ -82,6 +86,7 @@ _default_config = {
     "logging": {"level": "warning", "module_levels": {"alpenhorn": "info"}},
     "service": {
         "auto_import_interval": 30,
+        "auto_verify_min_days": 7,
         "num_workers": 0,
         "serial_io_timeout": 900,
         "update_interval": 60,

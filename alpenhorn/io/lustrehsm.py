@@ -17,20 +17,25 @@ from typing import TYPE_CHECKING, IO
 import logging
 import pathlib
 import peewee as pw
+from datetime import datetime
 
 from ..archive import ArchiveFileCopy
+from ..querywalker import QueryWalker
 from ..task import Task
 from ..util import pretty_bytes
 from .base import BaseGroupIO, BaseNodeRemote
 from .lustrequota import LustreQuotaNodeIO
+
+# This is the DefaultIO check async; used in auto_verify()
+from ._default_asyncs import check_async
 
 if TYPE_CHECKING:
     import os
     from ..acquisition import ArchiveFile
     from ..archive import ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
-    from ..storage import StorageNode, StorageGroup
-    from ..update import UpdateableNode
+    from ..update import UpdateableNode, UpdateableGroup
+    from .lfs import LFS
 
 log = logging.getLogger(__name__)
 
@@ -73,16 +78,29 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             the lfs(1) executable.  Defaults to "lfs"; may be a full path.
         * fixed_quota : integer
             the quota, in kiB, on the Lustre disk backing the HSM system
+        * release_check_count : integer
+            The number of files to check at a time when doing idle HSM status
+            update (see idle_update()).  Default is 100.
     """
 
     remote_class = LustreHSMNodeRemote
 
     def __init__(
-        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
+        self, node: UpdateableNode, config: dict, queue: FairMultiFIFOQueue
     ) -> None:
         super().__init__(node, config, queue)
 
         self._headroom = config["headroom"] * 2**10  # convert from kiB
+
+        # QueryWalker for the HSM state check
+        self._release_qw = None
+
+        # For idle-time HSM state updates
+        self._nrelease = config.get("release_check_count", 100)
+        if self._nrelease < 1:
+            raise ValueError(
+                f"io_config key 'release_check_count' non-positive (={self._nrelease})"
+            )
 
     def release_files(self) -> None:
         """Release files from the HSM disk to keep the headroom clear.
@@ -167,6 +185,70 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # Continue with the update
         return True
 
+    def idle_update(self) -> None:
+        """Update HSM state of copies when idle.
+
+        If the node is idle after an update, double check the HSM state
+        for a few files and update the DB if necessary.
+
+        Any I/O on a HSM file will restore it.  It's important for the
+        data index to reflect changes made in this way outside of alpenhorn so that
+        the alpenhornd daemon can properly manage free space.
+        """
+
+        # Check the query walker.  Initialised if necessary.
+        if self._release_qw is None:
+            try:
+                self._release_qw = QueryWalker(
+                    ArchiveFileCopy,
+                    ArchiveFileCopy.node == self.node,
+                    ArchiveFileCopy.has_file == "Y",
+                )
+            except pw.DoesNotExist:
+                return  # No files to check on the node
+
+        # Try to get a bunch of copies to check
+        try:
+            copies = self._release_qw.get(self._nrelease)
+        except pw.DoesNotExist:
+            # Not sure why all the file copies have gone away, but given there's
+            # nothing on the node now, can't hurt to re-init the QW in this case
+            self._release_qw = None
+            return
+
+        def _async(task, node, lfs, copies):
+            for copy in copies:
+                state = lfs.hsm_state(copy.path)
+                if state == lfs.HSM_MISSING:
+                    # File is unexpectedly gone.
+                    log.warning(
+                        f"File copy {copy.file.path} on node {node.name} is missing!"
+                    )
+                    ArchiveFileCopy.update(has_file="N", ready=False).where(
+                        ArchiveFileCopy.id == copy.id
+                    ).execute()
+                elif state == lfs.HSM_RELEASED:
+                    if copy.ready:
+                        log.info("Updating file copy {copy.file.path}: ready -> False")
+                        ArchiveFileCopy.update(ready=False).where(
+                            ArchiveFileCopy.id == copy.id
+                        ).execute()
+                else:  # i.e. RESTORED or UNARCHIVED
+                    if not copy.ready:
+                        log.info("Updating file copy {copy.file.path}: ready -> True")
+                        ArchiveFileCopy.update(ready=True).where(
+                            ArchiveFileCopy.id == copy.id
+                        ).execute()
+
+        # Copies get checked in an async
+        Task(
+            func=_async,
+            queue=self._queue,
+            key=self.node.name,
+            args=(self.node, self._lfs, copies),
+            name=f"Node {self.node.name}: HSM state check for {len(copies)} copies",
+        )
+
     # I/O METHODS
 
     def check(self, copy: ArchiveFileCopy) -> None:
@@ -191,6 +273,99 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
         # Otherwise, use the DefaultIO method to do the check
         super().check(copy)
+
+    def auto_verify(self, copy: ArchiveFileCopy) -> None:
+        """Auto-verify a file in HSM.
+
+        If the file happens to be restored, we simply run check() on
+        it.  If it's released, instead we do the following:
+
+        - trigger a restore the file
+        - wait for the file to be restored
+        - run the check()
+        - release the file again
+
+        The last step here is to keep auto-verifcation from replacing
+        all the newly added data from HSM (which are presumably
+        more interesting that some random files being auto-verified).
+
+        Parameters
+        ----------
+        copy : ArchiveFileCopy
+            the file copy to auto-verify
+        """
+
+        # The trivial case.
+        if not pathlib.Path(copy.path).exists():
+            # Only update if this is surprising (which it probably
+            # is.)
+            if copy.has_file != "N":
+                log.warning(
+                    "File copy missing during auto-verify: "
+                    f"{copy.file.path}.  Updating database."
+                )
+                ArchiveFileCopy.update(has_file="N").where(
+                    ArchiveFileCopy.id == copy.id
+                ).execute()
+            return
+
+        # Are we restored?  Note: we're interested in the actual
+        # state of the file, not the state as recorded in the database.
+        #
+        # If we are, we can just use the DefaultIO's check() method
+        # and not worry about any of the stuff going on below.
+        if not self._lfs.hsm_released(copy.path):
+            return super().check(copy)
+
+        # Update last_updated for the copy.  This ensures another
+        # copy of auto-verify won't be enqueued while the job is yielded
+        # waiting for restore
+        copy.last_update = datetime.now()
+        copy.save()
+
+        def _async(
+            task: Task, node: UpdateableNode, lfs: LFS, copy: ArchiveFileCopy
+        ) -> None:
+            """Asyncrhonously restore a file, verify it, and then
+            release it again.
+
+            Parameters
+            ----------
+            task : Task
+                The task instance containing this async.
+            node : UpdateableNode
+                The node we're running on
+            lfs : LFS
+                The lfs(1) wrapper
+            copy : ArchiveFileCopy
+                The file copy to check
+            """
+            # Trigger restore
+            lfs.hsm_restore(copy.path)
+
+            # While the file is not restored, yield to wait for later
+            while lfs.hsm_released(copy.path):
+                yield 30
+
+            # Do the check by inlining the Default-I/O function
+            check_async(task, node, copy)
+
+            # Before releasing the file, check whether the DB thinks
+            # it's restored.  If it is don't bother releasing, since
+            # it's better to be consistent with the DB
+            if not ArchiveFileCopy.get(id=copy.id).ready:
+                lfs.hsm_release(copy.path)
+
+        Task(
+            func=_async,
+            queue=self._queue,
+            key=self.node.name,
+            args=(self.node, self._lfs, copy),
+            name=(
+                f"Auto-verify released file {copy.file.name} "
+                f"on node {self.node.name}"
+            ),
+        )
 
     def check_active(self) -> bool:
         """Check that this is an active node.
@@ -327,7 +502,7 @@ class LustreHSMGroupIO(BaseGroupIO):
 
     # SETUP
 
-    def __init__(self, group: StorageGroup, config: dict) -> None:
+    def __init__(self, group: UpdateableGroup, config: dict) -> None:
         super().__init__(group, config)
 
         self._threshold = self.config.get("threshold", 1000000000)  # bytes
