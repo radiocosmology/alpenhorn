@@ -31,15 +31,77 @@ Example config:
         - alpenhorn_chime
         - chimedb.core.alpenhorn
 
-    # Logging configuration
+    # Logging configuration.  By default, alpenhorn sends all log message to
+    # standard error.
     logging:
-
         # Set the overall logging level
         level: debug
 
         # Allow overriding the level on a module by module basis
         module_levels:
             alpenhorn.db: info
+
+        # Alpenhorn can be configured to send log output to syslog and/or
+        # a file.  This is _in addition_ to the log sent to standard error,
+        # which is always enabled.
+
+        # Syslog logging.
+        syslog:
+            # If true, enable logging to syslog.  Note: if the "syslog" section
+            # is present in the logging config, then the default value
+            # of this key is true.  As a result, this key need only be specified if
+            # none of the other syslog configuration parameters are provided
+            # in the config.
+            enable: true
+
+            # The network address to send syslog message to.
+            #
+            # May also be a Unix domain socket (like "/dev/log").  In that case,
+            # set `port`, below, to zero to indicate this.
+            #
+            # Defaults to "localhost".
+            address: localhost
+
+            # The network port to send syslog messages to.  If this is zero,
+            # then the port is ignored and `address` is taken to be a Unix domain
+            # socket.  Defaults to 514, the standard syslog port.
+            port: 514
+
+            # The syslog facility to use.  If given, should be the name of one of
+            # the syslog facilities, disregarding case ("user", "local0", ...)
+            # Defaults to "user".
+            facility: user
+
+            # Set to True to use TCP, instead of UDP, to send messages to the syslog server.
+            # Ignored if using a Unix domain socket (i.e. `port` is zero).  Default is False.
+            use_tcp: false
+
+        # File logging.
+        file:
+            name: /path/to/file.log
+
+            # If a third-party (like logrotate) is rotating the alpenhorn log
+            # file, set this to "true" to tell alpenhorn to watch for log-file
+            # rotation.
+            watch: false
+
+            # Alternately, alpenhorn can manage log file rotation itself.  Set
+            # "rotate" to true to enable.  At most one of "watch" and "rotate"
+            # may be true.
+            rotate: true
+
+            # The following two settings affect alpenhorn-managed log rotation
+            # and are ignored if "rotate" is not true.
+
+            # Maximum number of rotated files to keep.  Must be at least one
+            # Rotated files append an integer to the name specified (e.g.
+            # "file.log.1", "file.log.2" etc.).
+            backup_count: 100
+
+            # Size, in bytes, at which log file rotation occurs.  May include a suffix:
+            # k, M, or G.
+            max_bytes: 4G
+
 
     # Configure the operation of the local service
     service:

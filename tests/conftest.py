@@ -2,8 +2,10 @@
 import os
 import pytest
 import shutil
+import logging
 from unittest.mock import patch, MagicMock
 
+import alpenhorn.logger
 from alpenhorn import config, db, extensions
 from alpenhorn.queue import FairMultiFIFOQueue
 from alpenhorn.storage import StorageGroup, StorageNode
@@ -51,7 +53,29 @@ def pytest_configure(config):
 
 
 @pytest.fixture
-def set_config(request):
+def logger():
+    """Set up for log testing
+
+    Yields alpenhorn.logger.
+    """
+
+    alpenhorn.logger.init_logging()
+
+    yield alpenhorn.logger
+
+    # Teardown
+    root = logging.getLogger()
+
+    # Remove all handlers from the root logger
+    handlers = root.handlers
+    for handler in handlers:
+        root.removeHandler(handler)
+
+    alpenhorn.logger.log_buffer = None
+
+
+@pytest.fixture
+def set_config(request, logger):
     """Set alpenhorn.config.config for testing.
 
     Any value given in the alpenhorn_config mark is merged into the
