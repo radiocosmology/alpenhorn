@@ -320,7 +320,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # Update last_updated for the copy.  This ensures another
         # copy of auto-verify won't be enqueued while the job is yielded
         # waiting for restore
-        copy.last_update = datetime.now()
+        copy.last_update = datetime.utcnow()
         copy.save()
 
         def _async(

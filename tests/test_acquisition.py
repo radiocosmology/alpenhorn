@@ -39,9 +39,9 @@ def test_acq_model(archiveacq):
 
 def test_file_model(archiveacq, archivefile):
     acq1 = archiveacq(name="acq1")
-    before = datetime.datetime.now().replace(microsecond=0)
+    before = datetime.datetime.utcnow().replace(microsecond=0)
     archivefile(name="min", acq=acq1)
-    after = datetime.datetime.now()
+    after = datetime.datetime.utcnow()
     archivefile(
         name="max",
         acq=acq1,

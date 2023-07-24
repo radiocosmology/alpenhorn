@@ -348,13 +348,15 @@ def test_update_avail_gb(simplenode):
     assert simplenode.avail_gb is None
 
     # Test a number
-    start = datetime.datetime.now()
+    before = datetime.datetime.utcnow()
     simplenode.update_avail_gb(10000)
     # Now the value is set
     node = StorageNode.get(id=simplenode.id)
+    after = datetime.datetime.utcnow()
 
     assert node.avail_gb == 10000.0 / 2.0**30
-    assert node.avail_gb_last_checked >= start
+    assert node.avail_gb_last_checked >= before
+    assert node.avail_gb_last_checked <= after
 
     # Test None
     simplenode.update_avail_gb(None)

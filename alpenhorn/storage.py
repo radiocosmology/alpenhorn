@@ -131,7 +131,7 @@ class StorageNode(base_model):
     avail_gb : float
         How much free space is there on this node?
     avail_gb_last_checked : datetime
-        When was the amount of free space last checked?
+        The UTC time when `avail_gb` was last updated.
     notes : string
         Any notes or comments about this node.
     io_config : string
@@ -366,7 +366,7 @@ class StorageNode(base_model):
             self.avail_gb = None
         else:
             self.avail_gb = new_avail / 2**30
-        self.avail_gb_last_checked = datetime.datetime.now()
+        self.avail_gb_last_checked = datetime.datetime.utcnow()
 
         # Update the DB with the free space but don't clobber changes made
         # manually to the database

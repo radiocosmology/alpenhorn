@@ -160,7 +160,7 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
             copy.has_file = "M"
             copy.wants_file = "Y"
             copy.ready = True
-            copy.last_update = datetime.now()
+            copy.last_update = datetime.utcnow()
             copy.save()
             log.warning(
                 f'Imported file "{path}" formerly present on node {node.name}!  Marking suspect.'
@@ -174,7 +174,7 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
                 wants_file="Y",
                 ready=True,
                 size_b=node.io.filesize(path, actual=True),
-                last_update=datetime.now(),
+                last_update=datetime.utcnow(),
             )
             log.info(f'Registered file copy "{path}" on node "{node.name}".')
 

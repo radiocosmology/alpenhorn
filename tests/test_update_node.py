@@ -146,7 +146,7 @@ def test_update_free_space(unode):
     unode.db.avail_gb = 3
     unode.db.save()
 
-    now = datetime.datetime.now()
+    now = datetime.datetime.utcnow()
     # 2 ** 32 bytes is 4 GiB
     with patch.object(unode.io, "bytes_avail", lambda fast: 2**32):
         unode.update_free_space()
@@ -164,7 +164,7 @@ def test_auto_verify(unode, simpleacq, archivefile, archivefilecopy):
     unode.db.auto_verify = 4
 
     # Last Update time to permit auto verification
-    last_update = datetime.datetime.now() - datetime.timedelta(days=10)
+    last_update = datetime.datetime.utcnow() - datetime.timedelta(days=10)
 
     # Make some files to verify
     copyY = archivefilecopy(
@@ -211,7 +211,7 @@ def test_auto_verify_dups(unode, simpleacq, archivefile, archivefilecopy):
     unode.db.auto_verify = 4
 
     # Last Update time to permit auto verification
-    last_update = datetime.datetime.now() - datetime.timedelta(days=10)
+    last_update = datetime.datetime.utcnow() - datetime.timedelta(days=10)
 
     # Only one file
     copyY = archivefilecopy(
@@ -235,33 +235,30 @@ def test_auto_verify_time(unode, simpleacq, archivefile, archivefilecopy):
     # Enable auto_verify
     unode.db.auto_verify = 4
 
-    # Last Update time to permit auto verification
-    last_update = datetime.datetime.now() - datetime.timedelta(days=10)
-
     # Files with different last update times
     copy9 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file9", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.now() - datetime.timedelta(days=9),
+        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=9),
     )
     copy8 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file8", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.now() - datetime.timedelta(days=8),
+        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=8),
     )
     copy6 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file6", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.now() - datetime.timedelta(days=6),
+        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=6),
     )
     copy5 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file5", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.now() - datetime.timedelta(days=5),
+        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=5),
     )
 
     mock = MagicMock()
@@ -298,18 +295,18 @@ def test_auto_verify_released(
     # Make the node
     unode = UpdateableNode(queue, simplenode)
 
-    # Files with different last update times
-    copy = archivefilecopy(
+    # This is the only file
+    archivefilecopy(
         node=unode.db,
         file=simplefile,
         has_file="Y",
-        last_update=datetime.datetime.now() - datetime.timedelta(days=10),
+        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=10),
     )
 
     unode.run_auto_verify()
     unode.run_auto_verify()
 
-    # There should be one deferred put
+    # There should be one pending check
     assert queue.qsize == 1
 
 

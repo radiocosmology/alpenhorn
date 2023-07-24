@@ -218,7 +218,7 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     log.info(
         f"Updating file copy #{copy.id} for file {copyname} on node {io.node.name}."
     )
-    copy.last_update = datetime.now()
+    copy.last_update = datetime.utcnow()
     copy.save()
 
 
@@ -303,5 +303,5 @@ def delete_async(
 
         # Update the DB
         ArchiveFileCopy.update(
-            has_file="N", wants_file="N", last_update=datetime.now()
+            has_file="N", wants_file="N", last_update=datetime.utcnow()
         ).where(ArchiveFileCopy.id == copy.id).execute()

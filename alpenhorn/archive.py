@@ -49,7 +49,7 @@ class ArchiveFileCopy(base_model):
     wants_file = EnumField(["Y", "M", "N"], default="Y")
     ready = pw.BooleanField(default=False)
     size_b = pw.BigIntegerField(null=True)
-    last_update = pw.DateTimeField(default=datetime.datetime.now)
+    last_update = pw.DateTimeField(default=datetime.datetime.utcnow)
 
     @property
     def path(self) -> pathlib.Path:
@@ -80,11 +80,11 @@ class ArchiveFileCopyRequest(base_model):
     cancelled : bool
         Set to true if the copy is no longer wanted.
     timestamp : datetime
-        The time the request was made.
+        The UTC time when the request was made.
     transfer_started : datetime
-        The time the transfer was started.
+        The UTC time when the transfer was started.
     transfer_completed : datetime
-        The time the transfer was completed.
+        The UTC time when the transfer was completed.
     """
 
     file = pw.ForeignKeyField(ArchiveFile, backref="requests")
@@ -92,7 +92,7 @@ class ArchiveFileCopyRequest(base_model):
     node_from = pw.ForeignKeyField(StorageNode, backref="requests_from")
     completed = pw.BooleanField(default=False)
     cancelled = pw.BooleanField(default=False)
-    timestamp = pw.DateTimeField(default=datetime.datetime.now, null=True)
+    timestamp = pw.DateTimeField(default=datetime.datetime.utcnow, null=True)
     transfer_started = pw.DateTimeField(null=True)
     transfer_completed = pw.DateTimeField(null=True)
 
