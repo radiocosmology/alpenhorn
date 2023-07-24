@@ -1,6 +1,5 @@
-peewee ~= 3.0
 Click >= 6.0
-globre
-watchdog
-tabulate
+peewee ~= 3.0
 PyYAML
+tabulate
+watchdog
