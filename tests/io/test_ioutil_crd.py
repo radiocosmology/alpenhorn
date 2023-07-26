@@ -154,7 +154,7 @@ def test_md5ok_true(db_setup):
 
     io, copy, req, start_time = db_setup
 
-    before = datetime.datetime.now() - datetime.timedelta(seconds=2)
+    before = datetime.datetime.utcnow() - datetime.timedelta(seconds=2)
     assert (
         copy_request_done(
             req,
@@ -165,13 +165,13 @@ def test_md5ok_true(db_setup):
         )
         is True
     )
-    after = datetime.datetime.now()
+    after = datetime.datetime.utcnow()
 
     # request is resolved
     afcr = ArchiveFileCopyRequest.get(id=req.id)
     assert afcr.completed
     assert not afcr.cancelled
-    assert afcr.transfer_started == datetime.datetime.fromtimestamp(start_time)
+    assert afcr.transfer_started == datetime.datetime.utcfromtimestamp(start_time)
     assert afcr.transfer_completed >= before
     assert afcr.transfer_completed <= after
 

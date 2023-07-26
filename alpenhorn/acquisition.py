@@ -40,7 +40,7 @@ class ArchiveFile(base_model):
     md5sum : string
         md5 checksum of file. Used for verifying integrity.
     registered : datetime
-        The time the file was registered in the database.
+        The UTC time when the file was registered in the database.
     """
 
     acq = pw.ForeignKeyField(ArchiveAcq, backref="files")
@@ -49,7 +49,7 @@ class ArchiveFile(base_model):
     md5sum = pw.CharField(null=True, max_length=32)
     # Note: default here is the now method itself (i.e. "now", not "now()").
     #       Will be evaulated by peewee at row-creation time.
-    registered = pw.DateTimeField(default=datetime.datetime.now)
+    registered = pw.DateTimeField(default=datetime.datetime.utcnow)
 
     class Meta:
         # (acq,name) is unique

@@ -105,7 +105,7 @@ def test_import_file_create(xfs, dbtables, unode):
 
     xfs.create_file("/node/simplefile_acq/simplefile")
 
-    before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
+    before = (datetime.datetime.utcnow() - datetime.timedelta(seconds=1)).replace(
         microsecond=0
     )
 
@@ -119,7 +119,7 @@ def test_import_file_create(xfs, dbtables, unode):
                 )
             )
 
-    after = datetime.datetime.now() + datetime.timedelta(seconds=1)
+    after = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
@@ -209,7 +209,7 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
     )
     xfs.create_file("/node/simplefile_acq/simplefile")
 
-    before = (datetime.datetime.now() - datetime.timedelta(seconds=1)).replace(
+    before = (datetime.datetime.utcnow() - datetime.timedelta(seconds=1)).replace(
         microsecond=0
     )
 
@@ -223,7 +223,7 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
                 )
             )
 
-    after = datetime.datetime.now() + datetime.timedelta(seconds=1)
+    after = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
