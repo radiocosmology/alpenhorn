@@ -33,11 +33,14 @@ sys.excepthook = log_exception
 def cli():
     """Alpenhorn data management service."""
 
+    # Initialise logging
+    logger.init_logging()
+
     # Load the configuration for alpenhorn
     config.load_config()
 
-    # Set up logging
-    logger.start_logging()
+    # Set up logging based on config
+    logger.configure_logging()
 
     # Load alpenhorn extensions
     extensions.load_extensions()
