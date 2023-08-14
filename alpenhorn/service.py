@@ -42,9 +42,6 @@ def cli():
     # Load alpenhorn extensions
     extensions.load_extensions()
 
-    # Initialise the database framework
-    db.init()
-
     # Connect to the database
     db.connect()
 

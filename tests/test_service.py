@@ -281,7 +281,7 @@ def e2e_config(xfs, hostname):
             "pattern_importer",
         ],
         "database": {"url": "sqlite:///?database=" + urlquote(DB_URI) + "&uri=true"},
-        "service": {"num_workers": 4},
+        "service": {"num_workers": 0},
     }
 
     # Put it in a file
