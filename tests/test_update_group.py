@@ -3,6 +3,8 @@ import pytest
 from unittest.mock import patch, call
 
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.storage import StorageGroup
+from alpenhorn.update import UpdateableGroup, UpdateableNode
 
 
 def make_afcr(
@@ -244,3 +246,68 @@ def test_group_idle(queue, mockgroupandnode):
 
     # Now idle again
     assert group.idle is True
+
+
+def test_reinit(storagegroup, storagenode, queue):
+    """Test UpdateableGroup.reinit."""
+
+    # Create a group
+    stgroup = storagegroup(name="group")
+    stnode = storagenode(name="node", group=stgroup)
+    node = UpdateableNode(queue, stnode)
+    group = UpdateableGroup(group=stgroup, nodes=[node], idle=True)
+
+    # No I/O re-init
+    stgroup = StorageGroup.get(id=stgroup.id)
+    assert stgroup is not group.db
+    io = group.io
+    group.reinit(group=stgroup, nodes=[node], idle=True)
+    assert io is group.io
+
+    # But storagegroup is updated
+    assert stgroup is group.db
+
+    # Also no I/O re-init
+    stgroup = StorageGroup.get(id=stgroup.id)
+    assert stgroup is not group.db
+    stgroup.notes = "Updated"
+    stgroup.save()
+    io = group.io
+    group.reinit(group=stgroup, nodes=[node], idle=True)
+    assert io is group.io
+    assert stgroup is group.db
+
+    # Changing io_config forces re-init
+    stgroup = StorageGroup.get(id=stgroup.id)
+    assert stgroup is not group.db
+    stgroup.io_config = "{}"
+    stgroup.save()
+    group.reinit(group=stgroup, nodes=[node], idle=True)
+    assert io is not group.io
+    assert stgroup is group.db
+
+    # Changing io_class forces re-init
+    stgroup = StorageGroup.get(id=stgroup.id)
+    assert stgroup is not group.db
+    stgroup.io_class = "Default"
+    stgroup.save()
+    io = group.io
+    group.reinit(group=stgroup, nodes=[node], idle=True)
+    assert io is not group.io
+    assert stgroup is group.db
+
+    # Changing id forces re-init
+    #
+    # Alpenhornd indexes UpdateabelGroups by group name, so this would happen
+    # if StorageGroup records have their names swapped around somehow, though we
+    # don't need to do that in this test
+    stgroup = storagegroup(
+        name="group2",
+        io_class=stgroup.io_class,
+        io_config=stgroup.io_config,
+    )
+    assert stgroup is not group.db
+    io = group.io
+    group.reinit(group=stgroup, nodes=[node], idle=True)
+    assert io is not group.io
+    assert stgroup is group.db

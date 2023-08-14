@@ -176,7 +176,7 @@ class updateable_base:
 
         # No re-init, update I/O instance's Storage object
         self.db = storage
-        self.io.update(storage)
+        self.io.set_storage(storage)
         return False
 
 
@@ -478,10 +478,10 @@ class UpdateableGroup(updateable_base):
         self.db = None
         self._do_idle_updates = False
 
-        self.reinit(group, nodes, idle)
+        self.reinit(group=group, nodes=nodes, idle=idle)
 
     def reinit(
-        self, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
+        self, *, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
     ) -> None:
         """Re-initialise the UpdateableGroup.
 

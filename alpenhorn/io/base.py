@@ -143,7 +143,7 @@ class BaseNodeIO:
         self._queue = queue
         self.config = config
 
-    def update(self, node: StorageNode) -> None:
+    def set_storage(self, node: StorageNode) -> None:
         """Update the cached StorageNode instance.
 
         Called once per update loop on pre-existing I/O instances to
@@ -455,6 +455,30 @@ class BaseGroupIO:
     def __init__(self, group: StorageGroup, config: dict) -> None:
         self.group = group
         self.config = config
+
+    def set_storage(self, group: StorageGroup) -> None:
+        """Update the cached StorageGroup instance.
+
+        Called once per update loop on pre-existing I/O instances to
+        replace their `self.group` with a new instance fetched from
+        the database.  The new `group` instance reflects changes made
+        to the database record outside of alpenhornd.
+
+        None of `group.id`, `group.name`, `group.io_class`, or `group.io_config`
+        are different than the old `self.group`'s values.  (Changes in these
+        attributes cause alpenhorn to re-create the I/O instance instead of
+        calling this method.)
+
+        If called, this method is called before the `before_update` hook,
+        but it is not called during the main loop iteration that creates
+        the I/O instance.
+
+        Parameters
+        ----------
+        group : StorageGroup
+            the updated group instance read from the database
+        """
+        self.group = group
 
     def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
         """Set the list of local active nodes in this group.
