@@ -398,7 +398,6 @@ def dbproxy(set_config):
     extensions.load_extensions()
 
     # DB start
-    db.init()
     db.connect()
 
     yield db.database_proxy

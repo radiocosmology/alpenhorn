@@ -86,7 +86,7 @@ def _capability(key: str) -> Any:
     default_cap = {
         "connect": None,
         "close": None,
-        "reentrant": False,
+        "reentrant": True,
     }
 
     try:
@@ -101,11 +101,11 @@ def _capability(key: str) -> Any:
             raise KeyError(f"unknown database capability: {key}")
 
 
-def init() -> None:
-    """Initiate the database connection framework.
+def connect() -> None:
+    """Connect to the database.
 
-    This must be called once, after extensions are loaded, but
-    before attempting to use connect() to create a database connection.
+    This must be called once, after extensions are loaded, before
+    threads are created.
     """
     # attempt to load a database extension
     global _db_ext
@@ -119,13 +119,6 @@ def init() -> None:
     # Tell everyone whether we're threadsafe
     global threadsafe
     threadsafe = _capability("reentrant")
-
-
-def connect() -> None:
-    """Connect to the database.
-
-    Should be called per-thread before any database operations are attempted.
-    """
 
     # If fetch the database config, if present
     if "database" in config.config:

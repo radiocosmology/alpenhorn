@@ -9,12 +9,12 @@ from alpenhorn import db
 
 def test_db(dbproxy):
     """Test starting the default DB."""
-    assert not db.threadsafe
+    assert db.threadsafe
     assert issubclass(dbproxy.obj.__class__, pw.Database)
 
 
 def test_chimedb(use_chimedb, dbproxy):
-    """Test starting the default DB."""
+    """Test starting CHIMEdb."""
     assert db.threadsafe
     assert issubclass(dbproxy.obj.__class__, pw.Database)
 

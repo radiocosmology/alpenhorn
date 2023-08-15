@@ -6,7 +6,6 @@ import threading
 from types import FrameType
 from peewee import OperationalError
 
-from . import db
 from .queue import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
@@ -60,8 +59,6 @@ class Worker(threading.Thread):
         """
 
         log.info("Started.")
-
-        db.connect()
 
         while True:
             # Exit if told to stop
