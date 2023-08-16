@@ -13,6 +13,7 @@ from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from .. import config, db, util
 
 if TYPE_CHECKING:
+    import os
     from ..base import BaseNodeIO
 
 import logging
@@ -63,16 +64,16 @@ def _pull_timeout(size_b: int) -> float | None:
     return base + size_b / bps
 
 
-def bbcp(from_path: str, to_dir: str, size_b: int) -> dict:
+def bbcp(from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int) -> dict:
     """Transfer a file with BBCP.
 
     Command times out after `_pull_timeout(size_b)` seconds have elapsed.
 
     Parameters
     ----------
-    from_path : str
+    from_path : path-like
         Source location
-    to_dir : str
+    to_dir : path-like
         Destination directory
     size_b : int
         Size of the file to transfer.  Only used to
@@ -153,8 +154,8 @@ def bbcp(from_path: str, to_dir: str, size_b: int) -> dict:
             # and https://github.com/chime-experiment/alpenhorn/pull/15
             "-E",
             "%md5=",
-            from_path,
-            to_dir,
+            str(from_path),
+            str(to_dir),
         ],
         timeout=_pull_timeout(size_b),
     )
@@ -178,16 +179,18 @@ def bbcp(from_path: str, to_dir: str, size_b: int) -> dict:
     return ioresult
 
 
-def rsync(from_path: str, to_dir: str, size_b: int, local: bool) -> dict:
+def rsync(
+    from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int, local: bool
+) -> dict:
     """Rsync a file (either local or remote).
 
     Command times out after `_pull_timeout(size_b)` seconds have elapsed.
 
     Parameters
     ----------
-    from_path : str
+    from_path : path-like
         Source location
-    to_dir : str
+    to_dir : path-like
         Destination directory
     size_b : int
         Size of the file to transfer.  Only used to
@@ -232,8 +235,8 @@ def rsync(from_path: str, to_dir: str, size_b: int, local: bool) -> dict:
             "--owner",
             "--copy-links",
             "--sparse",
-            from_path,
-            to_dir,
+            str(from_path),
+            str(to_dir),
         ],
         timeout=_pull_timeout(size_b),
     )

@@ -1,6 +1,7 @@
 """Test alpenhorn.io.lfs LFS wrapper."""
 
 import pytest
+import pathlib
 
 from alpenhorn.io.lfs import LFS
 
@@ -14,6 +15,20 @@ def test_run_lfs_success(have_lfs, mock_run_command):
     assert lfs.run_lfs("arg1", "arg2") == "lfs_out"
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
+        "kwargs": dict(),
+        "timeout": None,
+    }
+
+
+@pytest.mark.run_command_result(0, "lfs_out", "lfs_err")
+def test_run_lfs_stringify(have_lfs, mock_run_command):
+    """run_lfs should stringify arguments."""
+
+    lfs = LFS(None)
+
+    assert lfs.run_lfs(pathlib.Path("path"), 2) == "lfs_out"
+    assert mock_run_command() == {
+        "cmd": ["LFS", "path", "2"],
         "kwargs": dict(),
         "timeout": None,
     }

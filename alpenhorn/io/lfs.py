@@ -128,7 +128,10 @@ class LFS:
             the command.  If the command failed, returns None and
             logs the failure.
         """
-        ret, stdout, stderr = util.run_command([self._lfs] + list(args))
+        # Stringify args
+        args = [str(arg) for arg in args]
+
+        ret, stdout, stderr = util.run_command([self._lfs] + args)
 
         if ret != 0:
             log.warning(f"LFS command failed (ret={ret}): " + " ".join(args))
@@ -140,7 +143,7 @@ class LFS:
 
         return stdout
 
-    def quota_remaining(self, path: str) -> int | None:
+    def quota_remaining(self, path: str | os.PathLike) -> int | None:
         """Retrieve the remaining quota for `path`.
 
         Parameters
@@ -182,6 +185,9 @@ class LFS:
         # default quota is in use.  We (non-root) don't have permission
         # to fetch the default quota, so we need to fall back on the fixed
         # quota in that case.
+
+        # Stringify path
+        path = str(path)
 
         stdout = self.run_lfs("quota", "-q", "-g", self._quota_group, path)
         if stdout is None:
@@ -247,6 +253,9 @@ class LFS:
         # No need to check with HSM if the path isn't present
         if not pathlib.Path(path).exists():
             return HSMState.MISSING
+
+        # Stringify path
+        path = str(path)
 
         stdout = self.run_lfs("hsm_state", path)
         if stdout is None:
