@@ -268,7 +268,7 @@ class WorkerPool:
                     self._all_workers.remove(worker)
 
                     # Respawn
-                    log.warning("Respawning dead worker #{index}")
+                    log.warning(f"Respawning dead worker #{index}")
                     self._new_worker(index)
 
     def __len__(self) -> int:
