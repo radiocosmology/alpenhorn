@@ -292,7 +292,7 @@ class StorageNode(base_model):
             .where(ArchiveFileCopy.node == self, ArchiveFileCopy.has_file == "Y")
         ).scalar(as_tuple=True)[0]
 
-        return 0.0 if size is None else float(size) / 2**20
+        return 0.0 if size is None else float(size) / 2**30
 
     def get_all_files(
         self,

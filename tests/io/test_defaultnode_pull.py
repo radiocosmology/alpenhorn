@@ -128,7 +128,7 @@ def test_pull_sync_overmax(queue, test_req, archivefile, archivefilecopy):
     # set up node to fail over_max check
     file = archivefile(name="file2", acq=req.file.acq, size_b=100000)
     archivefilecopy(file=file, node=node.db, has_file="Y")
-    node.db.max_total_gb = file.size_b / 2**21  # i.e. half of file.size_b
+    node.db.max_total_gb = file.size_b / 2**31  # i.e. half of file.size_b
     node.io.pull(req)
 
     # No job should be queued and req isn't resolved.

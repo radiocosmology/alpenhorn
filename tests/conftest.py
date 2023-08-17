@@ -603,7 +603,7 @@ def simplefile(archiveacq, archivefile):
         name="simplefile",
         acq=acq,
         md5sum="d41d8cd98f00b204e9800998ecf8427e",
-        size_b=2**20,
+        size_b=2**30,
     )
 
 
