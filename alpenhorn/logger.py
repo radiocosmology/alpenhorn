@@ -36,7 +36,8 @@ except ImportError:
 
 # The log format.  Used by the stderr log and any other log destinations
 log_fmt = logging.Formatter(
-    "%(asctime)s %(levelname)s >> [%(threadName)s] %(message)s", "%b %d %H:%M:%S"
+    "%(asctime)s %(levelname)s >> [%(threadName)s:%(name)s] %(message)s",
+    "%b %d %H:%M:%S",
 )
 
 # initialised by init_logging
@@ -350,12 +351,13 @@ def configure_logging() -> None:
     root_logger.setLevel(level)
 
     # Apply any module specific logging levels
-    for name, level in logger_config["module_levels"].items():
-        logger = logging.getLogger(name)
-        level = level.upper()
+    if "module_levels" in logger_config:
+        for name, level in logger_config["module_levels"].items():
+            logger = logging.getLogger(name)
+            level = level.upper()
 
-        _check_level(level, f"logging.module_levels.{name}")
-        logger.setLevel(level)
+            _check_level(level, f"logging.module_levels.{name}")
+            logger.setLevel(level)
 
     # Configure syslog logging, maybe
     if "syslog" in logger_config:
