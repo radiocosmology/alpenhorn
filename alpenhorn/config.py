@@ -145,7 +145,7 @@ log = logging.getLogger(__name__)
 config = None
 
 _default_config = {
-    "logging": {"level": "warning", "module_levels": {"alpenhorn": "info"}},
+    "logging": {"level": "info"},
     "service": {
         "auto_import_interval": 30,
         "auto_verify_min_days": 7,

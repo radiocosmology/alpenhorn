@@ -189,7 +189,7 @@ class RetryOperationalError:
     See: https://github.com/coleifer/peewee/issues/1472
     """
 
-    def execute_sql(self, sql, params=None, commit=pw.SENTINEL):
+    def execute_sql(self, sql, params=None, commit=None):
         """Extend default execute_sql to retry.
 
         Retries once on pw.OperationalError, but only if not

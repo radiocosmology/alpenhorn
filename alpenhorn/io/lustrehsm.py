@@ -229,13 +229,13 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                     ).execute()
                 elif state == lfs.HSM_RELEASED:
                     if copy.ready:
-                        log.info("Updating file copy {copy.file.path}: ready -> False")
+                        log.info(f"Updating file copy {copy.file.path}: ready -> False")
                         ArchiveFileCopy.update(ready=False).where(
                             ArchiveFileCopy.id == copy.id
                         ).execute()
                 else:  # i.e. RESTORED or UNARCHIVED
                     if not copy.ready:
-                        log.info("Updating file copy {copy.file.path}: ready -> True")
+                        log.info(f"Updating file copy {copy.file.path}: ready -> True")
                         ArchiveFileCopy.update(ready=True).where(
                             ArchiveFileCopy.id == copy.id
                         ).execute()

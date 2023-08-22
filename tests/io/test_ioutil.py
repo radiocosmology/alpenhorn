@@ -1,6 +1,7 @@
 """Test alpenhorn.io.ioutil"""
 
 import pytest
+import pathlib
 
 from alpenhorn.io import ioutil
 
@@ -35,6 +36,22 @@ def test_bbcp_no_timeout(mock_run_command, set_config):
 
     args = mock_run_command()
     assert args["timeout"] is None  # pull_bytes_per_second = 0 disables
+
+
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_bbcp_pathlib(mock_run_command):
+    """Test passing pathlib.Path to ioutil.bbcp()."""
+
+    assert ioutil.bbcp(pathlib.Path("from/path"), pathlib.Path("to/dir"), 1e8) == {
+        "check_src": True,
+        "md5sum": "d41d8cd98f00b204e9800998ecf8427e",
+        "ret": 0,
+        "stderr": "md5 d41d8cd98f00b204e9800998ecf8427e",
+    }
+
+    args = mock_run_command()
+    assert "from/path" in args["cmd"]
+    assert "to/dir" in args["cmd"]
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
@@ -101,6 +118,25 @@ def test_rsync_good(mock_run_command):
     args = mock_run_command()
     assert "--compress" in args["cmd"]
     assert args["timeout"] == 305.0
+
+
+@pytest.mark.run_command_result(0, "", "")
+def test_rsync_pathlib(mock_run_command):
+    """Test passing pathlib.Path to ioutil.rsync()."""
+
+    # Local rsync
+    assert ioutil.rsync(
+        pathlib.Path("from/path"), pathlib.Path("to/dir"), 1e8, True
+    ) == {
+        "md5sum": True,
+        "ret": 0,
+        "stderr": "",
+    }
+
+    # Paths should be stringified
+    args = mock_run_command()
+    assert "from/path" in args["cmd"]
+    assert "to/dir" in args["cmd"]
 
 
 @pytest.mark.run_command_result(1, "", "mkstemp")

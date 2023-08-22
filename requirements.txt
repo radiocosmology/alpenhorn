@@ -1,6 +1,6 @@
 Click >= 6.0
 concurrent-log-handler
-peewee ~= 3.0
+peewee >= 3.16
 PyYAML
 tabulate
 watchdog
