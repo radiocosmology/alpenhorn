@@ -1,6 +1,7 @@
 """Test LustreHSMNodeIO."""
 
 import pytest
+import datetime
 from unittest.mock import MagicMock
 
 from alpenhorn.archive import ArchiveFileCopy
@@ -94,6 +95,8 @@ def test_release_files(queue, mock_lfs, node):
 
     node.io.release_files()
 
+    before = datetime.datetime.utcnow().replace(microsecond=0)
+
     # Job in queue
     assert queue.qsize == 1
 
@@ -111,10 +114,19 @@ def test_release_files(queue, mock_lfs, node):
     #  - file3: 400 kB  [ last_update = 5 ]
     # file4 remains restored
     assert not ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=1).last_update >= before
+
     assert not ArchiveFileCopy.get(id=2).ready
+    assert ArchiveFileCopy.get(id=2).last_update >= before
+
     assert not ArchiveFileCopy.get(id=3).ready
+    assert ArchiveFileCopy.get(id=3).last_update >= before
+
     assert ArchiveFileCopy.get(id=4).ready
+
     assert not ArchiveFileCopy.get(id=5).ready
+    assert ArchiveFileCopy.get(id=5).last_update >= before
+
     assert ArchiveFileCopy.get(id=6).ready
 
     # Check hsm_relase was actually called
@@ -346,6 +358,8 @@ def test_ready_path(mock_lfs, node):
 def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
     """Test LustreHSMNodeIO.ready_pull on a restored file that isn't ready."""
 
+    before = datetime.datetime.utcnow().replace(microsecond=0)
+
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
     copy.save()
@@ -357,6 +371,7 @@ def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
 
     # File is ready
     assert ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=1).last_update >= before
 
     # File is restored
     lfs = mock_lfs("")
@@ -378,7 +393,7 @@ def test_ready_pull_released(mock_lfs, node, archivefilecopyrequest):
 
     node.io.ready_pull(afcr)
 
-    # File is not ready (because ready is set before hsm_restore is called)
+    # File is not ready (because restore hasn't been verified)
     assert not ArchiveFileCopy.get(id=1).ready
 
     # File is restored
@@ -412,6 +427,8 @@ def test_idle_update_empty(queue, mock_lfs, node):
 def test_idle_update_ready(xfs, queue, mock_lfs, node):
     """Test LustreHSMNodeIO.idle_update with copies ready"""
 
+    before = datetime.datetime.utcnow().replace(microsecond=0)
+
     node.io.idle_update()
 
     # QW has been initialised
@@ -427,11 +444,15 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
 
     # check readiness
     assert not ArchiveFileCopy.get(id=1).ready
+    assert ArchiveFileCopy.get(id=1).last_update >= before
+
+    # These haven't changed
     assert ArchiveFileCopy.get(id=2).ready
     assert ArchiveFileCopy.get(id=3).ready
-    assert not ArchiveFileCopy.get(id=4).ready
 
     # Copy four is no longer on node
+    assert not ArchiveFileCopy.get(id=4).ready
+    assert ArchiveFileCopy.get(id=4).last_update >= before
     assert ArchiveFileCopy.get(id=4).has_file == "N"
 
 
@@ -445,6 +466,8 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
 )
 def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
     """Test LustreHSMNodeIO.idle_update with copies not ready"""
+
+    before = datetime.datetime.utcnow().replace(microsecond=0)
 
     # Update all copies
     ArchiveFileCopy.update(ready=False).execute()
@@ -464,9 +487,14 @@ def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
 
     # check readiness
     assert not ArchiveFileCopy.get(id=1).ready
+
     assert ArchiveFileCopy.get(id=2).ready
+    assert ArchiveFileCopy.get(id=2).last_update >= before
+
     assert ArchiveFileCopy.get(id=3).ready
-    assert not ArchiveFileCopy.get(id=4).ready
+    assert ArchiveFileCopy.get(id=3).last_update >= before
 
     # Copy four is no longer on node
+    assert not ArchiveFileCopy.get(id=4).ready
+    assert ArchiveFileCopy.get(id=4).last_update >= before
     assert ArchiveFileCopy.get(id=4).has_file == "N"

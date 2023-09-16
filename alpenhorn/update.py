@@ -7,6 +7,7 @@ import json
 import time
 import logging
 import peewee as pw
+from datetime import datetime
 
 from . import auto_import, config, util
 from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
@@ -582,7 +583,12 @@ class UpdateableGroup(updateable_base):
                 # ready == False is the safe option here: copy will be readied
                 # during the subsequent check if needed.
                 count = (
-                    ArchiveFileCopy.update(has_file="M", wants_file="Y", ready=False)
+                    ArchiveFileCopy.update(
+                        has_file="M",
+                        wants_file="Y",
+                        ready=False,
+                        last_update=datetime.utcnow(),
+                    )
                     .where(
                         ArchiveFileCopy.file == req.file,
                         ArchiveFileCopy.node == node.db,

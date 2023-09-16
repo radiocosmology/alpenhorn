@@ -141,9 +141,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 )
                 lfs.hsm_release(copy.path)
                 # Update copy record immediately
-                ArchiveFileCopy.update(ready=False).where(
-                    ArchiveFileCopy.id == copy.id
-                ).execute()
+                ArchiveFileCopy.update(
+                    ready=False, last_update=datetime.utcnow()
+                ).where(ArchiveFileCopy.id == copy.id).execute()
                 total_files += 1
                 total_bytes += copy.file.size_b
                 if total_bytes >= headroom_needed:
@@ -224,21 +224,21 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                     log.warning(
                         f"File copy {copy.file.path} on node {node.name} is missing!"
                     )
-                    ArchiveFileCopy.update(has_file="N", ready=False).where(
-                        ArchiveFileCopy.id == copy.id
-                    ).execute()
+                    ArchiveFileCopy.update(
+                        has_file="N", ready=False, last_update=datetime.utcnow()
+                    ).where(ArchiveFileCopy.id == copy.id).execute()
                 elif state == lfs.HSM_RELEASED:
                     if copy.ready:
                         log.info(f"Updating file copy {copy.file.path}: ready -> False")
-                        ArchiveFileCopy.update(ready=False).where(
-                            ArchiveFileCopy.id == copy.id
-                        ).execute()
+                        ArchiveFileCopy.update(
+                            ready=False, last_update=datetime.utcnow()
+                        ).where(ArchiveFileCopy.id == copy.id).execute()
                 else:  # i.e. RESTORED or UNARCHIVED
                     if not copy.ready:
                         log.info(f"Updating file copy {copy.file.path}: ready -> True")
-                        ArchiveFileCopy.update(ready=True).where(
-                            ArchiveFileCopy.id == copy.id
-                        ).execute()
+                        ArchiveFileCopy.update(
+                            ready=True, last_update=datetime.utcnow()
+                        ).where(ArchiveFileCopy.id == copy.id).execute()
 
         # Copies get checked in an async
         Task(
@@ -304,9 +304,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                     "File copy missing during auto-verify: "
                     f"{copy.file.path}.  Updating database."
                 )
-                ArchiveFileCopy.update(has_file="N").where(
-                    ArchiveFileCopy.id == copy.id
-                ).execute()
+                ArchiveFileCopy.update(
+                    has_file="N", last_update=datetime.utcnow()
+                ).where(ArchiveFileCopy.id == copy.id).execute()
             return
 
         # Are we restored?  Note: we're interested in the actual
@@ -469,10 +469,13 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         """
         ready = self.ready_path(req.file.path)
 
-        # Update DB based on HSM state
-        ArchiveFileCopy.update(ready=ready).where(
-            ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == self.node
-        ).execute()
+        # Update DB based on HSM state, if necessary
+        copy = ArchiveFileCopy.get(file=req.file, node=self.node)
+
+        if copy.ready != ready:
+            copy.ready = ready
+            copy.last_update = datetime.utcnow()
+            copy.save()
 
     def release_bytes(self, size: int) -> None:
         """Does nothing."""
