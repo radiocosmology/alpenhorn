@@ -1,5 +1,6 @@
 """Tests for UpdateableGroup."""
 import pytest
+import datetime
 from unittest.mock import patch, call
 
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
@@ -147,12 +148,15 @@ def test_update_group_path_exists(mockgroupandnode, hostname, queue, pull):
     # - desitination ArchiveFileCopy present with has_file='N'
     # It should behave the same both times
     for missing in [True, False]:
+        before = datetime.datetime.utcnow().replace(microsecond=0)
+
         # run update
         group.update()
 
         # Dest file copy needs checking
         dst = ArchiveFileCopy.get(file=file, node=node.db)
         assert dst.has_file == "M"
+        assert dst.last_update >= before
 
         # Request is still pending
         assert not ArchiveFileCopyRequest.get(file=file).completed
@@ -165,6 +169,7 @@ def test_update_group_path_exists(mockgroupandnode, hostname, queue, pull):
         if missing:
             # "Delete" dest
             dst.has_file = "N"
+            dst.last_update = before - datetime.timedelta(1)
             dst.save()
 
 
