@@ -132,7 +132,12 @@ def pretty_bytes(num: int) -> str:
     for x, p in enumerate("kMGTPE"):
         if num < 2 ** ((2 + x) * 10):
             num /= 2 ** ((1 + x) * 10)
-            return f"{num:.1f} {p}iB"
+            if num >= 100:
+                return f"{num:.1f} {p}iB"
+            elif num >= 10:
+                return f"{num:.2f} {p}iB"
+            else:
+                return f"{num:.3f} {p}iB"
 
     # overflow or something: in this case lets just go
     # with what we were given and get on with our day.

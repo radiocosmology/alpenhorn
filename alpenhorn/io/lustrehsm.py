@@ -150,8 +150,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 if total_bytes >= headroom_needed:
                     break
             log.info(
-                f"released {pretty_bytes(total_bytes)} in "
-                f"{total_files} files on node {self.node.name}"
+                f"Released {pretty_bytes(total_bytes)} in {total_files} "
+                f"{'file' if total_files == 1 else 'files'} "
+                f"on node {self.node.name}"
             )
             return
 
@@ -247,7 +248,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             queue=self._queue,
             key=self.node.name,
             args=(self.node, self._lfs, copies),
-            name=f"Node {self.node.name}: HSM state check for {len(copies)} copies",
+            name=f"Node {self.node.name}: HSM state check of {len(copies)} files",
         )
 
     # I/O METHODS
@@ -477,6 +478,10 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             copy.ready = ready
             copy.last_update = datetime.utcnow()
             copy.save()
+            log.info(
+                f"File copy {req.file.path} on node {self.node.name} now "
+                + ("restored" if ready else "released")
+            )
 
     def release_bytes(self, size: int) -> None:
         """Does nothing."""

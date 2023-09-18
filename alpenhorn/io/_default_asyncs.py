@@ -86,7 +86,6 @@ def pull_async(
 
     # Giddy up!
     start_time = time.time()
-    log.info(f'Transferring file "{req.file.path}":')
 
     # Attempt to transfer the file. Each of the methods below needs to return
     # a dict with required key:
@@ -108,9 +107,11 @@ def pull_async(
             # First try bbcp which is a fast multistream transfer tool. bbcp can
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
+            log.info(f"Pulling remote file {req.file.path} using bbcp")
             ioresult = ioutil.bbcp(from_path, to_dir, req.file.size_b)
         elif shutil.which("rsync") is not None:
             # Next try rsync over ssh.
+            log.info(f"Pulling remote file {req.file.path} using rsync")
             ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, local)
         else:
             # We have no idea how to transfer the file...
@@ -127,12 +128,15 @@ def pull_async(
         # a non-archive node
         if req.node_from.archive == io.node.archive:
             ioresult = ioutil.hardlink(from_path, to_dir, req.file.name)
+            if ioresult is not None:
+                log.info(f"Hardlinked local file {req.file.path}")
         else:
             ioresult = None
 
         # If we couldn't just link the file, try copying it with rsync.
         if ioresult is None:
             if shutil.which("rsync") is not None:
+                log.info(f"Pulling local file {req.file.path} using rsync")
                 ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, local)
             else:
                 log.error("No commands available to complete local pull.")

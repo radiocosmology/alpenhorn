@@ -92,7 +92,7 @@ class Worker(threading.Thread):
                     return
 
                 # Otherwise, execute the task.
-                log.debug(f"Beginning task {task}")
+                log.info(f"Beginning task {task}")
                 try:
                     task()
                 except OperationalError as operr:
@@ -116,7 +116,7 @@ class Worker(threading.Thread):
                         )
                         return 1
 
-                    log.debug(f"Finished task {task}")
+                    log.info(f"Finished task {task}")
                     self._queue.task_done(key)  # Keep the queue sanitised
 
                     # Requeue this task if necessary
@@ -131,7 +131,7 @@ class Worker(threading.Thread):
 
                 self._queue.task_done(key)
 
-                log.debug(f"Finished task {task}")
+                log.info(f"Finished task {task}")
 
     def stop_working(self) -> None:
         """Tell the worker to stop after finishing the current task."""
@@ -278,7 +278,7 @@ class WorkerPool:
                     self._all_workers.remove(worker)
 
                     # Respawn
-                    log.warning(f"Respawning dead worker #{index}")
+                    log.warning(f"Respawning dead worker #{1 + index}")
                     self._new_worker(index)
 
     def __len__(self) -> int:

@@ -288,7 +288,12 @@ class UpdateableNode(updateable_base):
         and saved to the database via `self.db.update_avail_gb()`
         """
         # This is always a slow call
-        self.db.update_avail_gb(self.io.bytes_avail(fast=False))
+        bytes_avail = self.io.bytes_avail(fast=False)
+
+        self.db.update_avail_gb(bytes_avail)
+
+        if bytes_avail is not None:
+            log.info(f"Node {self.name}: {util.pretty_bytes(bytes_avail)} available.")
 
     def run_auto_verify(self) -> None:
         """Run auto-verification on this node.
@@ -459,7 +464,7 @@ class UpdateableNode(updateable_base):
         else:
             log.info(
                 f"Skipping update for node {self.name}: "
-                f"idle={idle} do_update={do_update}"
+                + ("busy" if not idle else "cancelled")
             )
             self._updated = False
 
@@ -648,7 +653,7 @@ class UpdateableGroup(updateable_base):
         # If the source file is not ready, skip the request.
         node_from = RemoteNode(req.node_from)
         if not node_from.io.pull_ready(req.file):
-            log.info(
+            log.debug(
                 f"Skipping request for {req.file.acq.name}/{req.file.name}:"
                 f" not ready on node {req.node_from.name}."
             )
@@ -693,7 +698,7 @@ class UpdateableGroup(updateable_base):
         else:
             log.info(
                 f"Skipping update for group {self.name}: "
-                f"idle={self._init_idle} do_update={do_update}"
+                + ("busy" if not self._init_idle else "cancelled")
             )
 
     def update_idle(self) -> None:
