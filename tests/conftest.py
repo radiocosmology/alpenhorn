@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 import alpenhorn.logger
 from alpenhorn import config, db, extensions
 from alpenhorn.queue import FairMultiFIFOQueue
-from alpenhorn.storage import StorageGroup, StorageNode
+from alpenhorn.storage import StorageGroup, StorageNode, StorageTransfer
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.update import UpdateableNode, UpdateableGroup
@@ -413,6 +413,7 @@ def dbtables(dbproxy):
         [
             StorageGroup,
             StorageNode,
+            StorageTransfer,
             ArchiveAcq,
             ArchiveFile,
             ArchiveFileCopy,
@@ -445,7 +446,7 @@ def loop_once(dbtables):
 
 
 @pytest.fixture
-def unode(simplenode, queue):
+def unode(dbtables, simplenode, queue):
     """Returns an UpdateableNode."""
     return UpdateableNode(queue, simplenode)
 
@@ -544,6 +545,11 @@ def storagegroup(factory_factory):
 @pytest.fixture
 def storagenode(factory_factory):
     return factory_factory(StorageNode)
+
+
+@pytest.fixture
+def storagetransfer(factory_factory):
+    return factory_factory(StorageTransfer)
 
 
 @pytest.fixture

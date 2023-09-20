@@ -2,8 +2,11 @@
 
 import pytest
 import pathlib
+import datetime
+import peewee as pw
 
 from alpenhorn.io import ioutil
+from alpenhorn.archive import ArchiveFileCopyRequest, ArchiveFileCopy
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
@@ -227,3 +230,156 @@ def test_hardlink_fail(tmp_path):
     assert ioutil.hardlink(file, dstdir, "file") is None
     with pytest.raises(PermissionError):
         destfile.read_text()
+
+
+def test_autosync(dbtables, simplefile, simplenode, simplegroup, storagetransfer):
+    """Test post_add running autosync."""
+
+    storagetransfer(node_from=simplenode, group_to=simplegroup, autosync=True)
+
+    ioutil.post_add(simplenode, simplefile)
+
+    assert ArchiveFileCopyRequest.get(
+        file=simplefile,
+        node_from=simplenode,
+        group_to=simplegroup,
+        completed=0,
+        cancelled=0,
+    )
+
+
+def test_autosync_state(
+    dbtables,
+    archivefilecopy,
+    archivefile,
+    simpleacq,
+    storagenode,
+    simplenode,
+    simplegroup,
+    storagetransfer,
+):
+    """post_add autosync only copies if dest copy doesn't exist."""
+
+    destnode = storagenode(name="dest", group=simplegroup)
+    storagetransfer(node_from=simplenode, group_to=simplegroup, autosync=True)
+
+    # Copies with different states
+    fileY = archivefile(name="fileY", acq=simpleacq)
+    archivefilecopy(file=fileY, node=destnode, has_file="Y")
+
+    fileX = archivefile(name="fileX", acq=simpleacq)
+    archivefilecopy(file=fileX, node=destnode, has_file="X")
+
+    fileM = archivefile(name="fileM", acq=simpleacq)
+    archivefilecopy(file=fileM, node=destnode, has_file="M")
+
+    fileN = archivefile(name="fileN", acq=simpleacq)
+    archivefilecopy(file=fileN, node=destnode, has_file="N")
+
+    # None of these should add a new copy request
+    for f in [fileY, fileX, fileM]:
+        ioutil.post_add(simplenode, f)
+
+        with pytest.raises(pw.DoesNotExist):
+            ArchiveFileCopyRequest.get(file=f)
+
+    # But this one should
+    ioutil.post_add(simplenode, fileN)
+    assert ArchiveFileCopyRequest.get(
+        file=fileN, node_from=simplenode, group_to=simplegroup, completed=0, cancelled=0
+    )
+
+
+def test_autosync_loop(dbtables, simplefile, simplenode, storagetransfer):
+    """post_add autosync ignores graph loops."""
+
+    storagetransfer(node_from=simplenode, group_to=simplenode.group, autosync=True)
+
+    ioutil.post_add(simplenode, simplefile)
+
+    with pytest.raises(pw.DoesNotExist):
+        ArchiveFileCopyRequest.get(file=simplefile)
+
+
+def test_autoclean(
+    archivefilecopy, simplefile, simplenode, storagenode, simplegroup, storagetransfer
+):
+    """Test post_add running autoclean."""
+
+    before = datetime.datetime.utcnow() - datetime.timedelta(seconds=2)
+
+    destnode = storagenode(name="dest", group=simplegroup)
+
+    storagetransfer(node_from=simplenode, group_to=simplegroup, autoclean=True)
+    archivefilecopy(file=simplefile, node=simplenode, wants_file="Y", has_file="Y")
+
+    ioutil.post_add(destnode, simplefile)
+
+    copy = ArchiveFileCopy.get(file=simplefile, node=simplenode)
+    assert copy.wants_file == "N"
+    assert copy.last_update >= before
+
+
+def test_autoclean_state(
+    archivefile,
+    archivefilecopy,
+    simpleacq,
+    storagenode,
+    simplenode,
+    simplegroup,
+    storagetransfer,
+):
+    """post_add autoclean only deletes copies with has_file=='Y'."""
+
+    then = datetime.datetime.utcnow() - datetime.timedelta(seconds=200)
+
+    srcnode = storagenode(name="src", group=simplegroup)
+    storagetransfer(node_from=srcnode, group_to=simplenode.group, autoclean=True)
+
+    # Copies with different states
+    fileY = archivefile(name="fileY", acq=simpleacq)
+    archivefilecopy(
+        file=fileY, node=srcnode, has_file="Y", wants_file="Y", last_update=then
+    )
+
+    fileX = archivefile(name="fileX", acq=simpleacq)
+    archivefilecopy(
+        file=fileX, node=srcnode, has_file="X", wants_file="Y", last_update=then
+    )
+
+    fileM = archivefile(name="fileM", acq=simpleacq)
+    archivefilecopy(
+        file=fileM, node=srcnode, has_file="M", wants_file="Y", last_update=then
+    )
+
+    fileN = archivefile(name="fileN", acq=simpleacq)
+    archivefilecopy(
+        file=fileN, node=srcnode, has_file="N", wants_file="Y", last_update=then
+    )
+
+    # None of these should be deleted
+    for f in [fileN, fileX, fileM]:
+        ioutil.post_add(simplenode, f)
+
+        copy = ArchiveFileCopy.get(file=f, node=srcnode)
+        assert copy.last_update == then
+        assert copy.wants_file == "Y"
+
+    # But this one should
+    ioutil.post_add(simplenode, fileY)
+
+    copy = ArchiveFileCopy.get(file=fileY, node=srcnode)
+    assert copy.last_update > then
+    assert copy.wants_file == "N"
+
+
+def test_autoclean_loop(archivefilecopy, simplefile, simplenode, storagetransfer):
+    """post_add autoclean ignores graph loops."""
+
+    storagetransfer(node_from=simplenode, group_to=simplenode.group, autoclean=True)
+    archivefilecopy(file=simplefile, node=simplenode, wants_file="Y", has_file="Y")
+
+    ioutil.post_add(simplenode, simplefile)
+
+    copy = ArchiveFileCopy.get(file=simplefile, node=simplenode)
+    assert copy.wants_file == "Y"

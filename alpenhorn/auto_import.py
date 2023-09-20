@@ -11,6 +11,7 @@ from watchdog.events import FileSystemEventHandler
 from . import config, db, extensions
 from .acquisition import ArchiveAcq, ArchiveFile
 from .archive import ArchiveFileCopy
+from .io import ioutil
 from .task import Task
 
 if TYPE_CHECKING:
@@ -177,6 +178,9 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
                 last_update=datetime.utcnow(),
             )
             log.info(f'Registered file copy "{path}" on node "{node.name}".')
+
+    # Run post-add actions, if any
+    ioutil.post_add(node.db, file_)
 
     # Run the extension module's callback, if necessary
     if callable(callback):

@@ -383,6 +383,23 @@ class UpdateableNode(updateable_base):
             )
             .order_by(ArchiveFileCopy.id)
         ):
+            # Don't delete file copies which are the source for pending
+            # copy requests
+            if (
+                ArchiveFileCopyRequest.select()
+                .where(
+                    ArchiveFileCopyRequest.file == copy.file,
+                    ArchiveFileCopyRequest.node_from == self.db,
+                    ArchiveFileCopyRequest.completed == 0,
+                    ArchiveFileCopyRequest.cancelled == 0,
+                )
+                .count()
+            ):
+                log.info(
+                    f"Skipping delete of {copy.file.path} on node {self.name}: transfer pending"
+                )
+                continue
+
             # Group a bunch of these together to reduce the number of I/O Tasks
             # created.  TODO: figure out if this actually helps
             if len(del_copies) >= 10:
