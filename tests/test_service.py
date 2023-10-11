@@ -28,7 +28,7 @@ from urllib.parse import quote as urlquote
 
 from alpenhorn.service import cli
 from alpenhorn.db import database_proxy, EnumField
-from alpenhorn.storage import StorageGroup, StorageNode, StorageTransfer
+from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 
@@ -58,7 +58,7 @@ def e2e_db(xfs, hostname):
             ArchiveFileCopyRequest,
             StorageGroup,
             StorageNode,
-            StorageTransfer,
+            StorageTransferAction,
             pattern_importer.AcqType,
             pattern_importer.FileType,
             pattern_importer.ExtendedAcq,
@@ -253,7 +253,7 @@ def e2e_db(xfs, hostname):
     # Auto-actions:
     # * copy find.me to the transport fleet after import
     # * delete pull.me from the transport fleet after pull
-    StorageTransfer.create(
+    StorageTransferAction.create(
         node_from=dftnode, group_to=fleet, autoclean=True, autosync=True
     )
 

@@ -376,7 +376,7 @@ class StorageNode(base_model):
             log.info(f'Unable to determine available space for "{self.name}".')
 
 
-class StorageTransfer(base_model):
+class StorageTransferAction(base_model):
     """Storage transfer rules for the archive.
 
     This provides configuration for the edges in the storage node/group directed
@@ -397,9 +397,9 @@ class StorageTransfer(base_model):
     Notes
     -----
     If `NODE_A` is in `GROUP_A` and `NODE_B` in `GROUP_B`, then
-    `StorageTransfer(node_from=NODE_A, group_to=NODE_B)` and
-    `StorageTransfer(node_from=NODE_B, group_to=NODE_A)` are distinct.  (i.e.
-    all edges are directed).
+    `StorageTransferAction(node_from=NODE_A, group_to=NODE_B)` and
+    `StorageTransferAction(node_from=NODE_B, group_to=NODE_A)` are distinct.
+    (i.e. all edges are directed).
 
     Alpenhorn ignores records where `group_to == node_from.group` (self-loops).
 

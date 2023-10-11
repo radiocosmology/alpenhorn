@@ -10,7 +10,7 @@ from datetime import datetime
 from tempfile import TemporaryDirectory
 
 from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from ..storage import StorageNode, StorageTransfer
+from ..storage import StorageNode, StorageTransferAction
 from .. import config, db, util
 
 if TYPE_CHECKING:
@@ -329,13 +329,13 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
         The file added.
     """
 
-    # Autosync: find all StorageTransfers where we're the source node
-    for edge in StorageTransfer.select().where(
-        StorageTransfer.node_from == node,
-        StorageTransfer.group_to != node.group,
-        StorageTransfer.autosync == True,
+    # Autosync: find all StorageTransferActions where we're the source node
+    for edge in StorageTransferAction.select().where(
+        StorageTransferAction.node_from == node,
+        StorageTransferAction.group_to != node.group,
+        StorageTransferAction.autosync == True,
     ):
-        if edge.group_to.filecopy_state(file_) == "N":
+        if edge.group_to.filecopy_state(file_) != "Y":
             log.debug(
                 f"Autosyncing {file_.path} from node {node.name} to group {edge.group_to.name}"
             )
@@ -344,24 +344,26 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
                 node_from=node, group_to=edge.group_to, file=file_
             )
 
-    # Autoclean: find all the StorageTransfers where we're in the dest group
-    for edge in StorageTransfer.select().where(
-        StorageTransfer.group_to == node.group,
-        StorageTransfer.node_from != node,
-        StorageTransfer.autoclean == True,
+    # Autoclean: find all the StorageTransferActions where we're in the
+    # destination group
+    for edge in StorageTransferAction.select().where(
+        StorageTransferAction.group_to == node.group,
+        StorageTransferAction.node_from != node,
+        StorageTransferAction.autoclean == True,
     ):
-        try:
-            copy = ArchiveFileCopy.get(
-                file=file_, node=edge.node_from, has_file="Y", wants_file="Y"
+        count = (
+            ArchiveFileCopy.update(wants_file="N", last_update=datetime.utcnow())
+            .where(
+                ArchiveFileCopy.file == file_,
+                ArchiveFileCopy.node == edge.node_from,
+                ArchiveFileCopy.has_file == "Y",
+                ArchiveFileCopy.wants_file == "Y",
             )
+            .execute()
+        )
 
+        if count > 0:
             log.debug(f"Autocleaning {file_.path} from node {edge.node_from.name}")
-
-            copy.wants_file = "N"
-            copy.last_update = datetime.utcnow()
-            copy.save()
-        except pw.DoesNotExist:
-            pass
 
 
 def copy_request_done(

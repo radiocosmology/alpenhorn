@@ -232,10 +232,10 @@ def test_hardlink_fail(tmp_path):
         destfile.read_text()
 
 
-def test_autosync(dbtables, simplefile, simplenode, simplegroup, storagetransfer):
+def test_autosync(dbtables, simplefile, simplenode, simplegroup, storagetransferaction):
     """Test post_add running autosync."""
 
-    storagetransfer(node_from=simplenode, group_to=simplegroup, autosync=True)
+    storagetransferaction(node_from=simplenode, group_to=simplegroup, autosync=True)
 
     ioutil.post_add(simplenode, simplefile)
 
@@ -256,12 +256,12 @@ def test_autosync_state(
     storagenode,
     simplenode,
     simplegroup,
-    storagetransfer,
+    storagetransferaction,
 ):
-    """post_add autosync only copies if dest copy doesn't exist."""
+    """post_add autosync copies whenever dest doesn't have a good copy."""
 
     destnode = storagenode(name="dest", group=simplegroup)
-    storagetransfer(node_from=simplenode, group_to=simplegroup, autosync=True)
+    storagetransferaction(node_from=simplenode, group_to=simplegroup, autosync=True)
 
     # Copies with different states
     fileY = archivefile(name="fileY", acq=simpleacq)
@@ -276,24 +276,26 @@ def test_autosync_state(
     fileN = archivefile(name="fileN", acq=simpleacq)
     archivefilecopy(file=fileN, node=destnode, has_file="N")
 
-    # None of these should add a new copy request
-    for f in [fileY, fileX, fileM]:
+    # This one shouldn't add a new copy request
+    ioutil.post_add(simplenode, fileY)
+
+    with pytest.raises(pw.DoesNotExist):
+        ArchiveFileCopyRequest.get(file=fileY)
+
+    # But all these should
+    for f in [fileX, fileM, fileN]:
         ioutil.post_add(simplenode, f)
-
-        with pytest.raises(pw.DoesNotExist):
-            ArchiveFileCopyRequest.get(file=f)
-
-    # But this one should
-    ioutil.post_add(simplenode, fileN)
-    assert ArchiveFileCopyRequest.get(
-        file=fileN, node_from=simplenode, group_to=simplegroup, completed=0, cancelled=0
-    )
+        assert ArchiveFileCopyRequest.get(
+            file=f, node_from=simplenode, group_to=simplegroup, completed=0, cancelled=0
+        )
 
 
-def test_autosync_loop(dbtables, simplefile, simplenode, storagetransfer):
+def test_autosync_loop(dbtables, simplefile, simplenode, storagetransferaction):
     """post_add autosync ignores graph loops."""
 
-    storagetransfer(node_from=simplenode, group_to=simplenode.group, autosync=True)
+    storagetransferaction(
+        node_from=simplenode, group_to=simplenode.group, autosync=True
+    )
 
     ioutil.post_add(simplenode, simplefile)
 
@@ -302,7 +304,12 @@ def test_autosync_loop(dbtables, simplefile, simplenode, storagetransfer):
 
 
 def test_autoclean(
-    archivefilecopy, simplefile, simplenode, storagenode, simplegroup, storagetransfer
+    archivefilecopy,
+    simplefile,
+    simplenode,
+    storagenode,
+    simplegroup,
+    storagetransferaction,
 ):
     """Test post_add running autoclean."""
 
@@ -310,7 +317,7 @@ def test_autoclean(
 
     destnode = storagenode(name="dest", group=simplegroup)
 
-    storagetransfer(node_from=simplenode, group_to=simplegroup, autoclean=True)
+    storagetransferaction(node_from=simplenode, group_to=simplegroup, autoclean=True)
     archivefilecopy(file=simplefile, node=simplenode, wants_file="Y", has_file="Y")
 
     ioutil.post_add(destnode, simplefile)
@@ -327,14 +334,14 @@ def test_autoclean_state(
     storagenode,
     simplenode,
     simplegroup,
-    storagetransfer,
+    storagetransferaction,
 ):
     """post_add autoclean only deletes copies with has_file=='Y'."""
 
     then = datetime.datetime.utcnow() - datetime.timedelta(seconds=200)
 
     srcnode = storagenode(name="src", group=simplegroup)
-    storagetransfer(node_from=srcnode, group_to=simplenode.group, autoclean=True)
+    storagetransferaction(node_from=srcnode, group_to=simplenode.group, autoclean=True)
 
     # Copies with different states
     fileY = archivefile(name="fileY", acq=simpleacq)
@@ -373,10 +380,12 @@ def test_autoclean_state(
     assert copy.wants_file == "N"
 
 
-def test_autoclean_loop(archivefilecopy, simplefile, simplenode, storagetransfer):
+def test_autoclean_loop(archivefilecopy, simplefile, simplenode, storagetransferaction):
     """post_add autoclean ignores graph loops."""
 
-    storagetransfer(node_from=simplenode, group_to=simplenode.group, autoclean=True)
+    storagetransferaction(
+        node_from=simplenode, group_to=simplenode.group, autoclean=True
+    )
     archivefilecopy(file=simplefile, node=simplenode, wants_file="Y", has_file="Y")
 
     ioutil.post_add(simplenode, simplefile)

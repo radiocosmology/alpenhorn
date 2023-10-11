@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 import alpenhorn.logger
 from alpenhorn import config, db, extensions
 from alpenhorn.queue import FairMultiFIFOQueue
-from alpenhorn.storage import StorageGroup, StorageNode, StorageTransfer
+from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.update import UpdateableNode, UpdateableGroup
@@ -413,7 +413,7 @@ def dbtables(dbproxy):
         [
             StorageGroup,
             StorageNode,
-            StorageTransfer,
+            StorageTransferAction,
             ArchiveAcq,
             ArchiveFile,
             ArchiveFileCopy,
@@ -548,8 +548,8 @@ def storagenode(factory_factory):
 
 
 @pytest.fixture
-def storagetransfer(factory_factory):
-    return factory_factory(StorageTransfer)
+def storagetransferaction(factory_factory):
+    return factory_factory(StorageTransferAction)
 
 
 @pytest.fixture

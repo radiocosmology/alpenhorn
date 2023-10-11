@@ -5,17 +5,17 @@ import pathlib
 import datetime
 import peewee as pw
 
-from alpenhorn.storage import StorageGroup, StorageNode, StorageTransfer
+from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
 
 
-def test_schema(dbproxy, simplenode, storagetransfer):
+def test_schema(dbproxy, simplenode, storagetransferaction):
     # Force table creation
-    storagetransfer(node_from=simplenode, group_to=simplenode.group)
+    storagetransferaction(node_from=simplenode, group_to=simplenode.group)
 
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
-        "storagetransfer",
+        "storagetransferaction",
     }
 
 
@@ -370,23 +370,26 @@ def test_update_avail_gb(simplenode):
     assert StorageNode.get(id=simplenode.id).avail_gb is None
 
 
-def test_edge_model(storagetransfer, storagenode, storagegroup):
+def test_edge_model(storagetransferaction, storagenode, storagegroup):
     group1 = storagegroup(name="group1")
     node1 = storagenode(name="node1", group=group1)
 
     group2 = storagegroup(name="group2")
     node2 = storagenode(name="node2", group=group2)
 
-    storagetransfer(node_from=node1, group_to=group2)
-    storagetransfer(node_from=node2, group_to=group1, autosync=True, autoclean=True)
+    storagetransferaction(node_from=node1, group_to=group2)
+    storagetransferaction(
+        node_from=node2, group_to=group1, autosync=True, autoclean=True
+    )
 
     # (node_from, group_to) is unique
     with pytest.raises(pw.IntegrityError):
-        storagetransfer(node_from=node1, group_to=group2)
+        storagetransferaction(node_from=node1, group_to=group2)
 
     # Check records in DB
-    assert StorageTransfer.select().where(
-        StorageTransfer.node_from == node1, StorageTransfer.group_to == group2
+    assert StorageTransferAction.select().where(
+        StorageTransferAction.node_from == node1,
+        StorageTransferAction.group_to == group2,
     ).dicts().get() == {
         "id": 1,
         "node_from": node1.id,
@@ -394,8 +397,9 @@ def test_edge_model(storagetransfer, storagenode, storagegroup):
         "autosync": False,
         "autoclean": False,
     }
-    assert StorageTransfer.select().where(
-        StorageTransfer.node_from == node2, StorageTransfer.group_to == group1
+    assert StorageTransferAction.select().where(
+        StorageTransferAction.node_from == node2,
+        StorageTransferAction.group_to == group1,
     ).dicts().get() == {
         "id": 2,
         "node_from": node2.id,
@@ -405,8 +409,8 @@ def test_edge_model(storagetransfer, storagenode, storagegroup):
     }
 
 
-def test_edge_self_loop(storagetransfer, storagenode, storagegroup):
-    """StorageTransfer.self_loop is True when node_from.group == group_to"""
+def test_edge_self_loop(storagetransferaction, storagenode, storagegroup):
+    """StorageTransferAction.self_loop is True when node_from.group == group_to"""
 
     group1 = storagegroup(name="group1")
     node1 = storagenode(name="node1", group=group1)
@@ -415,10 +419,10 @@ def test_edge_self_loop(storagetransfer, storagenode, storagegroup):
     storagenode(name="node2", group=group2)
 
     # Not a loop
-    storagetransfer(node_from=node1, group_to=group2)
+    storagetransferaction(node_from=node1, group_to=group2)
 
     # Loop
-    storagetransfer(node_from=node1, group_to=group1)
+    storagetransferaction(node_from=node1, group_to=group1)
 
-    assert not StorageTransfer.get(id=1).self_loop
-    assert StorageTransfer.get(id=2).self_loop
+    assert not StorageTransferAction.get(id=1).self_loop
+    assert StorageTransferAction.get(id=2).self_loop
