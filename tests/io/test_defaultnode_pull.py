@@ -92,7 +92,7 @@ def test_req(
 
 
 @pytest.fixture
-def pull_async(test_req):
+def pull_async(dbtables, test_req):
     """Put a pull_async Task on the queue.
 
     Returns a two-element tuple: (node_to, copy_request)"""

@@ -374,3 +374,60 @@ class StorageNode(base_model):
 
         if new_avail is None:
             log.info(f'Unable to determine available space for "{self.name}".')
+
+
+class StorageTransferAction(base_model):
+    """Storage transfer rules for the archive.
+
+    This provides configuration for the edges in the storage node/group directed
+    graph.
+
+    Attributes
+    ----------
+    node_from : foreign key
+        The source node for the transfer.
+    group_to : foreign key
+        The destination group for the transfer.
+    autosync : boolean
+        If True, automatically copy files from `node_from` to `group_to`.
+    autoclean : boolean
+        If True, automatically delete file copies from `node_from` after they
+        end up in `group_to`.
+
+    Notes
+    -----
+    If `NODE_A` is in `GROUP_A` and `NODE_B` in `GROUP_B`, then
+    `StorageTransferAction(node_from=NODE_A, group_to=NODE_B)` and
+    `StorageTransferAction(node_from=NODE_B, group_to=NODE_A)` are distinct.
+    (i.e. all edges are directed).
+
+    Alpenhorn ignores records where `group_to == node_from.group` (self-loops).
+
+    Autosyncing:
+        If `autosync` between a NODE and a GROUP is enabled, then whenever a
+        new file copy is added to NODE (i.e. after a successful import or pull),
+        then a new `ArchiveFileCopyRequest` will be created to transfer the file
+        from NODE to GROUP, so long as the file doesn't already exist in GROUP.
+
+    Autocleaning:
+        If `autoclean` between a NODE and a GROUP is enabled, then whenever a
+        new file copy is added to GROUP (i.e. after a successful import or pull,
+        regardless of the origin of the file), then the file will be scheduled
+        for deletion from NODE (by setting `ArchiveFileCopy.wants_file` to "N"
+        for the file copy on NONE).
+    """
+
+    node_from = pw.ForeignKeyField(StorageNode, backref="transfers_from")
+    group_to = pw.ForeignKeyField(StorageGroup, backref="transfers_to")
+    autosync = pw.BooleanField(default=False)
+    autoclean = pw.BooleanField(default=False)
+
+    @property
+    def self_loop(self) -> bool:
+        """True if this is a self-loop (i.e. node_from.group == group_to)."""
+        return self.node_from.group == self.group_to
+
+    class Meta:
+        indexes = (
+            (("node_from", "group_to"), True),
+        )  # (node_from, group_to) is unique

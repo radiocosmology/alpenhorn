@@ -359,7 +359,7 @@ def test_update_idle(unode, queue):
 
 
 def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy):
-    """Test UpdateableNode.update_delete() when not under min"""
+    """Test UpdateableNode.update_delete() when under min"""
 
     archivefilecopy(
         node=unode.db,
@@ -419,6 +419,24 @@ def test_update_delete_over_min(unode, simpleacq, archivefile, archivefilecopy):
     with patch.object(unode.io, "delete", mock_delete):
         unode.update_delete()
     mock_delete.assert_called_once_with([copyN])
+
+
+def test_update_delete_transfer_pending(
+    unode, simplegroup, simplefile, archivefilecopy, archivefilecopyrequest
+):
+    """update_delete() should skip files that have pending transfers."""
+
+    archivefilecopy(file=simplefile, node=unode.db, has_file="Y", wants_file="N")
+
+    # The blocking AFCR
+    archivefilecopyrequest(file=simplefile, node_from=unode.db, group_to=simplegroup)
+
+    mock_delete = MagicMock()
+    with patch.object(unode.io, "delete", mock_delete):
+        unode.update_delete()
+
+    # A call is always made, even though in this case it's empty.
+    mock_delete.assert_called_once_with([])
 
 
 def test_update_node_run(

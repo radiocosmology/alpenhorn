@@ -10,11 +10,13 @@ from datetime import datetime
 from tempfile import TemporaryDirectory
 
 from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from ..storage import StorageNode, StorageTransferAction
 from .. import config, db, util
 
 if TYPE_CHECKING:
     import os
-    from ..base import BaseNodeIO
+    from .base import BaseNodeIO
+    from ..acquisition import ArchiveFile
 
 import logging
 
@@ -314,6 +316,56 @@ def hardlink(from_path, to_dir, filename) -> dict | None:
     return {"ret": 0, "md5sum": True}
 
 
+def post_add(node: StorageNode, file_: ArchiveFile) -> None:
+    """Run any actions after adding `file` to `node`.
+
+    Possible actions are autosync or autoclean.
+
+    Parameters
+    ----------
+    node : StorageNode
+        The node the file copy was added to.
+    file_ : ArchiveFile
+        The file added.
+    """
+
+    # Autosync: find all StorageTransferActions where we're the source node
+    for edge in StorageTransferAction.select().where(
+        StorageTransferAction.node_from == node,
+        StorageTransferAction.group_to != node.group,
+        StorageTransferAction.autosync == True,
+    ):
+        if edge.group_to.filecopy_state(file_) != "Y":
+            log.debug(
+                f"Autosyncing {file_.path} from node {node.name} to group {edge.group_to.name}"
+            )
+
+            ArchiveFileCopyRequest.create(
+                node_from=node, group_to=edge.group_to, file=file_
+            )
+
+    # Autoclean: find all the StorageTransferActions where we're in the
+    # destination group
+    for edge in StorageTransferAction.select().where(
+        StorageTransferAction.group_to == node.group,
+        StorageTransferAction.node_from != node,
+        StorageTransferAction.autoclean == True,
+    ):
+        count = (
+            ArchiveFileCopy.update(wants_file="N", last_update=datetime.utcnow())
+            .where(
+                ArchiveFileCopy.file == file_,
+                ArchiveFileCopy.node == edge.node_from,
+                ArchiveFileCopy.has_file == "Y",
+                ArchiveFileCopy.wants_file == "Y",
+            )
+            .execute()
+        )
+
+        if count > 0:
+            log.debug(f"Autocleaning {file_.path} from node {edge.node_from.name}")
+
+
 def copy_request_done(
     req: ArchiveFileCopyRequest,
     io: BaseNodeIO,
@@ -424,5 +476,8 @@ def copy_request_done(
             transfer_started=datetime.utcfromtimestamp(start_time),
             transfer_completed=datetime.utcfromtimestamp(end_time),
         ).where(ArchiveFileCopyRequest.id == req.id).execute()
+
+    # Run post-add actions, if any
+    post_add(io.node, req.file)
 
     return True

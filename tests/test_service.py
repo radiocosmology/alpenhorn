@@ -1,13 +1,14 @@
 """An end-to-end test of the alpenhorn daemon.
 
 Things that this end-to-end test does:
-    - auto-imports a file
+    - auto-imports a file and then autosyncs it onwards
     - auto-verifies a file
     - recalls a released file out of LustreHSM
-    - pulls a file onto the Transport group
+    - pulls a file onto the Transport group and then autodeletes the source
     - releases a file on HSM to free space
     - checks a corrupt file
     - deletes a file
+    - doesn't delete a file with a pending transfer
 
 The purpose of this test isn't to exhaustively exercise all parts
 of the daemon, but to check the connectivity of the high-level blocks
@@ -27,7 +28,7 @@ from urllib.parse import quote as urlquote
 
 from alpenhorn.service import cli
 from alpenhorn.db import database_proxy, EnumField
-from alpenhorn.storage import StorageGroup, StorageNode
+from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 
@@ -57,6 +58,7 @@ def e2e_db(xfs, hostname):
             ArchiveFileCopyRequest,
             StorageGroup,
             StorageNode,
+            StorageTransferAction,
             pattern_importer.AcqType,
             pattern_importer.FileType,
             pattern_importer.ExtendedAcq,
@@ -78,6 +80,9 @@ def e2e_db(xfs, hostname):
         auto_import=True,
     )
     xfs.create_file("/dft/ALPENHORN_NODE", contents="dftnode")
+
+    # An empty group
+    emptygrp = StorageGroup.create(name="emptygrp")
 
     # A transport fleet
     fleet = StorageGroup.create(name="fleet", io_class="Transport")
@@ -214,6 +219,22 @@ def e2e_db(xfs, hostname):
     xfs.create_file("/sf/acq1/delete.me")
     xfs.create_file("/tp/one/acq1/delete.me")
 
+    # A file to _not_ delete (because it's the source for a copy request)
+    keepme = ArchiveFile.create(name="keep.me", acq=acq1, size_b=0)
+    ArchiveFileCopy.create(
+        file=keepme, node=dftnode, has_file="Y", wants_file="Y", ready=True
+    )
+    ArchiveFileCopy.create(
+        file=keepme, node=sf1, has_file="Y", wants_file="Y", ready=True
+    )
+    ArchiveFileCopy.create(
+        file=keepme, node=tp1, has_file="Y", wants_file="N", ready=True
+    )
+    xfs.create_file("/tp/one/acq1/keep.me")
+
+    # The target of this request has no nodes, so it can't be fulfilled
+    ArchiveFileCopyRequest.create(file=keepme, node_from=tp1, group_to=emptygrp)
+
     # A file to auto-verify
     verifyme = ArchiveFile.create(
         name="verify.me",
@@ -228,6 +249,13 @@ def e2e_db(xfs, hostname):
 
     # A file to auto-import
     xfs.create_file("/dft/acq2/find.me", contents="")
+
+    # Auto-actions:
+    # * copy find.me to the transport fleet after import
+    # * delete pull.me from the transport fleet after pull
+    StorageTransferAction.create(
+        node_from=dftnode, group_to=fleet, autoclean=True, autosync=True
+    )
 
     yield
 
@@ -281,6 +309,7 @@ def e2e_config(xfs, hostname):
             "pattern_importer",
         ],
         "database": {"url": "sqlite:///?database=" + urlquote(DB_URI) + "&uri=true"},
+        "logging": {"level": "debug"},
         "service": {"num_workers": 0},
     }
 
@@ -313,7 +342,13 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
 
     # find.me has been imported
     assert ArchiveAcq.get(name="acq2")
-    assert ArchiveFile.get(name="find.me")
+    findme = ArchiveFile.get(name="find.me")
+    assert findme
+
+    # ... and is scheduled for transfer to the fleet
+    dftnode = StorageNode.get(name="dftnode")
+    fleet = StorageGroup.get(name="fleet")
+    assert ArchiveFileCopyRequest.get(file=findme, node_from=dftnode, group_to=fleet)
 
     # correct.me has been marked ready
     correctme = ArchiveFile.get(name="correct.me")
@@ -332,6 +367,10 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
     copy = ArchiveFileCopy(file=pullme, node=tp1)
     assert copy.path.exists()
 
+    # ... and now the source file is marked for deletion
+    copy = ArchiveFileCopy.get(file=pullme, node=dftnode)
+    assert copy.wants_file == "N"
+
     # release.me is not ready
     releaseme = ArchiveFile.get(name="release.me")
     assert not ArchiveFileCopy.get(file=releaseme).ready
@@ -349,3 +388,9 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
     copy = ArchiveFileCopy.get(file=deleteme, node=tp1)
     assert copy.has_file == "N"
     assert not copy.path.exists()
+
+    # keep.me is _not_ gone from tp1
+    deleteme = ArchiveFile.get(name="keep.me")
+    copy = ArchiveFileCopy.get(file=deleteme, node=tp1)
+    assert copy.has_file != "N"
+    assert copy.path.exists()
