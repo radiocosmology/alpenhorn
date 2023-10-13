@@ -83,6 +83,9 @@ def pool(dbproxy, queue):
     assert len(p) == 0
     del p
 
+    # Clear the global abort, if it was set by the test
+    global_abort.clear()
+
 
 @pytest.fixture
 def empty_pool():
@@ -183,3 +186,34 @@ def test_crash(queue, pool):
 
     # Do some clean-up so the queue fixture can exit
     queue.task_done("fifo")
+
+
+def test_worker_id(queue, pool):
+    """Test that tasks can read the worker ID."""
+
+    # Synchronisation
+    barrier = threading.Barrier(3)
+
+    ids = dict()
+
+    def task():
+        """A task that reports its worker ID."""
+
+        from alpenhorn.pool import threadlocal
+
+        nonlocal ids, barrier
+        ids[threadlocal.worker_id] = 1 + ids.get(threadlocal.worker_id, 0)
+
+        barrier.wait()
+
+    # Queue two tasks
+    queue.put(task, "fifo")
+    queue.put(task, "fifo")
+
+    # Wait for completion
+    barrier.wait()
+
+    # Check the result
+    assert len(ids) == 2
+    assert ids[1] == 1
+    assert ids[2] == 1

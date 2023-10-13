@@ -10,6 +10,7 @@ from datetime import datetime
 from tempfile import TemporaryDirectory
 
 from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from ..pool import threadlocal
 from ..storage import StorageNode, StorageTransferAction
 from .. import config, db, util
 
@@ -96,6 +97,12 @@ def bbcp(from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int) -
             True unless it's clear that a failure wasn't
             due to a problem with the source file.
     """
+
+    # Set port number, which is different for each worker
+    # We use 4200 for the main thread and increase by ten
+    # for each worker.
+    port = 4200 + getattr(threadlocal, "worker_id", 0) * 10
+
     ret, stdout, stderr = util.run_command(
         [  # See: https://www.slac.stanford.edu/~abh/bbcp/
             "bbcp",
@@ -128,7 +135,7 @@ def bbcp(from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int) -
             #
             # Port to use
             "--port",
-            "4200",
+            str(port),
             #
             #
             # TCP window size.  4M is what Linux typically limits
