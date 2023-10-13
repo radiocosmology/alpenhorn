@@ -72,6 +72,37 @@ def test_bbcp_good(mock_run_command):
     assert args["timeout"] == 305.0  # 300 seconds base + 5 seconds for 1e8 bytes
 
 
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_bbcp_port(mock_run_command):
+    """Test setting bbcp from worker threads."""
+
+    from alpenhorn.pool import threadlocal
+
+    # Ensure we have no worker id
+    try:
+        del threadlocal.worker_id
+    except AttributeError:
+        pass
+
+    ioutil.bbcp("from/path", "to/dir", 1e8)
+    args = mock_run_command()
+    assert "4200" in args["cmd"]
+
+    # Set worker id
+    threadlocal.worker_id = 1
+
+    ioutil.bbcp("from/path", "to/dir", 1e8)
+    args = mock_run_command()
+    assert "4210" in args["cmd"]
+
+    # Set worker id
+    threadlocal.worker_id = 2
+
+    ioutil.bbcp("from/path", "to/dir", 1e8)
+    args = mock_run_command()
+    assert "4220" in args["cmd"]
+
+
 @pytest.mark.run_command_result(0, "", "")
 def test_bbcp_nomd5(mock_run_command):
     """Test a ioutil.bbcp() call with md5 sum missing from commmand output."""

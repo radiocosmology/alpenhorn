@@ -19,6 +19,10 @@ log = logging.getLogger(__name__)
 global_abort = threading.Event()
 
 
+# Thread-local (Worker-local) storage
+threadlocal = threading.local()
+
+
 class Worker(threading.Thread):
     """A worker thread.
 
@@ -27,13 +31,15 @@ class Worker(threading.Thread):
     queue : FairMultiFIFOQueue
         The queue
     index : integer
-        The index of this thread.  Only used to set the threadName.
+        The index of this thread.  Available to tasks as `threadlocal.worker_id`
     """
 
     def __init__(self, queue: FairMultiFIFOQueue, index: int) -> None:
         # thread constructor; daemon=True means the thread will be cancelled if the
         # main thread dies
-        threading.Thread.__init__(self, name=f"Worker#{index}", daemon=True)
+        self._worker_id = index + 1
+
+        threading.Thread.__init__(self, name=f"Worker#{self._worker_id}", daemon=True)
 
         self._worker_stop = threading.Event()
         self._queue = queue
@@ -59,6 +65,10 @@ class Worker(threading.Thread):
         """
 
         log.info("Started.")
+
+        # Put the worker id in `threadlocal`, so tasks can access it
+        global threadlocal
+        threadlocal.worker_id = self._worker_id
 
         while True:
             # Exit if told to stop
