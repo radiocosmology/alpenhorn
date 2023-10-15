@@ -679,13 +679,19 @@ class UpdateableGroup(updateable_base):
         if self._init_idle and do_update:
             log.info(f'Updating group "{self.name}".')
 
+            # Remember ArchiveFiles that we're pulling, so we don't end up with
+            # overlapping pulls (which would try to write to the same file).
+            seen_files = set()
+
             # Process pulls into this group
             for req in ArchiveFileCopyRequest.select().where(
                 ArchiveFileCopyRequest.completed == 0,
                 ArchiveFileCopyRequest.cancelled == 0,
                 ArchiveFileCopyRequest.group_to == self.db,
             ):
-                self.update_pull(req)
+                if req.file not in seen_files:
+                    seen_files.add(req.file)
+                    self.update_pull(req)
 
             # Check for idleness at the end
             self._do_idle_updates = self.idle
