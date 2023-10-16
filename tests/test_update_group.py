@@ -173,6 +173,35 @@ def test_update_group_path_exists(mockgroupandnode, hostname, queue, pull):
             dst.save()
 
 
+def test_update_group_multicopy(
+    mockgroupandnode,
+    hostname,
+    queue,
+    pull,
+    storagenode,
+    archivefilecopy,
+    archivefilecopyrequest,
+):
+    """update.update_group shouldn't queue simultaneous pulls for the same file."""
+
+    mockio, group, node = mockgroupandnode
+    file, copy, afcr = pull
+
+    # Make a duplicate AFCR
+    archivefilecopyrequest(node_from=afcr.node_from, group_to=afcr.group_to, file=file)
+
+    # Make a third AFCR for the same file coming from a different source
+    node2 = storagenode(name="node2", group=afcr.node_from.group, active=True)
+    archivefilecopy(node=node2, file=file, has_file="Y")
+    archivefilecopyrequest(node_from=node2, group_to=afcr.group_to, file=file)
+
+    # Run update
+    group.update()
+
+    # only one pull request should have been submitted
+    mockio.group.pull.assert_called_once()
+
+
 def test_update_group_copy_state(
     mockgroupandnode,
     hostname,
