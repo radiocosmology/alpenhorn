@@ -135,8 +135,8 @@ def test_update_active(unode):
     # Pretend node is actually not active
     with patch.object(unode.io, "check_active", lambda: False):
         assert not unode.update_active()
-    assert not unode.db.active
-    assert not StorageNode.select(StorageNode.active).limit(1).scalar()
+    assert unode.db.active
+    assert StorageNode.select(StorageNode.active).limit(1).scalar()
 
 
 def test_update_free_space(unode):

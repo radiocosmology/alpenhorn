@@ -274,15 +274,9 @@ class UpdateableNode(updateable_base):
             if self.io.check_active():
                 return True
             else:
-                # Mark the node as inactive in the database
-                self.db.active = False
-                self.db.save(only=[StorageNode.active])
-                log.info(
-                    f'Correcting the database: node "{self.name}" is now set to '
-                    "inactive."
-                )
+                log.warning(f'Ignoring node "{self.name}": not ready for I/O.')
         else:
-            log.warning(f'Attempted to update inactive node "{self.name}"')
+            log.warning(f'Ignoring node "{self.name}": deactivated during update.')
 
         return False
 
