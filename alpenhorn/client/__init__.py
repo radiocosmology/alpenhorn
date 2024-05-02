@@ -250,9 +250,11 @@ def sync(
         click.echo(
             "Adding {} new requests{}.\n".format(
                 len(files_out) or "no",
-                ", keeping {} already existing".format(len(files_in))
-                if len(files_in)
-                else "",
+                (
+                    ", keeping {} already existing".format(len(files_in))
+                    if len(files_in)
+                    else ""
+                ),
             )
         )
 

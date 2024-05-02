@@ -1,4 +1,5 @@
 """Common fixtures"""
+
 import os
 import pytest
 import shutil

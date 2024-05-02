@@ -21,6 +21,7 @@ will be called by alpenhorn, which then stores the matched AcqType
 in an extended ArchiveAcq table and the matched FileType in an
 extended ArchiveFile table.
 """
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, Tuple
 

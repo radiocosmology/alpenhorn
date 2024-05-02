@@ -1,4 +1,5 @@
 """StorageNode and StorageGroup table models."""
+
 # Type annotation shennanigans
 from __future__ import annotations
 from typing import TYPE_CHECKING

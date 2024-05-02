@@ -1,4 +1,5 @@
 """Test DefaultNodeIO."""
+
 import pytest
 import pathlib
 

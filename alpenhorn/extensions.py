@@ -66,6 +66,7 @@ functionality they provide. There are currently three supported keys:
 If other keys are present in the dictionary returned by `register_extension`, they
 are ignored.
 """
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, Tuple
 

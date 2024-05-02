@@ -6,6 +6,7 @@ These are very low-level classes.  Any module implementing the I/O class for
 something even remotely resembling a POSIX filesystem may be better served
 by subclassing from DefaultIO instead of from here directly.
 """
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, IO
 

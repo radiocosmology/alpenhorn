@@ -1,4 +1,5 @@
 """alpenhorn.util tests."""
+
 import pytest
 
 from alpenhorn import util
