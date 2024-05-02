@@ -111,6 +111,18 @@ def test_md5(unode, xfs):
     assert unode.io.md5("dir/file2") == "9e107d9d372bb6826bd81d3542a419d6"
 
 
+def test_md5_bad(unode, xfs):
+    """test DefaultNodeIO.md5() with bad files"""
+
+    # Try a missing file
+    xfs.create_dir("/node/dir/")
+    assert unode.io.md5("dir", "file1") is None
+
+    # Try an unreadable file
+    xfs.create_file("/node/dir/file", st_mode=0)
+    assert unode.io.md5("dir/file") == None
+
+
 def test_open_absolute(unode, xfs):
     """Test DefaultNodeIO.open() on an absolute path."""
 

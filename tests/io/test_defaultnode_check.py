@@ -73,6 +73,28 @@ def test_check_md5sum_bad(xfs, queue, simpleacq, archivefile, unode, archivefile
     assert ArchiveFileCopy.get(file=file, node=unode.db).has_file == "X"
 
 
+def test_check_md5sum_perm(xfs, queue, simpleacq, archivefile, unode, archivefilecopy):
+    """Test check async with permission error."""
+
+    file = archivefile(name="file", acq=simpleacq, size_b=43, md5sum="incorrect-md5")
+    copy = archivefilecopy(file=file, node=unode.db, has_file="M")
+
+    xfs.create_file(
+        copy.path, st_mode=0, contents="The quick brown fox jumps over the lazy dog"
+    )
+
+    # queue
+    unode.io.check(copy)
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Copy is now corrupt.
+    assert ArchiveFileCopy.get(file=file, node=unode.db).has_file == "X"
+
+
 def test_check_missing(xfs, queue, simpleacq, archivefile, unode, archivefilecopy):
     """Test check async with missing file."""
 

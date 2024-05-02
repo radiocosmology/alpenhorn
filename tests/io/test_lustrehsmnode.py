@@ -2,10 +2,9 @@
 
 import pytest
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import patch, MagicMock
 
 from alpenhorn.archive import ArchiveFileCopy
-from alpenhorn.io import lustrehsm
 from alpenhorn.update import UpdateableNode
 
 
@@ -249,16 +248,15 @@ def test_auto_verify_missing(queue, node):
 def test_auto_verify_restored(xfs, node):
     """Test auto_verification on a restored file."""
 
-    # Mock the Default IO's check function which we don't need to test here
-    from alpenhorn.io.default import DefaultNodeIO
-
-    DefaultNodeIO.check = MagicMock()
+    # When a file is restored, LustreHSM.auto_verify just tail-calls DefaultIO.check
+    check_mock = MagicMock()
 
     xfs.create_file("/node/simpleacq/file1")
     copy = ArchiveFileCopy.get(id=1)
 
-    node.io.auto_verify(copy)
-    DefaultNodeIO.check.assert_called_once_with(copy)
+    with patch("alpenhorn.io.default.DefaultNodeIO.check", check_mock):
+        node.io.auto_verify(copy)
+    check_mock.assert_called_once_with(copy)
 
 
 @pytest.mark.lfs_hsm_state(
@@ -269,8 +267,8 @@ def test_auto_verify_restored(xfs, node):
 def test_auto_verify_released(xfs, queue, mock_lfs, node):
     """Test auto_verification on a released file."""
 
-    # Mock the Default IO's check_async after it gets imported into lustrehsm.py
-    lustrehsm.check_async = MagicMock()
+    # Mock the check async, which is called by the task to do the heavy lifting
+    async_mock = MagicMock()
 
     xfs.create_file("/node/simpleacq/file1")
 
@@ -283,11 +281,12 @@ def test_auto_verify_released(xfs, queue, mock_lfs, node):
     assert queue.qsize == 1
 
     # Run task
-    task, key = queue.get()
-    task()
-    queue.task_done(key)
+    with patch("alpenhorn.io.lustrehsm.check_async", async_mock):
+        task, key = queue.get()
+        task()
+        queue.task_done(key)
 
-    lustrehsm.check_async.assert_called_once()
+    async_mock.assert_called_once()
 
     # File has been re-released
     lfs = mock_lfs("")
@@ -302,8 +301,8 @@ def test_auto_verify_released(xfs, queue, mock_lfs, node):
 def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
     """Test auto_verification on a released file that's ready."""
 
-    # Mock the Default IO's check_async after it gets imported into lustrehsm.py
-    lustrehsm.check_async = MagicMock()
+    # Mock the check async, which is called by the task to do the heavy lifting
+    async_mock = MagicMock()
 
     xfs.create_file("/node/simpleacq/file1")
 
@@ -314,11 +313,12 @@ def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
     assert queue.qsize == 1
 
     # Run task
-    task, key = queue.get()
-    task()
-    queue.task_done(key)
+    with patch("alpenhorn.io.lustrehsm.check_async", async_mock):
+        task, key = queue.get()
+        task()
+        queue.task_done(key)
 
-    lustrehsm.check_async.assert_called_once()
+    async_mock.assert_called_once()
 
     # File has _not_ been re-released
     lfs = mock_lfs("")
