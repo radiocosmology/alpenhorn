@@ -289,7 +289,7 @@ class DefaultNodeIO(BaseNodeIO):
         """
         path = pathlib.Path(self.node.root, path, *segments)
         try:
-            return util.md5sum_file(pathlib.Path(path))
+            return util.md5sum_file(path)
         except FileNotFoundError:
             log.warning(f"MD5 sum check for {path} failed: file not found.")
         except PermissionError:
