@@ -1,4 +1,5 @@
 """Tests for UpdateableGroup."""
+
 import pytest
 import datetime
 from unittest.mock import patch, call

@@ -1,4 +1,5 @@
 """Common fixtures"""
+
 import os
 import pytest
 import shutil
@@ -314,7 +315,7 @@ def mock_stat(fs):
 
         from math import ceil
 
-        file = fs.get_object(path)
+        file = fs.get_object(path, check_read_perm=False)
         size = file.size
 
         # Anything with a __dict__ works here.
@@ -331,6 +332,44 @@ def mock_stat(fs):
 
 
 @pytest.fixture
+def mock_exists(fs):
+    """Mocks pathlib.PosixPath.exists to work with pyfakefs."""
+
+    def _mocked_exists(path):
+        """Mock of pathlib.PosixPath.exists to work better with pyfakefs.
+
+        The problem here is if there's an unreadable file in a readable
+        directory, pyfakefs raises PermissionError in pathlib.Path.exists,
+        even though it should return True (since only the directory needs to
+        be read for an existence check.)
+        """
+        nonlocal fs
+
+        from math import ceil
+
+        try:
+            dir_ = fs.get_object(path.parent)
+            # Parent directory not readable
+            if not dir_.st_mode & 0o222:
+                raise PermissionError("Permission denied")
+        except FileNotFoundError:
+            return False
+
+        # Directory is readable
+        try:
+            file = fs.get_object(path)
+        except PermissionError:
+            pass
+        except FileNotFoundError:
+            return False
+
+        return True
+
+    with patch("pathlib.PosixPath.exists", _mocked_exists):
+        yield
+
+
+@pytest.fixture
 def mock_observer():
     """Mocks the DefaultIO observer so its always the PollingObserver"""
     from watchdog.observers.polling import PollingObserver
@@ -340,7 +379,7 @@ def mock_observer():
 
 
 @pytest.fixture
-def xfs(fs, mock_observer, mock_statvfs, mock_stat):
+def xfs(fs, mock_observer, mock_statvfs, mock_stat, mock_exists):
     """An extended pyfakefs.
 
     Patches more stuff for proper behaviour with alpenhorn unittests"""

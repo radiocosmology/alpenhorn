@@ -7,6 +7,7 @@ These I/O classes are used by StorageNodes and StorageGroups which do not
 explicitly specify `io_class` (as well as being used explicitly when `io_class`
 has the value "Default").
 """
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, IO
 
@@ -268,7 +269,7 @@ class DefaultNodeIO(BaseNodeIO):
 
         return path.with_name("." + path.name + ".lock").exists()
 
-    def md5(self, path: str | pathlib.Path, *segments) -> str:
+    def md5(self, path: str | pathlib.Path, *segments) -> str | None:
         """Compute the MD5 hash of the file at the specified path.
 
         This can take a long time: call it from an async.
@@ -283,10 +284,17 @@ class DefaultNodeIO(BaseNodeIO):
 
         Returns
         -------
-        md5sum : str
-            the base64-encoded MD5 hash value
+        md5sum : str | None
+            the base64-encoded MD5 hash value or None on error
         """
-        return util.md5sum_file(pathlib.Path(self.node.root, path, *segments))
+        path = pathlib.Path(self.node.root, path, *segments)
+        try:
+            return util.md5sum_file(path)
+        except FileNotFoundError:
+            log.warning(f"MD5 sum check for {path} failed: file not found.")
+        except PermissionError:
+            log.warning(f"MD5 sum check for {path} failed: permission error.")
+        return None
 
     def open(self, path: os.PathLike | str, binary: bool = True) -> IO:
         """Open the file specified by `path` for reading.

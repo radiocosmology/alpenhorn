@@ -35,6 +35,7 @@ After `init()` has been called, database access is possible.  Each thread
 needing database access must separately call `connect()` to initialise the
 database proxy.
 """
+
 from __future__ import annotations
 from typing import Any
 

@@ -11,6 +11,7 @@ This module provides:
     with a secondary StorageNode of a different class meant to store files
     too small for the external system.
 """
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, IO
 

@@ -1,4 +1,5 @@
 """Test alpenhorn.logger"""
+
 import pytest
 import socket
 import logging
