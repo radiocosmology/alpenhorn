@@ -30,6 +30,7 @@ def run_command(
     -------
     retval : int or None
         Return code, or None if the process was killed after timing out.
+        Integer zero indicates success.
     stdout : string
         Value of stdout.
     stderr : string
@@ -48,8 +49,10 @@ def run_command(
         stdout_val, stderr_val = proc.communicate(timeout=timeout)
         retval = proc.returncode
     except subprocess.TimeoutExpired:
+        log.warning(f"Process overrun [timeout={timeout}]: " + " ".join(cmd))
         proc.kill()
-        stdout_val, stderr_val = proc.communicate()
+        stdout_val = ""
+        stderr_val = ""
         retval = None
 
     return (
