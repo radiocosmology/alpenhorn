@@ -449,7 +449,7 @@ def copy_request_done(
     trans_time = end_time - start_time
     rate = req.file.size_b / trans_time
     log.info(
-        f"Pull complete (md5sum correct). "
+        f"Pull of {req.file.path} complete. "
         f"Transferred {util.pretty_bytes(req.file.size_b)} "
         f"in {util.pretty_deltat(trans_time)} [{util.pretty_bytes(rate)}/s]"
     )

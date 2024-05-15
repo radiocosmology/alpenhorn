@@ -36,7 +36,7 @@ except ImportError:
 
 # The log format.  Used by the stderr log and any other log destinations
 log_fmt = logging.Formatter(
-    "%(asctime)s %(levelname)s >> [%(threadName)s:%(name)s] %(message)s",
+    "%(asctime)s %(levelname)s >> [%(threadName)s] %(message)s",
     "%b %d %H:%M:%S",
 )
 
