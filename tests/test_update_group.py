@@ -110,9 +110,9 @@ def test_update_group_nosrc(mockgroupandnode, hostname, queue, pull):
     # run update
     group.update()
 
-    # afcr is not handled
+    # afcr is cancelled
     assert not ArchiveFileCopyRequest.get(file=afcr.file).completed
-    assert not ArchiveFileCopyRequest.get(file=afcr.file).cancelled
+    assert ArchiveFileCopyRequest.get(file=afcr.file).cancelled
     assert call.pull(afcr) not in mockio.group.mock_calls
 
 
