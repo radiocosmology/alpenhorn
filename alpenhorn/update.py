@@ -458,7 +458,14 @@ class UpdateableNode(updateable_base):
                 ArchiveFileCopyRequest.cancelled == 0,
                 ArchiveFileCopyRequest.node_from == self.db,
             ):
-                self.io.ready_pull(req)
+                if self.db.filecopy_present(req.file):
+                    self.io.ready_pull(req)
+                else:
+                    log.info(
+                        "Ignoring ready request for "
+                        f"{req.file.acq.name}/{req.file.name} "
+                        f"on node {self.name}: not present."
+                    )
 
             self._updated = True
         else:
@@ -639,15 +646,16 @@ class UpdateableGroup(updateable_base):
             )
             return
 
-        # If the source file doesn't exist, skip the request.
-        #
-        # XXX Cancel instead?
+        # If the source file doesn't exist, cancel the request.
         if not req.node_from.filecopy_present(req.file):
             log.warning(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                f"Cancelling request for {req.file.acq.name}/{req.file.name}:"
                 f" not available on node {req.node_from.name}. "
                 f"[file_id={req.file.id}]"
             )
+            ArchiveFileCopyRequest.update(cancelled=True).where(
+                ArchiveFileCopyRequest.id == req.id
+            ).execute()
             return
 
         # If the source file is not ready, skip the request.

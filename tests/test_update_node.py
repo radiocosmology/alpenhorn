@@ -440,17 +440,30 @@ def test_update_delete_transfer_pending(
 
 
 def test_update_node_run(
-    unode, queue, simplegroup, simplefile, archivefilecopy, archivefilecopyrequest
+    unode,
+    queue,
+    simpleacq,
+    simplegroup,
+    archivefile,
+    archivefilecopy,
+    archivefilecopyrequest,
 ):
     """Test running UpdateableNode.update_node."""
 
     # Make something to check
-    copy = archivefilecopy(node=unode.db, file=simplefile, has_file="M")
+    badfile = archivefile(name="check_me", acq=simpleacq)
+    copy = archivefilecopy(node=unode.db, file=badfile, has_file="M")
 
-    # And something to pull
+    # And something to ready for a pull
+    goodfile = archivefile(name="ready_me", acq=simpleacq)
+    archivefilecopy(node=unode.db, file=goodfile, has_file="Y")
     afcr = archivefilecopyrequest(
-        node_from=unode.db, group_to=simplegroup, file=simplefile
+        node_from=unode.db, group_to=simplegroup, file=goodfile
     )
+
+    # And something to ignore (i.e. not ready for a pull)
+    missingfile = archivefile(name="ignore_me", acq=simpleacq)
+    archivefilecopyrequest(node_from=unode.db, group_to=simplegroup, file=missingfile)
 
     mock = MagicMock()
     mock.before_update.return_value = True
