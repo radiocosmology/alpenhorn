@@ -77,7 +77,7 @@ def pull_async(
     with tree_lock.up:
         if not to_dir.exists():
             log.info(f'Creating directory "{to_dir}".')
-            to_dir.mkdir(parents=True)
+            to_dir.mkdir(parents=True, exist_ok=True)
 
         # If the file doesn't exist, create a placeholder so we can release
         # the tree lock without having to wait for the transfer to complete
