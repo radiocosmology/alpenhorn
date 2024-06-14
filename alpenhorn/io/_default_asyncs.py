@@ -283,28 +283,7 @@ def delete_async(
 
         # Check if any containing directory is now empty
         # and remove if they are.
-        dirname = fullpath.parent
-
-        # try to delete the directories.  This must be done while locking down the tree lock
-        with tree_lock.down:
-            while dirname != ".":
-                try:
-                    dirname.rmdir()
-                    log.info(f"Removed directory {dirname} on {name}")
-                except OSError as e:
-                    if e.errno == errno.ENOTEMPTY:
-                        # This is fine, but stop trying to rmdir.
-                        break
-                    elif e.errno == errno.ENOENT:
-                        # Already deleted, which is fine.
-                        pass
-                    else:
-                        log.warning(
-                            f"Error deleting directory {dirname} on {name}: {e}"
-                        )
-                        # Otherwise, let's try to soldier on
-
-                dirname = dirname.parent
+        ioutil.remove_filedir(copy.node, fullpath.parent, tree_lock)
 
         # Update the DB
         ArchiveFileCopy.update(

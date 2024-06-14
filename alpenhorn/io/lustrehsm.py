@@ -187,7 +187,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # Continue with the update
         return True
 
-    def idle_update(self) -> None:
+    def idle_update(self, newly_idle) -> None:
         """Update HSM state of copies when idle.
 
         If the node is idle after an update, double check the HSM state
@@ -197,6 +197,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         data index to reflect changes made in this way outside of alpenhorn so that
         the alpenhornd daemon can properly manage free space.
         """
+
+        # Run DefautlIO idle checks
+        super().idle_update(newly_idle)
 
         # Check the query walker.  Initialised if necessary.
         if self._release_qw is None:

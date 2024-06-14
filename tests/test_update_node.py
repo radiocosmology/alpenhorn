@@ -357,6 +357,9 @@ def test_update_idle(unode, queue):
             assert len(rav.mock_calls) == 1
             assert len(ioiu.mock_calls) == 3
 
+            # newly_idle should only be true in the first call
+            assert ioiu.mock_calls == [call(True), call(False), call(False)]
+
 
 def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy):
     """Test UpdateableNode.update_delete() when under min"""
@@ -435,8 +438,8 @@ def test_update_delete_transfer_pending(
     with patch.object(unode.io, "delete", mock_delete):
         unode.update_delete()
 
-    # A call is always made, even though in this case it's empty.
-    mock_delete.assert_called_once_with([])
+    # A call is not made in this case
+    mock_delete.assert_not_called()
 
 
 def test_update_node_run(
@@ -476,8 +479,7 @@ def test_update_node_run(
 
     # Check I/O calls
     calls = list(mock.mock_calls)
-    assert len(calls) == 5
+    assert len(calls) == 4
     assert call.bytes_avail(fast=False) in calls
     assert call.check(copy) in calls
-    assert call.delete([]) in calls
     assert call.ready_pull(afcr) in calls

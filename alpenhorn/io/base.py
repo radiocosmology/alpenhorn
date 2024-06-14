@@ -190,7 +190,7 @@ class BaseNodeIO:
         # By default, we do nothing and allow the update to continue
         return True
 
-    def idle_update(self) -> None:
+    def idle_update(self, newly_idle: bool) -> None:
         """Idle update hook.
 
         Called after a regular update that wasn't skipped, but only if,
@@ -199,6 +199,12 @@ class BaseNodeIO:
 
         This is the place to put low-priority tasks that should only happen
         if no other I/O is happening on the node.
+
+        Parameters
+        ----------
+        newly_idle : bool
+            True if this is the first time idle_update has been called since
+            some I/O happened.
         """
         # By default do nothing.
         pass
