@@ -84,8 +84,8 @@ class DefaultNodeIO(BaseNodeIO):
         # The directory tree modification lock
         self.tree_lock = UpDownLock()
 
-        # When <= 1, the idle clean-up can is allowed to run; we initialise
-        # to zero # to run it as soon as possible after start-up
+        # When <= 1, the idle clean-up is allowed to run; we initialise
+        # to zero to run it as soon as possible after start-up
         self._skip_idle_cleanup = 0
 
         # Set up a reservation for ourself if necessary
