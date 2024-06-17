@@ -6,6 +6,7 @@ import datetime
 import peewee as pw
 
 from alpenhorn.io import ioutil
+from alpenhorn.io.updownlock import UpDownLock
 from alpenhorn.archive import ArchiveFileCopyRequest, ArchiveFileCopy
 
 
@@ -423,3 +424,65 @@ def test_autoclean_loop(archivefilecopy, simplefile, simplenode, storagetransfer
 
     copy = ArchiveFileCopy.get(file=simplefile, node=simplenode)
     assert copy.wants_file == "Y"
+
+
+def test_remove_filedir_patherror(simplenode):
+    """remove_filedir raises ValueErorr if dirname isn't rooted under node.root"""
+
+    with pytest.raises(ValueError):
+        ioutil.remove_filedir(simplenode, pathlib.Path("/some/other/path"), None)
+
+
+def test_remove_filedir_node_root(simplenode, xfs):
+    """remove_filedir must stop removing directories at node.root"""
+
+    udl = UpDownLock()
+
+    # Create something to delete
+    path_to_delete = pathlib.Path(f"{simplenode.root}/a/b/c")
+    xfs.create_dir(path_to_delete)
+
+    ioutil.remove_filedir(simplenode, path_to_delete, udl)
+
+    assert not path_to_delete.exists()
+    assert not pathlib.Path(f"{simplenode.root}/a/b").exists()
+    assert not pathlib.Path(f"{simplenode.root}/a").exists()
+    assert pathlib.Path(simplenode.root).exists()
+
+
+def test_remove_filedir_missing(simplenode, xfs):
+    """remove_filedir should be fine with missing subdirs"""
+
+    udl = UpDownLock()
+
+    # Create something to delete
+    path_to_delete = pathlib.Path(f"{simplenode.root}/a/b/c")
+    xfs.create_dir(path_to_delete)
+
+    ioutil.remove_filedir(simplenode, path_to_delete.joinpath("d/e/f"), udl)
+
+    assert not path_to_delete.exists()
+    assert not pathlib.Path(f"{simplenode.root}/a/b").exists()
+    assert not pathlib.Path(f"{simplenode.root}/a").exists()
+    assert pathlib.Path(simplenode.root).exists()
+
+
+def test_remove_filedir_nonempty(simplenode, xfs):
+    """remove_filedir should be fine with non-empty dirs"""
+
+    udl = UpDownLock()
+
+    # Create something to delete
+    path_to_delete = pathlib.Path(f"{simplenode.root}/a/b/c")
+    xfs.create_dir(path_to_delete)
+
+    # Make a file somewhere to block deletion
+    xfs.create_file(f"{simplenode.root}/a/b/blocker")
+
+    ioutil.remove_filedir(simplenode, path_to_delete, udl)
+
+    # Only has been deleted up to /a/b
+    assert not path_to_delete.exists()
+    assert pathlib.Path(f"{simplenode.root}/a/b").exists()
+    assert pathlib.Path(f"{simplenode.root}/a").exists()
+    assert pathlib.Path(simplenode.root).exists()

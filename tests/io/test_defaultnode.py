@@ -182,3 +182,68 @@ def test_reserve_bytes(unode, xfs):
 
     # Release the rest
     unode.io.release_bytes(2000)
+
+
+def test_idle_cleanup(unode, archiveacq, archivefile, queue, xfs):
+    """test clean-up code in DefaultNodeIO.idle_update"""
+
+    # Node root
+    root = unode.db.root
+
+    # Create some acqs
+    empty_acq = archiveacq(name="empty")
+    dirty_acq = archiveacq(name="dirty")
+    full_acq = archiveacq(name="full")
+
+    # Create some files
+    empty_file = archivefile(name="empty", acq=empty_acq)
+    dirty_file = archivefile(name="dirty", acq=dirty_acq)
+    full_file = archivefile(name="full", acq=full_acq)
+
+    # Popluate the node filesystem
+    xfs.create_dir(f"{root}/empty")
+    xfs.create_file(f"{root}/dirty/.dirty.placeholder")
+    xfs.create_file(f"{root}/full/.full.placeholder")
+    xfs.create_file(f"{root}/full/full")
+
+    # Run the idle update
+    unode.io.idle_update(True)
+
+    # Now there's something in the queue
+    assert queue.qsize == 1
+
+    # Run the task
+    task, fifo = queue.get()
+    task()
+    queue.task_done(fifo)
+
+    # empty acq has been deleted
+    assert not pathlib.Path(f"{root}/empty").exists()
+
+    # dirty acq has been cleaned and deleted
+    assert not pathlib.Path(f"{root}/firty").exists()
+
+    # full acq has been cleaned
+    assert not pathlib.Path(f"{root}/.full.placeholder").exists()
+    assert pathlib.Path(f"{root}/full").exists()
+
+
+def test_idle_cleanup_rate(unode, queue):
+    """Test rate limiting of the cleanup task."""
+
+    # This is how often the task should be queued
+    from alpenhorn.io.default import _IDLE_CLEANUP_PERIOD
+
+    # Run the idle update a few times with newly_idle true
+    # The task is queued the first time, and then once
+    # every _IDLE_CLEANUP_PERIOD times after that.
+    for _ in range(1 + _IDLE_CLEANUP_PERIOD * 5):
+        unode.io.idle_update(True)
+
+    assert queue.qsize == 6
+
+    # This shouldn't add any more jobs
+    for _ in range(1 + _IDLE_CLEANUP_PERIOD * 5):
+        unode.io.idle_update(False)
+
+    assert queue.qsize == 6

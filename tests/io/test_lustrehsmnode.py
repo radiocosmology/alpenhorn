@@ -407,7 +407,7 @@ def test_idle_update_empty(queue, mock_lfs, node):
     # Delete all copies
     ArchiveFileCopy.update(has_file="N").execute()
 
-    node.io.idle_update()
+    node.io.idle_update(False)
 
     # QW has not been initialised
     assert node.io._release_qw is None
@@ -429,7 +429,7 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
 
     before = datetime.datetime.utcnow().replace(microsecond=0)
 
-    node.io.idle_update()
+    node.io.idle_update(False)
 
     # QW has been initialised
     assert node.io._release_qw is not None
@@ -472,7 +472,7 @@ def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
     # Update all copies
     ArchiveFileCopy.update(ready=False).execute()
 
-    node.io.idle_update()
+    node.io.idle_update(False)
 
     # QW has been initialised
     assert node.io._release_qw is not None

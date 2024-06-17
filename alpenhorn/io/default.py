@@ -17,9 +17,11 @@ import pathlib
 import threading
 from watchdog.observers import Observer
 
+from . import ioutil
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 from .updownlock import UpDownLock
 from .. import util
+from ..acquisition import ArchiveAcq, ArchiveFile
 from ..task import Task
 
 # The asyncs are over here:
@@ -27,7 +29,6 @@ from ._default_asyncs import pull_async, check_async, delete_async
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from ..acquisition import ArchiveFile
     from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
     from ..storage import StorageNode
@@ -39,6 +40,10 @@ log = logging.getLogger(__name__)
 # by the mutex
 _mutex = threading.Lock()
 _reserved_bytes = dict()
+
+# This sets how often we run the clean-up idle task.  What
+# we're counting here is number of not-idle -> idle transitions
+_IDLE_CLEANUP_PERIOD = 100  # (i.e. once every 100 opportunities)
 
 
 class DefaultNodeRemote(BaseNodeRemote):
@@ -79,9 +84,66 @@ class DefaultNodeIO(BaseNodeIO):
         # The directory tree modification lock
         self.tree_lock = UpDownLock()
 
+        # When <= 1, the idle clean-up is allowed to run; we initialise
+        # to zero to run it as soon as possible after start-up
+        self._skip_idle_cleanup = 0
+
         # Set up a reservation for ourself if necessary
         with _mutex:
             _reserved_bytes.setdefault(node.name, 0)
+
+    # HOOKS
+
+    def idle_update(self, newly_idle: bool) -> None:
+        """Idle update hook.
+
+        Called after a regular update that wasn't skipped, but only if,
+        after the regular update, there were no tasks pending or in
+        progress for this node (i.e. `self.idle` is True).
+
+        This will try to do some tidying-up: look for stale placeholders,
+        and attempt to delete empty acqdirs, whenever newly_idle is True.
+
+        Parameters
+        ----------
+        newly_idle : bool
+            True if this is the first time idle_update has been called since
+            some I/O happened.
+        """
+
+        # Task to do some cleanup
+        def _async(task, node, tree_lock):
+            # Loop over all acqs
+            for acq in ArchiveAcq.select():
+                # Only continue if the directory for this acquisition exists
+                acqpath = pathlib.Path(node.root, acq.name)
+                if acqpath.is_dir():
+                    # Look for placeholders
+                    for file_ in ArchiveFile.select().where(ArchiveFile.acq == acq):
+                        placeholder = acqpath.joinpath(f".{file_.name}.placeholder")
+                        if placeholder.exists():
+                            log.warning(f"Removing stale placeholder {placeholder!s}")
+                            placeholder.unlink()
+                    # Attempt to remove acqpath.  If it isn't empty, this does nothing
+                    ioutil.remove_filedir(
+                        node,
+                        pathlib.Path(node.root, acq.name),
+                        tree_lock,
+                    )
+
+        # Submit the task only after doing some I/O
+        if newly_idle:
+            if self._skip_idle_cleanup <= 1:
+                self._skip_idle_cleanup = _IDLE_CLEANUP_PERIOD
+                Task(
+                    func=_async,
+                    queue=self._queue,
+                    key=self.node.name,
+                    args=(self.node, self.tree_lock),
+                    name=f"Tidy up {self.node.name}",
+                )
+            else:
+                self._skip_idle_cleanup = self._skip_idle_cleanup - 1
 
     # I/O METHODS
 

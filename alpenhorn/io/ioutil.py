@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import re
 import time
+import errno
 import pathlib
 import peewee as pw
 from datetime import datetime
@@ -18,6 +19,7 @@ from .. import config, db, util
 if TYPE_CHECKING:
     import os
     from .base import BaseNodeIO
+    from .updownlock import UpDownLock
     from ..acquisition import ArchiveFile
 
 import logging
@@ -489,3 +491,62 @@ def copy_request_done(
     post_add(io.node, req.file)
 
     return True
+
+
+def remove_filedir(
+    node: StorageNode, dirname: pathlib.Path, tree_lock: UpDownLock
+) -> None:
+    """Try to delete an file's parenty directorie(s) from a node
+
+    Will attempt to remove the enitre tree given as `dirname`
+    while holding the `tree_lock` down until reaching `node.root`.
+    Blocks until the lock can be acquired.
+
+    The attempt to delete starts at `acq.name` and walks upwards until
+    it runs out of path elements in `acq.name`.
+
+    As soon as a non-empty directory is encountered, the attempt stops
+    without raising an error.
+
+    If `acq.name` is missing, or partially missing, that is not an error
+    either, but an attempt to delete the part remaining will still be
+    attempted.
+
+    Parameters
+    ----------
+    node: StorageNode
+        The node to delete the acq directory from.
+    dirname: pathlib.Path
+        The path to delete.  Must be absolute and rooted at `node.root`.
+    tree_lock: UpDownLock
+        This function will block until it can acquire the down lock and
+        all I/O will happen while holding the lock down.
+
+    Raises
+    ------
+    ValueError
+        `dirname` was not a subdirectory of `node.root`
+    """
+    # Sanity check
+    if not dirname.is_relative_to(node.root):
+        raise ValueError(f"dirname {dirname} not rooted under {node.root}")
+
+    # try to delete the directories.  This must be done while locking down the tree lock
+    with tree_lock.down:
+        while str(dirname) != node.root:
+            try:
+                dirname.rmdir()
+                log.info(f"Removed directory {dirname} on {node.name}")
+            except OSError as e:
+                log.debug(f"Failed to remove directory {dirname} on {node.name}: {e}")
+                if e.errno == errno.ENOTEMPTY:
+                    # This is fine, but stop trying to rmdir.
+                    break
+                elif e.errno == errno.ENOENT:
+                    # Already deleted, which is fine.
+                    pass
+                else:
+                    log.warning(f"Error deleting directory {dirname} on {name}: {e}")
+                    # Otherwise, let's try to soldier on
+
+            dirname = dirname.parent

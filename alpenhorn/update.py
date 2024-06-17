@@ -224,6 +224,13 @@ class UpdateableNode(updateable_base):
         self._queue = queue
         self._updated = False
 
+        # Set to True whenever I/O tasks are started.
+        # Set to False whenever idle updates happened.
+        #
+        # Used to let the idle_update hooks know whether this is the
+        # first idle update to happen after some I/O or not
+        self._io_happened = True
+
         # Set in reinit()
         self.db = None
         self.reinit(node)
@@ -338,6 +345,7 @@ class UpdateableNode(updateable_base):
                 f" {self.name}."
             )
 
+            self._io_happened = True
             self.io.auto_verify(copy)
 
     def update_idle(self) -> None:
@@ -348,7 +356,9 @@ class UpdateableNode(updateable_base):
         """
         if self._updated and self.idle:
             # Do any I/O class idle updates
-            self.io.idle_update()
+            self.io.idle_update(self._io_happened)
+
+            self._io_happened = False
 
             # Run auto-verify, if requested
             if self.db.auto_verify > 0:
@@ -404,13 +414,16 @@ class UpdateableNode(updateable_base):
             # Group a bunch of these together to reduce the number of I/O Tasks
             # created.  TODO: figure out if this actually helps
             if len(del_copies) >= 10:
+                self._io_happened = True
                 self.io.delete(del_copies)
                 del_copies = [copy]
             else:
                 del_copies.append(copy)
 
         # Handle the partial group at the end (which may be empty)
-        self.io.delete(del_copies)
+        if len(del_copies) > 0:
+            self._io_happened = True
+            self.io.delete(del_copies)
 
     def update(self) -> None:
         """Perform I/O updates on this node.
@@ -447,6 +460,7 @@ class UpdateableNode(updateable_base):
                 )
 
                 # Dispatch integrity check to I/O layer
+                self._io_happened = True
                 self.io.check(copy)
 
             # Delete any unwanted files to cleanup space
@@ -459,6 +473,7 @@ class UpdateableNode(updateable_base):
                 ArchiveFileCopyRequest.node_from == self.db,
             ):
                 if self.db.filecopy_present(req.file):
+                    self._io_happened = True
                     self.io.ready_pull(req)
                 else:
                     log.info(
