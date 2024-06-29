@@ -32,10 +32,9 @@ from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
 from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
 
-from examples import pattern_importer
-
-# Make it easy for alpenhornd to find the extension
-sys.modules["pattern_importer"] = pattern_importer
+# Import pattern_importer from the examples directory
+sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "examples")))
+import pattern_importer
 
 # database URI for a shared in-memory database
 DB_URI = "file:e2edb?mode=memory&cache=shared"
@@ -141,17 +140,13 @@ def e2e_db(xfs, hostname):
     xfs.create_file("/sf2/ALPENHORN_NODE", contents="sf2")
 
     # The only acqtype
-    pattern_importer.AcqType.create(name="acqtype", glob=True, patterns='["acq?"]')
+    pattern_importer.AcqType.create(name="acqtype", patterns='["acq."]')
 
     # The only (existing) acq
     acq1 = ArchiveAcq.create(name="acq1")
 
     # The only filetype
-    pattern_importer.FileType.create(
-        name="filetype",
-        glob=True,
-        patterns='["*.me"]',
-    )
+    pattern_importer.FileType.create(name="filetype", patterns=r'[".*\\.me"]')
 
     # A file that needs to be pulled onto the Transport group
     pullme = ArchiveFile.create(name="pull.me", acq=acq1, size_b=0)
