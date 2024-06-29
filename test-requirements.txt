@@ -1,5 +1,4 @@
 chimedb @ git+https://github.com/chime-experiment/chimedb.git
 docker >= 3.0
-globre
 pyfakefs >= 5.0
 pytest >= 7.0

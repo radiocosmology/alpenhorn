@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 import re
 import os
 import json
-import globre
 import peewee as pw
 from functools import partial
 
@@ -52,11 +51,8 @@ class TypeBase(base_model):
     ----------
     name : string
         The name of this file type.
-    glob : bool
-        If True, the `patterns` will be interpreted by `globre.match`.
-        If False, the `patterns` will be interpreted by `re.match`.
     patterns : string
-        A JSON array literal of patterns.  Patterns are tried in order
+        A JSON array literal of regular expressions.  Patterns are tried in order
         listed.
     notes : string or None
         Any notes or comments about this file type.
@@ -102,15 +98,9 @@ class TypeBase(base_model):
                     f'(Got "{self.patterns}")'
                 )
 
-        # Get the match function to use depending on whether globbing is enabled.
-        if self.glob:
-            matchfn = globre.match
-        else:
-            matchfn = re.match
-
         # Loop over patterns and check for matches
         for pattern in self._pattern_list:
-            if matchfn(pattern, name):
+            if re.match(pattern, name):
                 return True
 
         return False
