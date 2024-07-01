@@ -298,7 +298,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 if copy.has_file != "N":
                     log.warning(
                         "File copy missing during check: "
-                        f"{copy.file.path}.  Updating database."
+                        f"{copy.path}.  Updating database."
                     )
                     ArchiveFileCopy.update(
                         has_file="N", last_update=datetime.utcnow()
@@ -311,6 +311,19 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
                 # While the file is not restored, yield to wait for later
                 while lfs.hsm_released(copy.path):
+                    # Has someone else come by while we've been waiting and
+                    # checked the file?
+                    if copy.has_file != "M":
+                        log.debug(
+                            f"File copy {copy.path} no longer needs "
+                            f"check (has_file={copy.has_file})"
+                        )
+
+                        # Assume whatever did the other check has re-released
+                        # the file if necessary
+                        return
+
+                    # Wait for a bit
                     yield 60
 
             # Do the check by inlining the Default-I/O function
