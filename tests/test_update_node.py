@@ -4,6 +4,7 @@ import pytest
 import datetime
 from unittest.mock import call, patch, MagicMock
 
+from alpenhorn.archive import ArchiveFileCopy
 from alpenhorn.storage import StorageNode
 from alpenhorn.update import UpdateableNode
 
@@ -192,41 +193,13 @@ def test_auto_verify(unode, simpleacq, archivefile, archivefilecopy):
         last_update=last_update,
     )
 
-    mock = MagicMock()
-    with patch.object(unode.io, "auto_verify", mock):
-        unode.run_auto_verify()
-    calls = list(mock.mock_calls)
+    unode.run_auto_verify()
 
-    # CopyN not checked
-    assert call(copyY) in calls
-    assert call(copyN) not in calls
-    assert call(copyM) in calls
-    assert call(copyX) in calls
-
-
-def test_auto_verify_dups(unode, simpleacq, archivefile, archivefilecopy):
-    """Test getting duplicates in UpdateableNode.run_auto_verify()"""
-
-    # Enable auto_verify
-    unode.db.auto_verify = 4
-
-    # Last Update time to permit auto verification
-    last_update = datetime.datetime.utcnow() - datetime.timedelta(days=10)
-
-    # Only one file
-    copyY = archivefilecopy(
-        node=unode.db,
-        file=archivefile(name="fileY", acq=simpleacq),
-        has_file="Y",
-        last_update=last_update,
-    )
-
-    mock = MagicMock()
-    with patch.object(unode.io, "auto_verify", mock):
-        unode.run_auto_verify()
-
-    # auto_verify only should be called once
-    mock.assert_called_once_with(copyY)
+    # CopyN is the only one not checked
+    assert ArchiveFileCopy.get(id=copyY.id).has_file == "M"
+    assert ArchiveFileCopy.get(id=copyN.id).has_file != "M"
+    assert ArchiveFileCopy.get(id=copyM.id).has_file == "M"
+    assert ArchiveFileCopy.get(id=copyX.id).has_file == "M"
 
 
 def test_auto_verify_time(unode, simpleacq, archivefile, archivefilecopy):
@@ -261,53 +234,13 @@ def test_auto_verify_time(unode, simpleacq, archivefile, archivefilecopy):
         last_update=datetime.datetime.utcnow() - datetime.timedelta(days=5),
     )
 
-    mock = MagicMock()
-    with patch.object(unode.io, "auto_verify", mock):
-        unode.run_auto_verify()
-    calls = list(mock.mock_calls)
-
-    # Only old files have been checked
-    assert call(copy9) in calls
-    assert call(copy8) in calls
-    assert call(copy6) not in calls
-    assert call(copy5) not in calls
-
-
-@pytest.mark.lfs_hsm_state(
-    {
-        "/node/simplefile_acq/simplefile": "released",
-    }
-)
-def test_auto_verify_released(
-    mock_lfs, xfs, queue, simplenode, simplefile, archivefilecopy
-):
-    """Shouldn't auto-verify a released file twice."""
-
-    simplenode.io_class = "LustreHSM"
-    simplenode.io_config = '{"quota_group": "qgroup", "headroom": 300000}'
-
-    # Enable auto_verify
-    simplenode.auto_verify = 1
-
-    # Create file
-    xfs.create_file("/node/simplefile_acq/simplefile")
-
-    # Make the node
-    unode = UpdateableNode(queue, simplenode)
-
-    # This is the only file
-    archivefilecopy(
-        node=unode.db,
-        file=simplefile,
-        has_file="Y",
-        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=10),
-    )
-
-    unode.run_auto_verify()
     unode.run_auto_verify()
 
-    # There should be one pending check
-    assert queue.qsize == 1
+    # Only old files need check
+    assert ArchiveFileCopy.get(id=copy9.id).has_file == "M"
+    assert ArchiveFileCopy.get(id=copy8.id).has_file == "M"
+    assert ArchiveFileCopy.get(id=copy6.id).has_file != "M"
+    assert ArchiveFileCopy.get(id=copy5.id).has_file != "M"
 
 
 def test_update_idle(unode, queue):

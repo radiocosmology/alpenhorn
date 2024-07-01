@@ -220,21 +220,6 @@ class BaseNodeIO:
 
     # I/O METHODS
 
-    def auto_verify(self, copy: ArchiveFileCopy):
-        """Check whether ArchiveFileCopy `copy` is corrupt.
-
-        This is called by the auto-verification process which can be
-        run during idle times on a node.
-
-        The default behaviour is to simply pass `copy` on to `self.check`.
-
-        Parameters
-        ----------
-        copy : ArchiveFileCopy
-            The file copy to check
-        """
-        return self.check(copy)
-
     def bytes_avail(self, fast: bool = False) -> int | None:
         """bytes_avail: Return amount of free space (in bytes) of the node, or
         None if that cannot be determined.
