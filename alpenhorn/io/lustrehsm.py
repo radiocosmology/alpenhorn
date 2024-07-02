@@ -27,8 +27,6 @@ from ..util import pretty_bytes
 from .base import BaseGroupIO, BaseNodeRemote
 from .lustrequota import LustreQuotaNodeIO
 
-# This is the DefaultIO check async; used in auto_verify()
-from ._default_asyncs import check_async
 
 if TYPE_CHECKING:
     import os
@@ -257,41 +255,18 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     # I/O METHODS
 
     def check(self, copy: ArchiveFileCopy) -> None:
-        """Check whether ArchiveFileCopy `copy` is corrupt.
+        """Check a file in HSM.
 
-        If the file is not restored, this function calls lfs(1) to
-        start restoration and then returns without doing anything else
-        (assuming a subsequent call to this function is going to resolve
-        the issue).
+        If the file is released, we trigger a restore and wait
+        for it to become available.
 
-        Parameters
-        ----------
-        copy : ArchiveFileCopy
-            the file copy to check
-        """
-        # If the file is released, restore it and do nothing
-        # further (assuming the update loop will re-call this
-        # method next time through the loop).
-        if self._lfs.hsm_released(copy.path):
-            self._lfs.hsm_restore(copy.path)
-            return
+        Then the file is verified.
 
-        # Otherwise, use the DefaultIO method to do the check
-        super().check(copy)
-
-    def auto_verify(self, copy: ArchiveFileCopy) -> None:
-        """Auto-verify a file in HSM.
-
-        If the file happens to be restored, we simply run check() on
-        it.  If it's released, instead we do the following:
-
-        - trigger a restore the file
-        - wait for the file to be restored
-        - run the check()
-        - release the file again
+        Finally, if the DB indicates the file is not ready, the
+        file is released.
 
         The last step here is to keep auto-verifcation from replacing
-        all the newly added data from HSM (which are presumably
+        all the newly added data that's just arrived (which is presumably
         more interesting that some random files being auto-verified).
 
         Parameters
@@ -300,39 +275,10 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             the file copy to auto-verify
         """
 
-        # The trivial case.
-        if not pathlib.Path(copy.path).exists():
-            # Only update if this is surprising (which it probably
-            # is.)
-            if copy.has_file != "N":
-                log.warning(
-                    "File copy missing during auto-verify: "
-                    f"{copy.file.path}.  Updating database."
-                )
-                ArchiveFileCopy.update(
-                    has_file="N", last_update=datetime.utcnow()
-                ).where(ArchiveFileCopy.id == copy.id).execute()
-            return
-
-        # Are we restored?  Note: we're interested in the actual
-        # state of the file, not the state as recorded in the database.
-        #
-        # If we are, we can just use the DefaultIO's check() method
-        # and not worry about any of the stuff going on below.
-        if not self._lfs.hsm_released(copy.path):
-            return super().check(copy)
-
-        # Update last_updated for the copy.  This ensures another
-        # copy of auto-verify won't be enqueued while the job is yielded
-        # waiting for restore
-        copy.last_update = datetime.utcnow()
-        copy.save()
-
         def _async(
             task: Task, node: UpdateableNode, lfs: LFS, copy: ArchiveFileCopy
         ) -> None:
-            """Asyncrhonously restore a file, verify it, and then
-            release it again.
+            """Verify a file (with restore and release, if necessary).
 
             Parameters
             ----------
@@ -345,19 +291,47 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             copy : ArchiveFileCopy
                 The file copy to check
             """
-            # Trigger restore
-            lfs.hsm_restore(copy.path)
+            # The trivial case.
+            if not pathlib.Path(copy.path).exists():
+                # Only update if this is surprising (which it probably
+                # is.)
+                if copy.has_file != "N":
+                    log.warning(
+                        "File copy missing during check: "
+                        f"{copy.path}.  Updating database."
+                    )
+                    ArchiveFileCopy.update(
+                        has_file="N", last_update=datetime.utcnow()
+                    ).where(ArchiveFileCopy.id == copy.id).execute()
+                return
 
-            # While the file is not restored, yield to wait for later
-            while lfs.hsm_released(copy.path):
-                yield 30
+            # Trigger restore, if necessary
+            if lfs.hsm_released(copy.path):
+                lfs.hsm_restore(copy.path)
+
+                # While the file is not restored, yield to wait for later
+                while lfs.hsm_released(copy.path):
+                    # Has someone else come by while we've been waiting and
+                    # checked the file?
+                    if copy.has_file != "M":
+                        log.debug(
+                            f"File copy {copy.path} no longer needs "
+                            f"check (has_file={copy.has_file})"
+                        )
+
+                        # Assume whatever did the other check has re-released
+                        # the file if necessary
+                        return
+
+                    # Wait for a bit
+                    yield 60
 
             # Do the check by inlining the Default-I/O function
+            from ._default_asyncs import check_async
+
             check_async(task, node, copy)
 
-            # Before releasing the file, check whether the DB thinks
-            # it's restored.  If it is don't bother releasing, since
-            # it's better to be consistent with the DB
+            # Release the file if the DB says it should be
             if not ArchiveFileCopy.get(id=copy.id).ready:
                 lfs.hsm_release(copy.path)
 
@@ -366,10 +340,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             queue=self._queue,
             key=self.node.name,
             args=(self.node, self._lfs, copy),
-            name=(
-                f"Auto-verify released file {copy.file.name} "
-                f"on node {self.node.name}"
-            ),
+            name=f"Check file {copy.file.path} on node {self.node.name}",
         )
 
     def check_active(self) -> bool:

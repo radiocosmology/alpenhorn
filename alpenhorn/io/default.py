@@ -184,7 +184,7 @@ class DefaultNodeIO(BaseNodeIO):
             queue=self._queue,
             key=self.node.name,
             args=(self, copy),
-            name=f"Check copy#{copy.id} on {self.node.name}",
+            name=f"Check file {copy.file.path} on {self.node.name}",
         )
 
     def check_active(self) -> bool:

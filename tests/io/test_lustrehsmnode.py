@@ -196,45 +196,23 @@ def test_open_text(xfs, node):
         assert f.read() == "file contents"
 
 
-@pytest.mark.lfs_hsm_state(
-    {
-        "/node/simpleacq/file1": "released",
-    }
-)
-def test_check_released(queue, mock_lfs, node):
-    """Test LustreHSMNodeIO.check() on a released file."""
-
-    copy = ArchiveFileCopy.get(id=1)
-    copy.ready = False
-
-    node.io.check(copy)
-
-    # Queue is empty
-    assert queue.qsize == 0
-
-    # File has been restored
-    assert not mock_lfs("").hsm_released(copy.path)
-
-
-@pytest.mark.lfs_hsm_state(
-    {
-        "/node/simpleacq/file1": "restored",
-    }
-)
-def test_check_restored(queue, mock_lfs, node):
-    """Test LustreHSMNodeIO.check() on a restored file."""
+def test_check_missing(queue, node):
+    """Test auto_verification on a missing file."""
     node.io.check(ArchiveFileCopy.get(id=1))
 
-    # Task has been created
+    # Job is queued
     assert queue.qsize == 1
 
+    # Mock the check async, which is called by the task to do the heavy lifting
+    async_mock = MagicMock()
+    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+        # Run task
+        task, key = queue.get()
+        task()
+        queue.task_done(key)
 
-def test_auto_verify_missing(queue, node):
-    """Test auto_verification on a missing file."""
-    node.io.auto_verify(ArchiveFileCopy.get(id=1))
-
-    # Queue is empty
-    assert queue.qsize == 0
+    # Mock was not called (task realised early that the file was missing)
+    async_mock.assert_not_called()
 
     # File has been marked as missing
     assert ArchiveFileCopy.get(id=1).has_file == "N"
@@ -245,18 +223,34 @@ def test_auto_verify_missing(queue, node):
         "/node/simpleacq/file1": "restored",
     }
 )
-def test_auto_verify_restored(xfs, node):
-    """Test auto_verification on a restored file."""
+def test_check_ready_restored(xfs, queue, node, mock_lfs):
+    """Test check on a restored, ready file."""
 
-    # When a file is restored, LustreHSM.auto_verify just tail-calls DefaultIO.check
-    check_mock = MagicMock()
-
+    # Restored file to check
     xfs.create_file("/node/simpleacq/file1")
     copy = ArchiveFileCopy.get(id=1)
+    copy.has_file = "M"
+    copy.ready = True
+    copy.save()
 
-    with patch("alpenhorn.io.default.DefaultNodeIO.check", check_mock):
-        node.io.auto_verify(copy)
-    check_mock.assert_called_once_with(copy)
+    node.io.check(copy)
+
+    # Job is queued
+    assert queue.qsize == 1
+
+    async_mock = MagicMock()
+    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+        # Run task
+        task, key = queue.get()
+        task()
+        queue.task_done(key)
+
+    async_mock.assert_called_once()
+
+    # File is still restored
+    assert ArchiveFileCopy.get(id=1).ready
+    lfs = mock_lfs("")
+    assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
 
 
 @pytest.mark.lfs_hsm_state(
@@ -264,24 +258,23 @@ def test_auto_verify_restored(xfs, node):
         "/node/simpleacq/file1": "released",
     }
 )
-def test_auto_verify_released(xfs, queue, mock_lfs, node):
-    """Test auto_verification on a released file."""
-
-    # Mock the check async, which is called by the task to do the heavy lifting
-    async_mock = MagicMock()
+def test_check_released(xfs, queue, mock_lfs, node):
+    """Test check on a non-ready, released file."""
 
     xfs.create_file("/node/simpleacq/file1")
 
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
     copy.save()
-    node.io.auto_verify(copy)
+    node.io.check(copy)
 
     # Task in queue
     assert queue.qsize == 1
 
-    # Run task
-    with patch("alpenhorn.io.lustrehsm.check_async", async_mock):
+    # Mock the check async, which is called by the task to do the heavy lifting
+    async_mock = MagicMock()
+    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+        # Run task
         task, key = queue.get()
         task()
         queue.task_done(key)
@@ -298,29 +291,30 @@ def test_auto_verify_released(xfs, queue, mock_lfs, node):
         "/node/simpleacq/file1": "released",
     }
 )
-def test_auto_verify_ready_released(xfs, queue, mock_lfs, node):
-    """Test auto_verification on a released file that's ready."""
-
-    # Mock the check async, which is called by the task to do the heavy lifting
-    async_mock = MagicMock()
+def test_check_ready_released(xfs, queue, mock_lfs, node):
+    """Test check on a ready, released file."""
 
     xfs.create_file("/node/simpleacq/file1")
 
     copy = ArchiveFileCopy.get(id=1)
-    node.io.auto_verify(copy)
+    copy.ready = True
+    copy.save()
+    node.io.check(copy)
 
     # Task in queue
     assert queue.qsize == 1
 
-    # Run task
-    with patch("alpenhorn.io.lustrehsm.check_async", async_mock):
+    # Mock the check async, which is called by the task to do the heavy lifting
+    async_mock = MagicMock()
+    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+        # Run task
         task, key = queue.get()
         task()
         queue.task_done(key)
 
     async_mock.assert_called_once()
 
-    # File has _not_ been re-released
+    # File has been restored
     lfs = mock_lfs("")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
 

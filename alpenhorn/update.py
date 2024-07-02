@@ -328,14 +328,7 @@ class UpdateableNode(updateable_base):
             self._av_walker = None
             return
 
-        done = set()  # Set of copies being verified already
         for copy in copies:
-            # No need to check the same file more than once in a single update
-            if copy in done:
-                continue
-
-            done.add(copy)
-
             copy_age_days = (time.time() - copy.last_update.timestamp()) / 86400.0
             if copy_age_days <= config.config["service"]["auto_verify_min_days"]:
                 continue  # Too new to re-verify
@@ -345,8 +338,10 @@ class UpdateableNode(updateable_base):
                 f" {self.name}."
             )
 
-            self._io_happened = True
-            self.io.auto_verify(copy)
+            # Mark file as needing check
+            copy.has_file = "M"
+            copy.last_update = datetime.utcnow()
+            copy.save()
 
     def update_idle(self) -> None:
         """Perform idle updates, if appropriate.
