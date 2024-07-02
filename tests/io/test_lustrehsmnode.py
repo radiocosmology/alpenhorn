@@ -279,6 +279,17 @@ def test_check_released(xfs, queue, mock_lfs, node):
         task()
         queue.task_done(key)
 
+        # Task is now deferred
+        assert queue.deferred_size == 1
+        assert queue.qsize == 0
+
+        # Calling check again doesn't add another task
+        node.io.check(copy)
+        assert queue.qsize == 0
+
+        # Don't wait for the deferral to expire, just run the task again
+        task()
+
     async_mock.assert_called_once()
 
     # File has been re-released
@@ -311,6 +322,12 @@ def test_check_ready_released(xfs, queue, mock_lfs, node):
         task, key = queue.get()
         task()
         queue.task_done(key)
+
+        # Task is now deferred
+        assert queue.deferred_size == 1
+
+        # Don't wait for the deferral to expire, just run the task again
+        task()
 
     async_mock.assert_called_once()
 
@@ -349,7 +366,7 @@ def test_ready_path(mock_lfs, node):
         "/node/simpleacq/file1": "restored",
     }
 )
-def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
+def test_ready_pull_restored(mock_lfs, node, queue, archivefilecopyrequest):
     """Test LustreHSMNodeIO.ready_pull on a restored file that isn't ready."""
 
     before = datetime.datetime.utcnow().replace(microsecond=0)
@@ -362,6 +379,14 @@ def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
     )
 
     node.io.ready_pull(afcr)
+
+    # Task in queue
+    assert queue.qsize == 1
+
+    # Run task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
 
     # File is ready
     assert ArchiveFileCopy.get(id=1).ready
@@ -377,7 +402,7 @@ def test_ready_pull_restored(mock_lfs, node, archivefilecopyrequest):
         "/node/simpleacq/file1": "released",
     }
 )
-def test_ready_pull_released(mock_lfs, node, archivefilecopyrequest):
+def test_ready_pull_released(mock_lfs, node, queue, archivefilecopyrequest):
     """Test LustreHSMNodeIO.ready on a released file that isn't ready."""
 
     copy = ArchiveFileCopy.get(id=1)
@@ -387,8 +412,27 @@ def test_ready_pull_released(mock_lfs, node, archivefilecopyrequest):
 
     node.io.ready_pull(afcr)
 
-    # File is not ready (because restore hasn't been verified)
-    assert not ArchiveFileCopy.get(id=1).ready
+    # Task in queue
+    assert queue.qsize == 1
+
+    # Run task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Task is now deferred
+    assert queue.deferred_size == 1
+    assert queue.qsize == 0
+
+    # Calling ready_pull again doesn't add another task
+    node.io.ready_pull(afcr)
+    assert queue.qsize == 0
+
+    # Don't wait for the deferral to expire, just run the task again
+    task()
+
+    # File is now ready
+    assert ArchiveFileCopy.get(id=1).ready
 
     # File is restored
     lfs = mock_lfs("")
