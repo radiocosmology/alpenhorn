@@ -158,8 +158,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # Add this copy to the list of copies we're waiting on.  Other tasks
         # can use this to see if the file they're interested in is already
         # "in use".
-        self._restoring.add(copy.file.id)
-        self._restore_start[copy.file.id] = time.monotonic()
+        if copy.file.id not in self._restoring:
+            self._restoring.add(copy.file.id)
+            self._restore_start[copy.file.id] = time.monotonic()
 
         # Restore it.  We deliberately do this every time, to hedge against
         # our initial request being forgotten/ignored by HSM.
