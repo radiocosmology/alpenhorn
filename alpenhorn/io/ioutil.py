@@ -538,7 +538,6 @@ def remove_filedir(
                 dirname.rmdir()
                 log.info(f"Removed directory {dirname} on {node.name}")
             except OSError as e:
-                log.debug(f"Failed to remove directory {dirname} on {node.name}: {e}")
                 if e.errno == errno.ENOTEMPTY:
                     # This is fine, but stop trying to rmdir.
                     break

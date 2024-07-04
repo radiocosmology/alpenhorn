@@ -94,7 +94,7 @@ class Worker(threading.Thread):
                 # Otherwise, execute the task.
                 log.info(f"Beginning task {task}")
                 try:
-                    task()
+                    finished = task()
                 except OperationalError as operr:
                     # Try to clean up. This runs task.do_cleanup()
                     # until it raises something other than OperationalError
@@ -131,7 +131,10 @@ class Worker(threading.Thread):
 
                 self._queue.task_done(key)
 
-                log.info(f"Finished task {task}")
+                if finished:
+                    log.info(f"Finished task: {task}")
+                else:
+                    log.info(f"Deferring task: {task}")
 
     def stop_working(self) -> None:
         """Tell the worker to stop after finishing the current task."""

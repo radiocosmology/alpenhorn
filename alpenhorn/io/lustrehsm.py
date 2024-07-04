@@ -162,9 +162,8 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             self._restoring.add(copy.file.id)
             self._restore_start[copy.file.id] = time.monotonic()
 
-        # Restore it.  We deliberately do this every time, to hedge against
-        # our initial request being forgotten/ignored by HSM.
-        self._lfs.hsm_restore(copy.path)
+            # Restore it.
+            self._lfs.hsm_restore(copy.path)
 
         # Tell the caller to wait
         return True
@@ -386,7 +385,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             # Do the check by inlining the Default-I/O function
             from ._default_asyncs import check_async
 
-            check_async(task, node_io.node, copy)
+            check_async(task, node_io, copy)
 
             # Release the file if the DB says it should be
             if not ArchiveFileCopy.get(id=copy.id).ready:
