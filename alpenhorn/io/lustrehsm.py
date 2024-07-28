@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     from ..archive import ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
     from ..update import UpdateableNode, UpdateableGroup
-    from .lfs import LFS
 
 log = logging.getLogger(__name__)
 
@@ -194,7 +193,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 .where(
                     ArchiveFileCopy.node == node,
                     ArchiveFileCopy.has_file == "Y",
-                    ArchiveFileCopy.ready == True,
+                    ArchiveFileCopy.ready == True,  # noqa: E712
                 )
                 .order_by(ArchiveFileCopy.last_update)
             ):
@@ -582,7 +581,7 @@ class LustreHSMGroupIO(DefaultGroupIO):
     # SETUP
 
     def __init__(
-        self, queue: FairMultiFifoQueue, group: UpdateableGroup, config: dict
+        self, queue: FairMultiFIFOQueue, group: UpdateableGroup, config: dict
     ) -> None:
         super().__init__(queue, group, config)
 

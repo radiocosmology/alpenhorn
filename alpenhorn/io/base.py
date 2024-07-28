@@ -448,7 +448,7 @@ class BaseGroupIO:
     # SETUP
 
     def __init__(
-        self, group: StorageGroup, config: dict, queue: FairMultiFifoQueue
+        self, group: StorageGroup, config: dict, queue: FairMultiFIFOQueue
     ) -> None:
         self.group = group
         self._queue = queue

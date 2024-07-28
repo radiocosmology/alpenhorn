@@ -492,7 +492,7 @@ class UpdateableGroup(updateable_base):
 
     Parameters
     ----------
-    queue : FairMultiFifoQueue
+    queue : FairMultiFIFOQueue
         The task queue/scheduler
     group : StorageGroup
         The underlying StorageGroup instance
@@ -508,7 +508,7 @@ class UpdateableGroup(updateable_base):
     def __init__(
         self,
         *,
-        queue: FairMultiFifoQueue,
+        queue: FairMultiFIFOQueue,
         group: StorageGroup,
         nodes: list[UpdateableNode],
         idle: bool,
@@ -745,7 +745,10 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
                 node.name: node
                 for node in (
                     StorageNode.select()
-                    .where(StorageNode.host == host, StorageNode.active == True)
+                    .where(
+                        StorageNode.host == host,
+                        StorageNode.active == True,  # noqa: E712
+                    )
                     .execute()
                 )
             }

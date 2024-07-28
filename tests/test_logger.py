@@ -246,8 +246,6 @@ def test_rotate_bad_size(set_config, logger, xfs):
 def test_rotatefile_logging(set_config, logger, xfs):
     """Test file logging and rotating."""
 
-    mock = MagicMock()
-
     with patch("alpenhorn.logger.RotatingFileHandler") as mock:
         logger.configure_logging()
 

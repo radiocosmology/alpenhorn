@@ -121,7 +121,7 @@ def test_md5_bad(unode, xfs):
 
     # Try an unreadable file
     xfs.create_file("/node/dir/file", st_mode=0)
-    assert unode.io.md5("dir/file") == None
+    assert unode.io.md5("dir/file") is None
 
 
 def test_open_absolute(unode, xfs):
@@ -196,9 +196,9 @@ def test_idle_cleanup(unode, archiveacq, archivefile, queue, xfs):
     full_acq = archiveacq(name="full")
 
     # Create some files
-    empty_file = archivefile(name="empty", acq=empty_acq)
-    dirty_file = archivefile(name="dirty", acq=dirty_acq)
-    full_file = archivefile(name="full", acq=full_acq)
+    archivefile(name="empty", acq=empty_acq)
+    archivefile(name="dirty", acq=dirty_acq)
+    archivefile(name="full", acq=full_acq)
 
     # Popluate the node filesystem
     xfs.create_dir(f"{root}/empty")
