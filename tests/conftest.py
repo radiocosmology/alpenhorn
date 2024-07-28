@@ -499,7 +499,9 @@ def mockio():
     # The I/O instances
     node = MagicMock()
     node.bytes_avail.return_value = 10000
+    node.fifo = "n:mockio"
     group = MagicMock()
+    group.fifo = "g:mockio"
 
     # This is our mock I/O module
     class MockIO:
@@ -545,7 +547,9 @@ def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
     mockio.group.set_nodes = lambda nodes: nodes
 
     node = UpdateableNode(queue, stnode)
-    yield mockio, UpdateableGroup(group=stgroup, nodes=[node], idle=True), node
+    yield mockio, UpdateableGroup(
+        queue=queue, group=stgroup, nodes=[node], idle=True
+    ), node
 
 
 # Data table fixtures.  Each of these will add a row with the specified

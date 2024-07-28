@@ -77,7 +77,7 @@ def test_update_node_not_idle(
     mockio.node.before_update.return_value = True
 
     # Ensure queue non-idle
-    queue.put(None, node.name)
+    queue.put(None, mockio.node.fifo)
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
@@ -195,7 +195,7 @@ def test_ioload(storagegroup, storagenode, mock_lfs):
         assert isinstance(unode.io, BaseNodeIO)
 
     for group in StorageGroup.select().execute():
-        ugroup = update.UpdateableGroup(group=group, nodes=[], idle=True)
+        ugroup = update.UpdateableGroup(queue=None, group=group, nodes=[], idle=True)
         assert isinstance(ugroup.io, BaseGroupIO)
 
 
@@ -215,7 +215,7 @@ def test_update_group_not_idle_node(
     mockio.group.before_update.return_value = True
 
     # Node not idle
-    queue.put(None, node.name)
+    queue.put(None, mockio.node.fifo)
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
@@ -245,8 +245,8 @@ def test_update_group_not_idle_group(
     # This function adds something to the queue so that after the
     # node update, it's not idle
     def node_before_update(idle):
-        nonlocal queue, node
-        queue.put(None, node.name)
+        nonlocal queue, mockio
+        queue.put(None, mockio.node.fifo)
 
         return True
 

@@ -101,7 +101,7 @@ def test_idle(unode, queue):
     assert unode.idle is True
 
     # Enqueue something into this node's queue
-    queue.put(None, unode.name)
+    queue.put(None, unode.io.fifo)
 
     # Now not idle
     assert unode.idle is False
@@ -113,7 +113,7 @@ def test_idle(unode, queue):
     assert unode.idle is False
 
     # Finish the task
-    queue.task_done(unode.name)
+    queue.task_done(key)
 
     # Now idle again
     assert unode.idle is True
@@ -267,7 +267,7 @@ def test_update_idle(unode, queue):
             assert len(rav.mock_calls) == 0
             assert len(ioiu.mock_calls) == 1
 
-            queue.put(None, unode.name)
+            queue.put(None, unode.io.fifo)
             unode.update_idle()
 
             # didn't run because not idle
@@ -276,7 +276,7 @@ def test_update_idle(unode, queue):
 
             # Empty the queue
             queue.get()
-            queue.task_done(unode.name)
+            queue.task_done(unode.io.fifo)
             unode.update_idle()
 
             # idle again, so ran again
@@ -404,6 +404,7 @@ def test_update_node_run(
     mock = MagicMock()
     mock.before_update.return_value = True
     mock.bytes_avail.return_value = None
+    mock.fifo = "n:mock"
     with patch.object(unode, "io", mock):
         # update runs
         unode.update()

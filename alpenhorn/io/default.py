@@ -25,7 +25,7 @@ from ..acquisition import ArchiveAcq, ArchiveFile
 from ..task import Task
 
 # The asyncs are over here:
-from ._default_asyncs import pull_async, check_async, delete_async
+from ._default_asyncs import pull_async, check_async, delete_async, group_search_async
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -138,7 +138,7 @@ class DefaultNodeIO(BaseNodeIO):
                 Task(
                     func=_async,
                     queue=self._queue,
-                    key=self.node.name,
+                    key=self.fifo,
                     args=(self.node, self.tree_lock),
                     name=f"Tidy up {self.node.name}",
                 )
@@ -182,7 +182,7 @@ class DefaultNodeIO(BaseNodeIO):
         Task(
             func=check_async,
             queue=self._queue,
-            key=self.node.name,
+            key=self.fifo,
             args=(self, copy),
             name=f"Check file {copy.file.path} on {self.node.name}",
         )
@@ -228,7 +228,7 @@ class DefaultNodeIO(BaseNodeIO):
         Task(
             func=delete_async,
             queue=self._queue,
-            key=self.node.name,
+            key=self.fifo,
             args=(self.tree_lock, copies),
             name="Delete copies "
             + str([copy.id for copy in copies])
@@ -421,7 +421,7 @@ class DefaultNodeIO(BaseNodeIO):
         Task(
             func=pull_async,
             queue=self._queue,
-            key=self.node.name,
+            key=self.fifo,
             args=(self, self.tree_lock, req),
             name=f"AFCR#{req.id}: {req.node_from.name} -> {self.node.name}",
         )
@@ -563,8 +563,8 @@ class DefaultGroupIO(BaseGroupIO):
 
         return None
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
-        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
+        """Handle ArchiveFileCopyRequest `req`, with overwriting.
 
         Simply passes the `req` on to the node in the group.
 
@@ -575,3 +575,29 @@ class DefaultGroupIO(BaseGroupIO):
             `req.group_to == self.group`).
         """
         self.node.io.pull(req)
+
+    def pull(self, req: ArchiveFileCopyRequest) -> None:
+        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+
+        Before the pull is dispached to the group, we first check
+        whether an existing unregistered file exists in the group.
+
+        If there is, the file is schedule for check and the request
+        is skipped.  Otherwise, `pull_force` will be called to actually
+        pull the file
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the request to fulfill.  We are the destination group (i.e.
+            `req.group_to == self.group`).
+        """
+
+        # The existing file search needs to happen in a Task.
+        Task(
+            func=group_search_async,
+            queue=self._queue,
+            key=self.fifo,
+            args=(self, req),
+            name=f"Pre-pull search for {req.file.path} in {self.group.name}",
+        )

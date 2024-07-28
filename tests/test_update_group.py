@@ -135,45 +135,6 @@ def test_update_group_notready(mockgroupandnode, hostname, queue, pull):
     assert call.pull(afcr) not in mockio.group.mock_calls
 
 
-def test_update_group_path_exists(mockgroupandnode, hostname, queue, pull):
-    """Test running update.update_group with unexpected existing dest."""
-
-    mockio, group, node = mockgroupandnode
-    file, copy, afcr = pull
-
-    # File exists on dest
-    mockio.group.exists.return_value = node
-
-    # This runs twice, to test two possibilities:
-    # - no destination ArchiveFileCopy record
-    # - desitination ArchiveFileCopy present with has_file='N'
-    # It should behave the same both times
-    for missing in [True, False]:
-        before = datetime.datetime.utcnow().replace(microsecond=0)
-
-        # run update
-        group.update()
-
-        # Dest file copy needs checking
-        dst = ArchiveFileCopy.get(file=file, node=node.db)
-        assert dst.has_file == "M"
-        assert dst.last_update >= before
-
-        # Request is still pending
-        assert not ArchiveFileCopyRequest.get(file=file).completed
-        assert not ArchiveFileCopyRequest.get(file=file).cancelled
-
-        # Pull was not executed
-        assert call.pull(afcr) not in mockio.group.mock_calls
-
-        # Only need to do this the first time
-        if missing:
-            # "Delete" dest
-            dst.has_file = "N"
-            dst.last_update = before - datetime.timedelta(1)
-            dst.save()
-
-
 def test_update_group_multicopy(
     mockgroupandnode,
     hostname,
@@ -246,26 +207,26 @@ def test_update_group_copy_state(
     assert not ArchiveFileCopyRequest.get(file=fileM).cancelled
     assert call.pull(afcrM) not in mockio.group.mock_calls
 
-    # afcrX was executed
+    # afcrX called pull_force
     assert not ArchiveFileCopyRequest.get(file=fileX).completed
     assert not ArchiveFileCopyRequest.get(file=fileX).cancelled
-    assert call.pull(afcrX) in mockio.group.mock_calls
+    assert call.pull_force(afcrX) in mockio.group.mock_calls
 
-    # afcrN was executed
-    assert not ArchiveFileCopyRequest.get(file=fileX).completed
-    assert not ArchiveFileCopyRequest.get(file=fileX).cancelled
+    # afcrN called pull
+    assert not ArchiveFileCopyRequest.get(file=fileN).completed
+    assert not ArchiveFileCopyRequest.get(file=fileN).cancelled
     assert call.pull(afcrN) in mockio.group.mock_calls
 
 
-def test_group_idle(queue, mockgroupandnode):
-    """Test DefaultGroupIO.idle."""
+def test_group_idle_group(queue, mockgroupandnode):
+    """Test DefaultGroupIO.idle via group queue."""
     mockio, group, node = mockgroupandnode
 
     # Currently idle
     assert group.idle is True
 
     # Enqueue something into this node's queue
-    queue.put(None, node.name)
+    queue.put(None, group.io.fifo)
 
     # Now not idle
     assert group.idle is False
@@ -277,7 +238,33 @@ def test_group_idle(queue, mockgroupandnode):
     assert group.idle is False
 
     # Finish the task
-    queue.task_done(node.name)
+    queue.task_done(key)
+
+    # Now idle again
+    assert group.idle is True
+
+
+def test_group_idle_node(queue, mockgroupandnode):
+    """Test DefaultGroupIO.idle via node queue."""
+    mockio, group, node = mockgroupandnode
+
+    # Currently idle
+    assert group.idle is True
+
+    # Enqueue something into this node's queue
+    queue.put(None, node.io.fifo)
+
+    # Now not idle
+    assert group.idle is False
+
+    # Dequeue it
+    task, key = queue.get()
+
+    # Still not idle, because task is in-progress
+    assert group.idle is False
+
+    # Finish the task
+    queue.task_done(key)
 
     # Now idle again
     assert group.idle is True
@@ -290,7 +277,7 @@ def test_reinit(storagegroup, storagenode, queue):
     stgroup = storagegroup(name="group")
     stnode = storagenode(name="node", group=stgroup)
     node = UpdateableNode(queue, stnode)
-    group = UpdateableGroup(group=stgroup, nodes=[node], idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=[node], idle=True)
 
     # No I/O re-init
     stgroup = StorageGroup.get(id=stgroup.id)

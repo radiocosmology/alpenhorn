@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import logging
 
-from .base import BaseGroupIO
+from .default import DefaultGroupIO
 
 if TYPE_CHECKING:
     import pathlib
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class TransportGroupIO(BaseGroupIO):
+class TransportGroupIO(DefaultGroupIO):
     """Transport Group I/O.
 
     This implements (the formerly special-cased) transport disk logic.
@@ -97,7 +97,7 @@ class TransportGroupIO(BaseGroupIO):
 
         return None
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
+    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
         """Handle a pull request.
 
         Only local pulls are only fulfilled.  Remote pulls are ignored.
