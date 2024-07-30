@@ -15,7 +15,7 @@ from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from ..update import RemoteNode
 
 if TYPE_CHECKING:
-    from .base import BaseNodeIO
+    from .base import BaseNodeIO, BaseGroupIO
     from .updownlock import UpDownLock
     from ..task import Task
 
@@ -289,3 +289,76 @@ def delete_async(
         ArchiveFileCopy.update(
             has_file="N", wants_file="N", last_update=datetime.utcnow()
         ).where(ArchiveFileCopy.id == copy.id).execute()
+
+
+def group_search_async(
+    task: Task,
+    groupio: BaseGroupIO,
+    req: ArchiveFileCopyRequest,
+) -> None:
+    """Check group `io` for an existing, unregistered `req.file`.
+
+    If the file is found, a request is made to check the
+    existing file, and the pull is skipped.  If the file
+    is not found, `req` is passed to `groupio.pull_force`, which
+    dispatch the ArchvieFileCopyRequest to a node in the
+    group to perform the pull request.
+
+    Parameters
+    ----------
+    task : Task
+        The task instance containing this async.
+    io : Group I/O instance
+        The I/O instance for the pull destination group.
+    req : ArchiveFileCopyRequest
+        The request we're fulfilling.
+    """
+
+    # Check whether an actual file exists on the target
+    log.debug(f"req={req}")
+    node = groupio.exists(req.file.path)
+    if node is not None:
+        # file on disk: create/update the ArchiveFileCopy
+        # to force a check next pass
+        log.warning(
+            f"Skipping pull request for "
+            f"{req.file.acq.name}/{req.file.name}: "
+            f"file already on disk in group {groupio.group.name}."
+        )
+        log.info(
+            f"Requesting check of "
+            f"{req.file.acq.name}/{req.file.name} on node "
+            f"{node.name}."
+        )
+
+        # Update/create ArchiveFileCopy to force a check.
+
+        # ready == False is the safe option here: copy will be readied
+        # during the subsequent check if needed.
+        count = (
+            ArchiveFileCopy.update(
+                has_file="M",
+                wants_file="Y",
+                ready=False,
+                last_update=datetime.utcnow(),
+            )
+            .where(
+                ArchiveFileCopy.file == req.file,
+                ArchiveFileCopy.node == node.db,
+            )
+            .execute()
+        )
+        if count == 0:
+            # Create new copy
+            ArchiveFileCopy.create(
+                file=req.file,
+                node=node.db,
+                has_file="M",
+                wants_file="Y",
+                ready=False,
+                size_b=node.io.filesize(req.file.path, actual=True),
+            )
+        return
+
+    # Otherwise, escallate to groupio.pull_force to actually perform the pull
+    groupio.pull_force(req)

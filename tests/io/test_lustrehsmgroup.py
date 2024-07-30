@@ -35,7 +35,9 @@ def group(xfs, mock_lfs, hostname, queue, storagegroup, storagenode):
         ),
     )
 
-    group = UpdateableGroup(group=stgroup, nodes=[hsm, smallfile], idle=True)
+    group = UpdateableGroup(
+        queue=queue, group=stgroup, nodes=[hsm, smallfile], idle=True
+    )
 
     # All the node pull methods are mocked to avoid running them.
     hsm.io.pull = MagicMock(return_value=None)
@@ -65,7 +67,7 @@ def req(
     return req
 
 
-def test_init(storagegroup, storagenode, mock_lfs):
+def test_init(storagegroup, storagenode, queue, mock_lfs):
     stgroup = storagegroup(name="group", io_class="LustreHSM")
 
     hsm = UpdateableNode(
@@ -82,22 +84,28 @@ def test_init(storagegroup, storagenode, mock_lfs):
     )
 
     # These should work
-    group = UpdateableGroup(group=stgroup, nodes=[hsm, smallfile], idle=True)
+    group = UpdateableGroup(
+        queue=queue, group=stgroup, nodes=[hsm, smallfile], idle=True
+    )
     assert group._nodes is not None
     assert group.io._hsm is hsm
     assert group.io._smallfile is smallfile
 
-    group = UpdateableGroup(group=stgroup, nodes=[smallfile, hsm], idle=True)
+    group = UpdateableGroup(
+        queue=queue, group=stgroup, nodes=[smallfile, hsm], idle=True
+    )
     assert group._nodes is not None
     assert group.io._hsm is hsm
     assert group.io._smallfile is smallfile
 
     # But not these
-    group = UpdateableGroup(group=stgroup, nodes=[smallfile], idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=[smallfile], idle=True)
     assert group._nodes is None
-    group = UpdateableGroup(group=stgroup, nodes=[hsm], idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=[hsm], idle=True)
     assert group._nodes is None
-    group = UpdateableGroup(group=stgroup, nodes=[smallfile, smallfile], idle=True)
+    group = UpdateableGroup(
+        queue=queue, group=stgroup, nodes=[smallfile, smallfile], idle=True
+    )
     assert group._nodes is None
 
 
@@ -110,14 +118,14 @@ def test_idle(queue, group):
 
     for node in hsm, smallfile:
         # Enqueue something into the node's queue
-        queue.put(None, node.name)
+        queue.put(None, node.io.fifo)
 
         # Now not idle
         assert group.idle is False
 
         # Dequeue it
         task, key = queue.get()
-        queue.task_done(node.name)
+        queue.task_done(node.io.fifo)
 
         # Now idle again
         assert group.idle is True
@@ -139,11 +147,11 @@ def test_exists(xfs, group):
 
 
 def test_pull_small(req, group):
-    """Test TransportGroupIO.pull() hands off a small file to the smallfile node."""
+    """Test TransportGroupIO.pull_force() hands off a small file to the smallfile node."""
     group, hsm, smallfile = group
 
     req.file.size_b = 1  # A very small file
-    group.io.pull(req)
+    group.io.pull_force(req)
 
     # Sent to smallfile
     smallfile.io.pull.assert_called_once_with(req)
@@ -151,11 +159,11 @@ def test_pull_small(req, group):
 
 
 def test_pull_big(req, group):
-    """Test TransportGroupIO.pull() hands off a large file to the hsm node."""
+    """Test TransportGroupIO.pull_force() hands off a large file to the hsm node."""
     group, hsm, smallfile = group
 
     req.file.size_b = 1e10
-    group.io.pull(req)
+    group.io.pull_force(req)
 
     hsm.io.pull.assert_called_once_with(req)
     smallfile.io.pull.assert_not_called()

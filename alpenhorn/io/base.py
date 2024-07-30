@@ -143,6 +143,7 @@ class BaseNodeIO:
         self.node = node
         self._queue = queue
         self.config = config
+        self.fifo = "n:" + node.name
 
     def set_storage(self, node: StorageNode) -> None:
         """Update the cached StorageNode instance.
@@ -437,6 +438,8 @@ class BaseGroupIO:
     ----------
     group : StorageGroup
         The group
+    queue : FairMultiFIFOQueue
+        the task queue
     config : dict
         The parsed `group.io_config`. If `group.io_config` is None,
         this is an empty `dict`.
@@ -444,9 +447,13 @@ class BaseGroupIO:
 
     # SETUP
 
-    def __init__(self, group: StorageGroup, config: dict) -> None:
+    def __init__(
+        self, group: StorageGroup, config: dict, queue: FairMultiFifoQueue
+    ) -> None:
         self.group = group
+        self._queue = queue
         self.config = config
+        self.fifo = "g:" + group.name
 
     def set_storage(self, group: StorageGroup) -> None:
         """Update the cached StorageGroup instance.
@@ -577,11 +584,23 @@ class BaseGroupIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
+        """Handle ArchiveFileCopyRequest `req`, overwritng an existing file.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            the request to fulfill.  We are the destination group (i.e.
+            `req.group_to == self.group`).
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
     def pull(self, req: ArchiveFileCopyRequest) -> None:
         """Handle ArchiveFileCopyRequest `req` by pulling to this group.
 
-        In general, implementations should choose which node in the group
-        to handle the request, and pass `req` to that node's `io.pull` method.
+        Unlike `pull_force`, an implementation of `pull` may decide to cancel
+        a request if an existing file (which will be unknown to the database)
+        is found in the group.
 
         Parameters
         ----------

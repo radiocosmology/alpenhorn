@@ -168,11 +168,8 @@ class updateable_base:
             # Parse I/O config if present
             config = self._parse_io_config(storage.io_config)
 
-            if self.is_group:
-                self.io = self.io_class(storage, config)
-            else:
-                # Nodes also need the queue
-                self.io = self.io_class(storage, config, self._queue)
+            # Initialise I/O object
+            self.io = self.io_class(storage, config, self._queue)
 
             return True
 
@@ -265,7 +262,7 @@ class UpdateableNode(updateable_base):
 
         True whenever the queue FIFO associated with this node is empty;
         False otherwise."""
-        return self._queue.fifo_size(self.name) == 0
+        return self._queue.fifo_size(self.io.fifo) == 0
 
     def update_active(self) -> bool:
         """Check if we are actually active on the host.
@@ -495,6 +492,8 @@ class UpdateableGroup(updateable_base):
 
     Parameters
     ----------
+    queue : FairMultiFifoQueue
+        The task queue/scheduler
     group : StorageGroup
         The underlying StorageGroup instance
     nodes : list of UpdateableNodes
@@ -507,11 +506,18 @@ class UpdateableGroup(updateable_base):
     is_group = True
 
     def __init__(
-        self, *, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
+        self,
+        *,
+        queue: FairMultiFifoQueue,
+        group: StorageGroup,
+        nodes: list[UpdateableNode],
+        idle: bool,
     ) -> None:
         # Set in reinit()
         self.db = None
         self._do_idle_updates = False
+
+        self._queue = queue
 
         self.reinit(group=group, nodes=nodes, idle=idle)
 
@@ -549,6 +555,10 @@ class UpdateableGroup(updateable_base):
         """Is this group idle?
 
         False whenever any consitiuent node is not idle."""
+
+        # If the group fifo isn't empty, the group is not idle.
+        if self._queue.fifo_size(self.io.fifo):
+            return False
 
         # A group with no nodes is not idle.
         if self._nodes is None:
@@ -596,50 +606,8 @@ class UpdateableGroup(updateable_base):
             # pull to overwrite the corrupt file
             pass
         elif copy_state == "N":
-            # Check whether an actual file exists on the target.
-            node = self.io.exists(req.file.path)
-            if node is not None:
-                # file on disk: create/update the ArchiveFileCopy
-                # to force a check next pass
-                log.warning(
-                    f"Skipping pull request for "
-                    f"{req.file.acq.name}/{req.file.name}: "
-                    f"file already on disk in group {self.name}."
-                )
-                log.info(
-                    f"Requesting check of "
-                    f"{req.file.acq.name}/{req.file.name} on node "
-                    f"{node.name}."
-                )
-
-                # Update/create ArchiveFileCopy to force a check.
-
-                # ready == False is the safe option here: copy will be readied
-                # during the subsequent check if needed.
-                count = (
-                    ArchiveFileCopy.update(
-                        has_file="M",
-                        wants_file="Y",
-                        ready=False,
-                        last_update=datetime.utcnow(),
-                    )
-                    .where(
-                        ArchiveFileCopy.file == req.file,
-                        ArchiveFileCopy.node == node.db,
-                    )
-                    .execute()
-                )
-                if count == 0:
-                    # Create new copy
-                    ArchiveFileCopy.create(
-                        file=req.file,
-                        node=node.db,
-                        has_file="M",
-                        wants_file="Y",
-                        ready=False,
-                        size_b=node.io.filesize(req.file.path, actual=True),
-                    )
-                return
+            # This is the expected state
+            pass
         else:
             # Shouldn't get here
             log.error(
@@ -678,7 +646,10 @@ class UpdateableGroup(updateable_base):
             return
 
         # Early checks passed: dispatch this request to the Group I/O layer
-        self.io.pull(req)
+        if copy_state == "X":
+            self.io.pull_force(req)
+        else:
+            self.io.pull(req)
 
     def update(self) -> None:
         """Perform I/O updates on the group"""
@@ -852,7 +823,7 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
             else:
                 # No existing group: create a new one.
                 log.info(f'Group "{name}" now available.')
-                groups[name] = UpdateableGroup(**new_groups[name])
+                groups[name] = UpdateableGroup(queue=queue, **new_groups[name])
 
         # Node updates
         for node in nodes.values():

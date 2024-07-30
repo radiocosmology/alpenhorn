@@ -25,7 +25,8 @@ from ..archive import ArchiveFileCopy
 from ..querywalker import QueryWalker
 from ..task import Task
 from ..util import pretty_bytes, pretty_deltat
-from .base import BaseGroupIO, BaseNodeRemote
+from .base import BaseNodeRemote
+from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO
 
 
@@ -225,7 +226,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         Task(
             func=_async,
             queue=self._queue,
-            key=self.node.name,
+            key=self.fifo,
             args=(self.node, self._lfs, headroom_needed),
             name=f"Node {self.node.name}: HSM release {pretty_bytes(headroom_needed)}",
         )
@@ -314,7 +315,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         Task(
             func=_async,
             queue=self._queue,
-            key=self.node.name,
+            key=self.fifo,
             args=(self.node, self._lfs, copies),
             name=f"Node {self.node.name}: HSM state check of {len(copies)} files",
         )
@@ -396,7 +397,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             Task(
                 func=_async,
                 queue=self._queue,
-                key=self.node.name,
+                key=self.fifo,
                 args=(self, copy),
                 name=f"Check file {copy.file.path} on node {self.node.name}",
             )
@@ -542,7 +543,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             Task(
                 func=_async,
                 queue=self._queue,
-                key=self.node.name,
+                key=self.fifo,
                 args=(self, req.file),
                 name=f"Ready file {req.file.path} on node {self.node.name}",
             )
@@ -561,7 +562,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         return True
 
 
-class LustreHSMGroupIO(BaseGroupIO):
+class LustreHSMGroupIO(DefaultGroupIO):
     """LustreHSM Group I/O
 
     The LustreHSM Group contains two nodes:
@@ -580,8 +581,10 @@ class LustreHSMGroupIO(BaseGroupIO):
 
     # SETUP
 
-    def __init__(self, group: UpdateableGroup, config: dict) -> None:
-        super().__init__(group, config)
+    def __init__(
+        self, queue: FairMultiFifoQueue, group: UpdateableGroup, config: dict
+    ) -> None:
+        super().__init__(queue, group, config)
 
         self._threshold = self.config.get("threshold", 1000000000)  # bytes
 
@@ -658,7 +661,7 @@ class LustreHSMGroupIO(BaseGroupIO):
             return self._hsm
         return None
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
+    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
         """Handle ArchiveFileCopyRequest `req` by pulling to this group.
 
         This takes care of directing pulls to the correct node

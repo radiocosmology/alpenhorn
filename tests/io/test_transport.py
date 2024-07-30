@@ -8,7 +8,7 @@ from alpenhorn.update import UpdateableGroup, UpdateableNode
 
 
 @pytest.fixture
-def transport_fleet(transport_fleet_no_init):
+def transport_fleet(transport_fleet_no_init, queue):
     """Create a Transport group for testing.
 
     Returns a tuple:
@@ -18,7 +18,7 @@ def transport_fleet(transport_fleet_no_init):
 
     # Do init
     stgroup, nodes = transport_fleet_no_init
-    group = UpdateableGroup(group=stgroup, nodes=nodes, idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
 
     return group, nodes
 
@@ -117,15 +117,16 @@ def req(hostname, remote_req):
     return remote_req
 
 
-def test_group_init(transport_fleet_no_init):
+def test_group_init(transport_fleet_no_init, queue):
     """Test initialisation of TranportGroupIO with good nodes."""
     stgroup, nodes = transport_fleet_no_init
 
-    group = UpdateableGroup(group=stgroup, nodes=nodes, idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
     assert group._nodes == nodes
+    assert group.io.fifo == "g:group"
 
 
-def test_group_init_bad(transport_fleet_no_init):
+def test_group_init_bad(transport_fleet_no_init, queue):
     """Test initialisation of TranportGroupIO with bad nodes."""
     stgroup, nodes = transport_fleet_no_init
 
@@ -133,11 +134,11 @@ def test_group_init_bad(transport_fleet_no_init):
     for node in nodes:
         node.db.storage_type = "F"
 
-    group = UpdateableGroup(group=stgroup, nodes=nodes, idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
     assert group._nodes is None
 
 
-def test_group_init_mixed(transport_fleet_no_init):
+def test_group_init_mixed(transport_fleet_no_init, queue):
     """Test initialisation of TranportGroupIO with some bad nodes."""
     stgroup, nodes = transport_fleet_no_init
 
@@ -145,7 +146,7 @@ def test_group_init_mixed(transport_fleet_no_init):
     nodes[0].db.storage_type = "A"
     nodes[3].db.storage_type = "F"
 
-    group = UpdateableGroup(group=stgroup, nodes=nodes, idle=True)
+    group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
     assert group._nodes == nodes[1:3]
 
 
@@ -157,14 +158,14 @@ def test_idle(queue, transport_fleet):
     assert group.idle is True
 
     # Enqueue something into a node's queue
-    queue.put(None, nodes[2].name)
+    queue.put(None, nodes[2].io.fifo)
 
     # Now not idle
     assert group.idle is False
 
     # Dequeue it
     task, key = queue.get()
-    queue.task_done(nodes[2].name)
+    queue.task_done(nodes[2].io.fifo)
 
     # Now idle again
     assert group.idle is True
@@ -186,10 +187,10 @@ def test_exists(xfs, transport_fleet):
 
 
 def test_pull_remote_skip(remote_req, transport_fleet):
-    """Test TransportGroupIO.pull() skips non-local requests."""
+    """Test TransportGroupIO.pull_force() skips non-local requests."""
     group, nodes = transport_fleet
 
-    group.io.pull(remote_req)
+    group.io.pull_force(remote_req)
 
     # Request is not resolved
     afcr = ArchiveFileCopyRequest.get(id=remote_req.id)
@@ -202,10 +203,10 @@ def test_pull_remote_skip(remote_req, transport_fleet):
 
 
 def test_pull_local(req, transport_fleet):
-    """Test TransportGroupIO.pull() hands off local requests."""
+    """Test TransportGroupIO.pull_force() hands off local requests."""
     group, nodes = transport_fleet
 
-    group.io.pull(req)
+    group.io.pull_force(req)
 
     # Since the copy has no size, it will be put onto the first (smallest) node
     nodes[0].io.pull.assert_called_once_with(req)
@@ -215,7 +216,7 @@ def test_pull_local(req, transport_fleet):
 
 
 def test_pull_size(req, transport_fleet):
-    """Test TransportGroupIO.pull() finds the correct disk to fit the request."""
+    """Test TransportGroupIO.pull_force() finds the correct disk to fit the request."""
     group, nodes = transport_fleet
 
     # Set file size.  The node sizes in the transport fleet are (in GiB):
@@ -223,7 +224,7 @@ def test_pull_size(req, transport_fleet):
     # nodes[1] due to the fudge factor of two in DefaultIO's reserve_bytes()
     req.file.size_b = 6 * 2**30
 
-    group.io.pull(req)
+    group.io.pull_force(req)
 
     nodes[0].io.pull.assert_not_called()
     nodes[1].io.pull.assert_called_once_with(req)
@@ -232,7 +233,7 @@ def test_pull_size(req, transport_fleet):
 
 
 def test_pull_minmax(req, archivefilecopy, transport_fleet):
-    """Test TransportGroupIO.pull() correctly rejecting under-min and over-max nodes."""
+    """Test TransportGroupIO.pull_force() correctly rejecting under-min and over-max nodes."""
     group, nodes = transport_fleet
 
     # Make nodes[0] under-min
@@ -244,7 +245,7 @@ def test_pull_minmax(req, archivefilecopy, transport_fleet):
     nodes[1].db.max_total_gb = 1e-3
 
     # Check
-    group.io.pull(req)
+    group.io.pull_force(req)
 
     # Node 2 is the first node that can take the file
     nodes[0].io.pull.assert_not_called()
@@ -254,7 +255,7 @@ def test_pull_minmax(req, archivefilecopy, transport_fleet):
 
 
 def test_pull_nonode(req, archivefilecopy, transport_fleet):
-    """Test TransportGroupIO.pull() being okay with no node available."""
+    """Test TransportGroupIO.pull_force() being okay with no node available."""
     group, nodes = transport_fleet
 
     # Give node[3] a size
@@ -264,7 +265,7 @@ def test_pull_nonode(req, archivefilecopy, transport_fleet):
         node.db.min_avail_gb = node.db.avail_gb * 2
 
     # Check
-    group.io.pull(req)
+    group.io.pull_force(req)
 
     nodes[0].io.pull.assert_not_called()
     nodes[1].io.pull.assert_not_called()

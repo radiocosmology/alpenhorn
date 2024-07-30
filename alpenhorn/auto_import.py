@@ -69,7 +69,7 @@ def import_file(
     Task(
         func=_import_file,
         queue=queue,
-        key=node.name,
+        key=node.io.fifo,
         args=(node, path),
         name=f"Import {path} on {node.name}",
         # If the job fails due to DB connection loss, re-start the
@@ -310,7 +310,7 @@ def update_observer(
         Task(
             func=catchup,
             queue=queue,
-            key=node.name,
+            key=node.io.fifo,
             args=(node, queue),
             name=f"Catch-up on {node.name}",
             # If the job fails due to DB connection loss, re-start it
