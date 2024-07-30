@@ -345,8 +345,6 @@ def mock_exists(fs):
         """
         nonlocal fs
 
-        from math import ceil
-
         try:
             dir_ = fs.get_object(path.parent)
             # Parent directory not readable
@@ -357,7 +355,7 @@ def mock_exists(fs):
 
         # Directory is readable
         try:
-            file = fs.get_object(path)
+            fs.get_object(path)
         except PermissionError:
             pass
         except FileNotFoundError:

@@ -1,10 +1,9 @@
 """Tests for UpdateableGroup."""
 
 import pytest
-import datetime
 from unittest.mock import patch, call
 
-from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.archive import ArchiveFileCopyRequest
 from alpenhorn.storage import StorageGroup
 from alpenhorn.update import UpdateableGroup, UpdateableNode
 

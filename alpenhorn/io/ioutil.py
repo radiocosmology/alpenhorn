@@ -343,7 +343,7 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
     for edge in StorageTransferAction.select().where(
         StorageTransferAction.node_from == node,
         StorageTransferAction.group_to != node.group,
-        StorageTransferAction.autosync == True,
+        StorageTransferAction.autosync == True,  # noqa: E712
     ):
         if edge.group_to.filecopy_state(file_) != "Y":
             log.debug(
@@ -359,7 +359,7 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
     for edge in StorageTransferAction.select().where(
         StorageTransferAction.group_to == node.group,
         StorageTransferAction.node_from != node,
-        StorageTransferAction.autoclean == True,
+        StorageTransferAction.autoclean == True,  # noqa: E712
     ):
         count = (
             ArchiveFileCopy.update(wants_file="N", last_update=datetime.utcnow())
@@ -545,7 +545,9 @@ def remove_filedir(
                     # Already deleted, which is fine.
                     pass
                 else:
-                    log.warning(f"Error deleting directory {dirname} on {name}: {e}")
+                    log.warning(
+                        f"Error deleting directory {dirname} on {node.name}: {e}"
+                    )
                     # Otherwise, let's try to soldier on
 
             dirname = dirname.parent
