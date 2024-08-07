@@ -15,8 +15,8 @@ The queue is unbounded.
 
 import heapq
 import threading
-from time import time
 from typing import Any
+from time import monotonic, sleep
 from collections import deque
 from collections.abc import Hashable
 
@@ -28,6 +28,7 @@ class FairMultiFIFOQueue:
         "_all_tasks_done",
         "_deferrals",
         "_dlock",
+        "_fifo_locks",
         "_fifos",
         "_inprogress_counts",
         "_joining",
@@ -53,6 +54,8 @@ class FairMultiFIFOQueue:
         # We initialise element 0 to the empty set to simplify creating new
         # FIFOs, which will always get added to that set.
         self._keys_by_inprogress = [set()]
+        # The set of locked FIFOs
+        self._fifo_locks = set()
 
         # The thread lock (mutex) and the conditionals (see queue.py for
         # details, which this implementation broadly follows)
@@ -99,6 +102,12 @@ class FairMultiFIFOQueue:
 
             # Remove the FIFO from the ordered list
             self._keys_by_inprogress[count].remove(key)
+
+            # Unlock this FIFO if it was locked.  If the caller has been working on
+            # an exclusive item from the FIFO, then this call must be completing it,
+            # because there can't be anything else in-progress from this FIFO.  So,
+            # it's always reasonable to try to unlock a FIFO here.
+            self._fifo_locks.discard(key)
 
             # Decrement counts
             count -= 1
@@ -202,7 +211,7 @@ class FairMultiFIFOQueue:
         with self._dlock:
             return len(self._deferrals)
 
-    def _put(self, item: Any, key: Hashable) -> None:
+    def _put(self, item: Any, key: Hashable, exclusive: bool) -> None:
         """Put `item` into the FIFO named `key` without locking.
 
         Never call this function directly; use put() instead.
@@ -215,6 +224,8 @@ class FairMultiFIFOQueue:
             The item to add to the queue
         key : hashable
             The name of the FIFO to which `item` is added
+        exclusive : bool
+            True if `item` is exclusive
         """
         # Create the FIFO, if necessary
         if key not in self._fifos:
@@ -226,11 +237,21 @@ class FairMultiFIFOQueue:
             fifo = self._fifos[key]
 
         # push the task onto the FIFO (right-most end)
-        fifo.append(item)
+        fifo.append((item, exclusive))
         self._total_queued += 1
 
-    def put(self, item: Any, key: Hashable, wait: float = 0) -> bool:
+    def put(
+        self, item: Any, key: Hashable, exclusive: bool = False, wait: float = 0
+    ) -> bool:
         """Push `item` onto the FIFO named `key`.
+
+        If `exclusive` is True, then `item` is considered to be exclusive:
+        it can only be in progress when no other items from its FIFO are
+        in progress.  Exclusive items are only returned by `get` when
+        nothing else from their FIFO is in progress.  Then, after being
+        returned by `get`, an exclusive item's FIFO is locked, preventing
+        further items to be popped from it while the exclusive item is in
+        progress.
 
         If `wait` <= 0, the item is immediately put into the queue.
         and the call returns True.  This is the default behaviour.
@@ -251,6 +272,8 @@ class FairMultiFIFOQueue:
             The item to add to the queue
         key : hashable
             The name of the FIFO to which `item` is added
+        exclusive : bool, optional
+            Whether the item is exclusive.
         wait : float, optional
             The amount of time (in seconds) to wait before adding `item`
             to the queue.
@@ -269,11 +292,13 @@ class FairMultiFIFOQueue:
                 if self._joining:
                     return False
 
-                heapq.heappush(self._deferrals, (time() + wait, item, key))
+                heapq.heappush(
+                    self._deferrals, (monotonic() + wait, item, key, exclusive)
+                )
         else:
             # Immediate put
             with self._not_empty:
-                self._put(item, key)
+                self._put(item, key, exclusive)
                 self._not_empty.notify()  # wakes up a single waiting thread
 
         return True
@@ -300,7 +325,11 @@ class FairMultiFIFOQueue:
         key : hashable
             The name of the FIFO from which `item` was popped
         """
-        timeout_at = time() + t
+        # Set to true later if we had to skip something due to an
+        # because its queue wasn't empty
+        skipped_exclusive = False
+
+        timeout_at = monotonic() + t
         with self._dlock:
             # If there are delayed puts, don't wait past the expiry of
             # the earliest
@@ -310,7 +339,7 @@ class FairMultiFIFOQueue:
                     timeout_at = first_expiry
 
         # Wait until t seconds elapse, or there's something to get
-        wait = timeout_at - time()
+        wait = timeout_at - monotonic()
         if wait > 0 and self._total_queued == 0:
             self._not_empty.wait(wait)
 
@@ -318,10 +347,10 @@ class FairMultiFIFOQueue:
         with self._dlock:
             # self._deferrals is a heapq, so self._deferrals[0] is always
             # the smallest element
-            while len(self._deferrals) > 0 and self._deferrals[0][0] <= time():
+            while len(self._deferrals) > 0 and self._deferrals[0][0] <= monotonic():
                 # heappop removes and returns self._deferrals[0]
-                _, item, key = heapq.heappop(self._deferrals)
-                self._put(item, key)
+                _, item, key, exclusive = heapq.heappop(self._deferrals)
+                self._put(item, key, exclusive)
 
         # If the queue is still empty, time out
         if self._total_queued < 1:
@@ -332,30 +361,63 @@ class FairMultiFIFOQueue:
         # Choose a FIFO by walking _keys_by_inprogress: find the lowest
         # non-empty set that has a non-empty FIFO in it.
         key = None
-        for key_set in self._keys_by_inprogress:
-            if len(key_set) > 0:
-                # Look for a non-empty FIFO in this set
-                for candidate in key_set:
-                    if len(self._fifos[candidate]) > 0:
-                        key = candidate
-                        # remove the key from the set
-                        key_set.remove(key)
-                        break
+        for count, key_set in enumerate(self._keys_by_inprogress):
+            # If the key_set is empty, try the next one
+            if not key_set:
+                continue
 
-                # If we found a non-empty FIFO, we're done
-                if key is not None:
-                    break
+            # Look for a non-empty FIFO in this set
+            for candidate in key_set:
+                # If the candidate FIFO is locked, skip it
+                if candidate in self._fifo_locks:
+                    skipped_exclusive = True
+                    continue
+
+                # If there's nothing in the FIFO, skip it
+                if not self._fifos[candidate]:
+                    continue
+
+                # If the first item in the FIFO is exclusive
+                # but there's currently in-progress items, skip it
+                #
+                # Items in the queue are 2-tuples, the second element
+                # of which is the exclusive flag, so fifo[0][1] is the
+                # exclusive flag for the first (left-most) item in the
+                # fifo deque.
+                if count and self._fifos[candidate][0][1]:
+                    skipped_exclusive = True
+                    continue
+
+                # Otherwise, this candidate looks good
+                key = candidate
+                # remove the key from the set
+                key_set.remove(key)
+                break
+
+            # If we found a non-empty FIFO, we're done
+            if key is not None:
+                break
 
         # Nothing to get
         if key is None:
+            if skipped_exclusive:
+                # Don't busy-wait if we ended up with nothing
+                # because everything was exclusion-blocked
+                wait = timeout_at - monotonic()
+                if wait > 0:
+                    sleep(wait)
             return None
 
         fifo = self._fifos[key]
 
         # Pop the first (left-most) item from this FIFO
-        item = fifo.popleft()
+        item, exclusive = fifo.popleft()
         self._total_queued -= 1
         self._total_inprogress += 1
+
+        # Lock this FIFO, if item is exclusive
+        if exclusive:
+            self._fifo_locks.add(key)
 
         # Increment the in-progress count and file the key in the right
         # place in _keys_by_inprogress
@@ -408,9 +470,9 @@ class FairMultiFIFOQueue:
                         return item
             else:
                 # Wait until woken up or timeout
-                wait_until = time() + timeout
+                wait_until = monotonic() + timeout
                 while True:
-                    remaining = wait_until - time()
+                    remaining = wait_until - monotonic()
                     if remaining <= 0:
                         return None  # timeout
                     item = self._get(
