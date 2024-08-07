@@ -70,17 +70,17 @@ def _pull_timeout(size_b: int) -> float | None:
     return base + size_b / bps
 
 
-def bbcp(from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int) -> dict:
+def bbcp(source: str | os.PathLike, target: str | os.PathLike, size_b: int) -> dict:
     """Transfer a file with BBCP.
 
     Command times out after `_pull_timeout(size_b)` seconds have elapsed.
 
     Parameters
     ----------
-    from_path : path-like
+    source : path-like
         Source location
-    to_dir : path-like
-        Destination directory
+    target : path-like
+        Target location
     size_b : int
         Size of the file to transfer.  Only used to
         set the timeout.
@@ -166,8 +166,8 @@ def bbcp(from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int) -
             # and https://github.com/chime-experiment/alpenhorn/pull/15
             "-E",
             "%md5=",
-            str(from_path),
-            str(to_dir),
+            str(source),
+            str(target),
         ],
         timeout=_pull_timeout(size_b),
     )
@@ -192,7 +192,7 @@ def bbcp(from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int) -
 
 
 def rsync(
-    from_path: str | os.PathLike, to_dir: str | os.PathLike, size_b: int, local: bool
+    source: str | os.PathLike, target: str | os.PathLike, size_b: int, local: bool
 ) -> dict:
     """Rsync a file (either local or remote).
 
@@ -200,10 +200,10 @@ def rsync(
 
     Parameters
     ----------
-    from_path : path-like
+    source : path-like
         Source location
-    to_dir : path-like
-        Destination directory
+    target : path-like
+        Target location
     size_b : int
         Size of the file to transfer.  Only used to
         set the timeout.
@@ -247,8 +247,8 @@ def rsync(
             "--owner",
             "--copy-links",
             "--sparse",
-            str(from_path),
-            str(to_dir),
+            str(source),
+            str(target),
         ],
         timeout=_pull_timeout(size_b),
     )
@@ -278,7 +278,9 @@ def rsync(
     return ioresult
 
 
-def hardlink(from_path, to_dir, filename) -> dict | None:
+def hardlink(
+    from_path: str | os.PathLike, to_dir: str | os.PathLike, filename: str
+) -> dict | None:
     """Hard link `from_path` as `to_dir/filename`
 
     Atomically overwrites an existing `to_dir/filename`.
@@ -289,9 +291,9 @@ def hardlink(from_path, to_dir, filename) -> dict | None:
 
     Parameters
     ----------
-    from_path : str
+    from_path : path-like
         Source location
-    to_dir : str
+    to_dir : spath-like
         Destination directory
     filename : str
         Destination filename
