@@ -47,21 +47,25 @@ class Task:
             the task is automatically added to this queue
     key : hashable
             the name of the FIFO used when added to `queuee
-    requeue : boolean
+    exclusive : bool, optional
+            should this task run only when no other tasks from the same
+            FIFO are running?  ``False`` by default.
+    requeue : bool, optional
             should the task be requeued if the worker aborts due to a DB
             error?  Typically ``True`` for `auto_import` tasks and
             ``False`` for main update loop tasks
-    name : string
+    name : str, optional
             the name of the task.  Used in log messages
-    args : list or tuple
+    args : list or tuple, optional
             additional positional arguments passed to `func`
-    kwargs : dict
+    kwargs : dict, optional
             keywork arguments passed to `func`
     """
 
     __slots__ = [
         "_args",
         "_cleanup",
+        "_exclusive",
         "_func",
         "_generator",
         "_key",
@@ -77,12 +81,14 @@ class Task:
         queue: FairMultiFIFOQueue,
         key: Hashable,
         requeue: bool = False,
+        exclusive: bool = False,
         name: str = "Task",
         args: tuple | list = tuple(),
         kwargs: dict = dict(),
     ) -> None:
         self._func = func
         self._args = args
+        self._exclusive = exclusive
         self._kwargs = kwargs
         self._name = name
         self._queue = queue
@@ -94,7 +100,7 @@ class Task:
         self._generator = None
 
         # Enqueue ourself
-        queue.put(self, key)
+        queue.put(self, key, exclusive)
 
     def __call__(self) -> bool:
         """This method is invoked by the worker thread to run the task.
@@ -168,6 +174,7 @@ class Task:
                 func=self._func,
                 queue=self._queue,
                 key=self._key,
+                exclusive=self._exclusive,
                 requeue=True,
                 name=self._name,
                 args=self._args,

@@ -174,3 +174,41 @@ def test_requeue(queue):
     task()
     queue.task_done(key)
     assert queue.qsize == 1
+
+
+def test_exclusive_task(queue):
+    """Test that exclusive task are actually exclusive."""
+
+    # Make some tasks.  The second one is exclusive
+    Task(None, queue, "fifo")
+    Task(None, queue, "fifo", exclusive=True)
+    Task(None, queue, "fifo")
+
+    # They're all there
+    assert queue.qsize == 3
+
+    # Pop the first task
+    task, key = queue.get(timeout=0.1)
+
+    # Can't pop the second task yet
+    assert queue.get(timeout=0.1) is None
+
+    # Finish the first task
+    queue.task_done(key)
+
+    # Now we can get the second task
+    task, key = queue.get(timeout=0.1)
+
+    # Fail to get the third task because
+    # we're now executing an exclusive task
+    assert queue.get(timeout=0.1) is None
+
+    # Finish the second task, unlocking the fifo
+    queue.task_done(key)
+
+    # Now we can get the third task
+    item, key = queue.get(timeout=0.1)
+    queue.task_done(key)
+
+    # Everything's taken care of
+    assert queue.qsize == 0
