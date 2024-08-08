@@ -43,7 +43,7 @@ _reserved_bytes = dict()
 
 # This sets how often we run the clean-up idle task.  What
 # we're counting here is number of not-idle -> idle transitions
-_IDLE_CLEANUP_PERIOD = 100  # (i.e. once every 100 opportunities)
+_IDLE_CLEANUP_PERIOD = 400  # (i.e. once every 400 opportunities)
 
 
 class DefaultNodeRemote(BaseNodeRemote):
@@ -135,9 +135,15 @@ class DefaultNodeIO(BaseNodeIO):
         if newly_idle:
             if self._skip_idle_cleanup <= 1:
                 self._skip_idle_cleanup = _IDLE_CLEANUP_PERIOD
+
+                # NB: this is an exclusive task: it will remain
+                # queued until no other I/O is happening on this
+                # node, and then prevent other I/O from happening
+                # on the node while it's running.
                 Task(
                     func=_async,
                     queue=self._queue,
+                    exclusive=True,
                     key=self.fifo,
                     args=(self.node, self.tree_lock),
                     name=f"Tidy up {self.node.name}",
