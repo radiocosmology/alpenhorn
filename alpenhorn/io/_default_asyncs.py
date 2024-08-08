@@ -108,11 +108,11 @@ def pull_async(
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             log.info(f"Pulling remote file {req.file.path} using bbcp")
-            ioresult = ioutil.bbcp(from_path, to_dir, req.file.size_b)
+            ioresult = ioutil.bbcp(from_path, to_file, req.file.size_b)
         elif shutil.which("rsync") is not None:
             # Next try rsync over ssh.
             log.info(f"Pulling remote file {req.file.path} using rsync")
-            ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, local)
+            ioresult = ioutil.rsync(from_path, to_file, req.file.size_b, local)
         else:
             # We have no idea how to transfer the file...
             log.error("No commands available to complete remote pull.")
@@ -137,7 +137,7 @@ def pull_async(
         if ioresult is None:
             if shutil.which("rsync") is not None:
                 log.info(f"Pulling local file {req.file.path} using rsync")
-                ioresult = ioutil.rsync(from_path, to_dir, req.file.size_b, local)
+                ioresult = ioutil.rsync(from_path, to_file, req.file.size_b, local)
             else:
                 log.error("No commands available to complete local pull.")
                 ioresult = {"ret": -1, "check_src": False}
