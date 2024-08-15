@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpenhorn"
+authors = [
+  {name = "Adam D. Hincks", email = "adam.hincks@utoronto.ca"},
+  {name = "J. Richard Shaw", email = "jrichardshaw@gmail.com"},
+  {name = "D. V. Wiebe", email = "dvw@phas.ubc.ca"}
+]
+version="2.0.0a1"
+description = "Data archive management software"
+requires-python = ">=3.10"
+dynamic = ["readme"]
+license = {file = "LICENSE"}
+dependencies = [
+  "Click >= 6.0",
+  "concurrent-log-handler",
+  "peewee >= 3.16",
+  "PyYAML",
+  "tabulate",
+  "watchdog"
+]
+
+[project.optional-dependencies]
+test = [
+  "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
+  "docker >= 3.0",
+  "pyfakefs >= 5.0",
+  "pytest >= 7.0"
+]
+
+[project.scripts]
+alpenhorn = "alpenhorn.client:cli"
+alpenhornd = "alpenhorn.service:cli"
+
+[tool.setuptools]
+packages = ["alpenhorn"]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.rst"], content-type = "text/x-rst"}
