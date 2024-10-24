@@ -51,9 +51,7 @@ def run_command(
     except subprocess.TimeoutExpired:
         log.warning(f"Process overrun [timeout={timeout}]: " + " ".join(cmd))
         proc.kill()
-        stdout_val = ""
-        stderr_val = ""
-        retval = None
+        return (None, "", "")
 
     return (
         retval,
