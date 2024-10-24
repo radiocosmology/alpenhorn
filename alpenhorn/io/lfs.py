@@ -36,6 +36,7 @@ from alpenhorn import util
 
 if TYPE_CHECKING:
     import os
+del TYPE_CHECKING
 
 
 log = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ class LFS:
         if self._lfs is None:
             raise RuntimeError("lfs command not found.")
 
-    def run_lfs(self, *args: str) -> str | None:
+    def run_lfs(self, *args: str, timeout: float | None = None) -> str | False | None:
         """Run the lfs command with the `args` provided.
 
         Parameters
@@ -121,26 +122,35 @@ class LFS:
         *args : strings
             The list of command-line arguments to pass to the
             lfs command.
+        timeout : float, optional
+            If not None, stop waiting for the command after `timeout` seconds
 
         Retunrs
         -------
-        output : str or None
+        output : str or False or None
             If the command succeeded, returns standard output of
-            the command.  If the command failed, returns None and
-            logs the failure.
+            the command.  If the command failed or timed out,
+            returns False (failed) or None (timed out) and logs
+            the failure.
         """
         # Stringify args
         args = [str(arg) for arg in args]
 
-        ret, stdout, stderr = util.run_command([self._lfs] + args)
+        ret, stdout, stderr = util.run_command([self._lfs] + args, timeout=timeout)
 
-        if ret != 0:
-            log.warning(f"LFS command failed (ret={ret}): " + " ".join(args))
+        # Failure or timeout
+        if ret is None or ret != 0:
+            if ret is None:
+                result = "timed out"
+            else:
+                result = f"failed (ret={ret})"
+                ret = False
+            log.warning(f"LFS command {result}: " + " ".join(args))
             if stderr:
                 log.debug(f"LFS stderr: {stderr}")
             if stdout:
                 log.debug(f"LFS stdout: {stdout}")
-            return None
+            return ret
 
         return stdout
 
@@ -259,7 +269,7 @@ class LFS:
         path = str(path)
 
         stdout = self.run_lfs("hsm_state", path)
-        if stdout is None:
+        if stdout is False:
             return None  # Command returned error
 
         # The output of hsm_state looks like this:
@@ -304,7 +314,7 @@ class LFS:
         """Is `path` released to external storage?"""
         return self.hsm_state(path) == HSMState.RELEASED
 
-    def hsm_restore(self, path: os.PathLike) -> bool:
+    def hsm_restore(self, path: os.PathLike) -> bool | None:
         """Trigger restore of `path` from external storage.
 
         If `path` is already restored or is missing, this does nothing.
@@ -316,9 +326,11 @@ class LFS:
 
         Returns
         -------
-        restored : bool
+        restored : bool or None
+            None if the request timed out.
+            False if the request failed.
             True if a successful restore request was made, or if
-            `path` was already restored.  False otherwise.
+            `path` was already restored.
         """
         state = self.hsm_state(path)
 
@@ -331,7 +343,10 @@ class LFS:
         if state != HSMState.RELEASED:
             return True
 
-        return self.run_lfs("hsm_restore", path) is not None
+        result = self.run_lfs("hsm_restore", path, timeout=60)
+        if result is None or result is False:
+            return result
+        return True
 
     def hsm_release(self, path: os.PathLike) -> bool:
         """Trigger release of `path` from disk.
@@ -363,4 +378,4 @@ class LFS:
             return False
 
         # Otherwise send the request
-        return self.run_lfs("hsm_release", path) is not None
+        return self.run_lfs("hsm_release", path) is not False
