@@ -40,7 +40,7 @@ def test_run_lfs_fail(have_lfs, mock_run_command):
 
     lfs = LFS(None)
 
-    assert lfs.run_lfs("arg1", "arg2") is None
+    assert lfs.run_lfs("arg1", "arg2") is False
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
         "kwargs": dict(),
@@ -255,7 +255,7 @@ def test_hsm_restore(mock_lfs, mock_run_command):
 
     lfs = LFS("qgroup")
 
-    assert not lfs.hsm_restore("/missing")
+    assert lfs.hsm_restore("/missing") is False
     assert lfs.hsm_restore("/unarchived")
     assert lfs.hsm_restore("/restored")
 
@@ -266,6 +266,17 @@ def test_hsm_restore(mock_lfs, mock_run_command):
     assert lfs.hsm_restore("/released")
     assert "hsm_restore" in mock_run_command()["cmd"]
     assert "/released" in mock_run_command()["cmd"]
+
+
+@pytest.mark.run_command_result(None, "", "")
+@pytest.mark.lfs_hsm_state({"/released": "released"})
+@pytest.mark.lfs_dont_mock("hsm_restore")
+def test_hsm_restore_timeout(mock_lfs, mock_run_command):
+    """Test hsm_restore() timeout."""
+
+    lfs = LFS("qgroup")
+
+    assert lfs.hsm_restore("/released") is None
 
 
 @pytest.mark.lfs_hsm_state(

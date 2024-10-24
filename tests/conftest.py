@@ -41,6 +41,13 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
+        "lfs_hsm_restore_result(result): "
+        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "to indicate the result of the hsm_restore call.  result "
+        "may be 'fail', 'timeout', or 'wait'",
+    )
+    config.addinivalue_line(
+        "markers",
         "lfs_dont_mock(*method_names): "
         "used on tests which mock alpenhorn.io.lfs.LFS "
         "to indicate which parts of LFS should _not_ be mocked.",
@@ -225,7 +232,20 @@ def mock_lfs(have_lfs, request):
         raise ValueError("Bad state in lfs_hsm_state marker: {state} for path {path}")
 
     def _mocked_lfs_hsm_restore(self, path):
-        nonlocal lfs_hsm_state
+        nonlocal request, lfs_hsm_state
+
+        marker = request.node.get_closest_marker("lfs_hsm_restore_result")
+        if marker:
+            if marker.args[0] == "fail":
+                # Return failure
+                return False
+            if marker.args[0] == "timeout":
+                # Return timeout
+                return None
+            if marker.args[0] == "wait":
+                # Return true (successful request)
+                # without changing state to "restored"
+                return True
 
         # de-pathlib-ify
         path = str(path)

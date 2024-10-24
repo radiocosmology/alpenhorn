@@ -36,8 +36,13 @@ if TYPE_CHECKING:
     from ..archive import ArchiveFileCopyRequest
     from ..queue import FairMultiFIFOQueue
     from ..update import UpdateableNode, UpdateableGroup
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
+
+# Retry delays (in seconds) after a successful or timed-out hsm_restore request
+RESTORE_TIMEOUT_RETRY = 1 * 3600  # 1 hour
+RESTORE_SUCCESS_RETRY = 4 * 3600  # 4 hours
 
 
 class LustreHSMNodeRemote(BaseNodeRemote):
@@ -100,6 +105,10 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # `ArchiveFile.id`s
         self._restoring = set()
 
+        # The time.monotonic value after which we should try to restore again.
+        # Keys are elements in self._restoring.
+        self._restore_retry = dict()
+
         # For informational purposes.  Keys are elements in self._restoring.
         self._restore_start = dict()
 
@@ -136,6 +145,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         if state == self._lfs.HSM_MISSING:
             log.warning(f"Unable to restore {copy.path}: missing.")
             self._restore_start.pop(copy.file.id, None)
+            self._restore_retry.pop(copy.file.id, None)
             self._restoring.discard(copy.file.id)
             return None
 
@@ -150,20 +160,53 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                     f"after {pretty_deltat(deltat)}"
                 )
                 self._restore_start.pop(copy.file.id, None)
+                self._restore_retry.pop(copy.file.id, None)
                 self._restoring.discard(copy.file.id)
             return False
 
         # If we got here, copy is released.
 
-        # Add this copy to the list of copies we're waiting on.  Other tasks
-        # can use this to see if the file they're interested in is already
-        # "in use".
-        if copy.file.id not in self._restoring:
-            self._restoring.add(copy.file.id)
-            self._restore_start[copy.file.id] = time.monotonic()
+        # Have we hit the retry time for an in-progress restore?
+        retry_restore = (
+            copy.file.id in self._restoring
+            and self._restore_retry[copy.file.id] <= time.monotonic()
+        )
 
-            # Restore it.
-            self._lfs.hsm_restore(copy.path)
+        if retry_restore or copy.file.id not in self._restoring:
+            # Add this copy to the list of copies we're waiting on.  Other tasks
+            # can use this to see if the file they're interested in is already
+            # "in use".
+            if not retry_restore:
+                self._restoring.add(copy.file.id)
+                self._restore_start[copy.file.id] = time.monotonic()
+
+            # Try to restore it.
+            result = self._lfs.hsm_restore(copy.path)
+            log.warning(f"restore result: {result}")
+
+            if result is False:
+                # Reqeust failed. Abandon the restore attempt entirely,
+                # in case it was deleted from the node.
+                self._restore_retry.pop(copy.file.id, None)
+                self._restore_start.pop(copy.file.id, None)
+                self._restoring.discard(copy.file.id)
+
+                # Report failure
+                return None
+            elif result is None:
+                # Request timeout.  This seems to happen when the file
+                # is already being restored, but let's try again in a
+                # little while, just to be safe.
+                self._restore_retry[copy.file.id] = (
+                    time.monotonic() + RESTORE_TIMEOUT_RETRY
+                )
+            else:
+                # Request success; restore should be in-progress, but
+                # we'll still schedule a retry for some time in the future
+                # to guard against HSM forgetting/abandonning our request
+                self._restore_retry[copy.file.id] = (
+                    time.monotonic() + RESTORE_SUCCESS_RETRY
+                )
 
         # Tell the caller to wait
         return True

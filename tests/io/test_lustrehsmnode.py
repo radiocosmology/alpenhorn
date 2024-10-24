@@ -262,7 +262,6 @@ def test_check_released(xfs, queue, mock_lfs, node):
     """Test check on a non-ready, released file."""
 
     xfs.create_file("/node/simpleacq/file1")
-
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
     copy.save()
@@ -536,3 +535,111 @@ def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
     assert not ArchiveFileCopy.get(id=4).ready
     assert ArchiveFileCopy.get(id=4).last_update >= before
     assert ArchiveFileCopy.get(id=4).has_file == "N"
+
+
+@pytest.mark.lfs_hsm_state({"/node/simpleacq/file1": "released"})
+@pytest.mark.lfs_hsm_restore_result("wait")
+def test_hsm_restore_twice(xfs, queue, mock_lfs, node):
+    """Test that only one restore request is made."""
+
+    # File is not ready, and maybe corrupt
+    xfs.create_file("/node/simpleacq/file1")
+    copy = ArchiveFileCopy.get(id=1)
+    copy.has_file = "M"
+    copy.ready = False
+    copy.save()
+
+    # Task will restore the file
+    node.io.check(copy)
+
+    # One item in queue now
+    assert queue.qsize == 1
+
+    # Run the task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Task has been requeued and is deferred
+    assert queue.deferred_size == 1
+    assert queue.qsize == 0
+
+    # Check the internal bookkeeping
+    assert copy.id in node.io._restoring
+    assert copy.id in node.io._restore_start
+    assert copy.id in node.io._restore_retry
+
+    # Try to add another task
+    node.io.check(copy)
+
+    # Second attempt shouldn't make a new task
+    # because the first one added copy.id to the
+    # list of in-progress restores
+    assert queue.deferred_size == 1
+    assert queue.qsize == 0
+
+
+@pytest.mark.lfs_hsm_state({"/node/simpleacq/file1": "released"})
+@pytest.mark.lfs_hsm_restore_result("timeout")
+def test_hsm_restore_timeout(xfs, queue, mock_lfs, node):
+    """Test handling of timeout in hsm_restore"""
+
+    # File is not ready, and maybe corrupt
+    xfs.create_file("/node/simpleacq/file1")
+    copy = ArchiveFileCopy.get(id=1)
+    copy.has_file = "M"
+    copy.ready = False
+    copy.save()
+
+    # Task will restore the file
+    node.io.check(copy)
+
+    # One item in queue now
+    assert queue.qsize == 1
+
+    # Run the task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Task has been requeued and is deferred
+    assert queue.deferred_size == 1
+    assert queue.qsize == 0
+
+    # Check the internal bookkeeping
+    assert copy.id in node.io._restoring
+    assert copy.id in node.io._restore_start
+    assert copy.id in node.io._restore_retry
+
+
+@pytest.mark.lfs_hsm_state({"/node/simpleacq/file1": "released"})
+@pytest.mark.lfs_hsm_restore_result("fail")
+def test_hsm_restore_fail(xfs, queue, mock_lfs, node):
+    """Test handling of hsm_restore failure"""
+
+    # File is not ready, and maybe corrupt
+    xfs.create_file("/node/simpleacq/file1")
+    copy = ArchiveFileCopy.get(id=1)
+    copy.has_file = "M"
+    copy.ready = False
+    copy.save()
+
+    # Task will restore the file
+    node.io.check(copy)
+
+    # One item in queue now
+    assert queue.qsize == 1
+
+    # Run the task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Task has been abandonned
+    assert queue.deferred_size == 0
+    assert queue.qsize == 0
+
+    # Check the internal bookkeeping
+    assert copy.id not in node.io._restoring
+    assert copy.id not in node.io._restore_start
+    assert copy.id not in node.io._restore_retry

@@ -26,13 +26,19 @@ def test_run_stdout():
 
 
 def test_run_stderr():
-    """Test getting stdout from run_command."""
+    """Test getting stderr from run_command."""
     retval, stdout, stderr = util.run_command(
         ["python3", "-c", "import os; os.write(2, b'stderr')"]
     )
     assert stderr == "stderr"
     assert stdout == ""
     assert retval == 0
+
+
+def test_run_timeout():
+    """Test run_command timing out."""
+    retval, stdout, stderr = util.run_command(["sleep", "10"], timeout=0.1)
+    assert retval is None
 
 
 def test_md5sum_file(tmp_path):
