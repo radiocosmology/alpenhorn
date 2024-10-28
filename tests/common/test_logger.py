@@ -1,29 +1,31 @@
-"""Test alpenhorn.logger"""
+"""Test alpenhorn.common.logger"""
 
 import pytest
 import socket
 import logging
 import pathlib
-import alpenhorn.logger
+import alpenhorn.common.logger
 from unittest.mock import patch, MagicMock
 
 
 def test_max_bytes_from_config():
     """Test throwing things at _max_bytes_from_config"""
 
-    assert alpenhorn.logger._max_bytes_from_config("1") == 1
-    assert alpenhorn.logger._max_bytes_from_config(12) == 12
-    assert alpenhorn.logger._max_bytes_from_config("1k") == 1024
-    assert alpenhorn.logger._max_bytes_from_config("1M") == 1024 * 1024
-    assert alpenhorn.logger._max_bytes_from_config("1G") == 1024 * 1024 * 1024
-    assert alpenhorn.logger._max_bytes_from_config("3.3") == 3
-    assert alpenhorn.logger._max_bytes_from_config(3.3) == 3
-    assert alpenhorn.logger._max_bytes_from_config("3.3k") == int(3.3 * 1024)
-    assert alpenhorn.logger._max_bytes_from_config("3.3M") == int(3.3 * 1024 * 1024)
+    assert alpenhorn.common.logger._max_bytes_from_config("1") == 1
+    assert alpenhorn.common.logger._max_bytes_from_config(12) == 12
+    assert alpenhorn.common.logger._max_bytes_from_config("1k") == 1024
+    assert alpenhorn.common.logger._max_bytes_from_config("1M") == 1024 * 1024
+    assert alpenhorn.common.logger._max_bytes_from_config("1G") == 1024 * 1024 * 1024
+    assert alpenhorn.common.logger._max_bytes_from_config("3.3") == 3
+    assert alpenhorn.common.logger._max_bytes_from_config(3.3) == 3
+    assert alpenhorn.common.logger._max_bytes_from_config("3.3k") == int(3.3 * 1024)
+    assert alpenhorn.common.logger._max_bytes_from_config("3.3M") == int(
+        3.3 * 1024 * 1024
+    )
 
     for string in ["", 0, -1, "3.3T", "words"]:
         with pytest.raises(ValueError):
-            alpenhorn.logger._max_bytes_from_config(string)
+            alpenhorn.common.logger._max_bytes_from_config(string)
 
 
 def test_log_buffer_gone(set_config, logger):
@@ -39,7 +41,7 @@ def test_config_sys_logging(set_config, logger):
     """Check that configure_logging calls configure_sys_logging() when a
     "logging.syslog" section is present."""
 
-    with patch("alpenhorn.logger.configure_sys_logging") as mock:
+    with patch("alpenhorn.common.logger.configure_sys_logging") as mock:
         logger.configure_logging()
 
     mock.assert_called_once_with({"test": True})
@@ -138,7 +140,7 @@ def test_config_file_logging(set_config, logger):
     """Check that configure_logging calls configure_file_logging() when a
     "logging.file" section is present."""
 
-    with patch("alpenhorn.logger.configure_file_logging") as mock:
+    with patch("alpenhorn.common.logger.configure_file_logging") as mock:
         logger.configure_logging()
 
     mock.assert_called_once_with({"test": True})
@@ -246,7 +248,7 @@ def test_rotate_bad_size(set_config, logger, xfs):
 def test_rotatefile_logging(set_config, logger, xfs):
     """Test file logging and rotating."""
 
-    with patch("alpenhorn.logger.RotatingFileHandler") as mock:
+    with patch("alpenhorn.common.logger.RotatingFileHandler") as mock:
         logger.configure_logging()
 
     mock.assert_called_with(pathlib.Path("/log"), maxBytes=1234, backupCount=567)

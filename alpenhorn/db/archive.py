@@ -2,10 +2,9 @@ import pathlib
 import datetime
 import peewee as pw
 
-from alpenhorn.acquisition import ArchiveFile
-from alpenhorn.storage import StorageGroup, StorageNode
-
-from .db import EnumField, base_model
+from ._base import EnumField, base_model
+from .acquisition import ArchiveFile
+from .storage import StorageGroup, StorageNode
 
 
 class ArchiveFileCopy(base_model):

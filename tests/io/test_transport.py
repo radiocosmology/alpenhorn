@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import MagicMock
 
-from alpenhorn.archive import ArchiveFileCopyRequest
-from alpenhorn.update import UpdateableGroup, UpdateableNode
+from alpenhorn.db.archive import ArchiveFileCopyRequest
+from alpenhorn.server.update import UpdateableGroup, UpdateableNode
 
 
 @pytest.fixture

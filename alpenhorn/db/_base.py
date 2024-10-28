@@ -1,40 +1,4 @@
-"""Database connection.
-
-This module abstracts the database connection, providing a minimally
-functional fallback if no external database module has been provided.
-
-More capable database connectors may be provided by a database extension
-module.  The dict returned by the register_extension() call to a database
-extension module must contain a "database" key whose value is a second dict
-with keys providing the database extensions capabilities.
-
-The following keys are allowed in the "database" dict, all of which are
-optional:
-    - "reentrant" : boolean
-            If True, the database extension is re-entrant (threadsafe), and
-            simultaneous independant connections to the database will be
-            made to it.  False is assumed if not given.
-    - "connect" : callable
-            Invoked to create a database connection.  Will be passed a dict
-            containing the contents of the "database" section of the
-            alpenhorn config as the keyword parameter "config".  Must
-            return a `pw.Database`.  Should raise `pw.OperationalError` if
-            a connection could not be established.  If not given, the
-            `_connect()` function in this module will be called instead.
-    - "close" : callable
-            Invoked when closing the database connection.
-
-Before accessing the attributes of this module, `init()` must be called once,
-from the MainThread, to set up the database.  After that function is called,
-the following attributes are available:
-
-- threadsafe: a boolean indicating whether the database can be concurrently
-            accessed from multiple threads.
-
-After `init()` has been called, database access is possible.  Each thread
-needing database access must separately call `connect()` to initialise the
-database proxy.
-"""
+"""Alpenhorn Database Base Implementation."""
 
 from __future__ import annotations
 from typing import Any
@@ -43,7 +7,7 @@ import logging
 import peewee as pw
 from playhouse import db_url
 
-from . import config, extensions
+from ..common import config, extensions
 
 # All peewee-generated logs are logged to this namespace.
 log = logging.getLogger(__name__)
@@ -53,7 +17,7 @@ _db_ext = None
 
 # Module attributes
 # =================
-# These are all initialised by init()
+# These are all initialised by connect()
 
 database_proxy = pw.Proxy()
 threadsafe = None
@@ -80,7 +44,7 @@ def _capability(key: str) -> Any:
     KeyError
         If `key` is not one of the values listed above.
     RuntimeError
-        If this function is used before `init()` has been called.
+        If this function is used before `connect()` has been called.
     """
     # capability defaults (these implement the fallback database
     # module).
@@ -93,7 +57,7 @@ def _capability(key: str) -> Any:
     try:
         return _db_ext[key]
     except TypeError:
-        # happens when _db_ext is None because init() wasn't called
+        # happens when _db_ext is None because connect() wasn't called
         raise RuntimeError("database not initialised")
     except KeyError:
         try:

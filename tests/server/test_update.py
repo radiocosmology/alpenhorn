@@ -3,10 +3,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from alpenhorn import pool, update
+from alpenhorn.db.storage import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseGroupIO, BaseNodeIO
-from alpenhorn.queue import FairMultiFIFOQueue
-from alpenhorn.storage import StorageGroup, StorageNode
+from alpenhorn.scheduler import pool
+from alpenhorn.scheduler.queue import FairMultiFIFOQueue
+from alpenhorn.server import update
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def mock_serial_io(dbtables):
     """
 
     mock = MagicMock()
-    with patch("alpenhorn.update.serial_io", mock):
+    with patch("alpenhorn.server.update.serial_io", mock):
         yield mock
 
 

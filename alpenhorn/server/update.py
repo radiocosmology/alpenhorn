@@ -10,12 +10,12 @@ import logging
 import peewee as pw
 from datetime import datetime
 
-from . import auto_import, config, util
-from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from .extensions import io_module
-from .pool import global_abort, WorkerPool, EmptyPool
+from ..common import config, util
+from ..common.extensions import io_module
+from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode, StorageGroup
+from ..scheduler import global_abort, WorkerPool, EmptyPool
+from . import auto_import
 from .querywalker import QueryWalker
-from .storage import StorageNode, StorageGroup
 
 if TYPE_CHECKING:
     from .queue import FairMultiFIFOQueue

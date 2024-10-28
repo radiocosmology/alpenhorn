@@ -9,8 +9,8 @@ import datetime
 import peewee as pw
 from peewee import fn
 
-from .db import EnumField, base_model
-from . import util
+from ._base import EnumField, base_model
+from ..common import util
 
 if TYPE_CHECKING:
     import pathlib

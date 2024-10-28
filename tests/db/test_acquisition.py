@@ -5,7 +5,7 @@ import pathlib
 import datetime
 import peewee as pw
 
-from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
 
 
 def test_schema(dbproxy, simplefile):

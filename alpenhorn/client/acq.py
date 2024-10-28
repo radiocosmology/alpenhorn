@@ -6,9 +6,7 @@ import sys
 import click
 import peewee as pw
 
-import alpenhorn.acquisition as ac
-import alpenhorn.archive as ar
-import alpenhorn.storage as st
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
 
 from .connect_db import config_connect
 
@@ -30,25 +28,23 @@ def acq_list(node_name):
 
     if node_name:
         try:
-            node = st.StorageNode.get(name=node_name)
+            node = StorageNode.get(name=node_name)
         except pw.DoesNotExist:
             print("No such storage node:", node_name)
             sys.exit(1)
 
         query = (
-            ar.ArchiveFileCopy.select(
-                ac.ArchiveAcq.name, pw.fn.count(ar.ArchiveFileCopy.id)
-            )
-            .join(ac.ArchiveFile)
-            .join(ac.ArchiveAcq)
-            .where(ar.ArchiveFileCopy.node == node)
-            .group_by(ac.ArchiveAcq.id)
+            ArchiveFileCopy.select(ArchiveAcq.name, pw.fn.count(ArchiveFileCopy.id))
+            .join(ArchiveFile)
+            .join(ArchiveAcq)
+            .where(ArchiveFileCopy.node == node)
+            .group_by(ArchiveAcq.id)
         )
     else:
         query = (
-            ac.ArchiveAcq.select(ac.ArchiveAcq.name, pw.fn.COUNT(ac.ArchiveFile.id))
-            .join(ac.ArchiveFile, pw.JOIN.LEFT_OUTER)
-            .group_by(ac.ArchiveAcq.name)
+            ArchiveAcq.select(ArchiveAcq.name, pw.fn.COUNT(ArchiveFile.id))
+            .join(ArchiveFile, pw.JOIN.LEFT_OUTER)
+            .group_by(ArchiveAcq.name)
         )
 
     data = query.tuples()
@@ -69,36 +65,36 @@ def files(acquisition, node_name):
     import tabulate
 
     try:
-        acq = ac.ArchiveAcq.get(name=acquisition)
+        acq = ArchiveAcq.get(name=acquisition)
     except pw.DoesNotExist:
         print("No such acquisition:", acquisition)
         sys.exit(1)
 
     if node_name:
         try:
-            node = st.StorageNode.get(name=node_name)
+            node = StorageNode.get(name=node_name)
         except pw.DoesNotExist:
             print("No such storage node:", node_name)
             sys.exit(1)
 
         query = (
-            ac.ArchiveFile.select(
-                ac.ArchiveFile.name,
-                ar.ArchiveFileCopy.size_b,
-                ar.ArchiveFileCopy.has_file,
-                ar.ArchiveFileCopy.wants_file,
+            ArchiveFile.select(
+                ArchiveFile.name,
+                ArchiveFileCopy.size_b,
+                ArchiveFileCopy.has_file,
+                ArchiveFileCopy.wants_file,
             )
-            .join(ar.ArchiveFileCopy)
+            .join(ArchiveFileCopy)
             .where(
-                ac.ArchiveFile.acq == acq,
-                ar.ArchiveFileCopy.node == node,
+                ArchiveFile.acq == acq,
+                ArchiveFileCopy.node == node,
             )
         )
         headers = ["Name", "Size", "Has", "Wants"]
     else:
-        query = ac.ArchiveFile.select(
-            ac.ArchiveFile.name, ac.ArchiveFile.size_b, ac.ArchiveFile.md5sum
-        ).where(ac.ArchiveFile.acq_id == acq.id)
+        query = ArchiveFile.select(
+            ArchiveFile.name, ArchiveFile.size_b, ArchiveFile.md5sum
+        ).where(ArchiveFile.acq_id == acq.id)
         headers = ["Name", "Size", "MD5"]
 
     data = query.tuples()
@@ -118,16 +114,16 @@ def where(acquisition):
     import tabulate
 
     try:
-        acq = ac.ArchiveAcq.get(name=acquisition)
+        acq = ArchiveAcq.get(name=acquisition)
     except pw.DoesNotExist:
         print("No such acquisition:", acquisition)
         sys.exit(1)
 
     nodes = (
-        st.StorageNode.select()
-        .join(ar.ArchiveFileCopy)
-        .join(ac.ArchiveFile)
-        .where(ac.ArchiveFile.acq == acq)
+        StorageNode.select()
+        .join(ArchiveFileCopy)
+        .join(ArchiveFile)
+        .where(ArchiveFile.acq == acq)
         .distinct()
     ).execute()
     if not nodes:
@@ -137,16 +133,16 @@ def where(acquisition):
     for node in nodes:
         print("Storage node:", node.name)
         query = (
-            ac.ArchiveFile.select(
-                ac.ArchiveFile.name,
-                ar.ArchiveFileCopy.size_b,
-                ar.ArchiveFileCopy.has_file,
-                ar.ArchiveFileCopy.wants_file,
+            ArchiveFile.select(
+                ArchiveFile.name,
+                ArchiveFileCopy.size_b,
+                ArchiveFileCopy.has_file,
+                ArchiveFileCopy.wants_file,
             )
-            .join(ar.ArchiveFileCopy)
+            .join(ArchiveFileCopy)
             .where(
-                ac.ArchiveFile.acq == acq,
-                ar.ArchiveFileCopy.node == node,
+                ArchiveFile.acq == acq,
+                ArchiveFileCopy.node == node,
             )
         )
         headers = ["Name", "Size", "Has", "Wants"]
@@ -166,49 +162,49 @@ def syncable(acquisition, source_node, destination_group):
     import tabulate
 
     try:
-        acq = ac.ArchiveAcq.get(name=acquisition)
+        acq = ArchiveAcq.get(name=acquisition)
     except pw.DoesNotExist:
         print("No such acquisition:", acquisition)
 
     try:
-        src = st.StorageNode.get(name=source_node)
+        src = StorageNode.get(name=source_node)
     except pw.DoesNotExist:
         print("No such storage node:", source_node)
         sys.exit(1)
 
     try:
-        dest = st.StorageGroup.get(name=destination_group)
+        dest = StorageGroup.get(name=destination_group)
     except pw.DoesNotExist:
         print("No such storage group:", destination_group)
         sys.exit(1)
 
     # First get the nodes at the destination...
-    nodes_at_dest = st.StorageNode.select().where(st.StorageNode.group == dest)
+    nodes_at_dest = StorageNode.select().where(StorageNode.group == dest)
 
     # Then use this to get a list of all files at the destination...
     files_at_dest = (
-        ac.ArchiveFile.select()
-        .join(ar.ArchiveFileCopy)
+        ArchiveFile.select()
+        .join(ArchiveFileCopy)
         .where(
-            ac.ArchiveFile.acq == acq,
-            ar.ArchiveFileCopy.node << nodes_at_dest,
-            ar.ArchiveFileCopy.has_file == "Y",
+            ArchiveFile.acq == acq,
+            ArchiveFileCopy.node << nodes_at_dest,
+            ArchiveFileCopy.has_file == "Y",
         )
     )
 
     # Then combine to get all file(copies) that are available at the source but
     # not at the destination...
     query = (
-        ac.ArchiveFile.select(
-            ac.ArchiveFile.name,
-            ac.ArchiveFile.size_b,
+        ArchiveFile.select(
+            ArchiveFile.name,
+            ArchiveFile.size_b,
         )
-        .where(ac.ArchiveFile.acq == acq)
-        .join(ar.ArchiveFileCopy)
+        .where(ArchiveFile.acq == acq)
+        .join(ArchiveFileCopy)
         .where(
-            ar.ArchiveFileCopy.node == src,
-            ar.ArchiveFileCopy.has_file == "Y",
-            ~(ar.ArchiveFile.id << files_at_dest),
+            ArchiveFileCopy.node == src,
+            ArchiveFileCopy.has_file == "Y",
+            ~(ArchiveFile.id << files_at_dest),
         )
     )
 

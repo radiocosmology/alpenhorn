@@ -6,7 +6,7 @@ import datetime
 
 import peewee as pw
 
-from .db import base_model
+from ._base import base_model
 
 log = logging.getLogger(__name__)
 

@@ -275,6 +275,7 @@ def io_module(name: str) -> ModuleType:
 
     # Try to load the module from alpenhorn.io
     try:
+        log.info(f"importing: alpenhorn.io.{name}")
         return importlib.import_module("alpenhorn.io." + name)
     except ImportError:
         # No alpenhorn.io module, maybe it's an extension module

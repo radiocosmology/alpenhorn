@@ -15,9 +15,9 @@ try:
 except ImportError:
     from mock import patch, call
 
-import alpenhorn.client as cli
-import alpenhorn.db as db
-import alpenhorn.storage as st
+# import alpenhorn.client as cli
+# import alpenhorn.db as db
+# import alpenhorn.storage as st
 
 # XXX: client is broken
 pytest.skip("client is broken", allow_module_level=True)

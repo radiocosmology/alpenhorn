@@ -7,10 +7,10 @@ import peewee as pw
 from unittest.mock import call, patch
 from watchdog.observers.api import BaseObserver, ObservedWatch
 
-from alpenhorn import auto_import
-from alpenhorn.archive import ArchiveFileCopy
-from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
-from alpenhorn.update import UpdateableNode
+from alpenhorn.db.archive import ArchiveFileCopy
+from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.server import auto_import
+from alpenhorn.server.update import UpdateableNode
 
 
 def test_import_file_bad_paths(queue, unode):
@@ -73,7 +73,9 @@ def test_import_file_no_ext(dbtables, unode):
 def test_import_file_no_detect(dbtables, unode):
     """Test no detection from import_detect."""
 
-    with patch("alpenhorn.extensions._id_ext", [lambda path, node: (None, None)]):
+    with patch(
+        "alpenhorn.common.extensions._id_ext", [lambda path, node: (None, None)]
+    ):
         with pytest.raises(StopIteration):
             next(auto_import._import_file(None, unode, pathlib.PurePath("acq/file")))
 
@@ -110,7 +112,8 @@ def test_import_file_create(xfs, dbtables, unode):
     )
 
     with patch(
-        "alpenhorn.extensions._id_ext", [lambda path, node: ("simplefile_acq", None)]
+        "alpenhorn.common.extensions._id_ext",
+        [lambda path, node: ("simplefile_acq", None)],
     ):
         with pytest.raises(StopIteration):
             next(
@@ -175,7 +178,7 @@ def test_import_file_callback(xfs, dbtables, unode):
         callback_args = [copy, file_, acq, node]
 
     with patch(
-        "alpenhorn.extensions._id_ext",
+        "alpenhorn.common.extensions._id_ext",
         [lambda path, node: ("simplefile_acq", callback)],
     ):
         with pytest.raises(StopIteration):
@@ -214,7 +217,8 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
     )
 
     with patch(
-        "alpenhorn.extensions._id_ext", [lambda path, node: ("simplefile_acq", None)]
+        "alpenhorn.common.extensions._id_ext",
+        [lambda path, node: ("simplefile_acq", None)],
     ):
         with pytest.raises(StopIteration):
             next(
@@ -313,7 +317,7 @@ def test_update_observers_force_stop(xfs, dbtables, unode, queue):
     auto_import.stop_observers()
 
 
-@patch("alpenhorn.auto_import.import_file")
+@patch("alpenhorn.server.auto_import.import_file")
 def test_catchup_new(mocked_import, xfs, dbtables, unode, queue):
     """Test auto_import.catchup with new files."""
 
@@ -332,7 +336,7 @@ def test_catchup_new(mocked_import, xfs, dbtables, unode, queue):
     )
 
 
-@patch("alpenhorn.auto_import.import_file")
+@patch("alpenhorn.server.auto_import.import_file")
 def test_catchup_exists(
     mocked_import,
     xfs,

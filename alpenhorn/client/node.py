@@ -8,9 +8,7 @@ from collections import defaultdict
 import click
 import peewee as pw
 
-import alpenhorn.acquisition as ac
-import alpenhorn.archive as ar
-import alpenhorn.storage as st
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
 import alpenhorn.util as util
 from alpenhorn import db
 
@@ -112,18 +110,18 @@ def create(
     config_connect()
 
     try:
-        this_group = st.StorageGroup.get(name=group)
+        this_group = StorageGroup.get(name=group)
     except pw.DoesNotExist:
         print('Requested group "%s" does not exit in DB.' % group)
         exit(1)
 
     try:
-        this_node = st.StorageNode.get(name=node_name)
+        this_node = StorageNode.get(name=node_name)
         print('Node name "%s" already exists! Try a different name!' % node_name)
         exit(1)
 
     except pw.DoesNotExist:
-        st.StorageNode.create(
+        StorageNode.create(
             name=node_name,
             root=root,
             host=hostname,
@@ -154,15 +152,15 @@ def node_list():
     import tabulate
 
     data = (
-        st.StorageNode.select(
-            st.StorageNode.name,
-            st.StorageGroup.name,
-            st.StorageNode.storage_type,
-            st.StorageNode.host,
-            st.StorageNode.root,
-            st.StorageNode.notes,
+        StorageNode.select(
+            StorageNode.name,
+            StorageGroup.name,
+            StorageNode.storage_type,
+            StorageNode.host,
+            StorageNode.root,
+            StorageNode.notes,
         )
-        .join(st.StorageGroup)
+        .join(StorageGroup)
         .tuples()
     )
     if data:
@@ -181,9 +179,9 @@ def rename(node_name, new_name):
     config_connect()
 
     try:
-        node = st.StorageNode.get(name=node_name)
+        node = StorageNode.get(name=node_name)
         try:
-            st.StorageNode.get(name=new_name)
+            StorageNode.get(name=new_name)
             print('Node "%s" already exists.' % new_name)
             exit(1)
         except pw.DoesNotExist:
@@ -223,7 +221,7 @@ def modify(node_name, max_total_gb, min_avail_gb, min_delete_age_days, notes):
     config_connect()
 
     try:
-        node = st.StorageNode.get(name=node_name)
+        node = StorageNode.get(name=node_name)
         changed = False
         if max_total_gb is not None:
             node.max_total_gb = max_total_gb
@@ -269,7 +267,7 @@ def activate(name, path, user, address, hostname):
     config_connect()
 
     try:
-        node = st.StorageNode.get(name=name)
+        node = StorageNode.get(name=name)
     except pw.DoesNotExist:
         click.echo('Storage node "%s" does not exist. I quit.' % name)
         exit(1)
@@ -310,7 +308,7 @@ def deactivate(root_or_name):
     config_connect()
 
     try:
-        node = st.StorageNode.get(name=root_or_name)
+        node = StorageNode.get(name=root_or_name)
     except pw.DoesNotExist:
         if root_or_name[-1] == "/":
             root_or_name = root_or_name[: len(root_or_name) - 1]
@@ -319,7 +317,7 @@ def deactivate(root_or_name):
             click.echo("That is neither a node name, nor a path on this host. I quit.")
             exit(1)
         try:
-            node = st.StorageNode.get(root=root_or_name, host=util.get_short_hostname())
+            node = StorageNode.get(root=root_or_name, host=util.get_short_hostname())
         except pw.DoesNotExist:
             click.echo(
                 "That is neither a node name, nor a root name that is known. I quit."
@@ -350,14 +348,12 @@ def active(host):
     if host is None:
         host = util.get_short_hostname()
     zero = True
-    for node in st.StorageNode.select().where(
-        st.StorageNode.host == host, st.StorageNode.active
+    for node in StorageNode.select().where(
+        StorageNode.host == host, StorageNode.active
     ):
         n_file = (
-            ar.ArchiveFileCopy.select()
-            .where(
-                (ar.ArchiveFileCopy.node == node) & (ar.ArchiveFileCopy.has_file == "Y")
-            )
+            ArchiveFileCopy.select()
+            .where((ArchiveFileCopy.node == node) & (ArchiveFileCopy.has_file == "Y"))
             .count()
         )
         print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
@@ -399,9 +395,7 @@ def scan(node_name, verbose, acq, register_new, dry):
 
     # Fetch a reference to the node
     try:
-        this_node = (
-            st.StorageNode.select().where(st.StorageNode.name == node_name).get()
-        )
+        this_node = StorageNode.select().where(StorageNode.name == node_name).get()
     except pw.DoesNotExist:
         click.echo("Unknown node:", node_name)
         exit(1)
@@ -409,12 +403,12 @@ def scan(node_name, verbose, acq, register_new, dry):
     cwd = os.getcwd()
     # Construct a dictionary of directories that might be acquisitions and the of
     # list files that they contain
-    db_acqs = ac.ArchiveAcq.select(ac.ArchiveAcq.name)
+    db_acqs = ArchiveAcq.select(ArchiveAcq.name)
     acq_files = defaultdict(list)
     if len(acq) == 0:
         tops = [cwd]
     else:
-        db_acqs = db_acqs.where(ac.ArchiveAcq.name >> acq)
+        db_acqs = db_acqs.where(ArchiveAcq.name >> acq)
         tops = []
         for acq_name in acq:
             acq_dir = os.path.join(this_node.root, acq_name)
@@ -476,7 +470,7 @@ def scan(node_name, verbose, acq, register_new, dry):
     with click.progressbar(acq_files, label="Scanning acquisitions") as acq_iter:
         for acq_name in acq_iter:
             try:
-                acq = ac.ArchiveAcq.select().where(ac.ArchiveAcq.name == acq_name).get()
+                acq = ArchiveAcq.select().where(ArchiveAcq.name == acq_name).get()
                 known_acqs.append(acq_name)
 
                 # Fetch lists of all files in this acquisition, and all
@@ -484,14 +478,14 @@ def scan(node_name, verbose, acq, register_new, dry):
                 file_names = [f.name for f in acq.files]
                 local_file_names = [
                     f.name
-                    for f in acq.files.join(ar.ArchiveFileCopy).where(
-                        ar.ArchiveFileCopy.node == this_node
+                    for f in acq.files.join(ArchiveFileCopy).where(
+                        ArchiveFileCopy.node == this_node
                     )
                 ]
             except pw.DoesNotExist:
                 if register_new:
                     acq_type, _ = ac.AcqType.detect(acq_name, this_node)
-                    acq = ac.ArchiveAcq(name=acq_name, type=acq_type)
+                    acq = ArchiveAcq(name=acq_name, type=acq_type)
                     if not dry:
                         # TODO: refactor duplication with auto_import.add_acq
                         with db.database_proxy.atomic():
@@ -525,10 +519,8 @@ def scan(node_name, verbose, acq, register_new, dry):
                     if f_name in file_names:
                         # it is a known file
                         archive_file = (
-                            ac.ArchiveFile.select()
-                            .where(
-                                ac.ArchiveFile.name == f_name, ac.ArchiveFile.acq == acq
-                            )
+                            ArchiveFile.select()
+                            .where(ArchiveFile.name == f_name, ArchiveFile.acq == acq)
                             .get()
                         )
 
@@ -555,7 +547,7 @@ def scan(node_name, verbose, acq, register_new, dry):
                             print('Computing md5sum of "{}"'.format(f_name))
                         md5sum = util.md5sum_file(abs_path, cmd_line=False)
                         size_b = os.path.getsize(abs_path)
-                        archive_file = ac.ArchiveFile(
+                        archive_file = ArchiveFile(
                             name=f_name,
                             acq=acq,
                             type=file_type,
@@ -568,7 +560,7 @@ def scan(node_name, verbose, acq, register_new, dry):
                     added_files.append(file_path)
                     if not dry:
                         copy_size_b = os.stat(abs_path).st_blocks * 512
-                        ar.ArchiveFileCopy.create(
+                        ArchiveFileCopy.create(
                             file=archive_file,
                             node=this_node,
                             has_file="Y",
@@ -668,7 +660,7 @@ def verify(node_name, md5, fixdb, acq):
     config_connect()
 
     try:
-        this_node = st.StorageNode.get(name=node_name)
+        this_node = StorageNode.get(name=node_name)
     except pw.DoesNotExist:
         click.echo('Storage node "{}" does not exist.'.format(node_name))
         exit(1)
@@ -688,21 +680,21 @@ def verify(node_name, md5, fixdb, acq):
     # need in a single query. This massively speeds up the whole process versus
     # fetching all the FileCopy's then querying for Files and Acqs.
     lfiles = (
-        ac.ArchiveFile.select(
-            ac.ArchiveFile.name,
-            ac.ArchiveAcq.name,
-            ac.ArchiveFile.size_b,
-            ac.ArchiveFile.md5sum,
-            ar.ArchiveFileCopy.id,
+        ArchiveFile.select(
+            ArchiveFile.name,
+            ArchiveAcq.name,
+            ArchiveFile.size_b,
+            ArchiveFile.md5sum,
+            ArchiveFileCopy.id,
         )
-        .join(ac.ArchiveAcq)
-        .switch(ac.ArchiveFile)
-        .join(ar.ArchiveFileCopy)
-        .where(ar.ArchiveFileCopy.node == this_node, ar.ArchiveFileCopy.has_file == "Y")
+        .join(ArchiveAcq)
+        .switch(ArchiveFile)
+        .join(ArchiveFileCopy)
+        .where(ArchiveFileCopy.node == this_node, ArchiveFileCopy.has_file == "Y")
     )
 
     if acq:
-        lfiles = lfiles.where(ac.ArchiveAcq.name << acq)
+        lfiles = lfiles.where(ArchiveAcq.name << acq)
 
     missing_files = []
     corrupt_files = []
@@ -763,16 +755,16 @@ def verify(node_name, md5, fixdb, acq):
 
         if (len(missing_files) > 0) and click.confirm("Fix missing files"):
             missing_count = (
-                ar.ArchiveFileCopy.update(has_file="N")
-                .where(ar.ArchiveFileCopy.id << missing_ids)
+                ArchiveFileCopy.update(has_file="N")
+                .where(ArchiveFileCopy.id << missing_ids)
                 .execute()
             )
             click.echo("  %i marked as missing" % missing_count)
 
         if (len(corrupt_files) > 0) and click.confirm("Fix corrupt files"):
             corrupt_count = (
-                ar.ArchiveFileCopy.update(has_file="M")
-                .where(ar.ArchiveFileCopy.id << corrupt_ids)
+                ArchiveFileCopy.update(has_file="M")
+                .where(ArchiveFileCopy.id << corrupt_ids)
                 .execute()
             )
             click.echo("  %i corrupt files marked for verification" % corrupt_count)
@@ -834,7 +826,7 @@ def clean(node_name, days, cancel, force, now, target, acq):
     config_connect()
 
     try:
-        this_node = st.StorageNode.get(st.StorageNode.name == node_name)
+        this_node = StorageNode.get(StorageNode.name == node_name)
     except pw.DoesNotExist:
         print('Storage node "%s" does not exist.' % node_name)
         exit(1)
@@ -850,58 +842,56 @@ def clean(node_name, days, cancel, force, now, target, acq):
             exit(1)
 
     # Select FileCopys on this node.
-    files = ar.ArchiveFileCopy.select(ar.ArchiveFileCopy.id).where(
-        ar.ArchiveFileCopy.node == this_node, ar.ArchiveFileCopy.has_file == "Y"
+    files = ArchiveFileCopy.select(ArchiveFileCopy.id).where(
+        ArchiveFileCopy.node == this_node, ArchiveFileCopy.has_file == "Y"
     )
 
     if now:
         # In 'now' cleaning, every copy will be set to wants_file="No", if it
         # wasn't already
-        files = files.where(ar.ArchiveFileCopy.wants_file != "N")
+        files = files.where(ArchiveFileCopy.wants_file != "N")
     elif cancel:
         # Undo any "Maybe" and "No" want_files and reset them to "Yes"
-        files = files.where(ar.ArchiveFileCopy.wants_file != "Y")
+        files = files.where(ArchiveFileCopy.wants_file != "Y")
     else:
         # In regular cleaning, we only mark as "Maybe" want_files that are
         # currently "Yes", but leave "No" unchanged
-        files = files.where(ar.ArchiveFileCopy.wants_file == "Y")
+        files = files.where(ArchiveFileCopy.wants_file == "Y")
 
     # Limit to acquisition
     if acq is not None:
         try:
-            acq = ac.ArchiveAcq.get(name=acq)
+            acq = ArchiveAcq.get(name=acq)
         except pw.DoesNotExit:
             raise RuntimeError("Specified acquisition %s does not exist" % acq)
 
-        files_in_acq = ac.ArchiveFile.select().where(ac.ArchiveFile.acq == acq)
+        files_in_acq = ArchiveFile.select().where(ArchiveFile.acq == acq)
 
-        files = files.where(ar.ArchiveFileCopy.file << files_in_acq)
+        files = files.where(ArchiveFileCopy.file << files_in_acq)
 
     # If the target option has been specified, only clean files also available there...
     if target is not None:
         # Fetch a reference to the target group
         try:
-            target_group = st.StorageGroup.get(name=target)
+            target_group = StorageGroup.get(name=target)
         except pw.DoesNotExist:
             raise RuntimeError('Target group "%s" does not exist in the DB.' % target)
 
         # First get the nodes at the destination...
-        nodes_at_target = st.StorageNode.select().where(
-            st.StorageNode.group == target_group
-        )
+        nodes_at_target = StorageNode.select().where(StorageNode.group == target_group)
 
         # Then use this to get a list of all files at the destination...
         files_at_target = (
-            ac.ArchiveFile.select()
-            .join(ar.ArchiveFileCopy)
+            ArchiveFile.select()
+            .join(ArchiveFileCopy)
             .where(
-                ar.ArchiveFileCopy.node << nodes_at_target,
-                ar.ArchiveFileCopy.has_file == "Y",
+                ArchiveFileCopy.node << nodes_at_target,
+                ArchiveFileCopy.has_file == "Y",
             )
         )
 
         # Only match files that are also available at the target
-        files = files.where(ar.ArchiveFileCopy.file << files_at_target)
+        files = files.where(ArchiveFileCopy.file << files_at_target)
 
     # If --days has been set we need to restrict to files older than the given
     # time. This only works for a few particular file types
@@ -949,10 +939,10 @@ def clean(node_name, days, cancel, force, now, target, acq):
 
         if count > 0:
             size_bytes = (
-                ar.ArchiveFileCopy.select()
-                .where(ar.ArchiveFileCopy.id << file_ids)
-                .join(ac.ArchiveFile)
-                .select(pw.fn.Sum(ac.ArchiveFile.size_b))
+                ArchiveFileCopy.select()
+                .where(ArchiveFileCopy.id << file_ids)
+                .join(ArchiveFile)
+                .select(pw.fn.Sum(ArchiveFile.size_b))
                 .scalar()
             )
 
@@ -979,8 +969,8 @@ def clean(node_name, days, cancel, force, now, target, acq):
             else:
                 state = "N" if now else "M"
 
-            update = ar.ArchiveFileCopy.update(wants_file=state).where(
-                ar.ArchiveFileCopy.id << file_ids
+            update = ArchiveFileCopy.update(wants_file=state).where(
+                ArchiveFileCopy.id << file_ids
             )
 
             n = update.execute()

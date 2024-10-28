@@ -4,17 +4,10 @@ import sys
 import click
 import logging
 
-from .queue import FairMultiFIFOQueue
-
-from . import (
-    auto_import,
-    config,
-    db,
-    extensions,
-    logger,
-    pool,
-    update,
-)
+from .. import db
+from ..common import config, extensions, logger
+from ..scheduler import FairMultiFIFOQueue, pool
+from . import auto_import, update
 
 log = logging.getLogger(__name__)
 

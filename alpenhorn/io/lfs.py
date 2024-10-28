@@ -32,7 +32,7 @@ import logging
 import pathlib
 from enum import Enum
 
-from alpenhorn import util
+from alpenhorn.common import util
 
 if TYPE_CHECKING:
     import os

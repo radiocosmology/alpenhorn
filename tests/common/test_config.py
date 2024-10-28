@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from alpenhorn import config
+from alpenhorn.common import config
 
 
 def merge_dict(a, b):

@@ -21,10 +21,10 @@ import pathlib
 import peewee as pw
 from datetime import datetime
 
-from ..archive import ArchiveFileCopy
-from ..querywalker import QueryWalker
-from ..task import Task
-from ..util import pretty_bytes, pretty_deltat
+from ..common.util import pretty_bytes, pretty_deltat
+from ..db import ArchiveFileCopy
+from ..scheduler import Task
+from ..server.querywalker import QueryWalker
 from .base import BaseNodeRemote
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO
@@ -32,10 +32,9 @@ from .lustrequota import LustreQuotaNodeIO
 
 if TYPE_CHECKING:
     import os
-    from ..acquisition import ArchiveFile
-    from ..archive import ArchiveFileCopyRequest
-    from ..queue import FairMultiFIFOQueue
-    from ..update import UpdateableNode, UpdateableGroup
+    from ..db import ArchiveFile, ArchiveFileCopyRequest
+    from ..scheduler import FairMultiFIFOQueue
+    from ..service.update import UpdateableNode, UpdateableGroup
 del TYPE_CHECKING
 
 log = logging.getLogger(__name__)

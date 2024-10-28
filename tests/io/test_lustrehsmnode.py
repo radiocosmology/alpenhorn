@@ -4,8 +4,8 @@ import pytest
 import datetime
 from unittest.mock import patch, MagicMock
 
-from alpenhorn.archive import ArchiveFileCopy
-from alpenhorn.update import UpdateableNode
+from alpenhorn.db.archive import ArchiveFileCopy
+from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture

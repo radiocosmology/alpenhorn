@@ -7,9 +7,9 @@ import pytest
 
 import yaml
 
-from alpenhorn import acquisition as ac
-from alpenhorn import archive as ar
-from alpenhorn import storage as st
+# from alpenhorn import acquisition as ac
+# from alpenhorn import archive as ar
+# from alpenhorn import storage as st
 
 
 if ("RUN_DOCKER_TESTS" not in os.environ) and ("PLAYGROUND" not in os.environ):

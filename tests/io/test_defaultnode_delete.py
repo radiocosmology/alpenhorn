@@ -4,7 +4,7 @@ import pytest
 import pathlib
 from unittest.mock import patch
 
-from alpenhorn.archive import ArchiveFileCopy
+from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.io._default_asyncs import delete_async
 from alpenhorn.io.updownlock import UpDownLock
 
@@ -17,7 +17,7 @@ def mock_archive_count():
     def _mock_archive_count(self):
         return 6
 
-    with patch("alpenhorn.archive.ArchiveFile.archive_count", _mock_archive_count):
+    with patch("alpenhorn.db.archive.ArchiveFile.archive_count", _mock_archive_count):
         yield
 
 

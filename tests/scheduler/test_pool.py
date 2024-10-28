@@ -8,7 +8,7 @@ from time import sleep
 
 import pytest
 
-from alpenhorn.pool import WorkerPool, EmptyPool, setsignals, global_abort
+from alpenhorn.scheduler.pool import WorkerPool, EmptyPool, setsignals, global_abort
 
 # Event to indicate that the worker that consumed the opperr_task
 # is exiting
@@ -199,7 +199,7 @@ def test_worker_id(queue, pool):
     def task():
         """A task that reports its worker ID."""
 
-        from alpenhorn.pool import threadlocal
+        from alpenhorn.scheduler.pool import threadlocal
 
         nonlocal ids, barrier
         ids[threadlocal.worker_id] = 1 + ids.get(threadlocal.worker_id, 0)

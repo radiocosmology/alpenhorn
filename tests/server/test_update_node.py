@@ -4,9 +4,9 @@ import pytest
 import datetime
 from unittest.mock import call, patch, MagicMock
 
-from alpenhorn.archive import ArchiveFileCopy
-from alpenhorn.storage import StorageNode
-from alpenhorn.update import UpdateableNode
+from alpenhorn.db.archive import ArchiveFileCopy
+from alpenhorn.db.storage import StorageNode
+from alpenhorn.server.update import UpdateableNode
 
 
 def test_bad_ioclass(simplenode):
