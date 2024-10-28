@@ -26,14 +26,14 @@ from unittest.mock import patch
 from click.testing import CliRunner
 from urllib.parse import quote as urlquote
 
-from alpenhorn.service import cli
 from alpenhorn.db import database_proxy, EnumField
-from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
-from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
+from alpenhorn.server.service import cli
 
 # Import pattern_importer from the examples directory
-sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "examples")))
+sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))
 import pattern_importer
 
 # database URI for a shared in-memory database

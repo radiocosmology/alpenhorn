@@ -3,7 +3,7 @@
 import click
 import peewee as pw
 
-import alpenhorn.storage as st
+from ..db import StorageGroup, StorageNode
 
 from .connect_db import config_connect
 
@@ -21,11 +21,11 @@ def create(group_name, notes):
     config_connect()
 
     try:
-        st.StorageGroup.get(name=group_name)
+        StorageGroup.get(name=group_name)
         print('Group name "%s" already exists! Try a different name!' % group_name)
         exit(1)
     except pw.DoesNotExist:
-        st.StorageGroup.create(name=group_name, notes=notes)
+        StorageGroup.create(name=group_name, notes=notes)
         print('Added group "%s" to database.' % group_name)
 
 
@@ -36,7 +36,7 @@ def list():
 
     import tabulate
 
-    data = st.StorageGroup.select(st.StorageGroup.name, st.StorageGroup.notes).tuples()
+    data = StorageGroup.select(StorageGroup.name, StorageGroup.notes).tuples()
     if data:
         print(tabulate.tabulate(data, headers=["Name", "Notes"]))
 
@@ -49,9 +49,9 @@ def rename(group_name, new_name):
     config_connect()
 
     try:
-        group = st.StorageGroup.get(name=group_name)
+        group = StorageGroup.get(name=group_name)
         try:
-            st.StorageGroup.get(name=new_name)
+            StorageGroup.get(name=new_name)
             print('Group "%s" already exists.' % new_name)
             exit(1)
         except pw.DoesNotExist:
@@ -71,7 +71,7 @@ def modify(group_name, notes):
     config_connect()
 
     try:
-        group = st.StorageGroup.get(name=group_name)
+        group = StorageGroup.get(name=group_name)
         if notes is not None:
             if notes == "":
                 notes = None

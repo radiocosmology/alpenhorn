@@ -25,21 +25,21 @@ extended ArchiveFile table.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Tuple
 
-if TYPE_CHECKING:
-    import pathlib
-
-    from alpenhorn.archive import ArchiveFileCopy
-    from alpenhorn.extensions import ImportCallback
-    from alpenhorn.update import UpdateableNode
-
 import re
 import os
 import json
 import peewee as pw
 from functools import partial
 
-from alpenhorn.db import base_model
-from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.db import ArchiveAcq, ArchiveFile, base_model
+
+if TYPE_CHECKING:
+    import pathlib
+
+    from alpenhorn.common.extensions import ImportCallback
+    from alpenhorn.db.archive import ArchiveFileCopy
+    from alpenhorn.server.update import UpdateableNode
+del TYPE_CHECKING
 
 
 class TypeBase(base_model):

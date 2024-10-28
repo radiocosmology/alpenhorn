@@ -4,7 +4,7 @@ import pytest
 import peewee as pw
 import threading
 
-from alpenhorn import db
+from alpenhorn.db import _base as db
 
 
 def test_db(dbproxy):

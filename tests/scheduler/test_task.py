@@ -1,6 +1,6 @@
 """Test Tasks"""
 
-from alpenhorn.task import Task
+from alpenhorn.scheduler.task import Task
 
 
 def test_args(queue):

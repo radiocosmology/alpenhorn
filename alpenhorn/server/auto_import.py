@@ -9,16 +9,17 @@ import peewee as pw
 from datetime import datetime
 from watchdog.events import FileSystemEventHandler
 
-from . import config, db, extensions
-from .acquisition import ArchiveAcq, ArchiveFile
-from .archive import ArchiveFileCopy
-from .io import ioutil
-from .task import Task
+from .. import db
+from ..common import config, extensions
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy
+from ..io import ioutil
+from ..scheduler import Task
 
 if TYPE_CHECKING:
-    from .queue import FairMultiFIFOQueue
-    from .storage import StorageNode
+    from ..db import StorageNode
+    from ..scheduler import FairMultiFIFOQueue
     from .update import UpdateableNode
+del TYPE_CHECKING
 
 
 log = logging.getLogger(__name__)

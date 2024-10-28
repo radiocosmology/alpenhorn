@@ -33,7 +33,7 @@ test = [
 
 [project.scripts]
 alpenhorn = "alpenhorn.client:cli"
-alpenhornd = "alpenhorn.service:cli"
+alpenhornd = "alpenhorn.server:cli"
 
 [tool.setuptools]
 packages = ["alpenhorn"]

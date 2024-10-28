@@ -6,13 +6,20 @@ import shutil
 import logging
 from unittest.mock import patch, MagicMock
 
-import alpenhorn.logger
-from alpenhorn import config, db, extensions
-from alpenhorn.queue import FairMultiFIFOQueue
-from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
-from alpenhorn.acquisition import ArchiveAcq, ArchiveFile
-from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.update import UpdateableNode, UpdateableGroup
+import alpenhorn.common.logger
+from alpenhorn.common import config, extensions
+from alpenhorn import db
+from alpenhorn.db import (
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
+)
+from alpenhorn.scheduler import FairMultiFIFOQueue
+from alpenhorn.server.update import UpdateableNode, UpdateableGroup
 
 
 def pytest_configure(config):
@@ -64,12 +71,12 @@ def pytest_configure(config):
 def logger():
     """Set up for log testing
 
-    Yields alpenhorn.logger.
+    Yields alpenhorn.common.logger.
     """
 
-    alpenhorn.logger.init_logging()
+    alpenhorn.common.logger.init_logging()
 
-    yield alpenhorn.logger
+    yield alpenhorn.common.logger
 
     # Teardown
     root = logging.getLogger()
@@ -79,19 +86,19 @@ def logger():
     for handler in handlers:
         root.removeHandler(handler)
 
-    alpenhorn.logger.log_buffer = None
+    alpenhorn.common.logger.log_buffer = None
 
 
 @pytest.fixture
 def set_config(request, logger):
-    """Set alpenhorn.config.config for testing.
+    """Set alpenhorn.common.config.config for testing.
 
     Any value given in the alpenhorn_config mark is merged into the
     default config.
 
-    Yields alpenhorn.config.config.
+    Yields alpenhorn.common.config.config.
 
-    After the test completes, alpenhorn.config.config is set to None.
+    After the test completes, alpenhorn.common.config.config is set to None.
     """
     # Initialise with the default
     config.config = config._default_config.copy()
@@ -111,7 +118,7 @@ def set_config(request, logger):
 
 @pytest.fixture
 def mock_run_command(request, set_config):
-    """Mock alpenhorn.util.run_command to _not_ run a command.
+    """Mock alpenhorn.common.util.run_command to _not_ run a command.
 
     The value returned by run_command() can be set by the test via the
     run_command_result mark.
@@ -143,7 +150,7 @@ def mock_run_command(request, set_config):
         nonlocal run_command_report
         return run_command_report
 
-    with patch("alpenhorn.util.run_command", _mocked_run_command):
+    with patch("alpenhorn.common.util.run_command", _mocked_run_command):
         yield _get_run_command_report
 
 
@@ -498,7 +505,7 @@ def loop_once(dbtables):
     mock.is_set = _is_set
 
     # This mocks the imported global_abort in update.py
-    with patch("alpenhorn.update.global_abort", mock):
+    with patch("alpenhorn.server.update.global_abort", mock):
         yield mock
 
 
@@ -540,7 +547,7 @@ def mockio():
     MockIO.group = group
 
     # Patch extensions._io_ext so alpenhorn can find our module
-    with patch.dict("alpenhorn.extensions._io_ext", mock=MockIO):
+    with patch.dict("alpenhorn.common.extensions._io_ext", mock=MockIO):
         yield MockIO
 
 

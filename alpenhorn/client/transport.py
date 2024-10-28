@@ -7,7 +7,7 @@ import time
 import click
 import peewee as pw
 
-import alpenhorn.storage as st
+from ..db import StorageGroup, StorageNode
 
 from . import node
 from .connect_db import config_connect
@@ -29,14 +29,14 @@ def list():
     import tabulate
 
     data = (
-        st.StorageNode.select(
-            st.StorageNode.name,
-            pw.Case(st.StorageNode.active, [(True, "Y"), (False, "-")]),
-            st.StorageNode.host,
-            st.StorageNode.root,
-            st.StorageNode.notes,
+        StorageNode.select(
+            StorageNode.name,
+            pw.Case(StorageNode.active, [(True, "Y"), (False, "-")]),
+            StorageNode.host,
+            StorageNode.root,
+            StorageNode.notes,
         )
-        .where(st.StorageNode.storage_type == "T")
+        .where(StorageNode.storage_type == "T")
         .tuples()
     )
     if data:
@@ -183,14 +183,14 @@ def format(serial_num):
         exit(1)
 
     try:
-        node = st.StorageNode.get(name=name)
+        node = StorageNode.get(name=name)
     except pw.DoesNotExist:
         print(
             "This disc has not been registered yet as a storage node. "
             "Registering now."
         )
         try:
-            group = st.StorageGroup.get(name="transport")
+            group = StorageGroup.get(name="transport")
         except pw.DoesNotExist:
             print('Hmmm. Storage group "transport" does not exist. I quit.')
             exit(1)
@@ -198,7 +198,7 @@ def format(serial_num):
         # TODO: ensure write access to the database
         # # We need to write to the database.
         # di.connect_database(read_write=True)
-        node = st.StorageNode.create(
+        node = StorageNode.create(
             name=name, root=root, group=group, storage_type="T", min_avail_gb=1
         )
 

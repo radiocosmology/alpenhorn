@@ -11,13 +11,14 @@ import pathlib
 from datetime import datetime
 
 from . import ioutil
-from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from ..update import RemoteNode
+from ..db import ArchiveFileCopy, ArchiveFileCopyRequest
+from ..server.update import RemoteNode
 
 if TYPE_CHECKING:
     from .base import BaseNodeIO, BaseGroupIO
     from .updownlock import UpDownLock
-    from ..task import Task
+    from ..scheduler import Task
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 

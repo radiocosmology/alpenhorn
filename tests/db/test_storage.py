@@ -5,7 +5,7 @@ import pathlib
 import datetime
 import peewee as pw
 
-from alpenhorn.storage import StorageGroup, StorageNode, StorageTransferAction
+from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
 
 
 def test_schema(dbproxy, simplenode, storagetransferaction):

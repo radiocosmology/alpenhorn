@@ -5,9 +5,9 @@ import pytest
 import datetime
 from unittest.mock import patch, MagicMock
 
-from alpenhorn.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io.ioutil import copy_request_done
-from alpenhorn.update import UpdateableNode
+from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture

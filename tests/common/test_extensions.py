@@ -1,10 +1,10 @@
-"""test alpenhorn.extensions."""
+"""test alpenhorn.common.extensions."""
 
 import pytest
 
 from unittest.mock import patch, MagicMock
 
-from alpenhorn import extensions
+from alpenhorn.common import extensions
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -16,7 +16,7 @@ def test_no_module(set_config):
         extensions.load_extensions()
 
 
-@pytest.mark.alpenhorn_config({"extensions": ["alpenhorn.extensions"]})
+@pytest.mark.alpenhorn_config({"extensions": ["alpenhorn.common.extensions"]})
 def test_bad_extensions(set_config):
     """Test that trying to extend with a module lacking a register_extension
     function returns RuntimeError."""

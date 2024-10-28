@@ -2,7 +2,7 @@
 
 import pytest
 
-from alpenhorn import util
+from alpenhorn.common import util
 
 
 def test_run_retval0():

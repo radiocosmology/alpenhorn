@@ -20,19 +20,19 @@ from watchdog.observers import Observer
 from . import ioutil
 from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
 from .updownlock import UpDownLock
-from .. import util
-from ..acquisition import ArchiveAcq, ArchiveFile
-from ..task import Task
+from ..common import util
+from ..db import ArchiveAcq, ArchiveFile
+from ..scheduler import Task
 
 # The asyncs are over here:
 from ._default_asyncs import pull_async, check_async, delete_async, group_search_async
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
-    from ..queue import FairMultiFIFOQueue
-    from ..storage import StorageNode
-    from ..update import UpdateableNode
+    from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
+    from ..service.queue import FairMultiFIFOQueue
+    from ..service.update import UpdateableNode
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 

@@ -3,9 +3,9 @@
 import pytest
 from unittest.mock import patch, call
 
-from alpenhorn.archive import ArchiveFileCopyRequest
-from alpenhorn.storage import StorageGroup
-from alpenhorn.update import UpdateableGroup, UpdateableNode
+from alpenhorn.db.archive import ArchiveFileCopyRequest
+from alpenhorn.db.storage import StorageGroup
+from alpenhorn.server.update import UpdateableGroup, UpdateableNode
 
 
 def make_afcr(

@@ -4,7 +4,7 @@ import pytest
 import peewee as pw
 
 from alpenhorn.db import base_model
-from alpenhorn.querywalker import QueryWalker
+from alpenhorn.server.querywalker import QueryWalker
 
 
 # Test table

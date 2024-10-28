@@ -3,7 +3,7 @@
 import pytest
 
 from alpenhorn.io.lustrequota import LustreQuotaNodeIO
-from alpenhorn.update import UpdateableNode
+from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture

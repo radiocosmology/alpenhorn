@@ -1,6 +1,6 @@
 """Test DefaultNodeIO.check()."""
 
-from alpenhorn.archive import ArchiveFileCopy
+from alpenhorn.db.archive import ArchiveFileCopy
 
 
 def test_check_size(xfs, queue, simpleacq, archivefile, unode, archivefilecopy):

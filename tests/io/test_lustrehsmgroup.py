@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from alpenhorn.update import UpdateableGroup, UpdateableNode
+from alpenhorn.server.update import UpdateableGroup, UpdateableNode
 
 
 @pytest.fixture
