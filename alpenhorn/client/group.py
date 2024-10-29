@@ -5,8 +5,6 @@ import peewee as pw
 
 from ..db import StorageGroup, StorageNode
 
-from .connect_db import config_connect
-
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():

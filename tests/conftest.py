@@ -74,7 +74,7 @@ def logger():
     Yields alpenhorn.common.logger.
     """
 
-    alpenhorn.common.logger.init_logging()
+    alpenhorn.common.logger.init_logging(False)
 
     yield alpenhorn.common.logger
 

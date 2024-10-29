@@ -6,9 +6,37 @@ import socket
 import hashlib
 import logging
 
-from . import config
+from . import config, extensions, logger
 
 log = logging.getLogger(__name__)
+
+
+def start_alpenhorn(
+    cli_conf: str | None, client: bool, verbosity: int | None = None
+) -> None:
+    """Initialise alpenhorn
+
+    Parameters
+    ----------
+    cli_conf : str or None
+        The config file given on the command line, if any.
+    client : bool
+        Is the alpenhorn client being initialised?
+    verbosity : int, optional
+        For clients, the initial verbosity level.  Ignored for servers.
+    """
+    # Initialise logging
+    logger.init_logging(client=client, verbosity=verbosity)
+
+    # Load the configuration for alpenhorn
+    config.load_config(cli_conf, client=client)
+
+    # Set up server logging based on config
+    if not client:
+        logger.configure_logging()
+
+    # Load alpenhorn extensions
+    extensions.load_extensions()
 
 
 def run_command(

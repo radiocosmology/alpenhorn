@@ -8,8 +8,6 @@ import peewee as pw
 
 from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
 
-from .connect_db import config_connect
-
 RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
 
 

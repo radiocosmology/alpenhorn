@@ -6,6 +6,7 @@ Configuration file search order:
 - `/etc/xdg/alpenhorn/alpenhorn.conf`
 - `~/.config/alpenhorn/alpenhorn.conf`
 - `ALPENHORN_CONFIG_FILE` environment variable
+- the path passed via `-c` or `--conf` on the command line
 
 This is in order of increasing precedence, with options in later files
 overriding those in earlier entries. Configuration is merged recursively by
@@ -135,6 +136,9 @@ Example config:
         pull_bytes_per_second: 20000000
 """
 
+from __future__ import annotations
+
+from click import ClickException
 import logging
 import os
 
@@ -156,7 +160,7 @@ _default_config = {
 }
 
 
-def load_config():
+def load_config(cli_conf: os.PathLike, client: bool) -> None:
     """Find and load the configuration from a file."""
 
     global config
@@ -171,8 +175,12 @@ def load_config():
         "~/.config/alpenhorn/alpenhorn.conf",
     ]
 
-    if "ALPENHORN_CONFIG_FILE" in os.environ:
-        config_files.append(os.environ["ALPENHORN_CONFIG_FILE"])
+    enviro_conf = os.environ.get("ALPENHORN_CONFIG_FILE", None)
+    if enviro_conf:
+        config_files.append(enviro_conf)
+
+    if cli_conf:
+        config_files.append(cli_conf)
 
     any_exist = False
 
@@ -181,6 +189,13 @@ def load_config():
         absfile = os.path.abspath(os.path.expanduser(os.path.expandvars(cfile)))
 
         if not os.path.exists(absfile):
+            # Warn if a user-supplied config file is missing
+            if cfile == cli_conf:
+                log.warning(f"Config file {absfile} defined on command line not found.")
+            elif cfile == enviro_conf:
+                log.warning(
+                    f"Config file {absfile} defined by ALPENHORN_CONFIG_FILE not found."
+                )
             continue
 
         any_exist = True
@@ -194,21 +209,15 @@ def load_config():
             config = merge_dict_tree(config, conf)
 
     if not any_exist:
-        raise RuntimeError("No configuration files available.")
+        if client:
+            exc = ClickException
+        else:
+            exc = RuntimeError
+
+        raise exc("No configuration files available.")
 
 
-class ConfigClass(object):
-    """A base for classes that can be configured from a dictionary.
-
-    Note that this configures the class itself, not instances of the class.
-    """
-
-    @classmethod
-    def set_config(cls, configdict):
-        """Configure the class from the supplied `configdict`."""
-
-
-def merge_dict_tree(a, b):
+def merge_dict_tree(a: dict, b: dict) -> dict:
     """Merge two dictionaries recursively.
 
     The following rules applied:

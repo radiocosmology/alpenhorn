@@ -1,11 +1,12 @@
 """Alpenhorn client interface."""
 
+import click
 import datetime
 import logging
-
-import click
 import peewee as pw
 
+from .. import db
+from ..common.util import start_alpenhorn
 from ..db import (
     ArchiveAcq,
     ArchiveFile,
@@ -15,17 +16,74 @@ from ..db import (
     StorageNode,
     StorageTransferAction,
 )
-from alpenhorn import config, db, extensions, util
 
 from . import acq, group, node, transport
-from .connect_db import config_connect
 
 log = logging.getLogger(__name__)
 
 
+def _verbosity_from_cli(verbose: int, debug: int, quiet: int) -> int:
+    """Get client verbosity from command line.
+
+    Processes the --verbose, --debug and --quiet flags to determine
+    the requested verbosity."""
+
+    if quiet and verbose:
+        raise click.UsageError("Cannot use both --quiet and --verbose.")
+    if quiet and debug:
+        raise click.UsageError("Cannot use both --quiet and --debug.")
+
+    # Default verbosity is 3.  --quiet decreases it.  --verbose increases it.
+
+    # Max verbosity
+    if debug or verbose > 2:
+        return 5
+    # Min verbosity
+    if quiet > 2:
+        return 1
+
+    return 3 + verbose - quiet
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
-def cli():
+@click.option(
+    "--conf",
+    "-c",
+    type=click.Path(exists=True),
+    help="Configuration file to read.",
+    default=None,
+    metavar="FILE",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    help="Decrease verbosity.  May be specified mulitple times: "
+    "once suppresses normal client output, leaving only warning "
+    "and error message.  A second use also suppresses warnings.",
+    count=True,
+)
+@click.option(
+    "--verbose",
+    "-v",
+    help="Increase verbosity.  May be specified mulitple times: "
+    "once enables informational messages.  A second use also "
+    "enables debugging messages.",
+    count=True,
+)
+@click.option(
+    "--debug",
+    help="Maximum verbosity.",
+    is_flag=True,
+    show_default=False,
+    default=False,
+)
+def cli(conf, quiet, verbose, debug):
     """Client interface for alpenhorn."""
+
+    # Initialise alpenhorn
+    start_alpenhorn(
+        conf, client=True, verbosity=_verbosity_from_cli(verbose, debug, quiet)
+    )
 
 
 @cli.command()
@@ -35,11 +93,6 @@ def init():
     Creates the database tables required for alpenhorn and any extensions
     specified in its configuration.
     """
-
-    # Load the configuration and initialise the database connection
-    config.load_config()
-    extensions.load_extensions()
-    db.config_connect()
 
     # Create any alpenhorn core tables
     core_tables = [
@@ -53,9 +106,6 @@ def init():
     ]
 
     db.database_proxy.create_tables(core_tables, safe=True)
-
-    # Register the acq/file type extensions
-    extensions.register_type_extensions()
 
     # TODO Create any tables registered by extensions
 
@@ -93,8 +143,6 @@ def sync(
     useful for transferring data to a staging location before going to a final
     archive (e.g. HPSS, transport disks).
     """
-
-    config_connect()
 
     try:
         from_node = StorageNode.get(name=node_name)
@@ -280,8 +328,6 @@ def status(all):
     """Summarise the status of alpenhorn storage nodes."""
 
     import tabulate
-
-    config_connect()
 
     # Data to fetch from the database (node name, total files, total size)
     query_info = (
