@@ -36,7 +36,15 @@ alpenhorn = "alpenhorn.client:cli"
 alpenhornd = "alpenhorn.server:cli"
 
 [tool.setuptools]
-packages = ["alpenhorn"]
+packages = [
+  "alpenhorn",
+  "alpenhorn.client",
+  "alpenhorn.common",
+  "alpenhorn.db",
+  "alpenhorn.io",
+  "alpenhorn.scheduler",
+  "alpenhorn.server"
+]
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.rst"], content-type = "text/x-rst"}
