@@ -36,19 +36,12 @@ from alpenhorn.server.service import cli
 sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))
 import pattern_importer
 
-# database URI for a shared in-memory database
-DB_URI = "file:e2edb?mode=memory&cache=shared"
-
 
 @pytest.fixture
-def e2e_db(xfs, hostname):
+def e2e_db(xfs, clidb_noinit, hostname):
     """Create and populate the DB for the end-to-end test."""
 
-    # Open
-    db = pw.SqliteDatabase(DB_URI, uri=True)
-    assert db is not None
-    database_proxy.initialize(db)
-    EnumField.native = False
+    db = clidb_noinit
 
     # Create tables
     db.create_tables(
@@ -288,7 +281,7 @@ def mock_rsync(xfs):
 
 
 @pytest.fixture
-def e2e_config(xfs, hostname):
+def e2e_config(xfs, hostname, clidb_uri):
     """Fixture creating the config file for the end-to-end test."""
 
     # The config.
@@ -303,7 +296,7 @@ def e2e_config(xfs, hostname):
         "extensions": [
             "pattern_importer",
         ],
-        "database": {"url": "sqlite:///?database=" + urlquote(DB_URI) + "&uri=true"},
+        "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
         "logging": {"level": "debug"},
         "service": {"num_workers": 0},
     }
