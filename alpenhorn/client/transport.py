@@ -10,7 +10,6 @@ import peewee as pw
 from ..db import StorageGroup, StorageNode
 
 from . import node
-from .connect_db import config_connect
 
 # A few utility routines for dealing with filesystems
 MAX_E2LABEL_LEN = 16

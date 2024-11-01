@@ -5,7 +5,8 @@ import click
 import logging
 
 from .. import db
-from ..common import config, extensions, logger
+from ..common import config
+from ..common.util import start_alpenhorn
 from ..scheduler import FairMultiFIFOQueue, pool
 from . import auto_import, update
 
@@ -23,20 +24,19 @@ sys.excepthook = log_exception
 
 
 @click.command()
-def cli():
+@click.option(
+    "--conf",
+    "-c",
+    type=click.Path(exists=True),
+    help="Configuration file to read.",
+    default=None,
+    metavar="FILE",
+)
+def cli(conf):
     """Alpenhorn data management service."""
 
-    # Initialise logging
-    logger.init_logging()
-
-    # Load the configuration for alpenhorn
-    config.load_config()
-
-    # Set up logging based on config
-    logger.configure_logging()
-
-    # Load alpenhorn extensions
-    extensions.load_extensions()
+    # Initialise alpenhorn
+    start_alpenhorn(conf, client=False)
 
     # Connect to the database
     db.connect()

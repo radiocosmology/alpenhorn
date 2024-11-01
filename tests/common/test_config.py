@@ -16,7 +16,7 @@ def test_no_config():
     # Check that alpenhorn fails if it has no appropriate configuration
 
     with pytest.raises(RuntimeError) as excinfo:
-        config.load_config()
+        config.load_config(None, False)
 
     assert "No configuration" in str(excinfo.value)
 
@@ -26,7 +26,7 @@ def test_config_env(fs, monkeypatch):
     fs.create_file("/test/from/env/test.yaml", contents="hello: test\n")
 
     monkeypatch.setenv("ALPENHORN_CONFIG_FILE", "/test/from/env/test.yaml")
-    config.load_config()
+    config.load_config(None, False)
     assert config.config == merge_dict(config._default_config, {"hello": "test"})
 
 
@@ -34,25 +34,25 @@ def test_precendence(fs, monkeypatch):
     # Test the precedence of configuration imported from files is correct
 
     fs.create_file("/etc/alpenhorn/alpenhorn.conf", contents="hello: test\n")
-    config.load_config()
+    config.load_config(None, False)
     assert config.config == merge_dict(config._default_config, {"hello": "test"})
 
     fs.create_file("/etc/xdg/alpenhorn/alpenhorn.conf", contents="hello: test2\n")
-    config.load_config()
+    config.load_config(None, False)
     assert config.config == merge_dict(config._default_config, {"hello": "test2"})
 
     fs.create_file(
         os.path.expanduser("~/.config/alpenhorn/alpenhorn.conf"),
         contents="hello: test3\nmeh: embiggens",
     )
-    config.load_config()
+    config.load_config(None, False)
     assert config.config == merge_dict(
         config._default_config, {"hello": "test3", "meh": "embiggens"}
     )
 
     fs.create_file("/test/from/env/test.yaml", contents="hello: test4\n")
     monkeypatch.setenv("ALPENHORN_CONFIG_FILE", "/test/from/env/test.yaml")
-    config.load_config()
+    config.load_config(None, False)
     assert config.config == merge_dict(
         config._default_config, {"hello": "test4", "meh": "embiggens"}
     )

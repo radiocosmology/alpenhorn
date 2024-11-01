@@ -1,23 +1,45 @@
 """Set up logging for alpenhorn.
 
-This module provides two important functions:
+Basic Configruation
+-------------------
 
-* `init_logging()` should be called as soon as possible after program start
-    to turn on logging to standard error.  Any log messages produced before
-    this call are discarded.
+Both client and server should call the `init_logging()` function as soon as
+possible after program start to turn on logging to standard error.  Any log
+messages produced before this call are discarded.
 
-* `configure_logging()` should be called immediately after the alpenhorn
-    config has been loaded.  It will re-configure the alpenhorn logger
-    based on the alpenhorn configuration, including starting file or syslog-
-    based logging, if requested.
 
-alpenhorn buffers log messages emitted between these two calls and will flush
-them to any additonal log destinations started by `configure_logging` so that
-these messages are not lost.  (This is in addiiton to the messages being sent
-immediately to standard error, which always happens.)
+Server Logging
+--------------
+
+The server should immediately follow the loading of the alpenhorn config
+with a call to `configure_logging()` which will re-configure the alpenhorn
+logger based on the alpenhorn configuration, including starting file or syslog-
+based logging, if requested.  The client should not call this function.
+
+The alpenhorn server buffers log messages emitted between the `init_logging`
+and `configure_logging` calls and will flush them to any additonal log
+destinations started by `configure_logging` so that these messages are not lost.
+(This is in addiiton to the messages being sent immediately to standard error,
+which always happens.)
 
 Note also that between the two calls, the log level of the root logger is
 set to DEBUG.
+
+
+Client Logging
+--------------
+
+The client does not support file or syslog logging, so should _not_ call
+`configure_logging`.  Instead, the client supports five verbosity levels:
+
+    1.  No output on standard out.  Error messages on standard error.
+    2.  No output on standard out.  Warning and error on standard error.
+    3.  Client ouput on standard out.  Warning and error messages on standard error.
+    4.  Client ouput on standard out.  Info, warning, errors on standard error.
+    5.  Client ouput on standard out.  Debug, info, warning, errors on standard error.
+
+The initial verbosity can be specified in the `init_logging` call.  The
+default verbosity is 3.   May be changed at runtime by calling `set_verbosity`.
 """
 
 import socket
@@ -34,14 +56,21 @@ try:
 except ImportError:
     RotatingFileHandler = logging.handlers.RotatingFileHandler
 
-# The log format.  Used by the stderr log and any other log destinations
-log_fmt = logging.Formatter(
+# The log formats.  Used by the stderr log and any other log destinations
+client_fmt = logging.Formatter(
+    "%(levelname)s >> %(message)s",
+    "%b %d %H:%M:%S",
+)
+server_fmt = logging.Formatter(
     "%(asctime)s %(levelname)s >> [%(threadName)s] %(message)s",
     "%b %d %H:%M:%S",
 )
 
-# initialised by init_logging
+# initialised by init_logging; server-only
 log_buffer = None
+
+# Client output suppression.
+_client_echo = True
 
 
 class StartupHandler(logging.handlers.BufferingHandler):
@@ -103,32 +132,83 @@ class StartupHandler(logging.handlers.BufferingHandler):
             self.release()
 
 
-def init_logging() -> None:
+def echo(*args, **kwargs) -> None:
+    """Client wrapper for click.echo.
+
+    Suppresses output when verbosity is less than three.
+    """
+    if client_echo:
+        return click.echo(*args, **kwargs)
+
+
+def set_verbosity(verbosity: int) -> None:
+    """Set client verbosity.
+
+    Sets the log level of the root logger based on the
+    requested verbosity level.
+    """
+
+    # Levels 2 and 3 are the same.
+    verbosity_to_level = {
+        1: logging.ERROR,
+        2: logging.WARNING,
+        3: logging.WARNING,
+        4: logging.INFO,
+        5: logging.DEBUG,
+    }
+
+    if verbosity not in verbosity_to_level:
+        raise ValueError(f"Bad verbosity: {verbosity}")
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(verbosity_to_level[verbosity])
+
+    # Suppress normal client output at low verbosity
+    global _client_echo
+    _client_echo = verbosity >= 3
+
+
+def init_logging(client: bool, verbosity: int | None = None) -> None:
     """Initialise the logger.
 
     This function is called before the config is read.  It sets up logging to
     standard error and also starts a log buffer where messages accumulate
     before the logging facilities defined by the configuration are started.
+
+    Parameters
+    ----------
+    client : bool
+        Is the alpenhorn client being initialised?
+    verbosity : int
+        For clients, the verbosity level to use.  Ignored for servers.
     """
 
     # This is the stderr logger.  It is always present, regardless of logging config
     log_stream = logging.StreamHandler()
-    log_stream.setFormatter(log_fmt)
-
-    # This is the start-up logger.  It buffers messages in memory until configure_logging()
-    # is called, at which point the buffered messages are flushed to a file, if one was
-    # opened, so that messages logged before the start of file logging are recorded,
-    # and then this handler is shut down.
-    global log_buffer
-    log_buffer = StartupHandler(10000)
+    log_stream.setFormatter(client_fmt if client else server_fmt)
 
     # Set up initial logging
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
-    root_logger.addHandler(log_buffer)
     root_logger.addHandler(log_stream)
 
-    root_logger.info("Alpenhorn start.")
+    if client:
+        if verbosity is None:
+            verbosity = 3
+        set_verbosity(verbosity)
+    else:
+        root_logger.setLevel(logging.DEBUG)
+
+        # This is the start-up logger for the server.  It buffers messages in memory
+        # until configure_logging() is called, at which point the buffered messages
+        # are flushed to a file, if one was opened, so that messages logged before
+        # the start of file logging are recorded, and then this handler is shut down.
+        global log_buffer
+        log_buffer = StartupHandler(10000)
+
+        root_logger.addHandler(log_buffer)
+
+        # Record server start
+        root_logger.info("Alpenhorn start.")
 
 
 def _max_bytes_from_config(max_bytes: str | float | int) -> int:
@@ -223,8 +303,8 @@ def configure_sys_logging(syslog_config: dict) -> logging.handlers.SysLogHandler
     )
 
     # Format handler
-    global log_fmt
-    handler.setFormatter(log_fmt)
+    global server_fmt
+    handler.setFormatter(server_fmt)
 
     # Log the start of syslogging to the alpenhorn logger.
     # We do this _before_ adding the file handler to prevent
@@ -308,8 +388,8 @@ def configure_file_logging(file_config: dict) -> logging.Handler:
         how = ""
 
     # Format handler
-    global log_fmt
-    handler.setFormatter(log_fmt)
+    global server_fmt
+    handler.setFormatter(server_fmt)
 
     # Log the start of file logging to the alpenhorn logger.
     # We do this _before_ adding the file handler to prevent
