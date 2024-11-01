@@ -6,7 +6,7 @@ import logging
 
 from .. import db
 from ..common import config
-from ..common.util import start_alpenhorn
+from ..common.util import start_alpenhorn, version_option
 from ..scheduler import FairMultiFIFOQueue, pool
 from . import auto_import, update
 
@@ -32,6 +32,7 @@ sys.excepthook = log_exception
     default=None,
     metavar="FILE",
 )
+@version_option
 def cli(conf):
     """Alpenhorn data management service."""
 

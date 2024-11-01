@@ -6,7 +6,7 @@ import logging
 import peewee as pw
 
 from .. import db
-from ..common.util import start_alpenhorn
+from ..common.util import start_alpenhorn, version_option
 from ..db import (
     ArchiveAcq,
     ArchiveFile,
@@ -46,6 +46,7 @@ def _verbosity_from_cli(verbose: int, debug: int, quiet: int) -> int:
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@version_option
 @click.option(
     "--conf",
     "-c",
