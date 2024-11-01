@@ -35,8 +35,8 @@ test = [
 alpenhorn = "alpenhorn.client:cli"
 alpenhornd = "alpenhorn.server:cli"
 
-[tool.setuptools]
-packages = ["alpenhorn"]
+[tool.setuptools.packages]
+find = {}
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.rst"], content-type = "text/x-rst"}
