@@ -19,7 +19,13 @@ def client_option(option: str, **extra_kwargs):
     """
 
     # Set args for the click.option decorator
-    if option == "io_class":
+    if option == "group":
+        args = ("--group",)
+        kwargs = {
+            "metavar": "GROUP",
+            "help": "Limit to files in Storage Group named GROUP.",
+        }
+    elif option == "io_class":
         args = (
             "io_class",
             "-i",
@@ -49,6 +55,12 @@ def client_option(option: str, **extra_kwargs):
             "multiple times.  Modifies any config specified by --io-config.  If VALUE "
             "is empty (--io-var VAR=), VAR is deleted if present.",
         }
+    elif option == "node":
+        args = ("--node",)
+        kwargs = {
+            "metavar": "NODE",
+            "help": "Limit to files on Storage Node named NODE.",
+        }
     elif option == "notes":
         args = ("--notes",)
         kwargs = {"metavar": "COMMENT", "help": "Set notes to COMMENT."}
@@ -64,6 +76,15 @@ def client_option(option: str, **extra_kwargs):
         return click.option(*args, **kwargs)(func)
 
     return _decorator
+
+
+def not_both(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> None:
+    """Check whether two incompatible options were used.
+
+    If they were, raise click.UsageError."""
+
+    if opt1_set and opt2_set:
+        raise click.UsageError(f"cannot use both --{opt1_name} and --{opt2_name}")
 
 
 def set_io_config(

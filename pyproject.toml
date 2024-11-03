@@ -40,3 +40,6 @@ find = {}
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.rst"], content-type = "text/x-rst"}
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
