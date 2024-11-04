@@ -49,7 +49,7 @@ class ArchiveFile(base_model):
     md5sum = pw.CharField(null=True, max_length=32)
     # Note: default here is the now method itself (i.e. "now", not "now()").
     #       Will be evaulated by peewee at row-creation time.
-    registered = pw.DateTimeField(default=datetime.datetime.utcnow)
+    registered = pw.DateTimeField(default=pw.utcnow)
 
     class Meta:
         # (acq,name) is unique

@@ -8,7 +8,6 @@ import time
 import errno
 import pathlib
 import peewee as pw
-from datetime import datetime
 from tempfile import TemporaryDirectory
 
 from .. import db
@@ -17,6 +16,8 @@ from ..db import (
     ArchiveFileCopyRequest,
     StorageNode,
     StorageTransferAction,
+    utcfromtimestamp,
+    utcnow,
 )
 from ..scheduler import threadlocal
 from ..common import config, util
@@ -369,7 +370,7 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
         StorageTransferAction.autoclean == True,  # noqa: E712
     ):
         count = (
-            ArchiveFileCopy.update(wants_file="N", last_update=datetime.utcnow())
+            ArchiveFileCopy.update(wants_file="N", last_update=utcnow())
             .where(
                 ArchiveFileCopy.file == file_,
                 ArchiveFileCopy.node == edge.node_from,
@@ -427,7 +428,7 @@ def copy_request_done(
         if check_src:
             # If the copy didn't work, then the remote file may be corrupted.
             log.error(f"Copy failed: {stderr};  Marking source file suspect.")
-            ArchiveFileCopy.update(has_file="M", last_update=datetime.utcnow()).where(
+            ArchiveFileCopy.update(has_file="M", last_update=utcnow()).where(
                 ArchiveFileCopy.file == req.file,
                 ArchiveFileCopy.node == req.node_from,
             ).execute()
@@ -448,7 +449,7 @@ def copy_request_done(
             f"MD5 mismatch on node {io.node.name}; "
             f"Marking source file {req.file.name} on node {req.node_from} suspect."
         )
-        ArchiveFileCopy.update(has_file="M", last_update=datetime.utcnow()).where(
+        ArchiveFileCopy.update(has_file="M", last_update=utcnow()).where(
             ArchiveFileCopy.file == req.file,
             ArchiveFileCopy.node == req.node_from,
         ).execute()
@@ -474,7 +475,7 @@ def copy_request_done(
                 wants_file="Y",
                 ready=True,
                 size_b=size,
-                last_update=datetime.utcnow(),
+                last_update=utcnow(),
             ).execute()
         except pw.IntegrityError:
             ArchiveFileCopy.update(
@@ -482,7 +483,7 @@ def copy_request_done(
                 wants_file="Y",
                 ready=True,
                 size_b=size,
-                last_update=datetime.utcnow(),
+                last_update=utcnow(),
             ).where(
                 ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == io.node
             ).execute()
@@ -490,8 +491,8 @@ def copy_request_done(
         # Mark AFCR as completed
         ArchiveFileCopyRequest.update(
             completed=True,
-            transfer_started=datetime.utcfromtimestamp(start_time),
-            transfer_completed=datetime.utcfromtimestamp(end_time),
+            transfer_started=utcfromtimestamp(start_time),
+            transfer_completed=utcfromtimestamp(end_time),
         ).where(ArchiveFileCopyRequest.id == req.id).execute()
 
     # Run post-add actions, if any

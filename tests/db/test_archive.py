@@ -79,11 +79,9 @@ def test_archivefilecopyrequest_model(
     """Test ArchiveFileCopyRequest model"""
     minnode = storagenode(name="min", group=simplegroup)
     maxnode = storagenode(name="max", group=simplegroup)
-    before = (datetime.datetime.utcnow() - datetime.timedelta(seconds=1)).replace(
-        microsecond=0
-    )
+    before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
     archivefilecopyrequest(file=simplefile, node_from=minnode, group_to=simplegroup)
-    after = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+    after = pw.utcnow() + datetime.timedelta(seconds=1)
     archivefilecopyrequest(
         file=simplefile,
         node_from=maxnode,

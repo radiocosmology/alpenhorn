@@ -5,6 +5,7 @@ import pytest
 import datetime
 from unittest.mock import patch, MagicMock
 
+from alpenhorn.db import utcfromtimestamp, utcnow
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io.ioutil import copy_request_done
 from alpenhorn.server.update import UpdateableNode
@@ -173,7 +174,7 @@ def test_md5ok_true(db_setup):
 
     io, copy, req, start_time, post_add = db_setup
 
-    before = datetime.datetime.utcnow() - datetime.timedelta(seconds=2)
+    before = utcnow() - datetime.timedelta(seconds=2)
     assert (
         copy_request_done(
             req,
@@ -184,13 +185,13 @@ def test_md5ok_true(db_setup):
         )
         is True
     )
-    after = datetime.datetime.utcnow()
+    after = utcnow()
 
     # request is resolved
     afcr = ArchiveFileCopyRequest.get(id=req.id)
     assert afcr.completed
     assert not afcr.cancelled
-    assert afcr.transfer_started == datetime.datetime.utcfromtimestamp(start_time)
+    assert afcr.transfer_started == utcfromtimestamp(start_time)
     assert afcr.transfer_completed >= before
     assert afcr.transfer_completed <= after
 

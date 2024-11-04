@@ -19,10 +19,9 @@ import time
 import logging
 import pathlib
 import peewee as pw
-from datetime import datetime
 
 from ..common.util import pretty_bytes, pretty_deltat
-from ..db import ArchiveFileCopy
+from ..db import ArchiveFileCopy, utcnow
 from ..scheduler import Task
 from ..server.querywalker import QueryWalker
 from .base import BaseNodeRemote
@@ -249,9 +248,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 )
                 lfs.hsm_release(copy.path)
                 # Update copy record immediately
-                ArchiveFileCopy.update(
-                    ready=False, last_update=datetime.utcnow()
-                ).where(ArchiveFileCopy.id == copy.id).execute()
+                ArchiveFileCopy.update(ready=False, last_update=utcnow()).where(
+                    ArchiveFileCopy.id == copy.id
+                ).execute()
                 total_files += 1
                 total_bytes += copy.file.size_b
                 if total_bytes >= headroom_needed:
@@ -337,20 +336,20 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                         f"File copy {copy.file.path} on node {node.name} is missing!"
                     )
                     ArchiveFileCopy.update(
-                        has_file="N", ready=False, last_update=datetime.utcnow()
+                        has_file="N", ready=False, last_update=utcnow()
                     ).where(ArchiveFileCopy.id == copy.id).execute()
                 elif state == lfs.HSM_RELEASED:
                     if copy.ready:
                         log.info(f"Updating file copy {copy.file.path}: ready -> False")
-                        ArchiveFileCopy.update(
-                            ready=False, last_update=datetime.utcnow()
-                        ).where(ArchiveFileCopy.id == copy.id).execute()
+                        ArchiveFileCopy.update(ready=False, last_update=utcnow()).where(
+                            ArchiveFileCopy.id == copy.id
+                        ).execute()
                 else:  # i.e. RESTORED or UNARCHIVED
                     if not copy.ready:
                         log.info(f"Updating file copy {copy.file.path}: ready -> True")
-                        ArchiveFileCopy.update(
-                            ready=True, last_update=datetime.utcnow()
-                        ).where(ArchiveFileCopy.id == copy.id).execute()
+                        ArchiveFileCopy.update(ready=True, last_update=utcnow()).where(
+                            ArchiveFileCopy.id == copy.id
+                        ).execute()
 
         # Copies get checked in an async
         Task(
@@ -405,9 +404,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                         "File copy missing during check: "
                         f"{copy.path}.  Updating database."
                     )
-                    ArchiveFileCopy.update(
-                        has_file="N", last_update=datetime.utcnow()
-                    ).where(ArchiveFileCopy.id == copy.id).execute()
+                    ArchiveFileCopy.update(has_file="N", last_update=utcnow()).where(
+                        ArchiveFileCopy.id == copy.id
+                    ).execute()
                 return
 
             # Trigger restore, if necessary
@@ -572,7 +571,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
             if copy.ready != ready:
                 copy.ready = ready
-                copy.last_update = datetime.utcnow()
+                copy.last_update = utcnow()
                 copy.save()
                 log.info(
                     f"File copy {file_.path} on node {node_io.node.name} now "

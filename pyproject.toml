@@ -17,7 +17,7 @@ license = {file = "LICENSE"}
 dependencies = [
   "Click >= 6.0",
   "concurrent-log-handler",
-  "peewee >= 3.16",
+  "peewee >= 3.17.1",
   "PyYAML",
   "tabulate",
   "watchdog"

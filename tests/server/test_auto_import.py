@@ -107,9 +107,7 @@ def test_import_file_create(xfs, dbtables, unode):
 
     xfs.create_file("/node/simplefile_acq/simplefile")
 
-    before = (datetime.datetime.utcnow() - datetime.timedelta(seconds=1)).replace(
-        microsecond=0
-    )
+    before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
     with patch(
         "alpenhorn.common.extensions._id_ext",
@@ -122,7 +120,7 @@ def test_import_file_create(xfs, dbtables, unode):
                 )
             )
 
-    after = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+    after = pw.utcnow() + datetime.timedelta(seconds=1)
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")
@@ -212,9 +210,7 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
     )
     xfs.create_file("/node/simplefile_acq/simplefile")
 
-    before = (datetime.datetime.utcnow() - datetime.timedelta(seconds=1)).replace(
-        microsecond=0
-    )
+    before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
     with patch(
         "alpenhorn.common.extensions._id_ext",
@@ -227,7 +223,7 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
                 )
             )
 
-    after = datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+    after = pw.utcnow() + datetime.timedelta(seconds=1)
 
     # Check DB
     acq = ArchiveAcq.get(name="simplefile_acq")

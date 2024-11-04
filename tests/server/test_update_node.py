@@ -2,6 +2,7 @@
 
 import pytest
 import datetime
+import peewee as pw
 from unittest.mock import call, patch, MagicMock
 
 from alpenhorn.db.archive import ArchiveFileCopy
@@ -147,7 +148,7 @@ def test_update_free_space(unode):
     unode.db.avail_gb = 3
     unode.db.save()
 
-    now = datetime.datetime.utcnow()
+    now = pw.utcnow()
     # 2 ** 32 bytes is 4 GiB
     with patch.object(unode.io, "bytes_avail", lambda fast: 2**32):
         unode.update_free_space()
@@ -165,7 +166,7 @@ def test_auto_verify(unode, simpleacq, archivefile, archivefilecopy):
     unode.db.auto_verify = 4
 
     # Last Update time to permit auto verification
-    last_update = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+    last_update = pw.utcnow() - datetime.timedelta(days=10)
 
     # Make some files to verify
     copyY = archivefilecopy(
@@ -213,25 +214,25 @@ def test_auto_verify_time(unode, simpleacq, archivefile, archivefilecopy):
         node=unode.db,
         file=archivefile(name="file9", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=9),
+        last_update=pw.utcnow() - datetime.timedelta(days=9),
     )
     copy8 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file8", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=8),
+        last_update=pw.utcnow() - datetime.timedelta(days=8),
     )
     copy6 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file6", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=6),
+        last_update=pw.utcnow() - datetime.timedelta(days=6),
     )
     copy5 = archivefilecopy(
         node=unode.db,
         file=archivefile(name="file5", acq=simpleacq),
         has_file="Y",
-        last_update=datetime.datetime.utcnow() - datetime.timedelta(days=5),
+        last_update=pw.utcnow() - datetime.timedelta(days=5),
     )
 
     unode.run_auto_verify()

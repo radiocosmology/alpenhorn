@@ -8,11 +8,16 @@ import json
 import time
 import logging
 import peewee as pw
-from datetime import datetime
 
 from ..common import config, util
 from ..common.extensions import io_module
-from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode, StorageGroup
+from ..db import (
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    StorageNode,
+    StorageGroup,
+    utcnow,
+)
 from ..scheduler import global_abort, WorkerPool, EmptyPool
 from . import auto_import
 from .querywalker import QueryWalker
@@ -337,7 +342,7 @@ class UpdateableNode(updateable_base):
 
             # Mark file as needing check
             copy.has_file = "M"
-            copy.last_update = datetime.utcnow()
+            copy.last_update = utcnow()
             copy.save()
 
     def update_idle(self) -> None:

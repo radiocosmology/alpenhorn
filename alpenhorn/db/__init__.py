@@ -45,3 +45,7 @@ from ._base import connect, close, database_proxy, threadsafe
 
 # Prototypes
 from ._base import EnumField, base_model
+
+# Naive-UTC stuff courtesy peewee.  These were originally in datetime
+# but were deprecated in 3.12 as too confusing.
+from peewee import utcnow as utcnow, utcfromtimestamp as utcfromtimestamp
