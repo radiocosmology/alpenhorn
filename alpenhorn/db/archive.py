@@ -59,6 +59,27 @@ class ArchiveFileCopy(base_model):
 
         return pathlib.Path(self.node.root, self.file.path)
 
+    @property
+    def state(self) -> str:
+        """A human-readable description of the copy state."""
+
+        if self.wants_file == "N":
+            return "Removed" if self.has_file == "N" else "Pending Removal"
+        if self.wants_file == "M":
+            return "Removed" if self.has_file == "N" else "Removable"
+
+        # Otherwise, wants_file == 'Y'
+        if self.has_file == "Y":
+            return "Present"
+        if self.has_file == "M":
+            return "Needs Check"
+        if self.has_file == "N":
+            # i.e. a third-party deleted it
+            return "Missing"
+
+        # wants_file == 'X' and has_file == 'Y' .. or something completely wrong
+        return "Corrupt"
+
     class Meta:
         indexes = ((("file", "node"), True),)  # (file, node) is unique
 
