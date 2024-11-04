@@ -6,6 +6,7 @@ import logging
 import peewee as pw
 
 from .. import db
+from ..common.logger import echo as echo
 from ..common.util import start_alpenhorn, version_option
 from ..db import (
     ArchiveAcq,

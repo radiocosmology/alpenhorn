@@ -42,6 +42,7 @@ The initial verbosity can be specified in the `init_logging` call.  The
 default verbosity is 3.   May be changed at runtime by calling `set_verbosity`.
 """
 
+import click
 import socket
 import logging
 import pathlib
@@ -137,7 +138,7 @@ def echo(*args, **kwargs) -> None:
 
     Suppresses output when verbosity is less than three.
     """
-    if client_echo:
+    if _client_echo:
         return click.echo(*args, **kwargs)
 
 

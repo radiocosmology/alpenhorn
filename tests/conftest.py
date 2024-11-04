@@ -1,10 +1,14 @@
 """Common fixtures"""
 
 import os
+import sys
+import yaml
 import pytest
 import shutil
 import logging
+import pathlib
 from unittest.mock import patch, MagicMock
+from urllib.parse import quote as urlquote
 
 import alpenhorn.common.logger
 from alpenhorn.common import config, extensions
@@ -64,6 +68,11 @@ def pytest_configure(config):
         "alpenhorn_config(*config_dict): "
         "used to set the alpenhorn.config for testing.  config_dict"
         "is merged with the default config.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "clirunner_args(**kwargs): "
+        "set arguments used to instantiate the click.testing.CliRunner.",
     )
 
 
@@ -575,6 +584,127 @@ def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
     yield mockio, UpdateableGroup(
         queue=queue, group=stgroup, nodes=[node], idle=True
     ), node
+
+
+@pytest.fixture
+def client(request, xfs, cli_config):
+    """Set up client tests using click
+
+    Yields a wrapper around click.testing.CliRunner().invoke.
+    The first parameter passed to the wrapper should be
+    the expected exit code.  Other parameters are passed
+    to CliRunner.invoke (including the list of command
+    line parameters).
+
+    The wrapper performs rudimentary checks on the result,
+    then returns the click.result so the caller can inspect
+    the result further, if desired.
+    """
+
+    from click.testing import CliRunner
+
+    marker = request.node.get_closest_marker("clirunner_args")
+    if marker is not None:
+        kwargs = marker.kwargs
+    else:
+        kwargs = {}
+
+    runner = CliRunner(**kwargs)
+
+    def _cli_wrapper(expected_result, *args, **kwargs):
+        nonlocal runner
+
+        import traceback
+        from alpenhorn.client import cli
+
+        result = runner.invoke(cli, *args, **kwargs)
+
+        # Show traceback if one was created
+        if (
+            result.exit_code
+            and result.exc_info
+            and type(result.exception) is not SystemExit
+        ):
+            traceback.print_exception(*result.exc_info)
+
+        # Print output so it appears in the test log on failure
+        print(result.output)
+
+        assert result.exit_code == expected_result
+        if expected_result:
+            assert type(result.exception) is SystemExit
+        else:
+            assert result.exception is None
+
+        return result
+
+    yield _cli_wrapper
+
+
+@pytest.fixture
+def clidb_uri():
+    """Returns database URI for a shared in-memory database."""
+    return "file:clidb?mode=memory&cache=shared"
+
+
+@pytest.fixture
+def clidb(clidb_noinit):
+    """Initiliase a peewee connector to the CLI DB and create tables.
+
+    Yields the connector."""
+
+    clidb_noinit.create_tables(
+        [
+            StorageGroup,
+            StorageNode,
+            StorageTransferAction,
+            ArchiveAcq,
+            ArchiveFile,
+            ArchiveFileCopy,
+            ArchiveFileCopyRequest,
+        ]
+    )
+
+    yield clidb_noinit
+
+
+@pytest.fixture
+def clidb_noinit(clidb_uri):
+    """Initialise a peewee connector to the empty CLI DB.
+
+    Yields the connector."""
+
+    import peewee as pw
+    from alpenhorn.db import database_proxy, EnumField
+
+    # Open
+    db = pw.SqliteDatabase(clidb_uri, uri=True)
+    assert db is not None
+    database_proxy.initialize(db)
+    EnumField.native = False
+
+    yield db
+
+    db.close()
+
+
+@pytest.fixture
+def cli_config(xfs, clidb_uri):
+    """Fixture creating the config file for CLI tests."""
+
+    # The config.
+    #
+    # The weird value for "url" here gets around playhouse.db_url not
+    # url-decoding the netloc of the supplied URL.  The netloc is used
+    # as the "database" value, so to get the URI in there, we need to pass
+    # it as a parameter, which WILL get urldecoded and supercede the empty
+    # netloc.
+    config = {
+        "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
+    }
+
+    # Put it in a file
+    xfs.create_file("/etc/alpenhorn/alpenhorn.conf", contents=yaml.dump(config))
 
 
 # Data table fixtures.  Each of these will add a row with the specified
