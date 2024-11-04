@@ -6,12 +6,11 @@ from typing import TYPE_CHECKING
 import logging
 import pathlib
 import peewee as pw
-from datetime import datetime
 from watchdog.events import FileSystemEventHandler
 
 from .. import db
 from ..common import config, extensions
-from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, utcnow
 from ..io import ioutil
 from ..scheduler import Task
 
@@ -163,7 +162,7 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
             copy.has_file = "M"
             copy.wants_file = "Y"
             copy.ready = True
-            copy.last_update = datetime.utcnow()
+            copy.last_update = utcnow()
             copy.save()
             log.warning(
                 f'Imported file "{path}" formerly present on node {node.name}!  Marking suspect.'
@@ -177,7 +176,7 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
                 wants_file="Y",
                 ready=True,
                 size_b=node.io.filesize(path, actual=True),
-                last_update=datetime.utcnow(),
+                last_update=utcnow(),
             )
             log.info(f'Registered file copy "{path}" on node "{node.name}".')
 

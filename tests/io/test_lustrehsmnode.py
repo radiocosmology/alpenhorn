@@ -1,7 +1,7 @@
 """Test LustreHSMNodeIO."""
 
 import pytest
-import datetime
+import peewee as pw
 from unittest.mock import patch, MagicMock
 
 from alpenhorn.db.archive import ArchiveFileCopy
@@ -94,7 +94,7 @@ def test_release_files(queue, mock_lfs, node):
 
     node.io.release_files()
 
-    before = datetime.datetime.utcnow().replace(microsecond=0)
+    before = pw.utcnow().replace(microsecond=0)
 
     # Job in queue
     assert queue.qsize == 1
@@ -368,7 +368,7 @@ def test_ready_path(mock_lfs, node):
 def test_ready_pull_restored(mock_lfs, node, queue, archivefilecopyrequest):
     """Test LustreHSMNodeIO.ready_pull on a restored file that isn't ready."""
 
-    before = datetime.datetime.utcnow().replace(microsecond=0)
+    before = pw.utcnow().replace(microsecond=0)
 
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
@@ -464,7 +464,7 @@ def test_idle_update_empty(queue, mock_lfs, node):
 def test_idle_update_ready(xfs, queue, mock_lfs, node):
     """Test LustreHSMNodeIO.idle_update with copies ready"""
 
-    before = datetime.datetime.utcnow().replace(microsecond=0)
+    before = pw.utcnow().replace(microsecond=0)
 
     node.io.idle_update(False)
 
@@ -504,7 +504,7 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
 def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
     """Test LustreHSMNodeIO.idle_update with copies not ready"""
 
-    before = datetime.datetime.utcnow().replace(microsecond=0)
+    before = pw.utcnow().replace(microsecond=0)
 
     # Update all copies
     ArchiveFileCopy.update(ready=False).execute()

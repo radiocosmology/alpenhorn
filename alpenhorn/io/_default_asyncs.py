@@ -8,10 +8,9 @@ import errno
 import shutil
 import logging
 import pathlib
-from datetime import datetime
 
 from . import ioutil
-from ..db import ArchiveFileCopy, ArchiveFileCopyRequest
+from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
 from ..server.update import RemoteNode
 
 if TYPE_CHECKING:
@@ -224,7 +223,7 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     log.info(
         f"Updating file copy #{copy.id} for file {copyname} on node {io.node.name}."
     )
-    copy.last_update = datetime.utcnow()
+    copy.last_update = utcnow()
     copy.save()
 
 
@@ -288,7 +287,7 @@ def delete_async(
 
         # Update the DB
         ArchiveFileCopy.update(
-            has_file="N", wants_file="N", last_update=datetime.utcnow()
+            has_file="N", wants_file="N", last_update=utcnow()
         ).where(ArchiveFileCopy.id == copy.id).execute()
 
 
@@ -341,7 +340,7 @@ def group_search_async(
                 has_file="M",
                 wants_file="Y",
                 ready=False,
-                last_update=datetime.utcnow(),
+                last_update=utcnow(),
             )
             .where(
                 ArchiveFileCopy.file == req.file,

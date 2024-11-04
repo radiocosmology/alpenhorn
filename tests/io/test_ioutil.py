@@ -345,7 +345,7 @@ def test_autoclean(
 ):
     """Test post_add running autoclean."""
 
-    before = datetime.datetime.utcnow() - datetime.timedelta(seconds=2)
+    before = pw.utcnow() - datetime.timedelta(seconds=2)
 
     destnode = storagenode(name="dest", group=simplegroup)
 
@@ -370,7 +370,7 @@ def test_autoclean_state(
 ):
     """post_add autoclean only deletes copies with has_file=='Y'."""
 
-    then = datetime.datetime.utcnow() - datetime.timedelta(seconds=200)
+    then = pw.utcnow() - datetime.timedelta(seconds=200)
 
     srcnode = storagenode(name="src", group=simplegroup)
     storagetransferaction(node_from=srcnode, group_to=simplenode.group, autoclean=True)

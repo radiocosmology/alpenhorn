@@ -367,7 +367,7 @@ class StorageNode(base_model):
             self.avail_gb = None
         else:
             self.avail_gb = new_avail / 2**30
-        self.avail_gb_last_checked = datetime.datetime.utcnow()
+        self.avail_gb_last_checked = pw.utcnow()
 
         # Update the DB with the free space but don't clobber changes made
         # manually to the database

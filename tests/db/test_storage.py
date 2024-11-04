@@ -2,7 +2,6 @@
 
 import pytest
 import pathlib
-import datetime
 import peewee as pw
 
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
@@ -355,11 +354,11 @@ def test_update_avail_gb(simplenode):
     assert simplenode.avail_gb is None
 
     # Test a number
-    before = datetime.datetime.utcnow()
+    before = pw.utcnow()
     simplenode.update_avail_gb(10000)
     # Now the value is set
     node = StorageNode.get(id=simplenode.id)
-    after = datetime.datetime.utcnow()
+    after = pw.utcnow()
 
     assert node.avail_gb == 10000.0 / 2.0**30
     assert node.avail_gb_last_checked >= before

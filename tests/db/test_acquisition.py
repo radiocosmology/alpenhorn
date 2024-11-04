@@ -2,7 +2,6 @@
 
 import pytest
 import pathlib
-import datetime
 import peewee as pw
 
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
@@ -39,9 +38,9 @@ def test_acq_model(archiveacq):
 
 def test_file_model(archiveacq, archivefile):
     acq1 = archiveacq(name="acq1")
-    before = datetime.datetime.utcnow().replace(microsecond=0)
+    before = pw.utcnow().replace(microsecond=0)
     archivefile(name="min", acq=acq1)
-    after = datetime.datetime.utcnow()
+    after = pw.utcnow()
     archivefile(
         name="max",
         acq=acq1,
