@@ -1,13 +1,13 @@
-"""Alpenhorn client interface."""
+"""Alpenhorn client command-line interface."""
+
+from __future__ import annotations
 
 import click
 import datetime
-import logging
 import peewee as pw
 
 from .. import db
 from ..common.logger import echo as echo
-from ..common.util import start_alpenhorn, version_option
 from ..db import (
     ArchiveAcq,
     ArchiveFile,
@@ -18,77 +18,57 @@ from ..db import (
     StorageTransferAction,
 )
 
-from . import acq, group, node, transport
 
-log = logging.getLogger(__name__)
+def update_or_remove(field: str, new: str | None, old: str | None) -> dict:
+    """Helper for metadata updates.
 
+    A helper function to determine whether a field needs updating.
+    Only works on string fields.  (Numeric fields need some other
+    mechanism to let the user specify None/null when necessary.)
 
-def _verbosity_from_cli(verbose: int, debug: int, quiet: int) -> int:
-    """Get client verbosity from command line.
+    Parameters:
+    -----------
+    field:
+        Name of the field to update
+    new:
+        The new value of the field, maybe.  From the user.  If this
+        is None, there is no update.  If this is the empty string,
+        the field should be set to None/null if not that already.
+    old:
+        The current value of the field, which might be None/null.
+        From the database.
 
-    Processes the --verbose, --debug and --quiet flags to determine
-    the requested verbosity."""
+    Returns
+    -------
+    result :  dict
+        Has at most one key, `field`, which is present only
+        if this function determines an update is required.  It should
+        be merged with the dict of updates by the caller.
+    """
 
-    if quiet and verbose:
-        raise click.UsageError("Cannot use both --quiet and --verbose.")
-    if quiet and debug:
-        raise click.UsageError("Cannot use both --quiet and --debug.")
+    # This implies the user didn't specify anything for this field
+    if new is None:
+        return {}
 
-    # Default verbosity is 3.  --quiet decreases it.  --verbose increases it.
+    # Check for empty string, which means: set to None
+    if new == "":
+        if old is not None:
+            return {field: None}
+        return {}
 
-    # Max verbosity
-    if debug or verbose > 2:
-        return 5
-    # Min verbosity
-    if quiet > 2:
-        return 1
+    # Otherwise, new is an actual value. Set it, if different than old
+    if new != old:
+        return {field: new}
 
-    return 3 + verbose - quiet
-
-
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
-@version_option
-@click.option(
-    "--conf",
-    "-c",
-    type=click.Path(exists=True),
-    help="Configuration file to read.",
-    default=None,
-    metavar="FILE",
-)
-@click.option(
-    "--quiet",
-    "-q",
-    help="Decrease verbosity.  May be specified mulitple times: "
-    "once suppresses normal client output, leaving only warning "
-    "and error message.  A second use also suppresses warnings.",
-    count=True,
-)
-@click.option(
-    "--verbose",
-    "-v",
-    help="Increase verbosity.  May be specified mulitple times: "
-    "once enables informational messages.  A second use also "
-    "enables debugging messages.",
-    count=True,
-)
-@click.option(
-    "--debug",
-    help="Maximum verbosity.",
-    is_flag=True,
-    show_default=False,
-    default=False,
-)
-def cli(conf, quiet, verbose, debug):
-    """Client interface for alpenhorn."""
-
-    # Initialise alpenhorn
-    start_alpenhorn(
-        conf, client=True, verbosity=_verbosity_from_cli(verbose, debug, quiet)
-    )
+    # Otherwise, no change.  Return no update.
+    return {}
 
 
-@cli.command()
+# The rest of this file were top-level commands that have been
+# temporarily dummied out while they're re-tooled.
+
+
+# @cli.command()
 def init():
     """Initialise an alpenhorn database.
 
@@ -112,7 +92,7 @@ def init():
     # TODO Create any tables registered by extensions
 
 
-@cli.command()
+# @cli.command()
 @click.argument("node_name", metavar="NODE")
 @click.argument("group_name", metavar="GROUP")
 @click.option(
@@ -320,80 +300,3 @@ def sync(
 
             # Do a bulk insert of these new rows
             ArchiveFileCopyRequest.insert_many(insert).execute()
-
-
-@cli.command()
-@click.option(
-    "--all", help="Show the status of all nodes, not just active ones.", is_flag=True
-)
-def status(all):
-    """Summarise the status of alpenhorn storage nodes."""
-
-    import tabulate
-
-    # Data to fetch from the database (node name, total files, total size)
-    query_info = (
-        StorageNode.name,
-        pw.fn.Count(ArchiveFileCopy.id).alias("count"),
-        pw.fn.Sum(ArchiveFile.size_b).alias("total_size"),
-        StorageNode.host,
-        StorageNode.root,
-    )
-
-    # Per node totals
-    nodes = (
-        StorageNode.select(*query_info)
-        .join(
-            ArchiveFileCopy,
-            pw.JOIN.LEFT_OUTER,
-            on=(
-                (StorageNode.id == ArchiveFileCopy.node_id)
-                & (ArchiveFileCopy.has_file == "Y")
-            ),
-        )
-        .join(
-            ArchiveFile,
-            pw.JOIN.LEFT_OUTER,
-            on=(ArchiveFile.id == ArchiveFileCopy.file_id),
-        )
-        .group_by(StorageNode)
-        .order_by(StorageNode.name)
-    )
-
-    log.info("Nodes: %s (all=%s)" % (nodes.count(), all))
-    if not all:
-        nodes = nodes.where(StorageNode.active)
-
-    log.info("Nodes: %s" % nodes.count())
-
-    # Totals for the whole archive
-    total_count, total_size = ArchiveFile.select(
-        pw.fn.Count(ArchiveFile.id).alias("count"),
-        pw.fn.Sum(ArchiveFile.size_b).alias("total_size"),
-    ).scalar(as_tuple=True)
-
-    # Create table of node stats to present to the user
-    data = []
-    for node in nodes.tuples():
-        node_name, file_count, file_size, node_host, node_root = node
-        pct_count = (100.0 * file_count / total_count) if total_count else None
-        pct_size = (
-            (100.0 * float(file_size / total_size))
-            if total_count and file_size
-            else None
-        )
-        file_size_tb = (float(file_size) / 2**40.0) if file_count else None
-        node_path = "%s:%s" % (node_host, node_root)
-        data.append(
-            [node_name, file_count, file_size_tb, pct_count, pct_size, node_path]
-        )
-
-    headers = ["Node", "Files", "Size [TB]", "Files [%]", "Size [%]", "Path"]
-
-    print(tabulate.tabulate(data, headers=headers, floatfmt=".1f"))
-
-
-cli.add_command(acq.cli, "acq")
-cli.add_command(group.cli, "group")
-cli.add_command(node.cli, "node")
-cli.add_command(transport.cli, "transport")

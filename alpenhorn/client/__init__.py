@@ -1,4 +1,4 @@
 """Alpenhorn client."""
 
-from .cli import cli
+from .entry import cli
 from .. import __version__

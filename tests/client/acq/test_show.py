@@ -1,7 +1,5 @@
 """Test CLI: alpenhorn acq files"""
 
-import re
-
 from alpenhorn.db import (
     StorageGroup,
     StorageNode,
@@ -37,7 +35,7 @@ def test_simple_show(clidb, client):
     assert "579 B" in result.output
 
 
-def test_show_nodes(clidb, client):
+def test_show_nodes(clidb, client, assert_row_present):
     """Test show with --show-nodes."""
 
     group = StorageGroup.create(name="Group")
@@ -56,12 +54,12 @@ def test_show_nodes(clidb, client):
 
     result = client(0, ["acq", "show", "Acq", "--show-nodes"])
 
-    assert re.search(r"Node1\s+2\s+579 B", result.output) is not None
-    assert re.search(r"Node2\s+1\s+456 B", result.output) is not None
+    assert_row_present(result.output, "Node1", 2, "579 B")
+    assert_row_present(result.output, "Node2", 1, "456 B")
     assert "Node3" not in result.output
 
 
-def test_show_groups(clidb, client):
+def test_show_groups(clidb, client, assert_row_present):
     """Test show with --show-groups."""
 
     group = StorageGroup.create(name="Group1")
@@ -85,12 +83,12 @@ def test_show_groups(clidb, client):
 
     result = client(0, ["acq", "show", "Acq", "--show-groups"])
 
-    assert re.search(r"Group1\s+3\s+1.011 kiB", result.output) is not None
-    assert re.search(r"Group2\s+1\s+789 B", result.output) is not None
+    assert_row_present(result.output, "Group1", 3, "1.011 kiB")
+    assert_row_present(result.output, "Group2", 1, "789 B")
     assert "Group3" not in result.output
 
 
-def test_show_groups_nodes(clidb, client):
+def test_show_groups_nodes(clidb, client, assert_row_present):
     """Test show with --show-groups and --show-nodes."""
 
     group = StorageGroup.create(name="Group1")
@@ -115,11 +113,11 @@ def test_show_groups_nodes(clidb, client):
 
     result = client(0, ["acq", "show", "Acq", "--show-groups", "--show-nodes"])
 
-    assert re.search(r"Group1\s+3\s+1.011 kiB", result.output) is not None
-    assert re.search(r"-- Node1\s+2\s+579 B", result.output) is not None
-    assert re.search(r"-- Node2\s+1\s+456 B", result.output) is not None
-    assert re.search(r"Group2\s+1\s+789 B", result.output) is not None
-    assert re.search(r"-- Node3\s+1\s+789 B", result.output) is not None
+    assert_row_present(result.output, "Group1", 3, "1.011 kiB")
+    assert_row_present(result.output, "-- Node1", 2, "579 B")
+    assert_row_present(result.output, "-- Node2", 1, "456 B")
+    assert_row_present(result.output, "Group2", 1, "789 B")
+    assert_row_present(result.output, "-- Node3", 1, "789 B")
     assert "Node4" not in result.output
     assert "Group3" not in result.output
     assert "Node5" not in result.output

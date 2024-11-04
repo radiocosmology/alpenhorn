@@ -1,7 +1,5 @@
 """Test CLI: alpenhorn acq files"""
 
-import re
-
 from alpenhorn.db import (
     StorageGroup,
     StorageNode,
@@ -34,7 +32,7 @@ def test_no_files(clidb, client):
     assert "Name" not in result.output
 
 
-def test_list(clidb, client):
+def test_list(clidb, client, assert_row_present):
     """Test with no constraints."""
 
     acq = ArchiveAcq.create(name="Acq1")
@@ -52,21 +50,17 @@ def test_list(clidb, client):
     result = client(0, ["acq", "files", "Acq1"])
 
     # Check table
-    assert (
-        re.search(r"File1\s+123 B\s+0123456789abcdef0123456789abcdef", result.output)
-        is not None
+    assert_row_present(
+        result.output, "File1", "123 B", "0123456789abcdef0123456789abcdef"
     )
-    assert (
-        re.search(
-            r"File2\s+44\.61 kiB\s+fedcba9876543210fedcba9876543210", result.output
-        )
-        is not None
+    assert_row_present(
+        result.output, "File2", "44.61 kiB", "fedcba9876543210fedcba9876543210"
     )
     assert "File3" not in result.output
     assert result.output.count("File") == 2
 
 
-def test_list_node(clidb, client):
+def test_list_node(clidb, client, assert_row_present):
     """Test with node constraint."""
 
     group = StorageGroup.create(name="Group")
@@ -114,27 +108,24 @@ def test_list_node(clidb, client):
 
     result = client(0, ["acq", "files", "Acq1", "--node=Node1"])
 
-    assert re.search(r"FileYY\s+123 B\s+Present\s+-", result.output) is not None
+    assert_row_present(result.output, "FileYY", "123 B", "Present", "-")
     assert "File2" not in result.output
     assert "File3" not in result.output
-    assert (
-        re.search(r"FileMY\s+789 B\s+Needs Check\s+1\.205 kiB", result.output)
-        is not None
-    )
-    assert re.search(r"FileXY\s+5.545 kiB\s+Corrupt\s+-", result.output) is not None
-    assert re.search(r"FileNY\s+0 B\s+Missing", result.output) is not None
-    assert re.search(r"FileYM\s+-\s+Removable", result.output) is not None
-    assert re.search(r"FileMM\s+-\s+Removable", result.output) is not None
-    assert re.search(r"FileXM\s+-\s+Removable", result.output) is not None
+    assert_row_present(result.output, "FileMY", "789 B", "Suspect", "1.205 kiB")
+    assert_row_present(result.output, "FileXY", "5.545 kiB", "Corrupt", "-")
+    assert_row_present(result.output, "FileNY", "0 B", "Missing", "-")
+    assert_row_present(result.output, "FileYM", "-", "Removable", "-")
+    assert_row_present(result.output, "FileMM", "-", "Removable", "-")
+    assert_row_present(result.output, "FileXM", "-", "Removable", "-")
     assert "FileNM" not in result.output
-    assert re.search(r"FileYN\s+-\s+Pending Removal", result.output) is not None
-    assert re.search(r"FileMN\s+-\s+Pending Removal", result.output) is not None
-    assert re.search(r"FileXN\s+-\s+Pending Removal", result.output) is not None
+    assert_row_present(result.output, "FileYN", "-", "Released", "-")
+    assert_row_present(result.output, "FileMN", "-", "Released", "-")
+    assert_row_present(result.output, "FileXN", "-", "Released", "-")
     assert "FileNN" not in result.output
     assert result.output.count("File") == 10
 
 
-def test_list_node_removed(clidb, client):
+def test_list_node_removed(clidb, client, assert_row_present):
     """Test --node --show-removed."""
 
     group = StorageGroup.create(name="Group")
@@ -148,27 +139,27 @@ def test_list_node_removed(clidb, client):
     ArchiveFileCopy.create(file=file, node=node1, has_file="N", wants_file="Y")
 
     file = ArchiveFile.create(name="FileYM", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="X", wants_file="M")
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="M")
     file = ArchiveFile.create(name="FileNM", acq=acq)
     ArchiveFileCopy.create(file=file, node=node1, has_file="N", wants_file="M")
 
     file = ArchiveFile.create(name="FileYN", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="X", wants_file="N")
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="N")
     file = ArchiveFile.create(name="FileNN", acq=acq)
     ArchiveFileCopy.create(file=file, node=node1, has_file="N", wants_file="N")
 
     result = client(0, ["acq", "files", "Acq1", "--node=Node1", "--show-removed"])
 
-    assert re.search(r"FileYY\s+123 B\s+Present\s+-", result.output) is not None
-    assert re.search(r"FileNY\s+0 B\s+Missing", result.output) is not None
-    assert re.search(r"FileYM\s+-\s+Removable", result.output) is not None
-    assert re.search(r"FileNM\s+-\s+Removed", result.output) is not None
-    assert re.search(r"FileYN\s+-\s+Pending Removal", result.output) is not None
-    assert re.search(r"FileNN\s+-\s+Removed", result.output) is not None
+    assert_row_present(result.output, "FileYY", "123 B", "Present", "-")
+    assert_row_present(result.output, "FileNY", "0 B", "Missing", "-")
+    assert_row_present(result.output, "FileYM", "-", "Removable", "-")
+    assert_row_present(result.output, "FileNM", "-", "Removed", "-")
+    assert_row_present(result.output, "FileYN", "-", "Released", "-")
+    assert_row_present(result.output, "FileNN", "-", "Removed", "-")
     assert result.output.count("File") == 6
 
 
-def test_list_group_removed(clidb, client):
+def test_list_group_removed(clidb, client, assert_row_present):
     """Test --group --show-removed."""
 
     group = StorageGroup.create(name="Group1")
@@ -193,12 +184,13 @@ def test_list_group_removed(clidb, client):
 
     result = client(0, ["acq", "files", "Acq1", "--group=Group1", "--show-removed"])
 
-    assert re.search(r"FileYY\s+123 B\s+Present", result.output) is not None
-    assert re.search(r"FileNY\s+0 B\s+Removed", result.output) is not None
-    assert re.search(r"FileYM\s+-\s+Present", result.output) is not None
-    assert re.search(r"FileNM\s+-\s+Removed", result.output) is not None
-    assert re.search(r"FileYN\s+-\s+Present", result.output) is not None
-    assert re.search(r"FileNN\s+-\s+Removed", result.output) is not None
+    # --group state ignores wants_file
+    assert_row_present(result.output, "FileYY", "123 B", "Present")
+    assert_row_present(result.output, "FileNY", "0 B", "Removed")
+    assert_row_present(result.output, "FileYM", "-", "Present")
+    assert_row_present(result.output, "FileNM", "-", "Removed")
+    assert_row_present(result.output, "FileYN", "-", "Present")
+    assert_row_present(result.output, "FileNN", "-", "Removed")
     assert result.output.count("File") == 6
 
 
