@@ -18,6 +18,11 @@ run these commands:
         * `UNARCHIVED`: file exists on disk, but not on external storage
         * `RESTORED`:   file exists on both disk and external storage
         * `RELEASED`:   file exists in external storage only
+* `lfs hsm_action`
+    retrieves the current action.  We use this to detect this
+    `HSMState`:
+        * `RESTORING`:  file exists in external storage only, but HSM
+                        is in the process of restoring it
 * `lfs hsm_restore`
     requests the state change `RELEASED -> RESTORED`
 * `lfs hsm_release`
@@ -55,6 +60,9 @@ class HSMState(Enum):
         is the state of newly created files until they are archived.
     HSMState.RELEASED:
         The file is in external storage but not on disk.
+    HSMState.RESTORING:
+        The file is in external storage only, and HSM is in the process of
+        bringing it back to disk
     HSMState.RESTORED:
         The file is both in external storage and on disk.
 
@@ -62,14 +70,18 @@ class HSMState(Enum):
     our control, but once the file has been archived, it moves from state
     UNARCHIVED to state RESTORED.
 
-    A `lfs.hsm_restore()` changes a file's state from RELEASED to RESTORED.
-    A `lfs.hsm_release()` changes a file's state from RESTORED to RELEASED.
+    A `lfs.hsm_restore()` requests a file's state change from RELEASED to RESTORED.
+    After this call, the files state changes to RESTORING until the restore is
+    complete.
+
+    A `lfs.hsm_release()` requests a file's state change from RESTORED to RELEASED.
     """
 
     MISSING = 0
     UNARCHIVED = 1
     RESTORED = 2
-    RELEASED = 3
+    RESTORING = 3
+    RELEASED = 4
 
 
 class LFS:
@@ -98,6 +110,7 @@ class LFS:
     HSM_MISSING = HSMState.MISSING
     HSM_UNARCHIVED = HSMState.UNARCHIVED
     HSM_RESTORED = HSMState.RESTORED
+    HSM_RESTORING = HSMState.RESTORING
     HSM_RELEASED = HSMState.RELEASED
 
     def __init__(
@@ -114,7 +127,7 @@ class LFS:
         if self._lfs is None:
             raise RuntimeError("lfs command not found.")
 
-    def run_lfs(self, *args: str, timeout: float | None = None) -> str | False | None:
+    def run_lfs(self, *args: str) -> dict:
         """Run the lfs command with the `args` provided.
 
         Parameters
@@ -122,37 +135,55 @@ class LFS:
         *args : strings
             The list of command-line arguments to pass to the
             lfs command.
-        timeout : float, optional
-            If not None, stop waiting for the command after `timeout` seconds
 
-        Retunrs
+        Returns
         -------
-        output : str or False or None
-            If the command succeeded, returns standard output of
-            the command.  If the command failed or timed out,
-            returns False (failed) or None (timed out) and logs
-            the failure.
+        result : dict
+            A dict is returned with the following keys:
+
+         - missing : bool
+            True if the file was missing; False otherwise
+         - timeout : bool
+            True if the command timed out; False otherwise
+         - failed : bool
+            True if the command failed; False otherwise
+         - output : str or None
+            If the command succeeded (i.e. all three booleans
+            are false), this has the standard output of
+            the command.  Otherwise, this is None.
         """
+        result = {"missing": False, "timeout": False, "failed": False, "output": None}
+
         # Stringify args
         args = [str(arg) for arg in args]
 
-        ret, stdout, stderr = util.run_command([self._lfs] + args, timeout=timeout)
+        ret, stdout, stderr = util.run_command([self._lfs] + args, timeout=60)
 
-        # Failure or timeout
-        if ret is None or ret != 0:
-            if ret is None:
-                result = "timed out"
-            else:
-                result = f"failed (ret={ret})"
-                ret = False
-            log.warning(f"LFS command {result}: " + " ".join(args))
-            if stderr:
-                log.debug(f"LFS stderr: {stderr}")
-            if stdout:
-                log.debug(f"LFS stdout: {stdout}")
-            return ret
+        # Timeout
+        if ret is None:
+            log.warning(f"LFS command timed out: " + " ".join(args))
+            result["timeout"] = True
+            return result
 
-        return stdout
+        if ret == 0:
+            # Success, return output
+            result["output"] = stdout
+            return result
+
+        # Failure, look for a "No such file" remark in stderr
+        if stderr and "No such file or directory" in stderr:
+            log.debug(f"LFS missing file: " + " ".join(args))
+            result["missing"] = True
+        else:
+            # Otherwise, report failure
+            log.warning(f"LFS command failed: " + " ".join(args))
+            result["failed"] = True
+
+        if stderr:
+            log.debug(f"LFS stderr: {stderr}")
+        if stdout:
+            log.debug(f"LFS stdout: {stdout}")
+        return result
 
     def quota_remaining(self, path: str | os.PathLike) -> int | None:
         """Retrieve the remaining quota for `path`.
@@ -200,7 +231,7 @@ class LFS:
         # Stringify path
         path = str(path)
 
-        stdout = self.run_lfs("quota", "-q", "-g", self._quota_group, path)
+        stdout = self.run_lfs("quota", "-q", "-g", self._quota_group, path)["output"]
         if stdout is None:
             return None  # Command returned error
 
@@ -246,6 +277,35 @@ class LFS:
         # lfs quota reports values in kiByte blocks
         return (quota_limit - quota) * 2**10
 
+    def hsm_restoring(self, path: os.PathLike | str) -> bool:
+        """Is HSM processing a restore request?
+
+        Returns True if HSM is currently working on a restore
+        request for `path`, and False otherwise.
+
+        Runs `lfs hsm_action` to check the current HSM action
+        or the file.
+
+        Parameters
+        ----------
+        path : path-like
+            The path to determine the state for.
+
+        Returns
+        -------
+        restoring : bool or None
+            True if a RESTORE is in progress.  False otherwise.
+            None if the command failed.
+        """
+
+        # Stringify path
+        path = str(path)
+
+        stdout = self.run_lfs("hsm_action", path)["output"]
+        if stdout is None:
+            return None  # Command returned error
+        return "RESTORE" in stdout
+
     def hsm_state(self, path: os.PathLike | str) -> HSMState:
         """Returns the HSM state of path.
 
@@ -261,16 +321,16 @@ class LFS:
             failed.  If `path` doesn't exist, this will be `HSMState.MISSING`.
         """
 
-        # No need to check with HSM if the path isn't present
-        if not pathlib.Path(path).exists():
-            return HSMState.MISSING
-
         # Stringify path
         path = str(path)
 
-        stdout = self.run_lfs("hsm_state", path)
-        if stdout is False:
+        result = self.run_lfs("hsm_state", path)
+        if result["failed"] or result["timeout"]:
             return None  # Command returned error
+        if result["missing"]:
+            return HSMState.MISSING
+
+        stdout = result["output"]
 
         # The output of hsm_state looks like this:
         #
@@ -301,18 +361,29 @@ class LFS:
         # See llapi_hsm_state_get(3) for full details about these.
         if "archived" not in stdout:
             return HSMState.UNARCHIVED
-        if "released" in stdout:
-            return HSMState.RELEASED
-        return HSMState.RESTORED
+        if "released" not in stdout:
+            return HSMState.RESTORED
+
+        # File is released, so now run `hsm_action` to see if a restore is in
+        # progress
+        if self.hsm_restoring(path):
+            return HSMState.RESTORING
+
+        return HSMState.RELEASED
 
     def hsm_archived(self, path: os.PathLike) -> bool:
         """Is `path` archived by HSM?"""
         state = self.hsm_state(path)
-        return state == HSMState.RESTORED or state == HSMState.RELEASED
+        return (
+            state == HSMState.RESTORED
+            or state == HSMState.RESTORING
+            or state == HSMState.RELEASED
+        )
 
     def hsm_released(self, path: os.PathLike) -> bool:
         """Is `path` released to external storage?"""
-        return self.hsm_state(path) == HSMState.RELEASED
+        state = self.hsm_state(path)
+        return state == HSMState.RELEASED or state == HSMState.RESTORING
 
     def hsm_restore(self, path: os.PathLike) -> bool | None:
         """Trigger restore of `path` from external storage.
@@ -343,9 +414,11 @@ class LFS:
         if state != HSMState.RELEASED:
             return True
 
-        result = self.run_lfs("hsm_restore", path, timeout=60)
-        if result is None or result is False:
-            return result
+        result = self.run_lfs("hsm_restore", path)
+        if result["missing"]:
+            return False
+        if result["timeout"] or result["failed"]:
+            return None
         return True
 
     def hsm_release(self, path: os.PathLike) -> bool:

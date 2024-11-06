@@ -368,13 +368,22 @@ def test_update_avail_gb(simplenode):
     node = StorageNode.get(id=simplenode.id)
     after = pw.utcnow()
 
-    assert node.avail_gb == 10000.0 / 2.0**30
+    avail = node.avail_gb
+    assert avail == 10000.0 / 2.0**30
     assert node.avail_gb_last_checked >= before
     assert node.avail_gb_last_checked <= after
 
-    # Test None
+    # Reset time
+    StorageNode.update(avail_gb_last_checked=0).where(
+        StorageNode.id == simplenode.id
+    ).execute()
+
+    # Test None -- shouldn't change value, but last
+    # update has happened
     simplenode.update_avail_gb(None)
-    assert StorageNode.get(id=simplenode.id).avail_gb is None
+    node = StorageNode.get(id=simplenode.id)
+    assert node.avail_gb == avail
+    assert node.avail_gb_last_checked >= after
 
 
 def test_edge_model(storagetransferaction, storagenode, storagegroup):

@@ -301,8 +301,10 @@ class UpdateableNode(updateable_base):
 
         self.db.update_avail_gb(bytes_avail)
 
-        if bytes_avail is not None:
-            log.info(f"Node {self.name}: {util.pretty_bytes(bytes_avail)} available.")
+        if self.db.avail_gb is not None:
+            log.info(
+                f"Node {self.name}: {util.pretty_bytes(self.db.avail_gb * 2**30)} available."
+            )
 
     def run_auto_verify(self) -> None:
         """Run auto-verification on this node.
