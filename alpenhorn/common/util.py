@@ -6,6 +6,7 @@ import click
 import socket
 import hashlib
 import logging
+import subprocess
 
 from . import config, extensions, logger
 
@@ -111,8 +112,6 @@ def run_command(
     stderr : string
         Value of stderr.
     """
-
-    import subprocess
 
     log.debug(f"Running command [timeout={timeout}]: " + " ".join(cmd))
 
