@@ -8,6 +8,7 @@ import errno
 import shutil
 import logging
 import pathlib
+import peewee as pw
 
 from . import ioutil
 from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
@@ -335,21 +336,8 @@ def group_search_async(
 
         # ready == False is the safe option here: copy will be readied
         # during the subsequent check if needed.
-        count = (
-            ArchiveFileCopy.update(
-                has_file="M",
-                wants_file="Y",
-                ready=False,
-                last_update=utcnow(),
-            )
-            .where(
-                ArchiveFileCopy.file == req.file,
-                ArchiveFileCopy.node == node.db,
-            )
-            .execute()
-        )
-        if count == 0:
-            # Create new copy
+        try:
+            # Try to create a new copy
             ArchiveFileCopy.create(
                 file=req.file,
                 node=node.db,
@@ -358,6 +346,17 @@ def group_search_async(
                 ready=False,
                 size_b=node.io.filesize(req.file.path, actual=True),
             )
+        except pw.IntegrityError:
+            # Copy already exists, just update the existing
+            ArchiveFileCopy.update(
+                has_file="M",
+                wants_file="Y",
+                ready=False,
+                last_update=utcnow(),
+            ).where(
+                ArchiveFileCopy.file == req.file,
+                ArchiveFileCopy.node == node.db,
+            ).execute()
         return
 
     # Otherwise, escallate to groupio.pull_force to actually perform the pull
