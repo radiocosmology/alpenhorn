@@ -282,19 +282,27 @@ def test_namedcopytracked(simplegroup, storagenode, simplefile, archivefilecopy)
     assert node.named_copy_tracked(acqname, filename) is False
 
 
-def test_copypresent(simplegroup, storagenode, simplefile, archivefilecopy):
-    """Test StorageNode.filecopy_present()."""
+def test_node_copystate(simplegroup, storagenode, simplefile, archivefilecopy):
+    """Test StorageNode.filecopy_state()."""
 
     node = storagenode(name="present", group=simplegroup)
     archivefilecopy(file=simplefile, node=node, has_file="Y")
-    assert node.filecopy_present(simplefile) is True
+    assert node.filecopy_state(simplefile) == "Y"
+
+    node = storagenode(name="suspect", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="M")
+    assert node.filecopy_state(simplefile) == "M"
 
     node = storagenode(name="corrupt", group=simplegroup)
     archivefilecopy(file=simplefile, node=node, has_file="X")
-    assert node.filecopy_present(simplefile) is False
+    assert node.filecopy_state(simplefile) == "X"
+
+    node = storagenode(name="removed", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="N")
+    assert node.filecopy_state(simplefile) == "N"
 
     node = storagenode(name="missing", group=simplegroup)
-    assert node.filecopy_present(simplefile) is False
+    assert node.filecopy_state(simplefile) == "N"
 
 
 def test_allfiles(simplenode, simpleacq, archivefile, archivefilecopy):
