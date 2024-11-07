@@ -46,11 +46,12 @@ def cli(conf):
     queue = FairMultiFIFOQueue()
 
     # If we can be multithreaded, start the worker pool
-    if db.threadsafe:
+    if db.threadsafe():
         wpool = pool.WorkerPool(
             num_workers=config.config["service"]["num_workers"], queue=queue
         )
     else:
+        log.warning("Database is not threadsafe: forcing serial I/O.")
         # EmptyPool acts like WorkerPool, but always has zero workers
         wpool = pool.EmptyPool()
 

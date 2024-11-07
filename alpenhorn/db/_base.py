@@ -15,12 +15,8 @@ log = logging.getLogger(__name__)
 # We store the database extension here
 _db_ext = None
 
-# Module attributes
-# =================
-# These are all initialised by connect()
-
+# Initialised by connect()
 database_proxy = pw.Proxy()
-threadsafe = None
 
 
 def _capability(key: str) -> Any:
@@ -66,6 +62,11 @@ def _capability(key: str) -> Any:
             raise KeyError(f"unknown database capability: {key}")
 
 
+def threadsafe() -> bool:
+    """Returns bool indicating whether the database is threadsafe."""
+    return _capability("reentrant")
+
+
 def connect() -> None:
     """Connect to the database.
 
@@ -80,10 +81,6 @@ def connect() -> None:
         # dict defined in _capability()
         log.debug("Using internal database module.")
         _db_ext = dict()
-
-    # Tell everyone whether we're threadsafe
-    global threadsafe
-    threadsafe = _capability("reentrant")
 
     # If fetch the database config, if present
     if "database" in config.config:
