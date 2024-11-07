@@ -240,8 +240,8 @@ class StorageNode(base_model):
         # Check has_file
         return copy.has_file != "N"
 
-    def filecopy_present(self, file: ArchiveFile) -> bool:
-        """Is a copy of ArchiveFile `file` present on this node?
+    def filecopy_state(self, file: ArchiveFile) -> str:
+        """What is the state of `file` on this node?
 
         Parameters
         ----------
@@ -250,22 +250,25 @@ class StorageNode(base_model):
 
         Returns
         -------
-        filecopy_present : bool
-            True if there is an ArchiveFileCopy of `file`r
-            with `has_file=='Y'` on this node.  False otherwise.
+        filecopy_state : str
+            One of:
+            - 'Y' file copy exists
+            - 'X' file copy is corrupt
+            - 'M' file copy needs to be checked
+            - 'N' file copy does not exist
         """
         from .archive import ArchiveFileCopy
 
         try:
-            ArchiveFileCopy.get(
+            copy = ArchiveFileCopy.get(
                 ArchiveFileCopy.file == file,
                 ArchiveFileCopy.node == self,
-                ArchiveFileCopy.has_file == "Y",
             )
+            return copy.has_file
         except pw.DoesNotExist:
-            return False
+            pass
 
-        return True
+        return "N"
 
     def get_total_gb(self) -> float:
         """Sum the size in GiB of all files on this node.

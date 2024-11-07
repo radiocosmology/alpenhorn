@@ -469,14 +469,20 @@ class UpdateableNode(updateable_base):
                 ArchiveFileCopyRequest.cancelled == 0,
                 ArchiveFileCopyRequest.node_from == self.db,
             ):
-                if self.db.filecopy_present(req.file):
+                state = self.db.filecopy_state(req.file)
+                if state == "Y":
                     self._io_happened = True
                     self.io.ready_pull(req)
                 else:
+                    reasons = {
+                        "N": "not present",
+                        "M": "needs check",
+                        "X": "corrupt",
+                    }
                     log.info(
                         "Ignoring ready request for "
                         f"{req.file.acq.name}/{req.file.name} "
-                        f"on node {self.name}: not present."
+                        f"on node {self.name}: {reasons[state]}."
                     )
 
             self._updated = True
@@ -629,8 +635,10 @@ class UpdateableGroup(updateable_base):
             )
             return
 
-        # If the source file doesn't exist, cancel the request.
-        if not req.node_from.filecopy_present(req.file):
+        # If the source file doesn't exist, cancel the request.  If the
+        # source is suspect, skip the request.
+        state = req.node_from.filecopy_state(req.file)
+        if state == "N" or state == "X":
             log.warning(
                 f"Cancelling request for {req.file.acq.name}/{req.file.name}:"
                 f" not available on node {req.node_from.name}. "
@@ -639,6 +647,12 @@ class UpdateableGroup(updateable_base):
             ArchiveFileCopyRequest.update(cancelled=True).where(
                 ArchiveFileCopyRequest.id == req.id
             ).execute()
+            return
+        elif state == "M":
+            log.info(
+                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
+                f" source needs check on node {req.node_from.name}."
+            )
             return
 
         # If the source file is not ready, skip the request.
