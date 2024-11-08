@@ -75,6 +75,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     Optional io_config keys:
         * lfs : string
             the lfs(1) executable.  Defaults to "lfs"; may be a full path.
+        * lfs_timeout: the timeout, in seconds, for an lfs(1) call.  Calls
+            that run longer than this will be abandonned.  Defaults to 60
+            seconds if not given.
         * fixed_quota : integer
             the quota, in kiB, on the Lustre disk backing the HSM system
         * release_check_count : integer

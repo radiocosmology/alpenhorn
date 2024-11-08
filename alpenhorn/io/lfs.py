@@ -104,6 +104,9 @@ class LFS:
     path : string, optional
         If not None, the search path to use to look for the lfs(1)
         commnad.  If None, the "PATH" environmental variable is used.
+    timeout : int, optional
+        Timeout, in seconds, before abandonning a lfs(1) invocation.
+        Defaults to 60 seconds if not given.
     """
 
     # Conveniences for clients
@@ -119,9 +122,17 @@ class LFS:
         fixed_quota: int | None = None,
         lfs: str = "lfs",
         path: str | None = None,
+        timeout: int | None = None,
     ) -> None:
         self._quota_group = quota_group
         self._fixed_quota = fixed_quota
+
+        if timeout is None:
+            self._timeout = 60
+        else:
+            if timeout <= 0:
+                raise ValueError("timeout must be positive.")
+            self._timeout = timeout
 
         self._lfs = shutil.which(lfs, path=path)
         if self._lfs is None:
@@ -157,7 +168,9 @@ class LFS:
         # Stringify args
         args = [str(arg) for arg in args]
 
-        ret, stdout, stderr = util.run_command([self._lfs] + args, timeout=60)
+        ret, stdout, stderr = util.run_command(
+            [self._lfs] + args, timeout=self._timeout
+        )
 
         # Timeout
         if ret is None:
