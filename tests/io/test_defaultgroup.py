@@ -3,13 +3,13 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from alpenhorn.db.archive import ArchiveFileCopy
+from alpenhorn.db import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io._default_asyncs import group_search_async
 from alpenhorn.server.update import UpdateableNode, UpdateableGroup
 
 
 @pytest.fixture
-def groupnode(xfs, queue, storagegroup, storagenode):
+def groupnode(xfs, dbtables, queue, storagegroup, storagenode):
     """Fixture setting up a default test group.
 
     Returns both the group and the node."""
@@ -112,8 +112,38 @@ def test_group_search_dispatch(groupnode, simplerequest, queue):
     mock.assert_called_once_with(simplerequest)
 
 
+def test_group_search_in_db(
+    groupnode, simplefile, archivefilecopy, archivefilecopyrequest, queue, xfs
+):
+    """Test group_search_async with record already in db."""
+
+    group, node = groupnode
+
+    mock = MagicMock()
+    group.io.pull_force = mock
+
+    # Create a file on the dest
+    xfs.create_file(f"{node.db.root}/{simplefile.path}")
+
+    # Create a file copy record
+    archivefilecopy(file=simplefile, node=node.db, has_file="Y")
+
+    # Create a copy request for the file.
+    # Source here doesn't matter
+    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
+
+    # Run the async.  First argument is Task
+    group_search_async(None, group.io, afcr)
+
+    # Check dispatch
+    mock.assert_not_called()
+
+    # Verify that the request has been cancelled
+    assert ArchiveFileCopyRequest.get(id=afcr.id).cancelled == 1
+
+
 def test_group_search_existing(
-    groupnode, simplefile, archivefilecopyrequest, queue, dbtables, xfs
+    groupnode, simplefile, archivefilecopyrequest, queue, xfs
 ):
     """Test group_search_async with existing file."""
 

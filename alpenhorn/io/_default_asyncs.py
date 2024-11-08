@@ -315,6 +315,20 @@ def group_search_async(
         The request we're fulfilling.
     """
 
+    # Before doing anything re-check the DB for something
+    # in this group.  The situation may have changed while this
+    # task was queued.
+    state = groupio.group.filecopy_state(req.file)
+    if state == "Y" or state == "M":
+        log.info(
+            "Cancelling pull request for "
+            f"{req.file.acq.name}/{req.file.name}: "
+            f"file already in group {groupio.group.name}."
+        )
+        req.cancelled = 1
+        req.save()
+        return
+
     # Check whether an actual file exists on the target
     log.debug(f"req={req}")
     node = groupio.exists(req.file.path)
@@ -322,12 +336,12 @@ def group_search_async(
         # file on disk: create/update the ArchiveFileCopy
         # to force a check next pass
         log.warning(
-            f"Skipping pull request for "
+            "Skipping pull request for "
             f"{req.file.acq.name}/{req.file.name}: "
             f"file already on disk in group {groupio.group.name}."
         )
         log.info(
-            f"Requesting check of "
+            "Requesting check of "
             f"{req.file.acq.name}/{req.file.name} on node "
             f"{node.name}."
         )
