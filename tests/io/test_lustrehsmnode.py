@@ -21,7 +21,7 @@ def node(
     simplenode.io_class = "LustreHSM"
 
     simplenode.io_config = (
-        '{"quota_group": "qgroup", "headroom": 10250, "release_check_count": 6}'
+        '{"quota_group": "qgroup", "headroom": 10250, "release_check_count": 7}'
     )
 
     # Some files
@@ -32,10 +32,11 @@ def node(
         archivefile(name="file4", acq=simpleacq, size_b=800000),
         archivefile(name="file5", acq=simpleacq, size_b=50000),
         archivefile(name="file6", acq=simpleacq, size_b=300000),
+        archivefile(name="file7", acq=simpleacq, size_b=200000),
     ]
 
     # Some copies
-    last_updates = [3, 1, 5, 6, 2, 4]
+    last_updates = [3, 1, 6, 7, 2, 4, 5]
     for num, file in enumerate(files):
         archivefilecopy(file=file, node=simplenode, has_file="Y", size_b=10, ready=True)
         # We need to do it this way to set last_update
@@ -68,9 +69,11 @@ def test_init_bad_release_count(simplenode, have_lfs):
         UpdateableNode(None, simplenode)
 
 
-@pytest.mark.lfs_quota_remaining(20000000)
 def test_release_files_okay(queue, node):
     """Test running release_files when we're under headroom"""
+
+    node.db.avail_gb = 20000000.0 / 2**30
+    node.db.save()
 
     node.io.release_files()
 
@@ -78,7 +81,6 @@ def test_release_files_okay(queue, node):
     assert queue.qsize == 0
 
 
-@pytest.mark.lfs_quota_remaining(10000000)
 @pytest.mark.lfs_hsm_state(
     {
         "/node/simpleacq/file1": "restored",
@@ -87,10 +89,17 @@ def test_release_files_okay(queue, node):
         "/node/simpleacq/file4": "restored",
         "/node/simpleacq/file5": "restored",
         "/node/simpleacq/file6": "unarchived",
+        "/node/simpleacq/file7": "restoring",
     }
 )
 def test_release_files(queue, mock_lfs, node):
     """Test running release_files."""
+
+    node.db.avail_gb = 10000000.0 / 2**30
+    node.db.save()
+
+    # File7 is not ready
+    ArchiveFileCopy.update(ready=False).where(ArchiveFileCopy.id == 7).execute()
 
     node.io.release_files()
 
@@ -110,7 +119,8 @@ def test_release_files(queue, mock_lfs, node):
     #  - file5:  50 kB  [ last_update = 2 ]
     #  - file1: 100 kB  [ last_update = 3 ]
     #  - file6 is skipped because it's not archived [last_update = 4]
-    #  - file3: 400 kB  [ last_update = 5 ]
+    #  - file7 is skipped because it's being restored [last_update = 5]
+    #  - file3: 400 kB  [ last_update = 6 ]
     # file4 remains restored
     assert not ArchiveFileCopy.get(id=1).ready
     assert ArchiveFileCopy.get(id=1).last_update >= before
@@ -126,7 +136,8 @@ def test_release_files(queue, mock_lfs, node):
     assert not ArchiveFileCopy.get(id=5).ready
     assert ArchiveFileCopy.get(id=5).last_update >= before
 
-    assert ArchiveFileCopy.get(id=6).ready
+    assert ArchiveFileCopy.get(id=6).last_update == 4
+    assert ArchiveFileCopy.get(id=7).last_update == 5
 
     # Check hsm_relase was actually called
     lfs = mock_lfs("")
@@ -136,11 +147,14 @@ def test_release_files(queue, mock_lfs, node):
     assert lfs.hsm_state("/node/simpleacq/file4") == lfs.HSM_RESTORED
     assert lfs.hsm_state("/node/simpleacq/file5") == lfs.HSM_RELEASED
     assert lfs.hsm_state("/node/simpleacq/file6") == lfs.HSM_UNARCHIVED
+    assert lfs.hsm_state("/node/simpleacq/file7") == lfs.HSM_RESTORING
 
 
-@pytest.mark.lfs_quota_remaining(10000000)
 def test_before_update(queue, node):
     """Test LustreHSMNodeIO.before_update()"""
+
+    node.db.avail_gb = 10000000.0 / 2**30
+    node.db.save()
 
     # When not idle, the release_files task is not run
     node.io.before_update(idle=False)
@@ -164,36 +178,48 @@ def test_filesize(xfs, node):
     {
         "/node/dir/file1": "released",
         "/node/dir/file2": "restored",
+        "/node/dir/file3": "restoring",
     }
 )
 def test_open_binary(xfs, node):
     """Test binary LustreHSMNodeIO.open()"""
 
-    xfs.create_file("/node/dir/file2", contents="file contents")
+    xfs.create_file("/node/dir/file1", contents="file1 contents")
+    xfs.create_file("/node/dir/file2", contents="file2 contents")
+    xfs.create_file("/node/dir/file3", contents="file3 contents")
 
     with pytest.raises(OSError):
         node.io.open("dir/file1", binary=True)
 
     with node.io.open("dir/file2", binary=True) as f:
-        assert f.read() == b"file contents"
+        assert f.read() == b"file2 contents"
+
+    with pytest.raises(OSError):
+        node.io.open("dir/file3", binary=True)
 
 
 @pytest.mark.lfs_hsm_state(
     {
         "/node/dir/file1": "released",
         "/node/dir/file2": "restored",
+        "/node/dir/file3": "restoring",
     }
 )
 def test_open_text(xfs, node):
     """Test text LustreHSMNodeIO.open()"""
 
-    xfs.create_file("/node/dir/file2", contents="file contents")
+    xfs.create_file("/node/dir/file1", contents="file1 contents")
+    xfs.create_file("/node/dir/file2", contents="file2 contents")
+    xfs.create_file("/node/dir/file3", contents="file3 contents")
 
     with pytest.raises(OSError):
         node.io.open("dir/file1", binary=False)
 
     with node.io.open("dir/file2", binary=False) as f:
-        assert f.read() == "file contents"
+        assert f.read() == "file2 contents"
+
+    with pytest.raises(OSError):
+        node.io.open("dir/file3", binary=False)
 
 
 def test_check_missing(queue, node):
@@ -258,6 +284,7 @@ def test_check_ready_restored(xfs, queue, node, mock_lfs):
         "/node/simpleacq/file1": "released",
     }
 )
+@pytest.mark.lfs_hsm_restore_result("restore")
 def test_check_released(xfs, queue, mock_lfs, node):
     """Test check on a non-ready, released file."""
 
@@ -301,6 +328,7 @@ def test_check_released(xfs, queue, mock_lfs, node):
         "/node/simpleacq/file1": "released",
     }
 )
+@pytest.mark.lfs_hsm_restore_result("restore")
 def test_check_ready_released(xfs, queue, mock_lfs, node):
     """Test check on a ready, released file."""
 
@@ -341,6 +369,7 @@ def test_check_ready_released(xfs, queue, mock_lfs, node):
         "/node/simpleacq/file2": "released",
         "/node/simpleacq/file3": "unarchived",
         "/node/simpleacq/file4": "missing",
+        "/node/simpleacq/file5": "restoring",
     }
 )
 def test_ready_path(mock_lfs, node):
@@ -351,13 +380,15 @@ def test_ready_path(mock_lfs, node):
     assert not node.io.ready_path("/node/simpleacq/file2")
     assert node.io.ready_path("/node/simpleacq/file3")
     assert not node.io.ready_path("/node/simpleacq/file4")
+    assert not node.io.ready_path("/node/simpleacq/file5")
 
     # But now released file is recalled.
     lfs = mock_lfs("")
     assert lfs.hsm_state("/node/simpleacq/file1") == lfs.HSM_RESTORED
-    assert lfs.hsm_state("/node/simpleacq/file2") == lfs.HSM_RESTORED
+    assert lfs.hsm_state("/node/simpleacq/file2") == lfs.HSM_RESTORING
     assert lfs.hsm_state("/node/simpleacq/file3") == lfs.HSM_UNARCHIVED
     assert lfs.hsm_state("/node/simpleacq/file4") == lfs.HSM_MISSING
+    assert lfs.hsm_state("/node/simpleacq/file5") == lfs.HSM_RESTORING
 
 
 @pytest.mark.lfs_hsm_state(
@@ -398,6 +429,41 @@ def test_ready_pull_restored(mock_lfs, node, queue, archivefilecopyrequest):
 
 @pytest.mark.lfs_hsm_state(
     {
+        "/node/simpleacq/file1": "restoring",
+    }
+)
+def test_ready_pull_restoring(mock_lfs, node, queue, archivefilecopyrequest):
+    """Test LustreHSMNodeIO.ready_pull on file already being restored."""
+
+    before = pw.utcnow().replace(microsecond=0)
+
+    copy = ArchiveFileCopy.get(id=1)
+    copy.ready = False
+    copy.save()
+    afcr = archivefilecopyrequest(
+        file=copy.file, node_from=node.db, group_to=node.db.group
+    )
+
+    node.io.ready_pull(afcr)
+
+    # Task in queue
+    assert queue.qsize == 1
+
+    # Run task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # File is still not ready
+    assert not ArchiveFileCopy.get(id=1).ready
+
+    # File is still being restored
+    lfs = mock_lfs("")
+    assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORING
+
+
+@pytest.mark.lfs_hsm_state(
+    {
         "/node/simpleacq/file1": "released",
     }
 )
@@ -430,12 +496,9 @@ def test_ready_pull_released(mock_lfs, node, queue, archivefilecopyrequest):
     # Don't wait for the deferral to expire, just run the task again
     task()
 
-    # File is now ready
-    assert ArchiveFileCopy.get(id=1).ready
-
-    # File is restored
+    # File is being restored
     lfs = mock_lfs("")
-    assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
+    assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORING
 
 
 def test_idle_update_empty(queue, mock_lfs, node):
@@ -447,7 +510,7 @@ def test_idle_update_empty(queue, mock_lfs, node):
     node.io.idle_update(False)
 
     # QW has not been initialised
-    assert node.io._release_qw is None
+    assert node.io._statecheck_qw is None
 
     # No item in queue
     assert queue.qsize == 0
@@ -459,6 +522,7 @@ def test_idle_update_empty(queue, mock_lfs, node):
         "/node/simpleacq/file2": "restored",
         "/node/simpleacq/file3": "unarchived",
         "/node/simpleacq/file4": "missing",
+        "/node/simpleacq/file5": "restoring",
     }
 )
 def test_idle_update_ready(xfs, queue, mock_lfs, node):
@@ -469,7 +533,7 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
     node.io.idle_update(False)
 
     # QW has been initialised
-    assert node.io._release_qw is not None
+    assert node.io._statecheck_qw is not None
 
     # Item in queue
     assert queue.qsize == 1
@@ -492,6 +556,9 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
     assert ArchiveFileCopy.get(id=4).last_update >= before
     assert ArchiveFileCopy.get(id=4).has_file == "N"
 
+    # Copy five is not ready (being restored)
+    assert not ArchiveFileCopy.get(id=5).ready
+
 
 @pytest.mark.lfs_hsm_state(
     {
@@ -499,6 +566,7 @@ def test_idle_update_ready(xfs, queue, mock_lfs, node):
         "/node/simpleacq/file2": "restored",
         "/node/simpleacq/file3": "unarchived",
         "/node/simpleacq/file4": "missing",
+        "/node/simpleacq/file5": "restoring",
     }
 )
 def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
@@ -512,7 +580,7 @@ def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
     node.io.idle_update(False)
 
     # QW has been initialised
-    assert node.io._release_qw is not None
+    assert node.io._statecheck_qw is not None
 
     # Item in queue
     assert queue.qsize == 1
@@ -535,6 +603,9 @@ def test_idle_update_not_ready(xfs, queue, mock_lfs, node):
     assert not ArchiveFileCopy.get(id=4).ready
     assert ArchiveFileCopy.get(id=4).last_update >= before
     assert ArchiveFileCopy.get(id=4).has_file == "N"
+
+    # Copy five is not ready (being restored)
+    assert not ArchiveFileCopy.get(id=5).ready
 
 
 @pytest.mark.lfs_hsm_state({"/node/simpleacq/file1": "released"})
@@ -567,7 +638,6 @@ def test_hsm_restore_twice(xfs, queue, mock_lfs, node):
     # Check the internal bookkeeping
     assert copy.id in node.io._restoring
     assert copy.id in node.io._restore_start
-    assert copy.id in node.io._restore_retry
 
     # Try to add another task
     node.io.check(copy)
@@ -609,7 +679,6 @@ def test_hsm_restore_timeout(xfs, queue, mock_lfs, node):
     # Check the internal bookkeeping
     assert copy.id in node.io._restoring
     assert copy.id in node.io._restore_start
-    assert copy.id in node.io._restore_retry
 
 
 @pytest.mark.lfs_hsm_state({"/node/simpleacq/file1": "released"})
@@ -642,4 +711,3 @@ def test_hsm_restore_fail(xfs, queue, mock_lfs, node):
     # Check the internal bookkeeping
     assert copy.id not in node.io._restoring
     assert copy.id not in node.io._restore_start
-    assert copy.id not in node.io._restore_retry

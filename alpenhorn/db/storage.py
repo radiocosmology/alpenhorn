@@ -367,17 +367,18 @@ class StorageNode(base_model):
         """
         # The value in the database is in GiB (2**30 bytes)
         if new_avail is None:
-            self.avail_gb = None
+            # Warn unless we never knew the free space
+            if self.avail_gb is not None:
+                log.warning(f'Unable to determine available space for "{self.name}".')
         else:
             self.avail_gb = new_avail / 2**30
+
+        # Record check time, even if we failed to update
         self.avail_gb_last_checked = pw.utcnow()
 
         # Update the DB with the free space but don't clobber changes made
-        # manually to the database
+        # manually to the database.
         self.save(only=[StorageNode.avail_gb, StorageNode.avail_gb_last_checked])
-
-        if new_avail is None:
-            log.info(f'Unable to determine available space for "{self.name}".')
 
 
 class StorageTransferAction(base_model):

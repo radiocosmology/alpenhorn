@@ -109,6 +109,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         root="/nl1",
         host=hostname,
         active=True,
+        avail_gb=2000.0 / 2**30,
         # This is mostly ignored
         io_config='{"quota_group": "qgroup", "headroom": 10}',
     )
@@ -128,6 +129,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         host=hostname,
         active=True,
         io_config='{"quota_group": "qgroup", "headroom": 1, "release_check_count": 1}',
+        avail_gb=2000.0 / 2**30,
     )
     StorageNode.create(name="sf2", group=nlgrp, root="/sf2", host=hostname, active=True)
     xfs.create_file("/sf2/ALPENHORN_NODE", contents="sf2")
@@ -305,7 +307,6 @@ def e2e_config(xfs, hostname, clidb_uri):
     xfs.create_file("/etc/alpenhorn/alpenhorn.conf", contents=yaml.dump(config))
 
 
-@pytest.mark.lfs_quota_remaining(2000)
 @pytest.mark.lfs_hsm_state(
     {
         "/nl2/acq1/correct.me": "restored",
@@ -323,7 +324,7 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
     # Check HSM
     lfs = mock_lfs(quota_group="qgroup")
     assert lfs.hsm_state("/nl2/acq1/correct.me") == lfs.HSM_RESTORED
-    assert lfs.hsm_state("/nl1/acq1/restore.me") == lfs.HSM_RESTORED
+    assert lfs.hsm_state("/nl1/acq1/restore.me") == lfs.HSM_RESTORING
     assert lfs.hsm_state("/nl1/acq1/release.me") == lfs.HSM_RELEASED
 
     # Check results

@@ -38,10 +38,6 @@ del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
-# Retry delays (in seconds) after a successful or timed-out hsm_restore request
-RESTORE_TIMEOUT_RETRY = 1 * 3600  # 1 hour
-RESTORE_SUCCESS_RETRY = 4 * 3600  # 4 hours
-
 
 class LustreHSMNodeRemote(BaseNodeRemote):
     """LustreHSMNodeRemote: information about a LustreHSM remote node."""
@@ -79,6 +75,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     Optional io_config keys:
         * lfs : string
             the lfs(1) executable.  Defaults to "lfs"; may be a full path.
+        * lfs_timeout: the timeout, in seconds, for an lfs(1) call.  Calls
+            that run longer than this will be abandonned.  Defaults to 60
+            seconds if not given.
         * fixed_quota : integer
             the quota, in kiB, on the Lustre disk backing the HSM system
         * release_check_count : integer
@@ -96,16 +95,12 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         self._headroom = config["headroom"] * 2**10  # convert from kiB
 
         # QueryWalker for the HSM state check
-        self._release_qw = None
+        self._statecheck_qw = None
 
         # Tracks files we're in the process of retrieving, so we can avoid
         # waiting for the same file twice.  The elements in this set are
         # `ArchiveFile.id`s
         self._restoring = set()
-
-        # The time.monotonic value after which we should try to restore again.
-        # Keys are elements in self._restoring.
-        self._restore_retry = dict()
 
         # For informational purposes.  Keys are elements in self._restoring.
         self._restore_start = dict()
@@ -140,14 +135,28 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # What's the current situation?
         state = self._lfs.hsm_state(copy.path)
 
-        if state == self._lfs.HSM_MISSING:
-            log.warning(f"Unable to restore {copy.path}: missing.")
+        if state == None:
+            log.warning(f"Unable to restore {copy.path}: state check failed.")
             self._restore_start.pop(copy.file.id, None)
-            self._restore_retry.pop(copy.file.id, None)
             self._restoring.discard(copy.file.id)
             return None
 
-        if state != self._lfs.HSM_RELEASED:
+        if state == self._lfs.HSM_MISSING:
+            log.warning(f"Unable to restore {copy.path}: missing.")
+            self._restore_start.pop(copy.file.id, None)
+            self._restoring.discard(copy.file.id)
+            return None
+
+        if state == self._lfs.HSM_RESTORING:
+            if copy.file.id not in self._restoring:
+                self._restoring.add(copy.file.id)
+                self._restore_start[copy.file.id] = time.monotonic()
+
+            log.debug(f"Restore in progress: {copy.path}")
+
+            # Tell the caller to wait
+            return True
+        elif state != self._lfs.HSM_RELEASED:
             # i.e. file is restored or unarchived, so we're done.
             if copy.file.id not in self._restoring:
                 log.debug(f"Already restored: {copy.path}")
@@ -157,54 +166,30 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                     f"{copy.file.path} restored on node {self.node.name}"
                     f"after {pretty_deltat(deltat)}"
                 )
-                self._restore_start.pop(copy.file.id, None)
-                self._restore_retry.pop(copy.file.id, None)
+                del self._restore_start[copy.file.id]
                 self._restoring.discard(copy.file.id)
             return False
 
         # If we got here, copy is released.
+        if copy.file.id not in self._restoring:
+            self._restoring.add(copy.file.id)
+            self._restore_start[copy.file.id] = time.monotonic()
 
-        # Have we hit the retry time for an in-progress restore?
-        retry_restore = (
-            copy.file.id in self._restoring
-            and self._restore_retry[copy.file.id] <= time.monotonic()
-        )
+        # Try to restore it.
+        result = self._lfs.hsm_restore(copy.path)
 
-        if retry_restore or copy.file.id not in self._restoring:
-            # Add this copy to the list of copies we're waiting on.  Other tasks
-            # can use this to see if the file they're interested in is already
-            # "in use".
-            if not retry_restore:
-                self._restoring.add(copy.file.id)
-                self._restore_start[copy.file.id] = time.monotonic()
+        if result is False:
+            log.warning(f"Restore request failed: {copy.path}")
+            # Reqeust failed. Abandon the restore attempt entirely,
+            # in case it was deleted from the node.
+            del self._restore_start[copy.file.id]
+            self._restoring.discard(copy.file.id)
 
-            # Try to restore it.
-            result = self._lfs.hsm_restore(copy.path)
-            log.warning(f"restore result: {result}")
-
-            if result is False:
-                # Reqeust failed. Abandon the restore attempt entirely,
-                # in case it was deleted from the node.
-                self._restore_retry.pop(copy.file.id, None)
-                self._restore_start.pop(copy.file.id, None)
-                self._restoring.discard(copy.file.id)
-
-                # Report failure
-                return None
-            elif result is None:
-                # Request timeout.  This seems to happen when the file
-                # is already being restored, but let's try again in a
-                # little while, just to be safe.
-                self._restore_retry[copy.file.id] = (
-                    time.monotonic() + RESTORE_TIMEOUT_RETRY
-                )
-            else:
-                # Request success; restore should be in-progress, but
-                # we'll still schedule a retry for some time in the future
-                # to guard against HSM forgetting/abandonning our request
-                self._restore_retry[copy.file.id] = (
-                    time.monotonic() + RESTORE_SUCCESS_RETRY
-                )
+            # Report failure
+            return None
+        elif result is None:
+            # Might have worked.  Caller should check again in a bit.
+            log.warning(f"Restore request timeout: {copy.path}")
 
         # Tell the caller to wait
         return True
@@ -217,7 +202,13 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         to happen (i.e. the node is currently idle).
         """
 
-        headroom_needed = self._headroom - self._lfs.quota_remaining(self.node.root)
+        # Can't do anything if we don't know how much free space we have
+        size_gib = self.node.avail_gb
+        if size_gib is None:
+            log.debug("Skipping release_files: free space unknown.")
+            return
+
+        headroom_needed = self._headroom - int(size_gib * 2**30)
 
         # Nothing to do
         if headroom_needed <= 0:
@@ -238,8 +229,8 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 )
                 .order_by(ArchiveFileCopy.last_update)
             ):
-                # Skip unarchived files
-                if not lfs.hsm_archived(copy.path):
+                # The only files we can release are ones that are fully restored
+                if lfs.hsm_state(copy.path) != lfs.HSM_RESTORED:
                     continue
 
                 log.debug(
@@ -308,9 +299,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         super().idle_update(newly_idle)
 
         # Check the query walker.  Initialised if necessary.
-        if self._release_qw is None:
+        if self._statecheck_qw is None:
             try:
-                self._release_qw = QueryWalker(
+                self._statecheck_qw = QueryWalker(
                     ArchiveFileCopy,
                     ArchiveFileCopy.node == self.node,
                     ArchiveFileCopy.has_file == "Y",
@@ -320,17 +311,21 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
         # Try to get a bunch of copies to check
         try:
-            copies = self._release_qw.get(self._nrelease)
+            copies = self._statecheck_qw.get(self._nrelease)
         except pw.DoesNotExist:
             # Not sure why all the file copies have gone away, but given there's
             # nothing on the node now, can't hurt to re-init the QW in this case
-            self._release_qw = None
+            self._statecheck_qw = None
             return
 
         def _async(task, node, lfs, copies):
             for copy in copies:
                 state = lfs.hsm_state(copy.path)
-                if state == lfs.HSM_MISSING:
+                if state is None:
+                    log.warning(
+                        f"Unable to determine state for {copy.file.path} on node {node.name}."
+                    )
+                elif state == lfs.HSM_MISSING:
                     # File is unexpectedly gone.
                     log.warning(
                         f"File copy {copy.file.path} on node {node.name} is missing!"
@@ -338,7 +333,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                     ArchiveFileCopy.update(
                         has_file="N", ready=False, last_update=utcnow()
                     ).where(ArchiveFileCopy.id == copy.id).execute()
-                elif state == lfs.HSM_RELEASED:
+                elif state == lfs.HSM_RELEASED or state == lfs.HSM_RESTORING:
                     if copy.ready:
                         log.info(f"Updating file copy {copy.file.path}: ready -> False")
                         ArchiveFileCopy.update(ready=False, last_update=utcnow()).where(
@@ -452,6 +447,19 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         """
         return self.node.active
 
+    def exists(self, path: pathlib.PurePath) -> bool:
+        """Does `path` exist?
+
+        Checks whether `lfs hsm_state` returns ENOENT.
+
+        Parameters
+        ----------
+        path : pathlib.PurePath
+            path relative to `node.root`
+        """
+        full_path = pathlib.PurePath(self.node.root).joinpath(path)
+        return self._lfs.hsm_state(full_path) != self._lfs.HSM_MISSING
+
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
         """Return size in bytes of the file given by `path`.
 
@@ -508,7 +516,10 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # Make abs path
         p = pathlib.Path(self.node.root, path)
 
-        if self._lfs.hsm_released(p):
+        state = self._lfs.hsm_state(p)
+        if state is None:
+            raise OSError(f"Can't get state for {path}.")
+        if state != self._lfs.HSM_RESTORED and state != self._lfs.HSM_UNARCHIVED:
             raise OSError(f"{path} is not restored.")
         return open(p, mode="rb" if binary else "rt")
 
@@ -559,7 +570,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             restore_wait = node_io._restore_wait(copy)
             while restore_wait:
                 # Wait for a bit
-                yield 60
+                yield 600
 
                 # Now check again
                 restore_wait = node_io._restore_wait(copy)

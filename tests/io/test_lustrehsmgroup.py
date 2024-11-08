@@ -131,6 +131,13 @@ def test_idle(queue, group):
         assert group.idle is True
 
 
+@pytest.mark.lfs_hsm_state(
+    {
+        "/hsm/test/one": "restored",
+        "/hsm/test/two": "released",
+        "/hsm/test/three": "missing",
+    }
+)
 def test_exists(xfs, group):
     """Test TransportGroupIO.exists()."""
     group, hsm, smallfile = group

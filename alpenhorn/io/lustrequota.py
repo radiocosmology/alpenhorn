@@ -37,6 +37,9 @@ class LustreQuotaNodeIO(DefaultNodeIO):
         * fixed_quota: a fixed number of kiB to use to override the max quota
             reported by the "lfs quota" command.
         * lfs: the lfs(1) executable.  Defaults to "lfs"; may be a full path.
+        * lfs_timeout: the timeout, in seconds, for an lfs(1) call.  Calls
+            that run longer than this will be abandonned.  Defaults to 60
+            seconds if not given.
 
     Notes
     -----
@@ -62,6 +65,7 @@ class LustreQuotaNodeIO(DefaultNodeIO):
             quota_group=config["quota_group"],
             fixed_quota=config.get("fixed_quota", None),
             lfs=config.get("lfs", "lfs"),
+            timeout=config.get("lfs_timeout", None),
         )
 
     # I/O METHODS

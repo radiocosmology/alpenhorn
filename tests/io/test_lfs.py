@@ -4,6 +4,7 @@ import pytest
 import pathlib
 
 from alpenhorn.io.lfs import LFS
+from alpenhorn.db import StorageNode
 
 
 @pytest.mark.run_command_result(0, "lfs_out", "lfs_err")
@@ -12,11 +13,16 @@ def test_run_lfs_success(have_lfs, mock_run_command):
 
     lfs = LFS(None)
 
-    assert lfs.run_lfs("arg1", "arg2") == "lfs_out"
+    assert lfs.run_lfs("arg1", "arg2") == {
+        "failed": False,
+        "missing": False,
+        "output": "lfs_out",
+        "timeout": False,
+    }
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
         "kwargs": dict(),
-        "timeout": None,
+        "timeout": 60,
     }
 
 
@@ -26,11 +32,11 @@ def test_run_lfs_stringify(have_lfs, mock_run_command):
 
     lfs = LFS(None)
 
-    assert lfs.run_lfs(pathlib.Path("path"), 2) == "lfs_out"
+    assert lfs.run_lfs(pathlib.Path("path"), 2)["output"] == "lfs_out"
     assert mock_run_command() == {
         "cmd": ["LFS", "path", "2"],
         "kwargs": dict(),
-        "timeout": None,
+        "timeout": 60,
     }
 
 
@@ -40,11 +46,56 @@ def test_run_lfs_fail(have_lfs, mock_run_command):
 
     lfs = LFS(None)
 
-    assert lfs.run_lfs("arg1", "arg2") is False
+    assert lfs.run_lfs("arg1", "arg2") == {
+        "failed": True,
+        "missing": False,
+        "output": None,
+        "timeout": False,
+    }
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
         "kwargs": dict(),
-        "timeout": None,
+        "timeout": 60,
+    }
+
+
+@pytest.mark.run_command_result(None, "lfs_out", "lfs_err")
+def test_run_lfs_timeout(have_lfs, mock_run_command):
+    """Test timed out invocation of lfs.run_lfs."""
+
+    lfs = LFS(None)
+
+    assert lfs.run_lfs("arg1", "arg2") == {
+        "failed": False,
+        "missing": False,
+        "output": None,
+        "timeout": True,
+    }
+    assert mock_run_command() == {
+        "cmd": ["LFS", "arg1", "arg2"],
+        "kwargs": dict(),
+        "timeout": 60,
+    }
+
+
+@pytest.mark.run_command_result(
+    2, "lfs_out", "Something didn't work: No such file or directory"
+)
+def test_run_lfs_missing(have_lfs, mock_run_command):
+    """Test ENOENT from lfs.run_fls."""
+
+    lfs = LFS(None)
+
+    assert lfs.run_lfs("arg1", "arg2") == {
+        "failed": False,
+        "missing": True,
+        "output": None,
+        "timeout": False,
+    }
+    assert mock_run_command() == {
+        "cmd": ["LFS", "arg1", "arg2"],
+        "kwargs": dict(),
+        "timeout": 60,
     }
 
 
@@ -143,7 +194,9 @@ def test_quota_fixed(have_lfs, mock_run_command):
     assert lfs.quota_remaining("/path") == (2500 - 1234) * 2**10
 
 
-@pytest.mark.run_command_result(1, None, None)
+@pytest.mark.run_command_result(
+    2, "", "Something didn't work: No such file or directory"
+)
 def test_hsm_state_missing(xfs, have_lfs, mock_run_command):
     """Test hsm_state on a missing file."""
 

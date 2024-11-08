@@ -9,6 +9,7 @@ from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.io.lfs import HSMState
 from alpenhorn.server import auto_import
 from alpenhorn.server.update import UpdateableNode
 
@@ -54,8 +55,8 @@ def test_import_file_not_ready(dbtables, queue, simplenode, mock_lfs):
     # _import_file is a generator function, so it needs to be interated to run.
     assert next(auto_import._import_file(None, unode, pathlib.PurePath("acq/file"))) > 0
 
-    # File has been restored
-    assert not mock_lfs("").hsm_released("/node/acq/file")
+    # File is being restored
+    assert mock_lfs("").hsm_state("/node/acq/file") == HSMState.RESTORING
 
 
 def test_import_file_no_ext(dbtables, unode):

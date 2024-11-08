@@ -55,7 +55,7 @@ def pytest_configure(config):
         "lfs_hsm_restore_result(result): "
         "used on tests which mock alpenhorn.io.lfs.LFS "
         "to indicate the result of the hsm_restore call.  result "
-        "may be 'fail', 'timeout', or 'wait'",
+        "may be 'fail', 'timeout', 'wait', or 'restore'",
     )
     config.addinivalue_line(
         "markers",
@@ -242,6 +242,8 @@ def mock_lfs(have_lfs, request):
             return HSMState.UNARCHIVED
         if state == "restored":
             return HSMState.RESTORED
+        if state == "restoring":
+            return HSMState.RESTORING
         if state == "released":
             return HSMState.RELEASED
 
@@ -249,6 +251,9 @@ def mock_lfs(have_lfs, request):
 
     def _mocked_lfs_hsm_restore(self, path):
         nonlocal request, lfs_hsm_state
+
+        # de-pathlib-ify
+        path = str(path)
 
         marker = request.node.get_closest_marker("lfs_hsm_restore_result")
         if marker:
@@ -260,16 +265,21 @@ def mock_lfs(have_lfs, request):
                 return None
             if marker.args[0] == "wait":
                 # Return true (successful request)
-                # without changing state to "restored"
+                # without full restore
+                lfs_hsm_state[path] = "restoring"
                 return True
-
-        # de-pathlib-ify
-        path = str(path)
+            if marker.args[0] == "restore":
+                # Return true (successful request)
+                # with full restore
+                lfs_hsm_state[path] = "restored"
+                return True
 
         state = lfs_hsm_state.get(path, "missing")
         if state == "missing":
             return False
         if state == "released":
+            lfs_hsm_state[path] = "restoring"
+        elif state == "restoring":
             lfs_hsm_state[path] = "restored"
         return True
 
@@ -280,12 +290,14 @@ def mock_lfs(have_lfs, request):
         path = str(path)
 
         state = lfs_hsm_state.get(path, "missing")
-        if state == "missing" or state == "unarchived":
-            return False
+        if state == "released":
+            return True
         if state == "restored":
             lfs_hsm_state[path] = "released"
+            return True
 
-        return True
+        # Missing, unarchived, or restoring
+        return False
 
     marker = request.node.get_closest_marker("lfs_quota_remaining")
     if marker is None:
