@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import time
 import errno
 import shutil
+import asyncio
 import logging
 import pathlib
 import peewee as pw
@@ -169,6 +170,21 @@ def pull_async(
         io.node.update_avail_gb(new_avail)
 
 
+async def _size_from_stat(fullpath: pathlib.Path) -> int | None:
+    """Asynchronously stat a file to get its size."""
+
+    try:
+        async with asyncio.timeout(600):
+            stat = await asyncio.to_thread(fullpath.stat)
+    except TimeoutError:
+        log.error(f"Timeout trying to stat {copyname} on node {io.node.name}!")
+        return None
+
+    if stat:
+        return stat.st_size
+    return None
+
+
 def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     """Check a file copy.  This is asynchronous.
 
@@ -196,7 +212,10 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     # Does the copy exist?
     if fullpath.exists():
         # First check the size
-        size = fullpath.stat().st_size
+        size = asyncio.run(_size_from_stat(fullpath))
+        if size is None:
+            # Abandon the check attempt if we can't stat
+            return
         if copy.file.size_b and size != copy.file.size_b:
             log.error(
                 f"File {copyname} on node {io.node.name} is corrupt! "

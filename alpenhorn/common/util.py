@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 import socket
+import asyncio
 import hashlib
 import logging
 import subprocess
@@ -134,7 +135,57 @@ def run_command(
     )
 
 
-def md5sum_file(filename: str, hr: bool = True) -> str:
+async def _md5sum_file(filename: str, hr: bool = True) -> str | None:
+    """asyncio implementation of md5sum_file().
+
+    Aborts and returns None if computation is too slow.
+
+    (Specifically: if it takes more than ten minutes to
+    read and compute the hash of 32MiB of the file.)
+    """
+
+    block_size = 256 * 128  # 32,768 bytes
+
+    # This is here just to reduce the number of times
+    # we have to spin up the async.  Has not been tuned.
+    blocks_per_chunk = 1024  # ie. chunks are 32MiB
+
+    md5 = hashlib.md5()
+
+    def _md5_chunk(f, md5, block_size, blocks_per_chunk):
+        """MD5 a "chunk" of a file.
+
+        This function is run in a asyncio thread."""
+
+        block_count = 0
+        for block in iter(lambda: f.read(block_size), b""):
+            md5.update(block)
+            block_count += 1
+            if block_count >= blocks_per_chunk:
+                return False
+
+        return True
+
+    with open(filename, "rb") as f:
+        eof = False
+        while not eof:
+            try:
+                # Here we're going to timeout if it takes more than 10 minutes to
+                # MD5 a "chunk" (i.e. 32 MiB), which should be extremely conservative
+                async with asyncio.timeout(600):
+                    eof = await asyncio.to_thread(
+                        _md5_chunk, f, md5, block_size, blocks_per_chunk
+                    )
+            except TimeoutError:
+                log.warning("Timeout trying to MD5 {filename}.")
+                return None
+
+    if hr:
+        return md5.hexdigest()
+    return md5.digest()
+
+
+def md5sum_file(filename: str, hr: bool = True) -> str | None:
     """Find the md5sum of a given file.
 
     Output should reproduce that of UNIX md5sum command.
@@ -146,19 +197,16 @@ def md5sum_file(filename: str, hr: bool = True) -> str:
     hr: boolean, optional
         Should output be a human readable hexstring (default is True).
 
+    Returns
+    -------
+    md5hash:
+        The MD5 sum of the file, or None if the operation timed out.
+
     See Also
     --------
     http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-python
     """
-    block_size = 256 * 128
-
-    md5 = hashlib.md5()
-    with open(filename, "rb") as f:
-        for chunk in iter(lambda: f.read(block_size), b""):
-            md5.update(chunk)
-    if hr:
-        return md5.hexdigest()
-    return md5.digest()
+    return asyncio.run(_md5sum_file(filename, hr))
 
 
 def get_hostname() -> str:

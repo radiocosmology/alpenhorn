@@ -11,7 +11,7 @@ authors = [
 ]
 version="2.0.0a1"
 description = "Data archive management software"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic = ["readme"]
 license = {file = "LICENSE"}
 dependencies = [
