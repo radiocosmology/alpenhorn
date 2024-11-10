@@ -543,6 +543,8 @@ def mockio():
     Access the mocks via mockio.group and mockio.node.
     """
     # The I/O instances
+    remote = MagicMock()
+    remote.pull_ready.return_value = False
     node = MagicMock()
     node.bytes_avail.return_value = 10000
     node.fifo = "n:mockio"
@@ -552,11 +554,19 @@ def mockio():
     # This is our mock I/O module
     class MockIO:
         # The I/O "classes"
+        def MockNodeRemote(*args, **kwargs):
+            nonlocal remote
+            remote._instance_args = args
+            remote._instance_kwargs = kwargs
+            return remote
+
         def MockNodeIO(*args, **kwargs):
             nonlocal node
             node._instance_args = args
             node._instance_kwargs = kwargs
             return node
+
+        MockNodeIO.remote_class = MockNodeRemote
 
         def MockGroupIO(*args, **kwargs):
             nonlocal group
@@ -564,6 +574,7 @@ def mockio():
             node._instance_kwargs = kwargs
             return group
 
+    MockIO.remote = remote
     MockIO.node = node
     MockIO.group = group
 

@@ -441,3 +441,22 @@ def test_pull_fail_unlink(xfs, queue, pull_async):
 
     # File is gone
     assert not path.exists()
+
+
+def test_pull_already_done(xfs, queue, pull_async, archivefilecopy):
+    """Test pulling a file that's already on the node."""
+
+    node, req = pull_async
+
+    # Create the archivefilecopy record
+    archivefilecopy(file=req.file, node=node.db, has_file="Y", wants_file="Y")
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Pull cancelled
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is True

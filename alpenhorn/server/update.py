@@ -466,6 +466,7 @@ class UpdateableNode(updateable_base):
             self.update_delete()
 
             # Prepare files for pulls out from this node
+            remote = RemoteNode(self.db)
             for req in ArchiveFileCopyRequest.select().where(
                 ArchiveFileCopyRequest.completed == 0,
                 ArchiveFileCopyRequest.cancelled == 0,
@@ -473,8 +474,9 @@ class UpdateableNode(updateable_base):
             ):
                 state = self.db.filecopy_state(req.file)
                 if state == "Y":
-                    self._io_happened = True
-                    self.io.ready_pull(req)
+                    if not remote.io.pull_ready(req.file):
+                        self._io_happened = True
+                        self.io.ready_pull(req)
                 else:
                     reasons = {
                         "N": "not present",
