@@ -24,7 +24,7 @@ from alpenhorn.db import (
     StorageTransferAction,
 )
 from alpenhorn.scheduler import FairMultiFIFOQueue
-from alpenhorn.server.update import UpdateableNode, UpdateableGroup
+from alpenhorn.daemon.update import UpdateableNode, UpdateableGroup
 
 
 def pytest_configure(config):
@@ -527,7 +527,7 @@ def loop_once(dbtables):
     mock.is_set = _is_set
 
     # This mocks the imported global_abort in update.py
-    with patch("alpenhorn.server.update.global_abort", mock):
+    with patch("alpenhorn.daemon.update.global_abort", mock):
         yield mock
 
 
@@ -611,8 +611,8 @@ def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
 
 
 @pytest.fixture
-def client(request, xfs, cli_config):
-    """Set up client tests using click
+def cli(request, xfs, cli_config):
+    """Set up CLI tests using click
 
     Yields a wrapper around click.testing.CliRunner().invoke.
     The first parameter passed to the wrapper should be
@@ -639,9 +639,9 @@ def client(request, xfs, cli_config):
         nonlocal runner
 
         import traceback
-        from alpenhorn.client import cli
+        from alpenhorn.cli import entry
 
-        result = runner.invoke(cli, *args, **kwargs)
+        result = runner.invoke(entry, *args, **kwargs)
 
         # Show traceback if one was created
         if (

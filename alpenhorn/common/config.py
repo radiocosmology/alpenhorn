@@ -160,7 +160,7 @@ _default_config = {
 }
 
 
-def load_config(cli_conf: os.PathLike, client: bool) -> None:
+def load_config(cli_conf: os.PathLike, cli: bool) -> None:
     """Find and load the configuration from a file."""
 
     global config
@@ -209,7 +209,7 @@ def load_config(cli_conf: os.PathLike, client: bool) -> None:
             config = merge_dict_tree(config, conf)
 
     if not any_exist:
-        if client:
+        if cli:
             exc = ClickException
         else:
             exc = RuntimeError

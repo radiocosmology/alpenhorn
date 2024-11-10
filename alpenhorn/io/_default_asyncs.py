@@ -13,7 +13,7 @@ import peewee as pw
 
 from . import ioutil
 from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
-from ..server.update import RemoteNode
+from ..daemon.update import RemoteNode
 
 if TYPE_CHECKING:
     from .base import BaseNodeIO, BaseGroupIO

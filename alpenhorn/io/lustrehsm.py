@@ -23,7 +23,7 @@ import peewee as pw
 from ..common.util import pretty_bytes, pretty_deltat
 from ..db import ArchiveFileCopy, utcnow
 from ..scheduler import Task
-from ..server.querywalker import QueryWalker
+from ..daemon.querywalker import QueryWalker
 from .base import BaseNodeRemote
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO

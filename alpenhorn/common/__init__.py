@@ -1,3 +1,3 @@
 """Alpenhorn common modules.
 
-Modules here are used by both client and server."""
+Modules here are used by both the alpenhorn CLI and the daemon."""

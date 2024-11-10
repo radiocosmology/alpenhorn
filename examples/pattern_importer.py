@@ -3,8 +3,8 @@
 This is an example of a third-party "import detect" extension.
 Such extensions are required to permit alpenhorn to find
 new data files which need import, both as part of the auto-import
-functionality, but also when performing manual imports
-with the alpenhorn client.
+functionality, but also when requesting manual imports with the
+alpenhorn CLI.
 
 This extension re-implements the AcqType and FileType tables
 formerly found in alpenhorn proper and then extends them with
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
     from alpenhorn.common.extensions import ImportCallback
     from alpenhorn.db.archive import ArchiveFileCopy
-    from alpenhorn.server.update import UpdateableNode
+    from alpenhorn.daemon.update import UpdateableNode
 del TYPE_CHECKING
 
 
