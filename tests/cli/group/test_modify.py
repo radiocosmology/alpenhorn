@@ -110,6 +110,6 @@ def test_modify_fix_json(clidb, cli):
 
     cli(0, ["group", "modify", "TEST", '--io-config={"a": 10}'])
 
-    # Client has fixed the I/O config
+    # We have fixed the I/O config
     group = StorageGroup.get(name="TEST")
     assert json.loads(group.io_config) == {"a": 10}

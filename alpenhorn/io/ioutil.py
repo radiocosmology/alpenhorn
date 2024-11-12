@@ -41,7 +41,7 @@ def _pull_timeout(size_b: int) -> float | None:
         pull_timeout_base + file.size_b / pull_bytes_per_second
 
     where `pull_timeout_base` and `pull_bytes_per_second` may
-    be given in the "service" section of the config.
+    be given in the "daemon" section of the config.
 
     If `pull_bytes_per_second` is zero, None is returned (disabling
     the timeout).
@@ -67,8 +67,8 @@ def _pull_timeout(size_b: int) -> float | None:
     PULL_TIMEOUT_BASE = 300  # 5 minutes base
     PULL_BYTES_PER_SECOND = 20000000  # 20MB/s
 
-    base = config.config["service"].get("pull_timeout_base", PULL_TIMEOUT_BASE)
-    bps = config.config["service"].get("pull_bytes_per_second", PULL_BYTES_PER_SECOND)
+    base = config.config["daemon"].get("pull_timeout_base", PULL_TIMEOUT_BASE)
+    bps = config.config["daemon"].get("pull_bytes_per_second", PULL_BYTES_PER_SECOND)
 
     if bps == 0:
         return None

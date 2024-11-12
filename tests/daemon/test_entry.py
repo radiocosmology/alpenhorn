@@ -30,7 +30,7 @@ from alpenhorn.db import database_proxy, EnumField
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
-from alpenhorn.daemon.service import cli
+from alpenhorn.daemon.entry import entry
 
 # Import pattern_importer from the examples directory
 sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))
@@ -300,7 +300,7 @@ def e2e_config(xfs, hostname, clidb_uri):
         ],
         "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
         "logging": {"level": "debug"},
-        "service": {"num_workers": 0},
+        "daemon": {"num_workers": 0},
     }
 
     # Put it in a file
@@ -317,7 +317,7 @@ def e2e_config(xfs, hostname, clidb_uri):
 def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
     runner = CliRunner()
 
-    result = runner.invoke(cli, catch_exceptions=False)
+    result = runner.invoke(entry, catch_exceptions=False)
 
     assert result.exit_code == 0
 

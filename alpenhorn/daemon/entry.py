@@ -1,4 +1,4 @@
-"""Alpenhorn service."""
+"""Alpenhorn daemon entry point."""
 
 import sys
 import click
@@ -33,8 +33,11 @@ sys.excepthook = log_exception
     metavar="FILE",
 )
 @version_option
-def cli(conf):
-    """Alpenhorn data management service."""
+def entry(conf):
+    """Alpenhorn data management daemon.
+
+    This daemon can be used to manage Storage Nodes.
+    """
 
     # Initialise alpenhorn
     start_alpenhorn(conf, cli=False)
@@ -48,7 +51,7 @@ def cli(conf):
     # If we can be multithreaded, start the worker pool
     if db.threadsafe():
         wpool = pool.WorkerPool(
-            num_workers=config.config["service"]["num_workers"], queue=queue
+            num_workers=config.config["daemon"]["num_workers"], queue=queue
         )
     else:
         log.warning("Database is not threadsafe: forcing serial I/O.")

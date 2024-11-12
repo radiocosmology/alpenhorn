@@ -104,8 +104,8 @@ Example config:
             max_bytes: 4G
 
 
-    # Configure the operation of the local service
-    service:
+    # Configure the operation of the local daemon
+    daemon:
         # Default number of worker threads
         num_workers: 4
 
@@ -150,7 +150,7 @@ config = None
 
 _default_config = {
     "logging": {"level": "info"},
-    "service": {
+    "daemon": {
         "auto_import_interval": 30,
         "auto_verify_min_days": 7,
         "num_workers": 0,

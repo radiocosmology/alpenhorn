@@ -33,7 +33,7 @@ test = [
 
 [project.scripts]
 alpenhorn = "alpenhorn.cli:entry"
-alpenhornd = "alpenhorn.daemon:cli"
+alpenhornd = "alpenhorn.daemon:entry"
 
 [tool.setuptools.packages]
 find = {}

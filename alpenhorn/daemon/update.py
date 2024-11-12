@@ -334,7 +334,7 @@ class UpdateableNode(updateable_base):
 
         for copy in copies:
             copy_age_days = (time.time() - copy.last_update.timestamp()) / 86400.0
-            if copy_age_days <= config.config["service"]["auto_verify_min_days"]:
+            if copy_age_days <= config.config["daemon"]["auto_verify_min_days"]:
                 continue  # Too new to re-verify
 
             log.info(
@@ -895,7 +895,7 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
         )
 
         # Avoid looping too fast.
-        remaining = config.config["service"]["update_interval"] - loop_time
+        remaining = config.config["daemon"]["update_interval"] - loop_time
         if remaining > 0:
             global_abort.wait(remaining)  # Stops waiting if a global abort is triggered
 
@@ -912,7 +912,7 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
     start_time = time.time()
 
     # Handle tasks for, say, 15 minutes at most
-    while time.time() - start_time < config.config["service"]["serial_io_timeout"]:
+    while time.time() - start_time < config.config["daemon"]["serial_io_timeout"]:
         # Get a task
         item = queue.get(timeout=1)
 

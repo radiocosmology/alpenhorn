@@ -66,7 +66,10 @@ def _verbosity_from_cli(verbose: int, debug: bool, quiet: int) -> int:
     default=False,
 )
 def entry(conf, quiet, verbose, debug):
-    """Client interface for alpenhorn."""
+    """Alpenhorn data management system.
+
+    This is the command-line interface to the alpenhorn data index.
+    """
 
     # Initialise alpenhorn
     start_alpenhorn(

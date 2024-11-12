@@ -286,7 +286,7 @@ def update_observer(
                 return
 
             _observers[node.io_class] = observer(
-                timeout=config.config["service"]["auto_import_interval"]
+                timeout=config.config["daemon"]["auto_import_interval"]
             )
 
             _observers[node.io_class].start()
