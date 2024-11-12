@@ -390,8 +390,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             copy : ArchiveFileCopy
                 The file copy to check
             """
+
             # The trivial case.
-            if not pathlib.Path(copy.path).exists():
+            if not node_io.exists(copy.file.path):
                 # Only update if this is surprising (which it probably
                 # is.)
                 if copy.has_file != "N":
@@ -408,7 +409,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             restore_wait = node_io._restore_wait(copy)
             while restore_wait:
                 # Wait for a bit
-                yield 60
+                yield 600
 
                 # Now check again
                 restore_wait = node_io._restore_wait(copy)
