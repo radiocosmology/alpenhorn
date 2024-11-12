@@ -45,6 +45,18 @@ def pull_async(
         The request we're fulfilling.
     """
 
+    # Recheck the database to see if a file hasn't shown
+    # up somehow
+    if io.node.filecopy_state(req.file) == "Y":
+        log.info(
+            f"Cancelling pull request for {req.file.path} "
+            f"to {io.node.name}: already present."
+        )
+        ArchiveFileCopyRequest.update(cancelled=1).where(
+            ArchiveFileCopyRequest.id == req.id
+        ).execute()
+        return
+
     # Before we were queued, NodeIO reserved space for this file.
     # Automatically release bytes on task completion
     task.on_cleanup(io.release_bytes, args=(req.file.size_b,))

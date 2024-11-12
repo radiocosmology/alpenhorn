@@ -393,8 +393,8 @@ def test_update_node_run(
 
     # And something to ready for a pull
     goodfile = archivefile(name="ready_me", acq=simpleacq)
-    archivefilecopy(node=unode.db, file=goodfile, has_file="Y")
-    afcr = archivefilecopyrequest(
+    archivefilecopy(node=unode.db, file=goodfile, has_file="Y", ready=False)
+    afcr_good = archivefilecopyrequest(
         node_from=unode.db, group_to=simplegroup, file=goodfile
     )
 
@@ -402,13 +402,31 @@ def test_update_node_run(
     missingfile = archivefile(name="ignore_me", acq=simpleacq)
     archivefilecopyrequest(node_from=unode.db, group_to=simplegroup, file=missingfile)
 
-    mock = MagicMock()
-    mock.before_update.return_value = True
-    mock.bytes_avail.return_value = None
-    mock.fifo = "n:mock"
-    with patch.object(unode, "io", mock):
-        # update runs
-        unode.update()
+    # And something already ready (i.e. no need to re-ready)
+    readyfile = archivefile(name="skip_me", acq=simpleacq)
+    archivefilecopy(node=unode.db, file=readyfile, has_file="Y", ready=True)
+    afcr_skip = archivefilecopyrequest(
+        node_from=unode.db, group_to=simplegroup, file=readyfile
+    )
+
+    # Mock the remote so the ready can happen
+    pull_ready_calls = set()
+
+    def pull_ready(file):
+        pull_ready_calls.add(file)
+        return file.name == "skip_me"
+
+    remote = MagicMock()
+    remote.io.pull_ready = pull_ready
+    with patch("alpenhorn.server.update.RemoteNode", lambda x: remote):
+        # Mock IO
+        mock = MagicMock()
+        mock.before_update.return_value = True
+        mock.bytes_avail.return_value = None
+        mock.fifo = "n:mock"
+        with patch.object(unode, "io", mock):
+            # update runs
+            unode.update()
 
     assert unode._updated is True
 
@@ -417,4 +435,7 @@ def test_update_node_run(
     assert len(calls) == 4
     assert call.bytes_avail(fast=False) in calls
     assert call.check(copy) in calls
-    assert call.ready_pull(afcr) in calls
+    assert call.ready_pull(afcr_good) in calls
+
+    # Check remote.pull_ready calls
+    assert pull_ready_calls == {goodfile, readyfile}
