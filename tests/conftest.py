@@ -1,6 +1,7 @@
 """Common fixtures"""
 
 import os
+import re
 import sys
 import yaml
 import pytest
@@ -871,3 +872,32 @@ def simplerequest(
     group2 = storagegroup(name="simplerequest_group2")
     node = storagenode(name="simplerequest_node", group=group1)
     return archivefilecopyrequest(file=file, node_from=node, group_to=group2)
+
+
+@pytest.fixture
+def assert_row_present():
+    """Returns a function which checks for a row output in a table."""
+
+    def _assert_row_present(text, *cells):
+        """Check `text` for a row of data.
+
+        Raises pytest.fail unless the list of `cells` comprise
+        a row in the `tabulate` table output in `text`.
+        """
+
+        # stringify
+        cells = [str(cell) for cell in cells]
+        text_row = "  |  ".join(cells)
+
+        # Now remove empty cells (because they're difficult to match) and armour
+        cells = [re.escape(cell) for cell in cells if cell != ""]
+
+        # Suppress traceback in pytest output, unless --full-trace is used
+        __tracebackhide__ = True
+
+        regex = r"^\s*" + r"\s+".join(cells) + r"\s*$"
+
+        if re.search(regex, text, flags=re.MULTILINE) is None:
+            pytest.fail(f"Row not found:\n   " + text_row)
+
+    return _assert_row_present

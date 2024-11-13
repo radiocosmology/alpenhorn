@@ -64,7 +64,7 @@ class ArchiveFileCopy(base_model):
         """A human-readable description of the copy state."""
 
         if self.wants_file == "N":
-            return "Removed" if self.has_file == "N" else "Pending Removal"
+            return "Removed" if self.has_file == "N" else "Released"
         if self.wants_file == "M":
             return "Removed" if self.has_file == "N" else "Removable"
 
@@ -72,7 +72,7 @@ class ArchiveFileCopy(base_model):
         if self.has_file == "Y":
             return "Present"
         if self.has_file == "M":
-            return "Needs Check"
+            return "Suspect"
         if self.has_file == "N":
             # i.e. a third-party deleted it
             return "Missing"

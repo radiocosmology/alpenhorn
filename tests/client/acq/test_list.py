@@ -1,7 +1,5 @@
 """Test CLI: alpenhorn acq list"""
 
-import re
-
 from alpenhorn.db import (
     StorageGroup,
     StorageNode,
@@ -20,7 +18,7 @@ def test_no_list(clidb, client):
     assert "Name" not in result.output
 
 
-def test_list(clidb, client):
+def test_list(clidb, client, assert_row_present):
     """Test with no constraints."""
 
     acq = ArchiveAcq.create(name="Acq1")
@@ -35,12 +33,12 @@ def test_list(clidb, client):
     result = client(0, ["acq", "list"])
 
     # Check table
-    assert re.search(r"Acq1\s+2", result.output) is not None
-    assert re.search(r"Acq2\s+1", result.output) is not None
-    assert re.search(r"Acq3\s+0", result.output) is not None
+    assert_row_present(result.output, "Acq1", 2)
+    assert_row_present(result.output, "Acq2", 1)
+    assert_row_present(result.output, "Acq3", 0)
 
 
-def test_list_node(clidb, client):
+def test_list_node(clidb, client, assert_row_present):
     """Test with node constraint."""
 
     group = StorageGroup.create(name="Group")
@@ -68,7 +66,7 @@ def test_list_node(clidb, client):
     result = client(0, ["acq", "list", "--node=Node1"])
 
     # Only Acq1 should be listed, with only one file
-    assert re.search(r"Acq1\s+1", result.output) is not None
+    assert_row_present(result.output, "Acq1", 1)
     assert "Acq2" not in result.output
     assert "Acq3" not in result.output
 
@@ -103,9 +101,12 @@ def test_no_list_node(clidb, client):
 
     # i.e. the header hasn't been printed
     assert "Name" not in result.output
+    assert "Acq1" not in result.output
+    assert "Acq2" not in result.output
+    assert "Acq3" not in result.output
 
 
-def test_list_group(clidb, client):
+def test_list_group(clidb, client, assert_row_present):
     """Test with group constraint."""
 
     group1 = StorageGroup.create(name="Group1")
@@ -137,8 +138,8 @@ def test_list_group(clidb, client):
     result = client(0, ["acq", "list", "--group=Group1"])
 
     # Check results.  Only files in the group should be counted
-    assert re.search(r"Acq1\s+2", result.output) is not None
-    assert re.search(r"Acq2\s+1", result.output) is not None
+    assert_row_present(result.output, "Acq1", 2)
+    assert_row_present(result.output, "Acq2", 1)
     assert "Acq3" not in result.output
 
 

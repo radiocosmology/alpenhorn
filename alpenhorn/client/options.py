@@ -19,12 +19,45 @@ def client_option(option: str, **extra_kwargs):
     """
 
     # Set args for the click.option decorator
-    if option == "group":
+    if option == "address":
+        args = ("--address",)
+        kwargs = {
+            "metavar": "ADDR",
+            "help": "Domain name or IP address to use for remote access to the "
+            "node.",
+        }
+    elif option == "archive":
+        args = ("--archive",)
+        kwargs = {
+            "is_flag": True,
+            "help": "Make node an archive node.  Incompatible with --field "
+            "or --transport.",
+        }
+    elif option == "auto_verify":
+        args = ("--auto-verify",)
+        kwargs = {
+            "metavar": "COUNT",
+            "type": int,
+            "help": "If COUNT is zero, turn off auto-verify.  If COUNT is "
+            "non-zero, turn on auto-verify for the node, with COUNT as the "
+            "maximum number of re-verified copies per iteration.",
+        }
+    elif option == "field":
+        args = ("--field",)
+        kwargs = {
+            "is_flag": True,
+            "help": "Make node a field node (i.e. neither an archive node "
+            "nor a transport node).  Incompatible with --archive or --transport.",
+        }
+    elif option == "group":
         args = ("--group",)
         kwargs = {
             "metavar": "GROUP",
             "help": "Limit to files in Storage Group named GROUP.",
         }
+    elif option == "host":
+        args = ("--host",)
+        kwargs = {"metavar": "HOST", "help": "The host managing this node."}
     elif option == "io_class":
         args = (
             "io_class",
@@ -41,9 +74,10 @@ def client_option(option: str, **extra_kwargs):
         kwargs = {
             "metavar": "CONFIG",
             "default": None,
-            "help": "Set I/O config to the JSON object literal CONFIG.  Any I/O config "
-            "specified this way may be further modified by --io-var.  Setting this to "
-            "nothing (--io-config=) empties the I/O config.",
+            "help": "Set I/O config to the JSON object literal CONFIG.  Any "
+            "I/O config specified this way may be further modified by "
+            "--io-var.  Setting this to nothing (--io-config=) empties the "
+            "I/O config.",
         }
     elif option == "io_var":
         args = ("--io-var",)
@@ -51,9 +85,25 @@ def client_option(option: str, **extra_kwargs):
             "metavar": "VAR=VALUE",
             "default": (),
             "multiple": True,
-            "help": "Set I/O config variable VAR to the value VALUE.  May be specified "
-            "multiple times.  Modifies any config specified by --io-config.  If VALUE "
-            "is empty (--io-var VAR=), VAR is deleted if present.",
+            "help": "Set I/O config variable VAR to the value VALUE.  May be "
+            "specified multiple times.  Modifies any config specified by "
+            "--io-config.  If VALUE is empty (--io-var VAR=), VAR is deleted "
+            "if present.",
+        }
+    elif option == "max_total":
+        args = ("--max-total",)
+        kwargs = {
+            "metavar": "SIZE",
+            "type": float,
+            "help": "The maximum allowed size of the node, in GiB",
+        }
+    elif option == "min_avail":
+        args = ("--min-avail",)
+        kwargs = {
+            "metavar": "SIZE",
+            "type": float,
+            "help": "The minimum allowed free space on the node, in GiB, "
+            "before auto-cleaning happens",
         }
     elif option == "node":
         args = ("--node",)
@@ -64,6 +114,22 @@ def client_option(option: str, **extra_kwargs):
     elif option == "notes":
         args = ("--notes",)
         kwargs = {"metavar": "COMMENT", "help": "Set notes to COMMENT."}
+    elif option == "root":
+        args = ("--root",)
+        kwargs = {"metavar": "ROOT", "help": "The node root or mount point."}
+    elif option == "transport":
+        args = ("--transport",)
+        kwargs = {
+            "is_flag": True,
+            "help": "Make node a transport node.  Incompatible with --archive "
+            "or --field.",
+        }
+    elif option == "username":
+        args = ("--username",)
+        kwargs = {
+            "metavar": "USER",
+            "help": "Username to use for remote access to the node.",
+        }
     else:
         raise ValueError(f"Unknown option: {option}")
 
@@ -85,6 +151,46 @@ def not_both(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> 
 
     if opt1_set and opt2_set:
         raise click.UsageError(f"cannot use both --{opt1_name} and --{opt2_name}")
+
+
+def exactly_one(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> None:
+    """Check that exactly one of two incompatible options were used.
+
+    If not, raise click.UsageError."""
+
+    not_both(opt1_set, opt1_name, opt2_set, opt2_name)
+
+    if not (opt1_set or opt2_set):
+        raise click.UsageError(f"missing --{opt1_name} or --{opt2_name}")
+
+
+def set_storage_type(
+    archive: bool, field: bool, transport: bool, none_ok: bool = False
+) -> str | None:
+    """Set node storage_type.
+
+    Processes the --archive, --field, --transport options.
+
+    Returns one of 'A', 'F', 'T', depending on which of the options is set.
+
+    If none of the options are set, None is returned if `none_ok` is True, otherwise
+    the default 'F' is returned.
+    """
+
+    # Usage checks
+    not_both(archive, "archive", field, "field")
+    not_both(archive, "archive", transport, "transport")
+    not_both(field, "field", transport, "transport")
+
+    if archive:
+        return "A"
+    if transport:
+        return "T"
+    if not field and none_ok:
+        return None
+
+    # Default
+    return "F"
 
 
 def set_io_config(
