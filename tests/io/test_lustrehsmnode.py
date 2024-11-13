@@ -4,8 +4,8 @@ import pytest
 import peewee as pw
 from unittest.mock import patch, MagicMock
 
+from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopy
-from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture

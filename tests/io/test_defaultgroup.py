@@ -3,9 +3,9 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from alpenhorn.daemon.update import UpdateableNode, UpdateableGroup
 from alpenhorn.db import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io._default_asyncs import group_search_async
-from alpenhorn.server.update import UpdateableNode, UpdateableGroup
 
 
 @pytest.fixture

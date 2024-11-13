@@ -3,20 +3,20 @@
 Basic Configruation
 -------------------
 
-Both client and server should call the `init_logging()` function as soon as
+Both the CLI and daemon should call the `init_logging()` function as soon as
 possible after program start to turn on logging to standard error.  Any log
 messages produced before this call are discarded.
 
 
-Server Logging
+Daemon Logging
 --------------
 
-The server should immediately follow the loading of the alpenhorn config
+The daemon should immediately follow the loading of the alpenhorn config
 with a call to `configure_logging()` which will re-configure the alpenhorn
 logger based on the alpenhorn configuration, including starting file or syslog-
-based logging, if requested.  The client should not call this function.
+based logging, if requested.  The CLI should not call this function.
 
-The alpenhorn server buffers log messages emitted between the `init_logging`
+The alpenhorn daemon buffers log messages emitted between the `init_logging`
 and `configure_logging` calls and will flush them to any additonal log
 destinations started by `configure_logging` so that these messages are not lost.
 (This is in addiiton to the messages being sent immediately to standard error,
@@ -26,17 +26,17 @@ Note also that between the two calls, the log level of the root logger is
 set to DEBUG.
 
 
-Client Logging
---------------
+CLI Logging
+-----------
 
-The client does not support file or syslog logging, so should _not_ call
-`configure_logging`.  Instead, the client supports five verbosity levels:
+The CLI does not support file or syslog logging, so should _not_ call
+`configure_logging`.  Instead, the CLI supports five verbosity levels:
 
     1.  No output on standard out.  Error messages on standard error.
     2.  No output on standard out.  Warning and error on standard error.
-    3.  Client ouput on standard out.  Warning and error messages on standard error.
-    4.  Client ouput on standard out.  Info, warning, errors on standard error.
-    5.  Client ouput on standard out.  Debug, info, warning, errors on standard error.
+    3.  CLI output on standard out.  Warning and error messages on standard error.
+    4.  CLI output on standard out.  Info, warning, errors on standard error.
+    5.  CLI output on standard out.  Debug, info, warning, errors on standard error.
 
 The initial verbosity can be specified in the `init_logging` call.  The
 default verbosity is 3.   May be changed at runtime by calling `set_verbosity`.
@@ -58,20 +58,20 @@ except ImportError:
     RotatingFileHandler = logging.handlers.RotatingFileHandler
 
 # The log formats.  Used by the stderr log and any other log destinations
-client_fmt = logging.Formatter(
+cli_fmt = logging.Formatter(
     "%(levelname)s >> %(message)s",
     "%b %d %H:%M:%S",
 )
-server_fmt = logging.Formatter(
+daemon_fmt = logging.Formatter(
     "%(asctime)s %(levelname)s >> [%(threadName)s] %(message)s",
     "%b %d %H:%M:%S",
 )
 
-# initialised by init_logging; server-only
+# initialised by init_logging; daemon-only
 log_buffer = None
 
-# Client output suppression.
-_client_echo = True
+# CLI output suppression.
+_cli_echo = True
 
 
 class StartupHandler(logging.handlers.BufferingHandler):
@@ -134,16 +134,16 @@ class StartupHandler(logging.handlers.BufferingHandler):
 
 
 def echo(*args, **kwargs) -> None:
-    """Client wrapper for click.echo.
+    """CLI wrapper for click.echo.
 
     Suppresses output when verbosity is less than three.
     """
-    if _client_echo:
+    if _cli_echo:
         return click.echo(*args, **kwargs)
 
 
 def set_verbosity(verbosity: int) -> None:
-    """Set client verbosity.
+    """Set cli verbosity.
 
     Sets the log level of the root logger based on the
     requested verbosity level.
@@ -164,12 +164,12 @@ def set_verbosity(verbosity: int) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(verbosity_to_level[verbosity])
 
-    # Suppress normal client output at low verbosity
-    global _client_echo
-    _client_echo = verbosity >= 3
+    # Suppress normal cli output at low verbosity
+    global _cli_echo
+    _cli_echo = verbosity >= 3
 
 
-def init_logging(client: bool, verbosity: int | None = None) -> None:
+def init_logging(cli: bool, verbosity: int | None = None) -> None:
     """Initialise the logger.
 
     This function is called before the config is read.  It sets up logging to
@@ -178,28 +178,28 @@ def init_logging(client: bool, verbosity: int | None = None) -> None:
 
     Parameters
     ----------
-    client : bool
-        Is the alpenhorn client being initialised?
+    cli : bool
+        Is the alpenhorn CLI being initialised?
     verbosity : int
-        For clients, the verbosity level to use.  Ignored for servers.
+        For the CLI, the verbosity level to use.  Ignored for daemons.
     """
 
     # This is the stderr logger.  It is always present, regardless of logging config
     log_stream = logging.StreamHandler()
-    log_stream.setFormatter(client_fmt if client else server_fmt)
+    log_stream.setFormatter(cli_fmt if cli else daemon_fmt)
 
     # Set up initial logging
     root_logger = logging.getLogger()
     root_logger.addHandler(log_stream)
 
-    if client:
+    if cli:
         if verbosity is None:
             verbosity = 3
         set_verbosity(verbosity)
     else:
         root_logger.setLevel(logging.DEBUG)
 
-        # This is the start-up logger for the server.  It buffers messages in memory
+        # This is the start-up logger for the daemon.  It buffers messages in memory
         # until configure_logging() is called, at which point the buffered messages
         # are flushed to a file, if one was opened, so that messages logged before
         # the start of file logging are recorded, and then this handler is shut down.
@@ -208,7 +208,7 @@ def init_logging(client: bool, verbosity: int | None = None) -> None:
 
         root_logger.addHandler(log_buffer)
 
-        # Record server start
+        # Record daemon start
         root_logger.info("Alpenhorn start.")
 
 
@@ -304,8 +304,8 @@ def configure_sys_logging(syslog_config: dict) -> logging.handlers.SysLogHandler
     )
 
     # Format handler
-    global server_fmt
-    handler.setFormatter(server_fmt)
+    global daemon_fmt
+    handler.setFormatter(daemon_fmt)
 
     # Log the start of syslogging to the alpenhorn logger.
     # We do this _before_ adding the file handler to prevent
@@ -389,8 +389,8 @@ def configure_file_logging(file_config: dict) -> logging.Handler:
         how = ""
 
     # Format handler
-    global server_fmt
-    handler.setFormatter(server_fmt)
+    global daemon_fmt
+    handler.setFormatter(daemon_fmt)
 
     # Log the start of file logging to the alpenhorn logger.
     # We do this _before_ adding the file handler to prevent
@@ -415,8 +415,6 @@ def configure_logging() -> None:
     ValueError
         An invalid value was found in the logging config.
     """
-
-    # TODO: apply different settings for the client
 
     def _check_level(level, source):
         if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:

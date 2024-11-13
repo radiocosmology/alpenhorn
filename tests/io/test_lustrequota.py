@@ -2,8 +2,8 @@
 
 import pytest
 
+from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.io.lustrequota import LustreQuotaNodeIO
-from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture

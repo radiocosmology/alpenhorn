@@ -11,7 +11,7 @@ from alpenhorn.io.updownlock import UpDownLock
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
-@pytest.mark.alpenhorn_config({"service": {"pull_timeout_base": 1000}})
+@pytest.mark.alpenhorn_config({"daemon": {"pull_timeout_base": 1000}})
 def test_bbcp_config_timeout(mock_run_command, set_config):
     """Test setting timeout via config."""
 
@@ -27,7 +27,7 @@ def test_bbcp_config_timeout(mock_run_command, set_config):
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
-@pytest.mark.alpenhorn_config({"service": {"pull_bytes_per_second": 0}})
+@pytest.mark.alpenhorn_config({"daemon": {"pull_bytes_per_second": 0}})
 def test_bbcp_no_timeout(mock_run_command, set_config):
     """Test disabling timeout via config."""
 

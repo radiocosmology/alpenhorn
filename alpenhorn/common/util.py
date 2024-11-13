@@ -61,7 +61,7 @@ SOFTWARE.
 
 
 def start_alpenhorn(
-    cli_conf: str | None, client: bool, verbosity: int | None = None
+    cli_conf: str | None, cli: bool, verbosity: int | None = None
 ) -> None:
     """Initialise alpenhorn
 
@@ -69,19 +69,19 @@ def start_alpenhorn(
     ----------
     cli_conf : str or None
         The config file given on the command line, if any.
-    client : bool
-        Is the alpenhorn client being initialised?
+    cli : bool
+        Is the alpenhorn cli being initialised?
     verbosity : int, optional
-        For clients, the initial verbosity level.  Ignored for servers.
+        For the cli, the initial verbosity level.  Ignored for daemons.
     """
     # Initialise logging
-    logger.init_logging(client=client, verbosity=verbosity)
+    logger.init_logging(cli=cli, verbosity=verbosity)
 
     # Load the configuration for alpenhorn
-    config.load_config(cli_conf, client=client)
+    config.load_config(cli_conf, cli=cli)
 
-    # Set up server logging based on config
-    if not client:
+    # Set up daemon logging based on config
+    if not cli:
         logger.configure_logging()
 
     # Load alpenhorn extensions

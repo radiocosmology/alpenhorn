@@ -109,7 +109,7 @@ class LFS:
         Defaults to 60 seconds if not given.
     """
 
-    # Conveniences for clients
+    # Conveniences for callers
     HSM_MISSING = HSMState.MISSING
     HSM_UNARCHIVED = HSMState.UNARCHIVED
     HSM_RESTORED = HSMState.RESTORED

@@ -5,8 +5,8 @@ import pytest
 import pathlib
 from unittest.mock import patch
 
+from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture

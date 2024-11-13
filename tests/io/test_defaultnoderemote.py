@@ -2,7 +2,7 @@
 
 import pytest
 
-from alpenhorn.server.update import RemoteNode
+from alpenhorn.daemon.update import RemoteNode
 
 
 def test_file_addr(simplenode, simplefile):

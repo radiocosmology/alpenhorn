@@ -5,10 +5,10 @@ import pytest
 import datetime
 from unittest.mock import patch, MagicMock
 
+from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db import utcfromtimestamp, utcnow
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io.ioutil import copy_request_done
-from alpenhorn.server.update import UpdateableNode
 
 
 @pytest.fixture
