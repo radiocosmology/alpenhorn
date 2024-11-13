@@ -1,7 +1,13 @@
 """Test CLI: alpenhorn group show"""
 
 import pytest
-from alpenhorn.db import StorageGroup, StorageNode
+from alpenhorn.db import (
+    StorageGroup,
+    StorageNode,
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+)
 
 
 def test_no_show(clidb, cli):
@@ -80,8 +86,8 @@ def test_show_io_config(clidb, cli):
     assert "Param2" in result.output
 
 
-def test_show_node_details(clidb, cli):
-    """Test show --node_details."""
+def test_show_node_details(clidb, cli, assert_row_present):
+    """Test show --node-details."""
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup", io_class="IOClass")
@@ -92,12 +98,79 @@ def test_show_node_details(clidb, cli):
 
     result = cli(0, ["group", "show", "SGroup", "--node-details"])
 
-    assert "Node1" in result.output
-    assert "Yes" in result.output
-    assert "over_here" in result.output
-    assert "Default" in result.output
+    assert_row_present(result.output, "Node1", "over_here", "Yes", "Default")
+    assert_row_present(result.output, "Node2", "over_there", "No", "NodeClass")
 
-    assert "Node1" in result.output
-    assert "No" in result.output
-    assert "over_there" in result.output
-    assert "NodeClass" in result.output
+
+def test_show_node_stats(clidb, cli, assert_row_present):
+    """Test show --node-stats."""
+
+    # Make a StorageGroup with some nodes in it.
+    group = StorageGroup.create(name="SGroup", io_class="IOClass")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    node2 = StorageNode.create(
+        name="Node2",
+        group=group,
+        active=False,
+        host="over_there",
+        io_class="NodeClass",
+        max_total_gb=1,
+    )
+
+    # And some files
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="X", wants_file="Y")
+
+    file = ArchiveFile.create(name="File2", acq=acq, size_b=2345)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="N", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="File3", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    result = cli(0, ["group", "show", "SGroup", "--node-stats"])
+
+    assert_row_present(result.output, "Node1", 2, "4.580 kiB", "-")
+    assert_row_present(result.output, "Node2", 2, "5.665 kiB", "0.00")
+
+
+def test_show_node_details_stats(clidb, cli, assert_row_present):
+    """Test show --node-details --node-stats."""
+
+    # Make a StorageGroup with some nodes in it.
+    group = StorageGroup.create(name="SGroup", io_class="IOClass")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    node2 = StorageNode.create(
+        name="Node2",
+        group=group,
+        active=False,
+        host="over_there",
+        io_class="NodeClass",
+        max_total_gb=1,
+    )
+
+    # And some files
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="X", wants_file="Y")
+
+    file = ArchiveFile.create(name="File2", acq=acq, size_b=2345)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="N", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="File3", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    result = cli(0, ["group", "show", "SGroup", "--node-stats", "--node-details"])
+
+    assert_row_present(
+        result.output, "Node1", "over_here", "Yes", "Default", 2, "4.580 kiB", "-"
+    )
+    assert_row_present(
+        result.output, "Node2", "over_there", "No", "NodeClass", 2, "5.665 kiB", "0.00"
+    )

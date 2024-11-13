@@ -19,6 +19,7 @@ from .deactivate import deactivate
 from .list import list_
 from .modify import modify
 from .rename import rename
+from .show import show
 from .stats import stats
 
 RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
@@ -36,6 +37,7 @@ cli.add_command(deactivate, "deactivate")
 cli.add_command(list_, "list")
 cli.add_command(modify, "modify")
 cli.add_command(rename, "rename")
+cli.add_command(show, "show")
 cli.add_command(stats, "stats")
 
 

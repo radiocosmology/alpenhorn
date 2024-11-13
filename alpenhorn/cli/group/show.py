@@ -7,6 +7,7 @@ from tabulate import tabulate
 
 from ...db import StorageGroup, StorageNode
 from ..cli import echo
+from ..node.stats import get_stats
 
 
 @click.command()
@@ -51,19 +52,55 @@ def show(group_name, node_details, node_stats):
     if nodes:
         if node_details or node_stats:
             if node_details:
-                data = [
-                    (
+                details = {
+                    node.id: (
                         node.name,
                         node.host,
                         "Yes" if node.active else "No",
                         node.io_class if node.io_class else "Default",
                     )
                     for node in nodes
-                ]
-                headers = ["Name", "Host", "Active", "I/O Class"]
+                }
             if node_stats:
-                # TODO: add --node-stats support when "alpenhorn node stats" is implemented
-                raise NotImplementedError()
+                stats = get_stats(nodes, False)
+
+            # Make table
+            data = []
+            if node_stats and node_details:
+                headers = [
+                    "Name",
+                    "Host",
+                    "Active",
+                    "I/O Class",
+                    "File Count",
+                    "Total Size",
+                    "% Full",
+                ]
+                for node in nodes:
+                    data.append(
+                        (
+                            *details[node.id],
+                            stats[node.id]["count"],
+                            stats[node.id]["size"],
+                            stats[node.id]["percent"],
+                        )
+                    )
+            elif node_details:
+                headers = ["Name", "Host", "Active", "I/O Class"]
+                for node in nodes:
+                    data.append(details[node.id])
+            else:
+                headers = ["Name", "File Count", "Total Size", "% Full"]
+                for node in nodes:
+                    data.append(
+                        (
+                            node.name,
+                            stats[node.id]["count"],
+                            stats[node.id]["size"],
+                            stats[node.id]["percent"],
+                        )
+                    )
+
             echo(tabulate(data, headers=headers))
         else:
             # simple list
