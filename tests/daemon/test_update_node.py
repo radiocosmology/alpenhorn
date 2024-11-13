@@ -376,6 +376,24 @@ def test_update_delete_transfer_pending(
     mock_delete.assert_not_called()
 
 
+def test_update_delete_bad_file(
+    unode, simplegroup, simpleacq, archivefile, archivefilecopy
+):
+    """update_delete() should attempt to delete bad files."""
+
+    fileM = archivefile(name="fileM", acq=simpleacq)
+    copyM = archivefilecopy(file=fileM, node=unode.db, has_file="M", wants_file="N")
+    fileX = archivefile(name="fileX", acq=simpleacq)
+    copyX = archivefilecopy(file=fileX, node=unode.db, has_file="X", wants_file="N")
+
+    mock_delete = MagicMock()
+    with patch.object(unode.io, "delete", mock_delete):
+        unode.update_delete()
+
+    # Both files were deleted
+    mock_delete.assert_called_once_with([copyM, copyX])
+
+
 def test_update_node_run(
     unode,
     queue,
@@ -387,9 +405,17 @@ def test_update_node_run(
 ):
     """Test running UpdateableNode.update_node."""
 
-    # Make something to check
-    badfile = archivefile(name="check_me", acq=simpleacq)
-    copy = archivefilecopy(node=unode.db, file=badfile, has_file="M")
+    # Make some things to check
+    badfileY = archivefile(name="check_me", acq=simpleacq)
+    badcopyY = archivefilecopy(
+        node=unode.db, file=badfileY, has_file="M", wants_file="Y"
+    )
+
+    # This one should be skipped (because it's about to be deleted)
+    badfileN = archivefile(name="dont_check_me", acq=simpleacq)
+    badcopyN = archivefilecopy(
+        node=unode.db, file=badfileN, has_file="M", wants_file="N"
+    )
 
     # And something to ready for a pull
     goodfile = archivefile(name="ready_me", acq=simpleacq)
@@ -432,9 +458,10 @@ def test_update_node_run(
 
     # Check I/O calls
     calls = list(mock.mock_calls)
-    assert len(calls) == 4
+    assert len(calls) == 5
     assert call.bytes_avail(fast=False) in calls
-    assert call.check(copy) in calls
+    assert call.check(badcopyY) in calls
+    assert call.delete([badcopyN]) in calls
     assert call.ready_pull(afcr_good) in calls
 
     # Check remote.pull_ready calls

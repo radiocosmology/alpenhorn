@@ -389,7 +389,7 @@ class UpdateableNode(updateable_base):
             .where(
                 dfclause,
                 ArchiveFileCopy.node == self.db,
-                ArchiveFileCopy.has_file == "Y",
+                ArchiveFileCopy.has_file != "N",
             )
             .order_by(ArchiveFileCopy.id)
         ):
@@ -451,7 +451,9 @@ class UpdateableNode(updateable_base):
 
             # Check the integrity of any questionable files (has_file=M)
             for copy in ArchiveFileCopy.select().where(
-                ArchiveFileCopy.node == self.db, ArchiveFileCopy.has_file == "M"
+                ArchiveFileCopy.node == self.db,
+                ArchiveFileCopy.has_file == "M",
+                ArchiveFileCopy.wants_file != "N",
             ):
                 log.info(
                     f'Checking copy "{copy.file.acq.name}/{copy.file.name}" '
