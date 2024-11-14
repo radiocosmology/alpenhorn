@@ -1,4 +1,4 @@
-"""alpenhorn node auto-clean command"""
+"""alpenhorn node autoclean command"""
 
 import click
 import peewee as pw
@@ -13,17 +13,17 @@ from ..cli import echo
 @click.option(
     "--remove",
     is_flag=True,
-    help="Remove (instead of add) GROUP as an auto-clean trigger.",
+    help="Remove (instead of add) GROUP as an autoclean trigger.",
 )
 @click.pass_context
 def autoclean(ctx, group_name, node_name, remove):
-    """Manage auto-clean triggers for this node.
+    """Manage autoclean triggers for this node.
 
     This allows you to add (the default) or remove (using --remove)
-    the StorageGroup named GROUP as a an auto-clean trigger for the
+    the StorageGroup named GROUP as a an autoclean trigger for the
     Storage Node named NODE.
 
-    If GROUP is added as an auto-clean trigger for NODE, then, whenever
+    If GROUP is added as an autoclean trigger for NODE, then, whenever
     a file is added to GROUP, it will be automatically released for
     deletion on NODE.
     """
@@ -39,10 +39,10 @@ def autoclean(ctx, group_name, node_name, remove):
         except pw.DoesNotExist:
             raise click.ClickException(f"no such group: {group_name}")
 
-        # Sanity check: can't auto-clean within a group
+        # Sanity check: can't autoclean within a group
         if group == node.group and not remove:
             raise click.ClickException(
-                "can't enable auto-clean: "
+                "can't enable autoclean: "
                 f'Node "{node_name}" is in group "{group_name}"'
             )
 
