@@ -5,6 +5,7 @@ import peewee as pw
 
 from ...db import StorageGroup, StorageNode
 
+from .autosync import autosync
 from .create import create
 from .list import list_
 from .modify import modify
@@ -17,6 +18,7 @@ def cli():
     """Manage Storage Groups."""
 
 
+cli.add_command(autosync, "autosync")
 cli.add_command(create, "create")
 cli.add_command(list_, "list")
 cli.add_command(modify, "modify")
