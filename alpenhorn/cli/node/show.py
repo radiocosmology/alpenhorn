@@ -3,21 +3,32 @@
 import json
 import click
 import peewee as pw
+from tabulate import tabulate
 
 from ...common.util import pretty_bytes
-from ...db import StorageGroup, StorageNode
+from ...db import StorageGroup, StorageNode, StorageTransferAction
 from ..cli import echo
 from .stats import get_stats
 
 
 @click.command()
 @click.argument("name", metavar="NAME")
+@click.option(
+    "--actions",
+    is_flag=True,
+    help="Show post-transfer auto-actions affecting this group.",
+)
+@click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
 @click.option("--stats", is_flag=True, help="Show usage stats of the node.")
-def show(name, stats):
+def show(name, actions, all_, stats):
     """Show details of a Storage Node.
 
     Shows details of the Storage Node named NODE.
     """
+
+    if all_:
+        actions = True
+        stats = True
 
     try:
         node = StorageNode.get(name=name)
@@ -96,3 +107,36 @@ def show(name, stats):
         echo("    Total Files: " + str(stats["count"]))
         echo("     Total Size: " + stats["size"])
         echo("          Usage: " + stats["percent"].lstrip() + "%")
+
+    # List transfer actions, if requested
+    if actions:
+        echo("\nAuto-actions:\n")
+
+        # It's possible for there to be entries in the table with nothing
+        # activated.  So filter those out
+        query = (
+            StorageTransferAction.select()
+            .join(StorageGroup)
+            .where(
+                StorageTransferAction.node_from == node,
+                (StorageTransferAction.autosync == 1)
+                | (StorageTransferAction.autoclean == 1),
+            )
+            .order_by(StorageTransferAction.group_to_id)
+        )
+
+        data = []
+        for action in query.execute():
+            if action.autoclean:
+                data.append(
+                    (action.group_to.name, "Auto-clean", "File added to that group")
+                )
+            if action.autosync:
+                data.append(
+                    (action.group_to.name, "Auto-sync", "File added to this node")
+                )
+
+        if data:
+            echo(tabulate(data, headers=["Group", "Action", "Trigger"]))
+        else:
+            echo("  none")

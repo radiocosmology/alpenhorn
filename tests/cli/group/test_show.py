@@ -4,6 +4,7 @@ import pytest
 from alpenhorn.db import (
     StorageGroup,
     StorageNode,
+    StorageTransferAction,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
@@ -174,3 +175,94 @@ def test_show_node_details_stats(clidb, cli, assert_row_present):
     assert_row_present(
         result.output, "Node2", "over_there", "No", "NodeClass", 2, "5.665 kiB", "0.00"
     )
+
+
+def test_show_actions(clidb, cli, assert_row_present):
+    """Test show --actions."""
+
+    group = StorageGroup.create(name="Group1")
+
+    group2 = StorageGroup.create(name="Group2")
+    node = StorageNode.create(name="Node1", group=group2)
+    StorageTransferAction.create(
+        node_from=node, group_to=group, autosync=1, autoclean=1
+    )
+
+    node = StorageNode.create(name="Node2", group=group2)
+    StorageTransferAction.create(
+        node_from=node, group_to=group, autosync=0, autoclean=1
+    )
+
+    node = StorageNode.create(name="Node3", group=group2)
+    StorageTransferAction.create(
+        node_from=node, group_to=group, autosync=1, autoclean=0
+    )
+
+    node = StorageNode.create(name="Node4", group=group2)
+    StorageTransferAction.create(
+        node_from=node, group_to=group, autosync=0, autoclean=0
+    )
+
+    node = StorageNode.create(name="Node5", group=group2)
+    StorageTransferAction.create(
+        node_from=node, group_to=group2, autosync=1, autoclean=1
+    )
+
+    result = cli(0, ["group", "show", "Group1", "--actions"])
+
+    # Nodes 1 and 2 are autocleaned
+    assert_row_present(result.output, "Node1", "Auto-clean", "File added to this group")
+    assert_row_present(result.output, "Node2", "Auto-clean", "File added to this group")
+
+    # Nodes 1 and 3 are autosynced
+    assert_row_present(result.output, "Node1", "Auto-sync", "File added to that node")
+    assert_row_present(result.output, "Node3", "Auto-sync", "File added to that node")
+
+    assert "Node4" not in result.output
+    assert "Node5" not in result.output
+
+
+def test_show_all(clidb, cli, assert_row_present):
+    """Test show --all."""
+
+    # Make a StorageGroup with some nodes in it.
+    group = StorageGroup.create(name="SGroup", io_class="IOClass")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    node2 = StorageNode.create(
+        name="Node2",
+        group=group,
+        active=False,
+        host="over_there",
+        io_class="NodeClass",
+        max_total_gb=1,
+    )
+
+    StorageTransferAction.create(
+        node_from=node1, group_to=group, autosync=1, autoclean=1
+    )
+
+    # And some files
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="X", wants_file="Y")
+
+    file = ArchiveFile.create(name="File2", acq=acq, size_b=2345)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="N", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="File3", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    result = cli(0, ["group", "show", "SGroup", "--all"])
+
+    assert_row_present(
+        result.output, "Node1", "over_here", "Yes", "Default", 2, "4.580 kiB", "-"
+    )
+    assert_row_present(
+        result.output, "Node2", "over_there", "No", "NodeClass", 2, "5.665 kiB", "0.00"
+    )
+
+    assert_row_present(result.output, "Node1", "Auto-clean", "File added to this group")
+    assert_row_present(result.output, "Node1", "Auto-sync", "File added to that node")

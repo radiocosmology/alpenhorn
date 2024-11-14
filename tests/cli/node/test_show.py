@@ -4,6 +4,7 @@ import pytest
 from alpenhorn.db import (
     StorageGroup,
     StorageNode,
+    StorageTransferAction,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
@@ -135,3 +136,92 @@ def test_show_node_stats(clidb, cli):
 
     # 4.58 out of 8 == 57.25 percent
     assert "57.25%" in result.output
+
+
+def test_show_actions(clidb, cli, assert_row_present):
+    """Test show --actions."""
+
+    group1 = StorageGroup.create(name="Group1")
+    node1 = StorageNode.create(name="Node1", group=group1)
+
+    group2 = StorageGroup.create(name="Group2")
+    node2 = StorageNode.create(name="Node2", group=group2)
+
+    StorageTransferAction.create(
+        node_from=node1, group_to=group2, autosync=1, autoclean=1
+    )
+
+    group = StorageGroup.create(name="Group3")
+    StorageTransferAction.create(
+        node_from=node1, group_to=group, autosync=0, autoclean=1
+    )
+
+    group = StorageGroup.create(name="Group4")
+    StorageTransferAction.create(
+        node_from=node1, group_to=group, autosync=1, autoclean=0
+    )
+
+    group = StorageGroup.create(name="Group5")
+    StorageTransferAction.create(
+        node_from=node1, group_to=group, autosync=0, autoclean=0
+    )
+
+    group = StorageGroup.create(name="Group6")
+    StorageTransferAction.create(
+        node_from=node2, group_to=group, autosync=1, autoclean=1
+    )
+
+    result = cli(0, ["node", "show", "Node1", "--actions"])
+
+    # Groups 2 and 3 are autocleaned
+    assert_row_present(
+        result.output, "Group2", "Auto-clean", "File added to that group"
+    )
+    assert_row_present(
+        result.output, "Group3", "Auto-clean", "File added to that group"
+    )
+
+    # Groups 2 and 4 are autosynced
+    assert_row_present(result.output, "Group2", "Auto-sync", "File added to this node")
+    assert_row_present(result.output, "Group4", "Auto-sync", "File added to this node")
+
+    assert "Node5" not in result.output
+    assert "Node6" not in result.output
+
+
+def test_show_all(clidb, cli, assert_row_present):
+    """Test show --all."""
+
+    group = StorageGroup.create(name="Group")
+    node = StorageNode.create(
+        name="Node",
+        group=group,
+        active=True,
+        max_total_gb=2**-17,  # 2**(30-17) == 2**13 == 8 kiB
+    )
+    StorageTransferAction.create(
+        node_from=node, group_to=group, autosync=1, autoclean=1
+    )
+
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file, node=node, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="File2", acq=acq, size_b=2345)
+    ArchiveFileCopy.create(file=file, node=node, has_file="X", wants_file="Y")
+
+    file = ArchiveFile.create(name="File3", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(file=file, node=node, has_file="Y", wants_file="Y")
+
+    result = cli(0, ["node", "show", "Node", "--all"])
+
+    assert "Total Files: 2" in result.output
+
+    # 1234 + 3456 = 4690 bytes = 4.580078 kiB
+    assert "4.580 kiB" in result.output
+
+    # 4.58 out of 8 == 57.25 percent
+    assert "57.25%" in result.output
+
+    assert_row_present(result.output, "Group", "Auto-clean", "File added to that group")
+    assert_row_present(result.output, "Group", "Auto-sync", "File added to this node")

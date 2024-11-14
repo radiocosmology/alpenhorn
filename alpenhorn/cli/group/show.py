@@ -5,20 +5,31 @@ import click
 import peewee as pw
 from tabulate import tabulate
 
-from ...db import StorageGroup, StorageNode
+from ...db import StorageGroup, StorageNode, StorageTransferAction
 from ..cli import echo
 from ..node.stats import get_stats
 
 
 @click.command()
 @click.argument("group_name", metavar="GROUP")
+@click.option(
+    "--actions",
+    is_flag=True,
+    help="Show post-transfer auto-actions affecting this group.",
+)
+@click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
 @click.option("--node-details", is_flag=True, help="Show details of listed nodes.")
 @click.option("--node-stats", is_flag=True, help="Show usage stats of listed nodes.")
-def show(group_name, node_details, node_stats):
+def show(group_name, actions, all_, node_details, node_stats):
     """Show details of a storage group.
 
     Shows details of the storage group named GROUP.
     """
+
+    if all_:
+        node_details = True
+        node_stats = True
+        actions = True
 
     try:
         group = StorageGroup.get(name=group_name)
@@ -108,3 +119,36 @@ def show(group_name, node_details, node_stats):
                 echo("  " + node.name)
     else:
         echo("  none")
+
+    # List transfer actions, if requested
+    if actions:
+        echo("\nAuto-actions:\n")
+
+        # It's possible for there to be entries in the table with nothing
+        # activated.  So filter those out
+        query = (
+            StorageTransferAction.select()
+            .join(StorageNode)
+            .where(
+                StorageTransferAction.group_to == group,
+                (StorageTransferAction.autosync == 1)
+                | (StorageTransferAction.autoclean == 1),
+            )
+            .order_by(StorageTransferAction.node_from_id)
+        )
+
+        data = []
+        for action in query.execute():
+            if action.autoclean:
+                data.append(
+                    (action.node_from.name, "Auto-clean", "File added to this group")
+                )
+            if action.autosync:
+                data.append(
+                    (action.node_from.name, "Auto-sync", "File added to that node")
+                )
+
+        if data:
+            echo(tabulate(data, headers=["Node", "Action", "Trigger"]))
+        else:
+            echo("  none")

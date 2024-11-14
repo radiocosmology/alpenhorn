@@ -13,6 +13,7 @@ from ...common import util
 from ...db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
 
 from .activate import activate
+from .autoclean import autoclean
 from .clean import clean
 from .create import create
 from .deactivate import deactivate
@@ -31,6 +32,7 @@ def cli():
 
 
 cli.add_command(activate, "activate")
+cli.add_command(autoclean, "autoclean")
 cli.add_command(clean, "clean")
 cli.add_command(create, "create")
 cli.add_command(deactivate, "deactivate")
