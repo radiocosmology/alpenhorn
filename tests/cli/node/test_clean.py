@@ -97,16 +97,22 @@ def test_run(clidb, cli):
     group = StorageGroup.create(name="Group")
     node = StorageNode.create(name="NODE", group=group, storage_type="F")
     acq = ArchiveAcq.create(name="Acq")
-    fileY = ArchiveFile.create(name="FileY", acq=acq, size_b=2345)
-    ArchiveFileCopy.create(node=node, file=fileY, has_file="Y", wants_file="Y")
-    fileN = ArchiveFile.create(name="FileN", acq=acq, size_b=3456)
-    ArchiveFileCopy.create(node=node, file=fileN, has_file="Y", wants_file="N")
+    fileYY = ArchiveFile.create(name="FileYY", acq=acq, size_b=2345)
+    ArchiveFileCopy.create(node=node, file=fileYY, has_file="Y", wants_file="Y")
+    fileYN = ArchiveFile.create(name="FileYN", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(node=node, file=fileYN, has_file="Y", wants_file="N")
+    fileMY = ArchiveFile.create(name="FileMY", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(node=node, file=fileMY, has_file="M", wants_file="Y")
+    fileXY = ArchiveFile.create(name="FileXY", acq=acq, size_b=3456)
+    ArchiveFileCopy.create(node=node, file=fileXY, has_file="X", wants_file="Y")
 
     cli(0, ["node", "clean", "NODE"], input="Y\n")
 
-    # Clean should have run, but only on the 'Y' file
-    assert ArchiveFileCopy.get(node=node, file=fileY).wants_file == "M"
-    assert ArchiveFileCopy.get(node=node, file=fileN).wants_file == "N"
+    # Clean should have run, but only on the 'YY' file
+    assert ArchiveFileCopy.get(node=node, file=fileYY).wants_file == "M"
+    assert ArchiveFileCopy.get(node=node, file=fileYN).wants_file == "N"
+    assert ArchiveFileCopy.get(node=node, file=fileMY).wants_file == "Y"
+    assert ArchiveFileCopy.get(node=node, file=fileXY).wants_file == "Y"
 
 
 def test_now(clidb, cli):
@@ -463,7 +469,7 @@ def test_size_part(clidb, cli):
     assert ArchiveFileCopy.get(node=node, file=file4).wants_file == "Y"
 
 
-def test_size_part(clidb, cli):
+def test_size_done(clidb, cli):
     """Test clean with --size already satisfied"""
 
     group = StorageGroup.create(name="Group1")
@@ -487,3 +493,26 @@ def test_size_part(clidb, cli):
     assert ArchiveFileCopy.get(node=node, file=file2).wants_file == "N"
     assert ArchiveFileCopy.get(node=node, file=file3).wants_file == "Y"
     assert ArchiveFileCopy.get(node=node, file=file4).wants_file == "Y"
+
+
+def test_include_bad(clidb, cli):
+    """Test clean with --include-bad"""
+
+    group = StorageGroup.create(name="Group1")
+    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    fileY = ArchiveFile.create(name="FileY", acq=acq)
+    ArchiveFileCopy.create(node=node, file=fileY, has_file="Y", wants_file="N")
+    fileM = ArchiveFile.create(name="FileM", acq=acq)
+    ArchiveFileCopy.create(node=node, file=fileM, has_file="M", wants_file="N")
+    fileX = ArchiveFile.create(name="FileX", acq=acq)
+    ArchiveFileCopy.create(node=node, file=fileX, has_file="X", wants_file="N")
+
+    cli(0, ["node", "clean", "NODE", "--force", "--include-bad"])
+
+    # All the files are cleaned
+    assert ArchiveFileCopy.get(node=node, file=fileY).wants_file == "N"
+    assert ArchiveFileCopy.get(node=node, file=fileM).wants_file == "N"
+    assert ArchiveFileCopy.get(node=node, file=fileX).wants_file == "N"

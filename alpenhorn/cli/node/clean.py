@@ -1,5 +1,7 @@
 """alpenhorn node clean"""
 
+from __future__ import annotations
+
 import click
 import datetime
 import peewee as pw
@@ -25,6 +27,7 @@ def _run_query(
     acq,
     archive_ok,
     days: datetime.datetime,
+    has_file: pw.Expression,
     size: int,
     target,
     clean_goal: str,
@@ -51,6 +54,11 @@ def _run_query(
         Replaces the `now` and `cancel` parameters.
     days:
         Converted to datetime
+    has_file:
+        peewee.Expression instance for the ArchiveFileCopy.has_file constraint.
+        That is: an object which is the result of evaluating, say,
+        (ArchiveFileCopy.has_file == 'Y'), which we'll pass on to the where()
+        clause in the query.
     size:
         Converted to bytes
     warn:
@@ -117,9 +125,7 @@ def _run_query(
                 raise click.ClickException("No such acquisition: " + acqname)
 
         # Find all candidate file copies
-        query = ArchiveFileCopy.select().where(
-            ArchiveFileCopy.node == node, ArchiveFileCopy.has_file == "Y"
-        )
+        query = ArchiveFileCopy.select().where(ArchiveFileCopy.node == node, has_file)
 
         # Join to ArchiveFile, if necessary
         if acqs or days or size:
@@ -315,6 +321,11 @@ def _run_query(
     help="Force cleaning (skips confirmation).  Incompatible with --check",
     is_flag=True,
 )
+@click.option(
+    "--include-bad",
+    help="Include suspect and corrupt files in the operation.",
+    is_flag=True,
+)
 @click.option("--now", "-n", help="Force immediate removal.", is_flag=True)
 @click.option(
     "--size",
@@ -331,7 +342,20 @@ def _run_query(
     "files in all GROUPs.",
 )
 @click.pass_context
-def clean(ctx, name, acq, archive_ok, cancel, check, days, force, now, size, target):
+def clean(
+    ctx,
+    name,
+    acq,
+    archive_ok,
+    cancel,
+    check,
+    days,
+    force,
+    include_bad,
+    now,
+    size,
+    target,
+):
     """Remove files from a Storage Node.
 
     There are two ways alpenhorn can schedule a file for cleaning:
@@ -419,11 +443,27 @@ def clean(ctx, name, acq, archive_ok, cancel, check, days, force, now, size, tar
     else:
         clean_goal = "M"
 
+    # Determine the has_file constraint
+    if include_bad:
+        has_file = ArchiveFileCopy.has_file != "N"
+    else:
+        has_file = ArchiveFileCopy.has_file == "Y"
+
     # If we're forcing, skip the check phase
     if not force:
         # Doesn't return if there's nothing to clean
         _run_query(
-            False, ctx, name, acq, archive_ok, days, size, target, clean_goal, warn=True
+            False,
+            ctx,
+            name,
+            acq,
+            archive_ok,
+            days,
+            has_file,
+            size,
+            target,
+            clean_goal,
+            warn=True,
         )
 
         # With --check, we're done
@@ -439,5 +479,15 @@ def clean(ctx, name, acq, archive_ok, cancel, check, days, force, now, size, tar
     # Execute the query, if not in --check mode
     if not check:
         _run_query(
-            True, ctx, name, acq, archive_ok, days, size, target, clean_goal, warn=force
+            True,
+            ctx,
+            name,
+            acq,
+            archive_ok,
+            days,
+            has_file,
+            size,
+            target,
+            clean_goal,
+            warn=force,
         )
