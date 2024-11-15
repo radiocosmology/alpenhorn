@@ -11,6 +11,7 @@ from .list import list_
 from .modify import modify
 from .rename import rename
 from .show import show
+from .sync import sync
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -24,3 +25,4 @@ cli.add_command(list_, "list")
 cli.add_command(modify, "modify")
 cli.add_command(rename, "rename")
 cli.add_command(show, "show")
+cli.add_command(sync, "sync")

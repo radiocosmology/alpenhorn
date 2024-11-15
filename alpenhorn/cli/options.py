@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import click
+import peewee as pw
 from typing import TYPE_CHECKING
+
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
 
 if TYPE_CHECKING:
     from typing import Any
@@ -55,6 +58,12 @@ def cli_option(option: str, **extra_kwargs):
             "non-zero, turn on auto-verify for the node, with COUNT as the "
             "maximum number of re-verified copies per iteration.",
         }
+    elif option == "cancel":
+        args = (
+            "--cancel",
+            "-x",
+        )
+        kwargs = {"is_flag": True, "help": "Cancel the operation"}
     elif option == "field":
         args = ("--field",)
         kwargs = {
@@ -130,6 +139,14 @@ def cli_option(option: str, **extra_kwargs):
     elif option == "root":
         args = ("--root",)
         kwargs = {"metavar": "ROOT", "help": "The node root or mount point."}
+    elif option == "target":
+        args = ("--target",)
+        kwargs = {
+            "metavar": "GROUP",
+            "multiple": True,
+            "help": "May be specified multiple times.  Restrict operation to "
+            "files which exist in all specified target groups GROUP.",
+        }
     elif option == "transport":
         args = ("--transport",)
         kwargs = {
@@ -181,6 +198,102 @@ def exactly_one(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) 
 
     if not (opt1_set or opt2_set):
         raise click.UsageError(f"missing --{opt1_name} or --{opt2_name}")
+
+
+def requires_other(
+    opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str
+) -> None:
+    """If opt1 is set, check that opt2 was also set.
+
+    If not, raise click.UsageError."""
+
+    if opt1_set and not opt2_set:
+        raise click.UsageError(f"--{opt1_name} may only be used with --{opt2_name}")
+
+
+def resolve_acqs(acq: list[str]) -> list[ArchiveAcq]:
+    """Convert --acq list to ArchiveAcq list.
+
+    If the input list is empty, so is the output list.
+
+    Raises `click.ClickException` if a non-existent acqusition was
+    provided.
+    """
+    acqs = []
+    for acqname in acq:
+        try:
+            acqs.append(ArchiveAcq.get(name=acqname))
+        except pw.DoesNotExist:
+            raise click.ClickException("No such acquisition: " + acqname)
+    return acqs
+
+
+def files_in_target(target: list[str], in_any: bool = False) -> list[int] | None:
+    """Take a --target list and return a list of target files.
+
+    Parameters
+    ----------
+    target:
+        list of group names from --target options.
+    in_any:
+        if True, file needs to be only in one target.
+        If False, file needs to be in all targets.
+
+    Returns
+    -------
+    target_files:
+        If the input list was empty, this is None.  Otherwise,
+        it is a list of ArchiveFile.ids which are in any/all target
+        groups.  The list may be empty, if no files satisfied the
+        constraint.
+
+    Raises
+    ------
+    click.ClickException:
+        a non-exsitent group was found in the target list
+    """
+
+    target_files = None
+    for name in target:
+        # Resolve group name
+        try:
+            group = StorageGroup.get(name=name)
+        except pw.DoesNotExist:
+            raise click.ClickException("No such target group: " + name)
+
+        # Get files in target
+        query = (
+            ArchiveFile.select(ArchiveFile.id)
+            .join(ArchiveFileCopy)
+            .join(StorageNode)
+            .where(
+                StorageNode.group == group,
+                ArchiveFileCopy.has_file == "Y",
+                ArchiveFileCopy.wants_file == "Y",
+            )
+        )
+
+        if in_any:
+            # In "any" mode, run the query and then compute the set union,
+            # if we already have a target set
+            if target_files:
+                target_files |= set(query.scalars())
+            else:
+                target_files = set(query.scalars())
+        else:
+            # In "all" mode, intersect the current list with the new query
+            # and replace the set with the result
+            if target_files:
+                query = query.where(ArchiveFile.id << target_files)
+
+            # Execute the query and record the result
+            target_files = set(query.scalars())
+
+            # In this mode, there's no reason to continue if the set is empty
+            if not target_files:
+                return []
+
+    return target_files
 
 
 def set_storage_type(
