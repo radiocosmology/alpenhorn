@@ -8,6 +8,7 @@ from tabulate import tabulate
 from ...common.util import pretty_bytes
 from ...db import StorageGroup, StorageNode, StorageTransferAction
 from ..cli import echo
+from ..options import cli_option
 from .stats import get_stats
 
 
@@ -18,7 +19,7 @@ from .stats import get_stats
     is_flag=True,
     help="Show post-transfer auto-actions affecting this group.",
 )
-@click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
+@cli_option("all_", help="Show all additional data.")
 @click.option("--stats", is_flag=True, help="Show usage stats of the node.")
 def show(name, actions, all_, stats):
     """Show details of a Storage Node.

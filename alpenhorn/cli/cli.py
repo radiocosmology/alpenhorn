@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 import datetime
 import peewee as pw
+from typing import TYPE_CHECKING
 
 from ..common.logger import echo as echo
 from ..db import (
@@ -16,6 +17,72 @@ from ..db import (
     StorageNode,
     StorageTransferAction,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+del TYPE_CHECKING
+
+
+def check_then_update(
+    do_check: bool, do_update: bool, func: Callable, ctx, *, args: list = []
+) -> None:
+    """Boilerplate for the check-confirm-update pattern.
+
+    Calls `func` up to twice, and maybe asks for confirmation in between.
+
+    Flow is like this:
+
+    1. If `do_check` is False, skips to step 6
+    2. Calls `func` in "check" mode.
+    3. If `do_update` is False, program exits
+    4. `click.confirm("Continue?")
+    5. If user declines confirmation, program exits
+    6. If `do_update` is True, calls `func` in "update" mode.
+
+    When calling `func` the following arguments are passed, in order:
+
+    1. `update`: a bool which is False in "check" mode (step 2) and True in
+        "update" mode (step 6)
+    2. `ctx`: the click context object
+    3. any positional parameters given in in `args`
+    4. `first_time`: a bool keyword arguemnt which is True the first time
+        `func` is called, and False the second time (if called twice).
+
+    Anything returned by `func` is ignored.
+
+    Parameters
+    ----------
+    do_check
+        True if we should run the check phase
+    do_update
+        True if we should run the update phase
+    func:
+        The function to call
+    ctx:
+        The click context
+    args:
+        A list of positional arguments to pass `func`
+    """
+
+    if do_check:
+        func(False, ctx, *args, first_time=True)
+
+        # If we're not doing the update, we're done
+        if not do_update:
+            ctx.exit()
+
+        # Ask for confirmation
+        echo()
+        if not click.confirm("Continue?"):
+            echo("\nCancelled.")
+            ctx.exit()
+        echo()
+
+    # If, both do_check and do_update are False, I guess we do nothing...
+    if do_update:
+        # `first_time` is `not do_check` here because if do_check is True, this is the
+        # second call, and if do_check is False, this is the first call
+        func(True, ctx, *args, first_time=not do_check)
 
 
 def update_or_remove(field: str, new: str | None, old: str | None) -> dict:

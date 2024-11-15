@@ -16,8 +16,8 @@ from ...db import (
     utcnow,
 )
 from ...common.util import pretty_bytes
-from ..options import not_both
-from ..cli import echo
+from ..options import cli_option, not_both
+from ..cli import check_then_update, echo
 
 
 def _run_query(
@@ -31,9 +31,12 @@ def _run_query(
     size: int,
     target,
     clean_goal: str,
-    warn: bool = True,
+    first_time: bool = True,
 ) -> None:
     """Actually do the clean query, either in check mode or update mode.
+
+    This function is called via `alpenhorn.cli.cli.check_then_update`,
+    which sets some of the parameters.
 
     We separate this from check() because we typically have to do the
     whole thing twice, once at the start to get the results to present
@@ -61,7 +64,7 @@ def _run_query(
         clause in the query.
     size:
         Converted to bytes
-    warn:
+    first_time:
         True the first time this function is called (and we should print
         warnings).
     """
@@ -77,7 +80,7 @@ def _run_query(
         # --archive-ok was given
         if node.archive:
             if archive_ok:
-                if warn:
+                if first_time:
                     echo(f'DANGER: "{name}" is an archive node. Forcing clean.')
             else:
                 raise click.ClickException(f'Cannot clean archive node "{name}".')
@@ -275,7 +278,6 @@ def _run_query(
                 echo(
                     f'  {results["N"]["count"]} released {files} ({pretty_bytes(results["N"]["size"])})'
                 )
-        echo("")
 
         # Now update, if needed
         if update:
@@ -290,13 +292,7 @@ def _run_query(
 
 @click.command()
 @click.argument("name", metavar="NODE")
-@click.option(
-    "--acq",
-    metavar="ACQ",
-    default=None,
-    multiple=True,
-    help="Only clean files in acquisition ACQ.  May be specified multiple times.",
-)
+@cli_option("acq")
 @click.option(
     "--archive-ok", help="Run the clean, even if NODE is an archive node.", is_flag=True
 )
@@ -317,7 +313,6 @@ def _run_query(
 )
 @click.option(
     "--force",
-    "-f",
     help="Force cleaning (skips confirmation).  Incompatible with --check",
     is_flag=True,
 )
@@ -449,45 +444,11 @@ def clean(
     else:
         has_file = ArchiveFileCopy.has_file == "Y"
 
-    # If we're forcing, skip the check phase
-    if not force:
-        # Doesn't return if there's nothing to clean
-        _run_query(
-            False,
-            ctx,
-            name,
-            acq,
-            archive_ok,
-            days,
-            has_file,
-            size,
-            target,
-            clean_goal,
-            warn=True,
-        )
-
-        # With --check, we're done
-        if check:
-            ctx.exit()
-
-        # Ask for confirmation
-        if not click.confirm("Continue?"):
-            echo("\nCancelled.")
-            ctx.exit()
-        echo()
-
-    # Execute the query, if not in --check mode
-    if not check:
-        _run_query(
-            True,
-            ctx,
-            name,
-            acq,
-            archive_ok,
-            days,
-            has_file,
-            size,
-            target,
-            clean_goal,
-            warn=force,
-        )
+    # Do a check-then-update with the `_run_query` function.
+    check_then_update(
+        not force,
+        not check,
+        _run_query,
+        ctx,
+        args=[name, acq, archive_ok, days, has_file, size, target, clean_goal],
+    )
