@@ -7,7 +7,7 @@ import click
 from .. import db
 from ..common.util import start_alpenhorn, version_option
 
-from . import acq, group, node, transport
+from . import acq, db, group, node, transport
 from .options import not_both
 
 
@@ -78,6 +78,7 @@ def entry(conf, quiet, verbose, debug):
 
 
 entry.add_command(acq.cli, "acq")
+entry.add_command(db.cli, "db")
 entry.add_command(group.cli, "group")
 entry.add_command(node.cli, "node")
 entry.add_command(transport.cli, "transport")

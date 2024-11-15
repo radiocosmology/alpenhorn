@@ -6,7 +6,6 @@ import click
 import datetime
 import peewee as pw
 
-from .. import db
 from ..common.logger import echo as echo
 from ..db import (
     ArchiveAcq,
@@ -66,30 +65,6 @@ def update_or_remove(field: str, new: str | None, old: str | None) -> dict:
 
 # The rest of this file were top-level commands that have been
 # temporarily dummied out while they're re-tooled.
-
-
-# @cli.command()
-def init():
-    """Initialise an alpenhorn database.
-
-    Creates the database tables required for alpenhorn and any extensions
-    specified in its configuration.
-    """
-
-    # Create any alpenhorn core tables
-    core_tables = [
-        ArchiveAcq,
-        ArchiveFile,
-        ArchiveFileCopy,
-        ArchiveFileCopyRequest,
-        StorageGroup,
-        StorageNode,
-        StorageTransferAction,
-    ]
-
-    db.database_proxy.create_tables(core_tables, safe=True)
-
-    # TODO Create any tables registered by extensions
 
 
 # @cli.command()
