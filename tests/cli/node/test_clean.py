@@ -37,7 +37,7 @@ def test_cancel_size(clidb, cli):
     cli(2, ["node", "clean", "NODE", "--cancel", "--size=3"])
 
 
-def test_cancel_size(clidb, cli):
+def test_check_force(clidb, cli):
     """Test --check --force fails."""
 
     group = StorageGroup.create(name="Group")
@@ -64,31 +64,6 @@ def test_bad_size(clidb, cli):
 
     cli(2, ["node", "clean", "NODE", "--size=0"])
     cli(2, ["node", "clean", "NODE", "--size=-1"])
-
-
-def test_bad_size(clidb, cli):
-    """Test non-positive --size."""
-
-    group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
-
-    cli(2, ["node", "clean", "NODE", "--size=0"])
-    cli(2, ["node", "clean", "NODE", "--size=-1"])
-
-
-def test_cancel(clidb, cli):
-    """Test cancelling a clean."""
-
-    group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
-    acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq, size_b=1234)
-    ArchiveFileCopy.create(node=node, file=file, has_file="Y", wants_file="Y")
-
-    cli(0, ["node", "clean", "NODE"], input="N\n")
-
-    # Clean should not have run
-    assert ArchiveFileCopy.get(node=node, file=file).wants_file == "Y"
 
 
 def test_run(clidb, cli):
