@@ -2,10 +2,11 @@
 
 import pytest
 import datetime
+import pathlib
 import peewee as pw
 from unittest.mock import call, patch, MagicMock
 
-from alpenhorn.db.archive import ArchiveFileCopy
+from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
 from alpenhorn.db.storage import StorageNode
 from alpenhorn.daemon.update import UpdateableNode
 
@@ -376,9 +377,7 @@ def test_update_delete_transfer_pending(
     mock_delete.assert_not_called()
 
 
-def test_update_delete_bad_file(
-    unode, simplegroup, simpleacq, archivefile, archivefilecopy
-):
+def test_update_delete_bad_file(unode, simpleacq, archivefile, archivefilecopy):
     """update_delete() should attempt to delete bad files."""
 
     fileM = archivefile(name="fileM", acq=simpleacq)
@@ -466,3 +465,61 @@ def test_update_node_run(
 
     # Check remote.pull_ready calls
     assert pull_ready_calls == {goodfile, readyfile}
+
+
+def test_update_import_absolute(unode, queue, archivefileimportrequest):
+    """update_import() should skip absolute paths."""
+
+    afir = archivefileimportrequest(
+        path=f"{unode.db.root}/absolute/path", node=unode.db, register=True
+    )
+
+    unode.update_import()
+
+    # Nothing queued
+    assert queue.qsize == 0
+
+    # Request is completed and no file was imported
+    assert ArchiveFileImportRequest.get(id=afir.id).completed == 1
+    assert ArchiveFileCopy.select().count() == 0
+
+
+def test_update_import_no_recurse(unode, queue, archivefileimportrequest):
+    """Test update_import() with a non-recursive import request."""
+
+    afir = archivefileimportrequest(
+        path="import/path", node=unode.db, recurse=False, register=True
+    )
+
+    mock = MagicMock()
+    with patch("alpenhorn.daemon.auto_import.import_file", mock):
+        unode.update_import()
+
+    # Nothing queued
+    assert queue.qsize == 0
+
+    # Mocked import_file was called
+    mock.assert_called_with(unode, queue, "import/path", True, afir)
+
+
+def test_update_import_scan(unode, queue, archivefileimportrequest):
+    """Test update_import() with a recursive import request."""
+
+    afir = archivefileimportrequest(
+        path="import/path", node=unode.db, recurse=True, register=True
+    )
+
+    mock = MagicMock()
+    with patch("alpenhorn.daemon.auto_import.scan", mock):
+        unode.update_import()
+
+    # scan queued
+    assert queue.qsize == 1
+
+    # Run scan
+    task, fifo = queue.get()
+    task()
+    queue.task_done(fifo)
+
+    # Mocked scan was called
+    mock.assert_called_with(task, unode, queue, pathlib.Path("import/path"), True, afir)

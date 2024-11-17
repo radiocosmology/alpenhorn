@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import json
 import time
 import logging
+import pathlib
 import peewee as pw
 
 from ..common import config, util
@@ -14,11 +15,12 @@ from ..common.extensions import io_module
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
     StorageNode,
     StorageGroup,
     utcnow,
 )
-from ..scheduler import global_abort, WorkerPool, EmptyPool
+from ..scheduler import global_abort, WorkerPool, EmptyPool, Task
 from . import auto_import
 from .querywalker import QueryWalker
 
@@ -424,6 +426,34 @@ class UpdateableNode(updateable_base):
             self._io_happened = True
             self.io.delete(del_copies)
 
+    def update_import(self) -> None:
+        """Handle ArchiveFileImportRequests for this node."""
+
+        # Loop over uncompleted requests for this node
+        for req in ArchiveFileImportRequest.select().where(
+            ArchiveFileImportRequest.node == self.db,
+            ArchiveFileImportRequest.completed == 0,
+        ):
+            # Sanity checks
+            path = pathlib.Path(req.path)
+            if path.is_absolute():
+                log.info(f'Not importing to "{self.name}" absolute path: {path}')
+                req.complete()
+                continue
+
+            if req.recurse:
+                # If recursion was requested, run a scan on the path
+                Task(
+                    func=auto_import.scan,
+                    queue=self._queue,
+                    key=self.io.fifo,
+                    args=(self, self._queue, path, req.register, req),
+                    name=f'Scan "{path}" on {self.name}',
+                )
+            else:
+                # Otherwise, try to directly import the path
+                auto_import.import_file(self, self._queue, req.path, req.register, req)
+
     def update(self) -> None:
         """Perform I/O updates on this node.
 
@@ -466,6 +496,9 @@ class UpdateableNode(updateable_base):
 
             # Delete any unwanted files to cleanup space
             self.update_delete()
+
+            # Process import requests
+            self.update_import()
 
             # Prepare files for pulls out from this node
             remote = RemoteNode(self.db)

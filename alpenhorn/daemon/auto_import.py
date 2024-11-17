@@ -1,4 +1,9 @@
-"""Routines for the importing of new files on a node."""
+"""Routines for the importing of files on a node.
+
+This module should probably be called "import", because it's
+not just used for auto-importing, but that's a difficult name
+for a module.
+"""
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
@@ -10,7 +15,13 @@ from watchdog.events import FileSystemEventHandler
 
 from .. import db
 from ..common import config, extensions
-from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, utcnow
+from ..db import (
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+    ArchiveFileImportRequest,
+    utcnow,
+)
 from ..io import ioutil
 from ..scheduler import Task
 
@@ -25,7 +36,11 @@ log = logging.getLogger(__name__)
 
 
 def import_file(
-    node: UpdateableNode, queue: FairMultiFIFOQueue, path: pathlib.PurePath
+    node: UpdateableNode,
+    queue: FairMultiFIFOQueue,
+    path: pathlib.PurePath,
+    register: bool,
+    req: ArchiveFileImportRequest | None,
 ) -> None:
     """Queue a task to import `path` into `node`.
 
@@ -39,11 +54,19 @@ def import_file(
         The tasks queue
     path : pathlib.PurePath
         The path we're trying to import
+    register : bool
+        True if we should register new files (files without ArchiveFile records),
+        or False to only import already registered files.
+    req : ArchiveFileImportRequest or None
+        If not None, req will be marked as complete if the import isn't skipped.
     """
 
     # Occasionally the watchdog sends events on the node root directory itself. Skip these.
     if path == pathlib.PurePath(node.db.root):
         log.debug("Skipping import request of node root")
+        if req:
+            log.info(f"Completed import request #{req.id}.")
+            req.complete()
         return
 
     # Strip node root, if path is absolute
@@ -53,8 +76,11 @@ def import_file(
         except ValueError:
             # Not rooted under node.root
             log.warning(
-                f"skipping import of {path}: not rooted under node {node.db.root}"
+                f"Ignoring import of {path}: not rooted under node {node.db.root}"
             )
+            if req:
+                log.info(f"Completed import request #{req.id}.")
+                req.complete()
             return
 
     # Ignore the node info file.  NB: this happens even on nodes which
@@ -62,35 +88,57 @@ def import_file(
     # this path is disallowed as a data file.
     if str(path) == "ALPENHORN_NODE":
         log.debug("ignoring ALPENHORN_NODE file during import")
+        if req:
+            log.info(f"Completed import request #{req.id}.")
+            req.complete()
         return
 
-    # New import task.  It's better to do this in a worker
-    # because the worker pool will take care of DB connection loss.
+    # New import task.
     Task(
         func=_import_file,
         queue=queue,
         key=node.io.fifo,
-        args=(node, path),
+        args=(node, path, register, req),
         name=f"Import {path} on {node.name}",
-        # If the job fails due to DB connection loss, re-start the
-        # task because unlike tasks made in the main loop, we're
+        # If the job fails due to DB connection loss, and we don't have a request,
+        # re-start the task because unlike tasks made in the main loop, we're
         # never going to revisit this.
-        requeue=True,
+        requeue=(req is None),
     )
 
 
-def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
+def _import_file(
+    task: Task,
+    node: UpdateableNode,
+    path: pathlib.PurePath,
+    register: bool,
+    req: ArchiveFileImportRequest | None,
+) -> None:
     """Import `path` on `node` into the DB.  This is run by a worker.
 
     Parameters
     ----------
     task : task.Task
         The task running this function
-    node : storage.StorageNode
+    node : UpdateableNode
         The node we are processing.
     path : pathlib.PurePath
         The path should be relative to `node.root`
+    register : bool
+        True if we should register new files (files without ArchiveFile records),
+        or False to only import already registered files.
+    req : ArchiveFileImportRequest or None
+        If not None, req will be marked as complete if the import isn't skipped.
     """
+
+    # Skip non-files
+    fullpath = pathlib.Path(node.db.root).joinpath(path)
+    if fullpath.is_symlink() or not fullpath.is_file():
+        log.debug(f'Not importing "{path}": not a file.')
+        if req:
+            log.info(f"Completed import request #{req.id}.")
+            req.complete()
+        return
 
     log.debug(f'Considering "{path}" for import to node {node.name}.')
 
@@ -99,11 +147,12 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
         log.debug(
             f'Path "{path}" not ready for I/O during import.  Waiting 60 seconds.'
         )
-        yield 60  # wait 60 seconds and re-queue
+        yield 600  # wait 600 seconds and re-queue
 
     # Skip the file if there is still a lock on it.
     if node.io.locked(path):
         log.debug(f'Skipping "{path}": locked.')
+        # In this case we don't complete the import request.
         return
 
     # Step through the detection extensions to find one that's willing
@@ -114,14 +163,20 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
             break
     else:
         # Detection failed, so we're done.
-        log.info(f"Skipping non-acquisition path: {path}")
+        log.info(f"Not importing non-acquisition path: {path}")
+        if req:
+            log.info(f"Completed import request #{req.id}.")
+            req.complete()
         return
 
     file_name = path.relative_to(acq_name)
 
     # If a copy already exists, we're done
     if node.db.named_copy_tracked(acq_name, file_name):
-        log.debug(f"Skipping import of {path}: already known")
+        log.debug(f"Not importing {path}: already known")
+        if req:
+            log.info(f"Completed import request #{req.id}.")
+            req.complete()
         return
 
     # Begin a transaction
@@ -130,11 +185,18 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
         try:
             acq = ArchiveAcq.get(ArchiveAcq.name == acq_name)
             new_acq = None
-            log.debug(f'Acquisition "{acq_name}" already in DB. Skipping.')
+            log.debug(f'Acquisition "{acq_name}" already in DB.')
         except pw.DoesNotExist:
-            acq = ArchiveAcq.create(name=acq_name)
-            new_acq = acq
-            log.info(f'Acquisition "{acq_name}" added to DB.')
+            if register:
+                acq = ArchiveAcq.create(name=acq_name)
+                new_acq = acq
+                log.info(f'Acquisition "{acq_name}" added to DB.')
+            else:
+                log.info(f'Not importing unregistered acquistion: "{acq_name}".')
+                if req:
+                    log.info(f"Completed import request #{req.id}.")
+                    req.complete()
+                return
 
         # Add the file, if necessary.
         try:
@@ -142,31 +204,43 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
                 ArchiveFile.name == file_name, ArchiveFile.acq == acq
             )
             new_file = None
-            log.debug(f'File "{path}" already in DB. Skipping.')
+            log.debug(f'File "{path}" already in DB.')
         except pw.DoesNotExist:
-            log.debug(f'Computing md5sum of "{path}".')
-            md5sum = node.io.md5(acq_name, file_name)
-            size_b = node.io.filesize(path)
+            if register:
+                log.debug(f'Computing md5sum of "{path}".')
+                md5sum = node.io.md5(acq_name, file_name)
+                size_b = node.io.filesize(path)
 
-            file_ = ArchiveFile.create(
-                acq=acq, name=file_name, size_b=size_b, md5sum=md5sum
-            )
-            new_file = file_
-            log.info(f'File "{path}" added to DB.')
+                file_ = ArchiveFile.create(
+                    acq=acq, name=file_name, size_b=size_b, md5sum=md5sum
+                )
+                new_file = file_
+                log.info(f'File "{path}" added to DB.')
+            else:
+                log.info(f'Not importing unregistered file: "{path}".')
+                if req:
+                    log.info(f"Completed import request #{req.id}.")
+                    req.complete()
+                return
 
-        # If we're importing a file that used to exist on this node, set has_file='M'
-        # to trigger a integrity check.  (In this case, we can't have md5'ed it
-        # above, because the ArchiveFile must have existed.)
         try:
             copy = ArchiveFileCopy.get(file=file_, node=node.db)
-            copy.has_file = "M"
-            copy.wants_file = "Y"
+            # If we're importing a file that's missing (has_file == N but wants_file == Y),
+            # set has_file='M' to trigger a integrity check.  If it's recorded as
+            # having been properly removed, though, just set it to 'Y' and assume it's good
+            # now.
+            if copy.wants_file == "Y":
+                copy.has_file = "M"
+                log.warning(
+                    f'Imported missing file "{path}" on node {node.name}.  Marking suspect.'
+                )
+            else:
+                copy.has_file = "Y"
+                copy.wants_file = "Y"
+                log.info(f'Imported file copy "{path}" on node "{node.name}".')
             copy.ready = True
             copy.last_update = utcnow()
             copy.save()
-            log.warning(
-                f'Imported file "{path}" formerly present on node {node.name}!  Marking suspect.'
-            )
         except pw.DoesNotExist:
             # No existing file copy; create a new one.
             copy = ArchiveFileCopy.create(
@@ -178,7 +252,11 @@ def _import_file(task: Task, node: StorageNode, path: pathlib.PurePath) -> None:
                 size_b=node.io.filesize(path, actual=True),
                 last_update=utcnow(),
             )
-            log.info(f'Registered file copy "{path}" on node "{node.name}".')
+            log.info(f'Imported file copy "{path}" on node "{node.name}".')
+
+    if req:
+        log.info(f"Completed import request #{req.id}.")
+        req.complete()
 
     # Run post-add actions, if any
     ioutil.post_add(node.db, file_)
@@ -211,15 +289,15 @@ class RegisterFile(FileSystemEventHandler):
         super(RegisterFile, self).__init__()
 
     def on_created(self, event):
-        import_file(self.node, self.queue, pathlib.PurePath(event.src_path))
+        import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
         return
 
     def on_modified(self, event):
-        import_file(self.node, self.queue, pathlib.PurePath(event.src_path))
+        import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
         return
 
     def on_moved(self, event):
-        import_file(self.node, self.queue, pathlib.PurePath(event.src_path))
+        import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
         return
 
     def on_deleted(self, event):
@@ -230,7 +308,7 @@ class RegisterFile(FileSystemEventHandler):
         basename = path.name
         if basename[0] == "." and basename[-5:] == ".lock":
             basename = basename[1:-5]
-            import_file(self.node, self.queue, path.with_name(basename))
+            import_file(self.node, self.queue, path.with_name(basename), True, None)
 
 
 # Routines to control the filesystem watchdogs.
@@ -308,41 +386,61 @@ def update_observer(
         # pull task should be able to handle the other causing the file to appear
         # unexpectedly.
         Task(
-            func=catchup,
+            func=scan,
             queue=queue,
             key=node.io.fifo,
-            args=(node, queue),
+            args=(node, queue, ".", True, None),
             name=f"Catch-up on {node.name}",
             # If the job fails due to DB connection loss, re-start it
             requeue=True,
         )
 
 
-def catchup(task: Task, node: UpdateableNode, queue: FairMultiFIFOQueue):
-    """Traverse the node directory for new files and importem.
+def scan(
+    task: Task,
+    node: UpdateableNode,
+    queue: FairMultiFIFOQueue,
+    path: str | os.PathLike,
+    register: bool,
+    req: ArchiveFileImportRequest | None,
+) -> None:
+    """Traverse a directory on a node looking for new files and importem.
 
-    Invoked whenever an auto-import watchdog is started to ensure there's nothing
-    that's going to be missed on the node.  This runs in a worker.
+    Task invoked to handle ArchiveFileImportRequest and whenever an auto-import
+    watchdog is started to ensure there's nothing that's going to be missed
+    on the node.
+
+    Attempts to import individual files will be done via further jobs added to
+    the node's task queue.
 
     Parameters
     ----------
     task : task.Task
-        The task running this function
+        The task containing this job
     node : UpdateableNode
-        The node we're crawling
+        The node we're scanning
     queue : FairMultiFIFOQueue
         The task queue
+    path : path-like
+        The path to scan.  Relative to `node.root`.
+    register : bool
+        If True, register new files.  If False, only import files with existing
+        ArchiveFile records.
+    req : ArchiveFileImportRequest or None
+        If not None, req will be marked as complete once the scan finishes.
     """
+
+    path = pathlib.PurePath(path)
 
     # Get set of all files that are known on the node
     already_imported_files = node.db.get_all_files(
         present=True, corrupt=True, unknown=True
     )
 
-    log.info(f'Crawling node "{node.name}" root "{node.db.root}" for new files.')
+    log.info(f'Scanning "{path}" on "{node.name}" for new files.')
 
     lastparent = None
-    for file in node.io.file_walk():
+    for file in node.io.file_walk(path):
         # Try to remove node root
         try:
             file = file.relative_to(node.db.root)
@@ -352,14 +450,18 @@ def catchup(task: Task, node: UpdateableNode, queue: FairMultiFIFOQueue):
         # Print directory as we pass through them
         parent = file.parent
         if parent != lastparent:
-            log.info(f'Crawling "{parent}".')
+            log.info(f'Scanning "{parent}".')
             lastparent = parent
 
         # Skip files already imported
         if file in already_imported_files:
             log.debug(f'Skipping already-registered file "{file}".')
         else:
-            import_file(node, queue, file)
+            import_file(node, queue, file, register, None)
+
+    if req:
+        log.info(f"Completed import request #{req.id}.")
+        req.complete()
 
 
 def stop_observers() -> None:

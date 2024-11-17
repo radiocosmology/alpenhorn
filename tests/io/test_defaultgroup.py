@@ -60,26 +60,26 @@ def test_exists(xfs, groupnode):
     assert group.io.exists("no-acq/no-file") is None
 
 
-def test_pull_force_handoff(groupnode, simplerequest):
+def test_pull_force_handoff(groupnode, simplecopyrequest):
     """Test DefaultGroupIO.pull_force()."""
 
     group, node = groupnode
     node.io.pull = MagicMock(return_value=None)
 
     # Call pull_force
-    group.io.pull_force(simplerequest)
+    group.io.pull_force(simplecopyrequest)
 
     # Check for hand-off to the node
-    node.io.pull.assert_called_with(simplerequest)
+    node.io.pull.assert_called_with(simplecopyrequest)
 
 
-def test_pull(groupnode, simplerequest, queue):
+def test_pull(groupnode, simplecopyrequest, queue):
     """Test task submission in DefaultGroupIO.pull()."""
 
     group, node = groupnode
 
     with patch("alpenhorn.io.default.group_search_async") as mock:
-        group.io.pull(simplerequest)
+        group.io.pull(simplecopyrequest)
 
         # Task is queued
         assert queue.qsize == 1
@@ -97,7 +97,7 @@ def test_pull(groupnode, simplerequest, queue):
         mock.assert_called_once()
 
 
-def test_group_search_dispatch(groupnode, simplerequest, queue):
+def test_group_search_dispatch(groupnode, simplecopyrequest, queue):
     """Test group_search_async dispatch to pull_force"""
 
     group, node = groupnode
@@ -106,10 +106,10 @@ def test_group_search_dispatch(groupnode, simplerequest, queue):
     group.io.pull_force = mock
 
     # Run the async.  First argument is Task
-    group_search_async(None, group.io, simplerequest)
+    group_search_async(None, group.io, simplecopyrequest)
 
     # Check dispatch
-    mock.assert_called_once_with(simplerequest)
+    mock.assert_called_once_with(simplecopyrequest)
 
 
 def test_group_search_in_db(
