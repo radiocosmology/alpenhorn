@@ -177,7 +177,7 @@ async def _md5sum_file(filename: str, hr: bool = True) -> str | None:
                         _md5_chunk, f, md5, block_size, blocks_per_chunk
                     )
             except TimeoutError:
-                log.warning("Timeout trying to MD5 {filename}.")
+                log.warning(f"Timeout trying to MD5 {filename}.")
                 return None
 
     if hr:
