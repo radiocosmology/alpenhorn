@@ -193,15 +193,15 @@ class DefaultNodeIO(BaseNodeIO):
             name=f"Check file {copy.file.path} on {self.node.name}",
         )
 
-    def check_active(self) -> bool:
-        """Check that this is an active node.
+    def check_init(self) -> bool:
+        """Check that this node is initialised.
 
         Checks that the file `node.root`/ALPENHORN_NODE exists and
         contains the name of the node.
 
         Returns
         -------
-        active : bool
+        init : bool
             True if the `ALPENHORN_NODE` check succeeded;
             False otherwise.
         """
@@ -331,6 +331,29 @@ class DefaultNodeIO(BaseNodeIO):
             True if `size_b` fits on the node.  False otherwise.
         """
         return self.reserve_bytes(size_b, check_only=True)
+
+    def init(self) -> bool:
+        """Initialise this node.
+
+        We do that by creating the ALPENHORN_NODE file, if it
+        doesn't already exit.
+        """
+
+        # Sanity check
+        if self.check_init():
+            return True
+
+        # Create file
+        try:
+            with open(
+                pathlib.Path(self.node.root).joinpath("ALPENHORN_NODE"), mode="wt"
+            ) as f:
+                f.write(self.node.name + "\n")
+        except IOError as e:
+            log.warning(f"Node initialistion failed: {e}")
+            return False
+
+        return True
 
     def locked(self, path: os.PathLike) -> bool:
         """Is file `path` locked?

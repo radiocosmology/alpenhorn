@@ -121,25 +121,55 @@ def test_idle(unode, queue):
     assert unode.idle is True
 
 
-def test_update_active(unode):
-    """Test UpdateableNode.update_active."""
+def test_check_init(unode):
+    """Test UpdateableNode.check_init."""
 
     # Starts out active
     unode.db.active = True
     unode.db.save()
     assert unode.db.active
 
-    # Pretend node is actually active
-    with patch.object(unode.io, "check_active", lambda: True):
-        assert unode.update_active()
+    # Pretend node is actually initialised
+    with patch.object(unode.io, "check_init", lambda: True):
+        assert unode.check_init()
     assert unode.db.active
     assert StorageNode.select(StorageNode.active).limit(1).scalar()
 
-    # Pretend node is actually not active
-    with patch.object(unode.io, "check_active", lambda: False):
-        assert not unode.update_active()
+    # Pretend node is actually not initialised
+    with patch.object(unode.io, "check_init", lambda: False):
+        assert not unode.check_init()
     assert unode.db.active
     assert StorageNode.select(StorageNode.active).limit(1).scalar()
+
+
+def test_update_do_init(xfs, unode, queue, archivefileimportrequest):
+    """Test handling an init request"""
+
+    # the req
+    req = archivefileimportrequest(node=unode.db, path="ALPENHORN_NODE")
+
+    # Activate node
+    unode.db.active = True
+    unode.db.save()
+
+    xfs.create_dir("/node")
+
+    # Call check_init
+    unode.check_init()
+
+    # Task is queued
+    assert queue.qsize == 1
+
+    # Run task
+    task, fifo = queue.get()
+    task()
+    queue.task_done(fifo)
+
+    # Node is initialised
+    assert unode.io.check_init() is True
+
+    # Request is complete
+    assert ArchiveFileImportRequest.get(id=req.id).completed == 1
 
 
 def test_update_free_space(unode):
@@ -523,3 +553,19 @@ def test_update_import_scan(unode, queue, archivefileimportrequest):
 
     # Mocked scan was called
     mock.assert_called_with(task, unode, queue, pathlib.Path("import/path"), True, afir)
+
+
+def test_update_import_alpenhorn_node(unode, queue, archivefileimportrequest):
+    """Test update_import() doesn't try to import ALPENHORN_NODE.
+
+    Even if we try to trick it...
+    """
+
+    afir = archivefileimportrequest(
+        path="./ALPENHORN_NODE", node=unode.db, recurse=False, register=True
+    )
+
+    unode.update_import()
+
+    # nothing queued
+    assert queue.qsize == 0

@@ -440,13 +440,12 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         else:
             log.debug(f"Skipping check of {copy.path}: restore in progress.")
 
-    def check_active(self) -> bool:
-        """Check that this is an active node.
+    def check_init(self) -> bool:
+        """Check that this node is initialised.
 
-        There's no ALPENHORN_NODE file on HSM,
-        so this just returns `self.node.active`.
+        There's no ALPENHORN_NODE file on HSM, so just return True.
         """
-        return self.node.active
+        return True
 
     def exists(self, path: pathlib.PurePath) -> bool:
         """Does `path` exist?
@@ -486,6 +485,15 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
         Returns True: everything fits in HSM.
         """
+        return True
+
+    def init(self) -> bool:
+        """Initialise this node.
+
+        This should never be called, because check_init always returns
+        True, but in case it does, we implement it anyways.
+        """
+        # Initialisaiton is a no-op
         return True
 
     def open(self, path: os.PathLike | str, binary: bool = True) -> IO:

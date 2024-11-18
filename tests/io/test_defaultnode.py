@@ -14,17 +14,33 @@ def test_bytes_avail(xfs, unode):
     assert unode.io.bytes_avail() == 10000.0
 
 
-def test_check_active(xfs, unode):
-    """test DefaultNodeIO.check_active()"""
+def test_check_init(xfs, unode):
+    """test DefaultNodeIO.check_init()"""
 
-    assert unode.io.check_active() is False
+    assert unode.io.check_init() is False
 
     xfs.create_file("/node/ALPENHORN_NODE", contents="not-node")
-    assert unode.io.check_active() is False
+    assert unode.io.check_init() is False
 
     with open("/node/ALPENHORN_NODE", mode="w") as f:
         f.write("simplenode")
-    assert unode.io.check_active() is True
+    assert unode.io.check_init() is True
+
+
+def test_init(xfs, unode, queue):
+    """test DefaultNodeIO.init()"""
+
+    # Somewhere for I/O to happen
+    xfs.create_dir("/node")
+
+    # Not initialised
+    assert unode.io.check_init() is False
+
+    # Run init
+    assert unode.io.init() is True
+
+    # Now initialised
+    assert unode.io.check_init() is True
 
 
 def test_exists(unode, xfs):

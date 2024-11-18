@@ -16,11 +16,16 @@ import pathlib
 if TYPE_CHECKING:
     import os
     from collections.abc import Iterator
-    from ..acquisition import ArchiveFile
-    from ..archive import ArchiveFileCopy, ArchiveFileCopyRequest
-    from ..queue import FairMultiFIFOQueue
-    from ..storage import StorageNode, StorageGroup
-    from ..update import UpdateableNode
+    from ..db import (
+        ArchiveFile,
+        ArchiveFileCopy,
+        ArchiveFileCopyRequest,
+        ArchiveFileImportRequest,
+        StorageNode,
+        StorageGroup,
+    )
+    from ..scheduler import FairMultiFIFOQueue
+    from ..daemon.update import UpdateableNode
 
 log = logging.getLogger(__name__)
 
@@ -253,18 +258,17 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def check_active(self) -> bool:
-        """Check that this is an active node.
+    def check_init(self) -> bool:
+        """Check that this node is initialised.
 
         This check should be done by inspecting the storage system, rather than
-        checking the database, because is meant to catch instances where the
-        "active" bit in the database is incorrect.
+        checking the database.
 
-        Returns True if the node is active, or False if inactive.
+        Returns True if the node is initialised, or False if not.
 
-        If this can't be determined, it should return self.node.active (i.e.
-        assume the database is correct), which is the default behaviour."""
-        return self.node.active
+        The default is to just return False (i.e. assume it's never initialised.)
+        """
+        return False
 
     def delete(self, copies: list[ArchiveFileCopy]) -> None:
         """Delete the ArchiveFileCopy list `copies` from the node.
@@ -322,6 +326,20 @@ class BaseNodeIO:
         -------
         fits : bool
             True if `size_b` fits on the node.  False otherwise.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def init(self) -> bool:
+        """Initialise this node.
+
+        This method will only be called if `check_init` returns False.
+        If initialisation is successful, subsequent `check_init` calls should
+        return True.
+
+        Returns
+        -------
+        init_successful : bool
+            Did initialisation succeed?
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
