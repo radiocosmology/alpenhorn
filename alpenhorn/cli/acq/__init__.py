@@ -5,6 +5,7 @@ import sys
 import click
 import peewee as pw
 
+from .create import create
 from .files import files
 from .list import list_
 from .show import show
@@ -15,6 +16,7 @@ def cli():
     """Manage Acquisitions."""
 
 
+cli.add_command(create, "create")
 cli.add_command(files, "files")
 cli.add_command(list_, "list")
 cli.add_command(show, "show")
