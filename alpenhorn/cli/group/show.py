@@ -5,7 +5,14 @@ import click
 import peewee as pw
 from tabulate import tabulate
 
-from ...db import StorageGroup, StorageNode, StorageTransferAction
+from ...common.util import pretty_bytes
+from ...db import (
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
+    ArchiveFileCopyRequest,
+    ArchiveFile,
+)
 from ..cli import echo
 from ..node.stats import get_stats
 
@@ -20,7 +27,8 @@ from ..node.stats import get_stats
 @click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
 @click.option("--node-details", is_flag=True, help="Show details of listed nodes.")
 @click.option("--node-stats", is_flag=True, help="Show usage stats of listed nodes.")
-def show(group_name, actions, all_, node_details, node_stats):
+@click.option("--transfers", is_flag=True, help="Show pending inbound transfers.")
+def show(group_name, actions, all_, node_details, node_stats, transfers):
     """Show details of a storage group.
 
     Shows details of the storage group named GROUP.
@@ -29,6 +37,7 @@ def show(group_name, actions, all_, node_details, node_stats):
     if all_:
         node_details = True
         node_stats = True
+        transfers = True
         actions = True
 
     try:
@@ -120,7 +129,35 @@ def show(group_name, actions, all_, node_details, node_stats):
     else:
         echo("  none")
 
-    # List transfer actions, if requested
+    # List transfers, if requested
+    if transfers:
+        echo("\nPending inbound transfers:\n")
+
+        query = (
+            ArchiveFileCopyRequest.select(
+                StorageNode.name,
+                pw.fn.COUNT(ArchiveFileCopyRequest.id).alias("count"),
+                pw.fn.Sum(ArchiveFile.size_b).alias("size"),
+            )
+            .join(ArchiveFile)
+            .switch(ArchiveFileCopyRequest)
+            .join(StorageNode)
+            .where(
+                ArchiveFileCopyRequest.group_to == group,
+                ArchiveFileCopyRequest.completed == 0,
+                ArchiveFileCopyRequest.cancelled == 0,
+            )
+            .group_by(ArchiveFileCopyRequest.node_from_id)
+            .order_by(StorageNode.name)
+        )
+
+        data = []
+        for node in query.tuples():
+            data.append((node[0], node[1], pretty_bytes(node[2])))
+
+        echo(tabulate(data, headers=["Source Node", "Request Count", "Total Size"]))
+
+    # List auto-actions, if requested
     if actions:
         echo("\nAuto-actions:\n")
 
