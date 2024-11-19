@@ -15,6 +15,7 @@ from ...db import (
 )
 from ..cli import echo
 from ..node.stats import get_stats
+from ..options import cli_option
 
 
 @click.command()
@@ -24,7 +25,7 @@ from ..node.stats import get_stats
     is_flag=True,
     help="Show post-transfer auto-actions affecting this group.",
 )
-@click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
+@cli_option("all_", help="Show all additional data.")
 @click.option("--node-details", is_flag=True, help="Show details of listed nodes.")
 @click.option("--node-stats", is_flag=True, help="Show usage stats of listed nodes.")
 @click.option("--transfers", is_flag=True, help="Show pending inbound transfers.")

@@ -19,13 +19,26 @@ def cli_option(option: str, **extra_kwargs):
     """
 
     # Set args for the click.option decorator
-    if option == "address":
+    if option == "acq":
+        args = ("--acq",)
+        kwargs = {
+            "metavar": "ACQ",
+            "default": None,
+            "multiple": True,
+            "help": "May be specified multiple times.  "
+            "Limits operation to files in acquisition(s) named ACQ.",
+        }
+    elif option == "address":
         args = ("--address",)
         kwargs = {
             "metavar": "ADDR",
             "help": "Domain name or IP address to use for remote access to the "
             "node.",
         }
+    elif option == "all_":
+        # Has no help; must be provided when used
+        args = ("all_", "--all", "-a")
+        kwargs = {"is_flag": True}
     elif option == "archive":
         args = ("--archive",)
         kwargs = {
@@ -135,6 +148,12 @@ def cli_option(option: str, **extra_kwargs):
 
     # Update kwargs, if given
     kwargs.update(extra_kwargs)
+
+    # Default help string for common options missing them
+    if "help" not in kwargs:
+        kwargs["help"] = (
+            "SOMEONE FORGOT TO WRITE SOME HELP FOR THIS OPTION.  GOOD LUCK, I GUESS!"
+        )
 
     def _decorator(func):
         nonlocal args, kwargs

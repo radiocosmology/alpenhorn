@@ -1,4 +1,4 @@
-"""alpenhorn group auto-sync command"""
+"""alpenhorn group autosync command"""
 
 import click
 import peewee as pw
@@ -13,17 +13,17 @@ from ..cli import echo
 @click.option(
     "--remove",
     is_flag=True,
-    help="Remove (instead of add) NODE as an auto-sync source.",
+    help="Remove (instead of add) NODE as an autosync source.",
 )
 @click.pass_context
 def autosync(ctx, group_name, node_name, remove):
-    """Manage auto-sync sources for this group.
+    """Manage autosync sources for this group.
 
     This allows you to add (the default) or remove (using --remove)
-    the StorageNode named NODE as a an auto-sync souce for the Storage
+    the StorageNode named NODE as a an autosync souce for the Storage
     Group named GROUP.
 
-    If NODE is added as an auto-sync source for GROUP, then, whenever
+    If NODE is added as an autosync source for GROUP, then, whenever
     a file is added to NODE, it will be automatically synced into the
     Group GROUP, so long as the file isn't already present in the Group.
     """
@@ -39,10 +39,10 @@ def autosync(ctx, group_name, node_name, remove):
         except pw.DoesNotExist:
             raise click.ClickException(f"no such node: {node_name}")
 
-        # Sanity check: can't auto-sync within a group
+        # Sanity check: can't autosync within a group
         if group == node.group and not remove:
             raise click.ClickException(
-                "can't enable auto-sync: "
+                "can't enable autosync: "
                 f'Node "{node_name}" is in group "{group_name}"'
             )
 

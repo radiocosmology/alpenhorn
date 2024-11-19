@@ -14,6 +14,7 @@ from ...db import (
     ArchiveFile,
 )
 from ..cli import echo
+from ..options import cli_option
 from .stats import get_stats
 
 
@@ -24,7 +25,7 @@ from .stats import get_stats
     is_flag=True,
     help="Show post-transfer auto-actions affecting this group.",
 )
-@click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
+@cli_option("all_", help="Show all additional data.")
 @click.option("--stats", is_flag=True, help="Show usage stats of the node.")
 @click.option(
     "--transfers", is_flag=True, help="Show pending transfers out from the node."

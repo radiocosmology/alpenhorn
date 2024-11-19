@@ -22,6 +22,7 @@ from .modify import modify
 from .rename import rename
 from .show import show
 from .stats import stats
+from .verify import verify
 
 RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
 
@@ -41,6 +42,7 @@ cli.add_command(modify, "modify")
 cli.add_command(rename, "rename")
 cli.add_command(show, "show")
 cli.add_command(stats, "stats")
+cli.add_command(verify, "verify")
 
 
 @cli.command()
@@ -306,152 +308,3 @@ def scan(node_name, verbose, acq, register_new, dry):
         for fn in sorted(not_acqs_roots):
             print(fn)
         print()
-
-
-@cli.command()
-@click.argument("node_name", metavar="NODE")
-@click.option("--md5", help="perform full check against md5sum", is_flag=True)
-@click.option(
-    "--fixdb", help="fix up the database to be consistent with reality", is_flag=True
-)
-@click.option(
-    "--acq",
-    metavar="ACQ",
-    multiple=True,
-    help="Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.",
-)
-def verify(node_name, md5, fixdb, acq):
-    """Verify the archive on NODE against the database.
-
-    If there are no issues with the archive returns with exit status of zero,
-    non-zero if there are issues. Specifically:
-
-    `0`
-        No problems.
-    `1`
-        Corrupt files found.
-    `2`
-        Files missing from archive.
-    `3`
-        Both corrupt and missing files.
-    """
-
-    import os
-
-    config_connect()
-
-    try:
-        this_node = StorageNode.get(name=node_name)
-    except pw.DoesNotExist:
-        click.echo('Storage node "{}" does not exist.'.format(node_name))
-        exit(1)
-
-    if not this_node.active:
-        click.echo('Node "{}" is not active.'.format(node_name))
-        exit(1)
-    if not util.alpenhorn_node_check(this_node):
-        click.echo(
-            'Node "{}" does not match ALPENHORN_NODE: {}'.format(
-                node_name, this_node.root
-            )
-        )
-        exit(1)
-
-    # Use a complicated query with a tuples construct to fetch everything we
-    # need in a single query. This massively speeds up the whole process versus
-    # fetching all the FileCopy's then querying for Files and Acqs.
-    lfiles = (
-        ArchiveFile.select(
-            ArchiveFile.name,
-            ArchiveAcq.name,
-            ArchiveFile.size_b,
-            ArchiveFile.md5sum,
-            ArchiveFileCopy.id,
-        )
-        .join(ArchiveAcq)
-        .switch(ArchiveFile)
-        .join(ArchiveFileCopy)
-        .where(ArchiveFileCopy.node == this_node, ArchiveFileCopy.has_file == "Y")
-    )
-
-    if acq:
-        lfiles = lfiles.where(ArchiveAcq.name << acq)
-
-    missing_files = []
-    corrupt_files = []
-
-    missing_ids = []
-    corrupt_ids = []
-
-    nfiles = 0
-
-    with click.progressbar(lfiles.tuples(), label="Scanning files") as lfiles_iter:
-        for filename, acqname, filesize, md5sum, fc_id in lfiles_iter:
-            nfiles += 1
-
-            filepath = this_node.root + "/" + acqname + "/" + filename
-
-            # Check if file is plain missing
-            if not os.path.exists(filepath):
-                missing_files.append(filepath)
-                missing_ids.append(fc_id)
-                continue
-
-            if md5:
-                file_md5 = util.md5sum_file(filepath)
-                corrupt = file_md5 != md5sum
-            else:
-                corrupt = os.path.getsize(filepath) != filesize
-
-            if corrupt:
-                corrupt_files.append(filepath)
-                corrupt_ids.append(fc_id)
-                continue
-
-    if len(missing_files) > 0:
-        click.echo()
-        click.echo("=== Missing files ===")
-        for fname in missing_files:
-            click.echo(fname)
-
-    if len(corrupt_files) > 0:
-        print()
-        click.echo("=== Corrupt files ===")
-        for fname in corrupt_files:
-            click.echo(fname)
-
-    click.echo()
-    click.echo("=== Summary ===")
-    click.echo("  %i total files" % nfiles)
-    click.echo("  %i missing files" % len(missing_files))
-    click.echo("  %i corrupt files" % len(corrupt_files))
-    click.echo()
-
-    # Fix up the database by marking files as missing, and marking
-    # corrupt files for verification by alpenhornd.
-    if fixdb:
-        # TODO: ensure write access to the database
-        # # We need to write to the database.
-        # di.connect_database(read_write=True)
-
-        if (len(missing_files) > 0) and click.confirm("Fix missing files"):
-            missing_count = (
-                ArchiveFileCopy.update(has_file="N")
-                .where(ArchiveFileCopy.id << missing_ids)
-                .execute()
-            )
-            click.echo("  %i marked as missing" % missing_count)
-
-        if (len(corrupt_files) > 0) and click.confirm("Fix corrupt files"):
-            corrupt_count = (
-                ArchiveFileCopy.update(has_file="M")
-                .where(ArchiveFileCopy.id << corrupt_ids)
-                .execute()
-            )
-            click.echo("  %i corrupt files marked for verification" % corrupt_count)
-    else:
-        # Set the exit status
-        status = 1 if corrupt_files else 0
-        status += 2 if missing_files else 0
-
-        exit(status)
