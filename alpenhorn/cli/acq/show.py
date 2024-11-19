@@ -57,12 +57,11 @@ def show(acq, show_groups, show_nodes):
             .group_by(StorageNode.id)
         )
         for row in query.dicts():
-            pretty_size = pretty_bytes(row["size"]) if row["size"] is not None else "-"
             if show_groups:
                 group_dict = node_totals.setdefault(row["group"], {})
-                group_dict[row["node"]] = (row["count"], pretty_size)
+                group_dict[row["node"]] = (row["count"], pretty_bytes(row["size"]))
             else:
-                node_totals[row["node"]] = (row["count"], pretty_size)
+                node_totals[row["node"]] = (row["count"], pretty_bytes(row["size"]))
 
     if show_groups:
         group_totals = (
@@ -92,7 +91,7 @@ def show(acq, show_groups, show_nodes):
                 (
                     group["name"],
                     group["count"],
-                    pretty_bytes(group["size"]) if group["size"] is not None else "-",
+                    pretty_bytes(group["size"]),
                 )
             )
             if show_nodes and group["gid"] in node_totals:

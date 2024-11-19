@@ -220,19 +220,19 @@ def get_hostname() -> str:
     return socket.gethostname().split(".")[0]
 
 
-def pretty_bytes(num: int) -> str:
+def pretty_bytes(num: int | None) -> str:
     """Return a nicely formatted string describing a size in bytes.
 
     Parameters
     ----------
-    num : int
+    num : int or None
         Number of bytes
 
     Returns
     -------
     pretty_bytes : str
-        A formatted string using power-of-two prefixes,
-        e.g. "103.4 GiB"
+        If `num` was None, this will be "-".  Otherwise, it's a
+        formatted string using power-of-two prefixes, e.g. "103.4 GiB".
 
     Raises
     ------
@@ -242,8 +242,13 @@ def pretty_bytes(num: int) -> str:
         `num` was less than zero
     """
 
+    # Return something unhelpful if given None
+    if num is None:
+        return "-"
+
     # Reject weird stuff
     try:
+        num = int(num)
         if num < 0:
             raise ValueError("negative size")
     except TypeError:

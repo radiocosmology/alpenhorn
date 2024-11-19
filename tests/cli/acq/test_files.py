@@ -112,7 +112,7 @@ def test_list_node(clidb, cli, assert_row_present):
     assert "File2" not in result.output
     assert "File3" not in result.output
     assert_row_present(result.output, "FileMY", "789 B", "Suspect", "1.205 kiB")
-    assert_row_present(result.output, "FileXY", "5.545 kiB", "Corrupt", "-")
+    assert_row_present(result.output, "FileXY", "5.545 kiB", "Corrupt", "0 B")
     assert_row_present(result.output, "FileNY", "0 B", "Missing", "-")
     assert_row_present(result.output, "FileYM", "-", "Removable", "-")
     assert_row_present(result.output, "FileMM", "-", "Removable", "-")
