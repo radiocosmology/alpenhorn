@@ -114,13 +114,12 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
             stats[node.id]["count"] = 0
 
         if "size" in node_stats and node_stats["size"]:
-            size = pretty_bytes(node_stats["size"])
             if node.max_total_gb:
                 percent = 100.0 * node_stats["size"] / node.max_total_gb / 2**30
                 stats[node.id]["percent"] = f"{percent:5.2f}"
             else:
                 stats[node.id]["percent"] = "-"
-            stats[node.id]["size"] = size
+            stats[node.id]["size"] = pretty_bytes(node_stats["size"])
         else:
             stats[node.id]["size"] = "-"
             stats[node.id]["percent"] = "-"

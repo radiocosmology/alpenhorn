@@ -105,7 +105,7 @@ def _run_query(
             what = "verification"
             goal = ""
 
-        size = pretty_bytes(total.size) if total.size is not None else "size unknown"
+        size = "unknown size" if total.size is None else pretty_bytes(total.size)
         echo(f"{verb} {what} of {total.count} {files} ({size}){goal}.")
 
         if update:

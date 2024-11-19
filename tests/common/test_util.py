@@ -71,7 +71,13 @@ def test_pretty_bytes():
         util.pretty_bytes(-1)
 
     with pytest.raises(TypeError):
-        util.pretty_bytes(None)
+        util.pretty_bytes({})
+
+    # This is explicitly allowed
+    assert util.pretty_bytes(None) == "-"
+
+    # int conversion should happen
+    assert util.pretty_bytes("456") == "456 B"
 
     # This is an overflow
     assert util.pretty_bytes(1234567890123456789012) == "1234567890123456789012 B"

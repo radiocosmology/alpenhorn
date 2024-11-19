@@ -48,16 +48,12 @@ def files(acq, group, node, show_removed):
         for copy in query:
             state = copy.state
             if show_removed or state != "Removed":
-                file_size = (
-                    "-" if copy.file.size_b is None else pretty_bytes(copy.file.size_b)
-                )
-                node_size = pretty_bytes(copy.size_b) if copy.size_b else "-"
                 data.append(
                     (
                         copy.file.name,
-                        file_size,
+                        pretty_bytes(copy.file.size_b),
                         state,
-                        node_size,
+                        pretty_bytes(copy.size_b),
                         copy.file.md5sum,
                     )
                 )
@@ -91,19 +87,21 @@ def files(acq, group, node, show_removed):
                 else:
                     state = "Corrupt"
 
-                file_size = (
-                    "-" if copy.file.size_b is None else pretty_bytes(copy.file.size_b)
+                data.append(
+                    (
+                        copy.file.name,
+                        pretty_bytes(copy.file.size_b),
+                        state,
+                        copy.file.md5sum,
+                    )
                 )
-
-                data.append((copy.file.name, file_size, state, copy.file.md5sum))
     else:
         headers = ["Name", "Size", "MD5"]
 
         query = ArchiveFile.select().where(ArchiveFile.acq == acq)
 
         for file in query:
-            file_size = "-" if file.size_b is None else pretty_bytes(file.size_b)
-            data.append((file.name, file_size, file.md5sum))
+            data.append((file.name, pretty_bytes(file.size_b), file.md5sum))
 
     if data:
         echo(tabulate(data, headers=headers))
