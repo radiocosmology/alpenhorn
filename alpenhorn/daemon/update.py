@@ -271,24 +271,64 @@ class UpdateableNode(updateable_base):
         False otherwise."""
         return self._queue.fifo_size(self.io.fifo) == 0
 
-    def update_active(self) -> bool:
-        """Check if we are actually active on the host.
+    def check_init(self) -> bool:
+        """Check if the node is initialised.
 
         This is an I/O check, rather than a database check.
 
         Returns
         -------
-        active : bool
-            Whether or not the node is active.
+        initialised : bool
+            Whether or not the node is initialised.
         """
 
-        if self.db.active:
-            if self.io.check_active():
-                return True
-            else:
-                log.warning(f'Ignoring node "{self.name}": not ready for I/O.')
-        else:
+        def _async(
+            task: Task, node: UpdateableNode, req: ArchiveFileImportRequest
+        ) -> None:
+            """Task async to initialise `node`, if necessary.
+
+            Calls `req.complete()` if initialisation succeeds.
+            """
+
+            # recheck
+            if node.io.check_init():
+                log.info(f'Node "{node.name}" already initialised.')
+                req.complete()
+                return
+
+            # Run the init and check result
+            if node.io.init() and node.io.check_init():
+                log.info(f'Node "{node.name}" initialised.')
+                req.complete()
+                return
+
+            # Otherwise, fail, and don't complete req
+            log.warning(f'Initialisation failed for node "{node.name}".')
+
+        if not self.db.active:
             log.warning(f'Ignoring node "{self.name}": deactivated during update.')
+            return False
+
+        if self.io.check_init():
+            return True
+
+        # We're active but not initialised.  Is there a pending init request?
+        try:
+            req = ArchiveFileImportRequest.get(
+                node=self.db, path="ALPENHORN_NODE", completed=0
+            )
+            # Create a task to init the node
+            Task(
+                func=_async,
+                queue=self._queue,
+                key=self.io.fifo,
+                args=(self, req),
+                name=f'Init Node "{self.name}"',
+            )
+            log.info(f'Requesting init of node "{self.name}".')
+            # But then we still ignore it for now.
+        except pw.DoesNotExist:
+            log.warning(f'Ignoring node "{self.name}": not initialised.')
 
         return False
 
@@ -438,6 +478,15 @@ class UpdateableNode(updateable_base):
             path = pathlib.Path(req.path)
             if path.is_absolute():
                 log.info(f'Not importing to "{self.name}" absolute path: {path}')
+                req.complete()
+                continue
+
+            if req.path == "ALPENHORN_NODE":
+                # This part of the update only runs if the node is already initialised,
+                # so this request can't be something we need to deal with here
+                log.info(
+                    f'Ignoring node init request for "{self.name}": already initialised.'
+                )
                 req.complete()
                 continue
 
@@ -848,7 +897,7 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
                 continue
 
             # Check if the node is actually active
-            if not node.update_active():
+            if not node.check_init():
                 del nodes[name]  # Not active
                 continue
 

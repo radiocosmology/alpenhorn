@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from alpenhorn.db import StorageGroup, StorageNode
+from alpenhorn.db import StorageGroup, StorageNode, ArchiveFileImportRequest
 
 
 def test_no_group(clidb, cli):
@@ -265,3 +265,15 @@ def test_bad_min_avail(clidb, cli):
 
     cli(2, ["node", "create", "TEST", "--create-group", "--min-avail=-1"])
     cli(2, ["node", "create", "TEST", "--create-group", "--min-avail=none"])
+
+
+def test_init(clidb, cli):
+    """Test create with --init"""
+
+    cli(0, ["node", "create", "TEST", "--init", "--create-group"])
+
+    node = StorageNode.get(name="TEST")
+    afir = ArchiveFileImportRequest.get(id=1)
+
+    assert afir.node == node
+    assert afir.path == "ALPENHORN_NODE"

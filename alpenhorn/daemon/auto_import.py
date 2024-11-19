@@ -61,6 +61,8 @@ def import_file(
         If not None, req will be marked as complete if the import isn't skipped.
     """
 
+    path = pathlib.PurePath(path)
+
     # Occasionally the watchdog sends events on the node root directory itself. Skip these.
     if path == pathlib.PurePath(node.db.root):
         log.debug("Skipping import request of node root")
@@ -86,7 +88,9 @@ def import_file(
     # Ignore the node info file.  NB: this happens even on nodes which
     # don't use an ALPENHORN_NODE file, meaning even on those nodes,
     # this path is disallowed as a data file.
-    if str(path) == "ALPENHORN_NODE":
+    if pathlib.PurePath(node.db.root).joinpath(path) == pathlib.PurePath(
+        node.db.root
+    ).joinpath("ALPENHORN_NODE"):
         log.debug("ignoring ALPENHORN_NODE file during import")
         if req:
             log.info(f"Completed import request #{req.id}.")

@@ -128,8 +128,8 @@ class ArchiveFileImportRequest(base_model):
     node : foreign key
         The StorageNode on which the import should happen
     path : string
-        The path to import.  If this is a directory and
-        recurse is True, it will be recursively scanned.
+        The path to import.  If this is a directory and recurse is True,
+        it will be recursively scanned.
     recurse : bool
         If True, recursively scan path for files, if path is a directory.
     register : bool
@@ -139,6 +139,15 @@ class ArchiveFileImportRequest(base_model):
         Set to true when the import request has completed.
     timestamp : datetime
         The UTC time when the request was made.
+
+    If `path` is the special value "ALPENHORN_NODE", then the request is
+    a node initialisation request, instead of a normal import request.
+    This only happens on active nodes which aren't already initialised:
+    an initialisation request on an already initialised node is ignored.
+
+    Note: How node initialisation works is dependent on the I/O class of
+    the node.  There is no requirement for initialisation to create an
+    ALPENHORN_NODE node file.
     """
 
     node = pw.ForeignKeyField(StorageNode, backref="import_requests")

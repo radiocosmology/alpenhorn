@@ -4,7 +4,7 @@ import click
 import json
 import peewee as pw
 
-from ...db import database_proxy, StorageGroup, StorageNode
+from ...db import database_proxy, StorageGroup, StorageNode, ArchiveFileImportRequest
 from ..options import cli_option, exactly_one, set_storage_type, set_io_config
 from ..cli import echo
 
@@ -50,6 +50,9 @@ from ..cli import echo
     "Incompatible with --create-group",
 )
 @cli_option("host")
+@click.option(
+    "--init", is_flag=True, help='Initialise the new node (see "node init --help")'
+)
 @cli_option("io_config")
 @cli_option("io_var")
 @cli_option("max_total")
@@ -70,6 +73,7 @@ def create(
     field,
     group,
     host,
+    init,
     io_config,
     io_var,
     max_total,
@@ -131,7 +135,7 @@ def create(
             except pw.DoesNotExist:
                 raise click.ClickException("no such group: " + group)
 
-        StorageNode.create(
+        node = StorageNode.create(
             name=node_name,
             root=root,
             host=host,
@@ -149,6 +153,10 @@ def create(
             io_config=json.dumps(io_config) if io_config else None,
         )
 
-        if create_group:
-            echo(f'Created storage group "{node_name}".')
-        echo(f'Created storage node "{node_name}".')
+        # Create AFIR for node init
+        if init:
+            ArchiveFileImportRequest.create(node=node, path="ALPENHORN_NODE")
+
+    if create_group:
+        echo(f'Created storage group "{node_name}".')
+    echo(f'Created storage node "{node_name}".')

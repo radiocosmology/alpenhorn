@@ -7,6 +7,7 @@ from .autoclean import autoclean
 from .clean import clean
 from .create import create
 from .deactivate import deactivate
+from .init import init
 from .list import list_
 from .modify import modify
 from .rename import rename
@@ -27,6 +28,7 @@ cli.add_command(autoclean, "autoclean")
 cli.add_command(clean, "clean")
 cli.add_command(create, "create")
 cli.add_command(deactivate, "deactivate")
+cli.add_command(init, "init")
 cli.add_command(list_, "list")
 cli.add_command(modify, "modify")
 cli.add_command(rename, "rename")
