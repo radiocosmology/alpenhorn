@@ -300,12 +300,13 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def file_walk(self) -> Iterator[pathlib.PurePath]:
-        """Iterate over file copies
+    def file_walk(self, path: pathlib.Path) -> Iterator[pathlib.PurePath]:
+        """Iterate through directory `path`.
 
-        Should successively yield a pathlib.PurePath for each file copy on the
-        node.  The returned path may either be absolute (i.e have node.root
-        pre-pended) or else be relative to node.root.  The former is preferred.
+        Should successively yield a pathlib.PurePath for each file under `path`,
+        which is relative to the node `root.  The returned path may either be
+        absolute (i.e have node.root pre-pended) or else be relative to
+        node.root.  The former is preferred.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 

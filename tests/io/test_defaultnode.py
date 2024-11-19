@@ -57,12 +57,47 @@ def test_file_walk(unode, xfs):
     xfs.create_file("/node/dir/subdir/file4")
     xfs.create_link("/node/dir/file2", "/node/dir/subdir/file5")
 
-    assert sorted(list(unode.io.file_walk())) == [
+    assert sorted(list(unode.io.file_walk(pathlib.PurePath(".")))) == [
         pathlib.PurePath("/node/dir/file1"),
         pathlib.PurePath("/node/dir/file2"),
         pathlib.PurePath("/node/dir/subdir/file4"),
         pathlib.PurePath("/node/dir/subdir/file5"),
     ]
+
+
+def test_file_walk_path(unode, xfs):
+    """test DefaultNodeIO.file_walk() with a path"""
+
+    # Make some things.
+    xfs.create_file("/node/dir1/file1")
+    xfs.create_file("/node/dir1/file2")
+    xfs.create_file("/node/dir2/file3")
+    xfs.create_file("/node/dir2/file4")
+
+    assert sorted(list(unode.io.file_walk(pathlib.PurePath("dir1")))) == [
+        pathlib.PurePath("/node/dir1/file1"),
+        pathlib.PurePath("/node/dir1/file2"),
+    ]
+
+
+def test_file_walk_missing(unode, xfs):
+    """test DefaultNodeIO.file_walk() with a missing path"""
+
+    # Make some things.
+    xfs.create_file("/node/dir1/file1")
+
+    assert len(list(unode.io.file_walk(pathlib.PurePath("dir3")))) == 0
+
+
+def test_file_walk_file(unode, xfs):
+    """test DefaultNodeIO.file_walk() with a file path"""
+
+    # Make some things.
+    xfs.create_file("/node/dir1/file1")
+
+    result = list(unode.io.file_walk(pathlib.PurePath("dir1/file1")))
+    assert len(result) == 1
+    assert str(result[0]) == "/node/dir1/file1"
 
 
 def test_fits(unode, xfs):

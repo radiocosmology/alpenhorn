@@ -37,7 +37,7 @@ thread, typically via the peewee table models provided by this module.
 
 # Table models
 from .acquisition import ArchiveAcq, ArchiveFile
-from .archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from .archive import ArchiveFileCopy, ArchiveFileCopyRequest, ArchiveFileImportRequest
 from .storage import StorageGroup, StorageNode, StorageTransferAction
 
 # Basic functionality

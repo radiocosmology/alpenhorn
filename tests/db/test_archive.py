@@ -5,16 +5,21 @@ import pathlib
 import datetime
 import peewee as pw
 
-from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.db.archive import (
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
+)
 
 
-def test_schema(dbproxy, simplecopy, simplerequest):
+def test_schema(dbproxy, simplecopy, simplecopyrequest, simpleimportrequest):
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
         "storagenode",
         "archiveacq",
         "archivefile",
         "archivefilecopyrequest",
+        "archivefileimportrequest",
         "archivefilecopy",
     }
 
@@ -138,3 +143,85 @@ def test_copy_path(simplefile, simplenode, archivefilecopy):
     assert copy.path == pathlib.PurePath(
         simplenode.root, simplefile.acq.name, simplefile.name
     )
+
+
+def test_archivefileimportrequest_model(
+    simplegroup, storagenode, archivefileimportrequest
+):
+    """Test ArchiveFileImportRequest model"""
+    minnode = storagenode(name="min", group=simplegroup)
+    maxnode = storagenode(name="max", group=simplegroup)
+
+    before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
+    archivefileimportrequest(node=minnode, path="min_path")
+    after = pw.utcnow() + datetime.timedelta(seconds=1)
+
+    archivefileimportrequest(
+        path="max_path",
+        node=maxnode,
+        completed=True,
+        register=True,
+        recurse=True,
+        timestamp=before,
+    )
+
+    afir = (
+        ArchiveFileImportRequest.select()
+        .where(ArchiveFileImportRequest.node == minnode)
+        .dicts()
+        .get()
+    )
+
+    assert afir["timestamp"] >= before
+    assert afir["timestamp"] <= after
+    del afir["timestamp"]
+    assert afir == {
+        "path": "min_path",
+        "node": minnode.id,
+        "id": 1,
+        "completed": False,
+        "recurse": False,
+        "register": False,
+    }
+    assert ArchiveFileImportRequest.select().where(
+        ArchiveFileImportRequest.node == maxnode
+    ).dicts().get() == {
+        "path": "max_path",
+        "node": maxnode.id,
+        "id": 2,
+        "completed": True,
+        "recurse": True,
+        "register": True,
+        "timestamp": before,
+    }
+
+    # Not unique
+    archivefileimportrequest(path="min_path", node=minnode)
+
+
+def test_copy_path(simplefile, simplenode, archivefilecopy):
+    """Test ArchiveFileCopy.path."""
+
+    copy = archivefilecopy(file=simplefile, node=simplenode)
+
+    assert copy.path == pathlib.PurePath(
+        simplenode.root, simplefile.acq.name, simplefile.name
+    )
+
+
+def test_importreqeust_complete(simpleimportrequest):
+    """Test ArchiveFileImportRequest.complete()."""
+
+    assert simpleimportrequest.completed == 0
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 0
+
+    simpleimportrequest.complete()
+
+    assert simpleimportrequest.completed == 1
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
+
+    # Can be called multiple times
+    simpleimportrequest.complete()
+
+    assert simpleimportrequest.completed == 1
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1

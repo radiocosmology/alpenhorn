@@ -19,6 +19,7 @@ from alpenhorn.db import (
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
     StorageGroup,
     StorageNode,
     StorageTransferAction,
@@ -358,7 +359,7 @@ def mock_statvfs(fs):
 def mock_stat(fs):
     """Mocks pathlib.PosixPath.stat to work with pyfakefs."""
 
-    def _mocked_stat(path):
+    def _mocked_stat(path, follow_symlinks=False):
         """Mock of pathlib.PosixPath.stat to report the size of pyfakefs files."""
         nonlocal fs
 
@@ -504,6 +505,7 @@ def dbtables(dbproxy):
             ArchiveFile,
             ArchiveFileCopy,
             ArchiveFileCopyRequest,
+            ArchiveFileImportRequest,
         ]
     )
 
@@ -686,6 +688,7 @@ def clidb(clidb_noinit):
             ArchiveFile,
             ArchiveFileCopy,
             ArchiveFileCopyRequest,
+            ArchiveFileImportRequest,
         ]
     )
 
@@ -794,6 +797,11 @@ def archivefilecopyrequest(factory_factory):
     return factory_factory(ArchiveFileCopyRequest)
 
 
+@pytest.fixture
+def archivefileimportrequest(factory_factory):
+    return factory_factory(ArchiveFileImportRequest)
+
+
 # Generic versions of the above.  When you just want a record, but don't care
 # what it is.
 
@@ -855,7 +863,7 @@ def simplecopy(
 
 
 @pytest.fixture
-def simplerequest(
+def simplecopyrequest(
     archiveacq,
     archivefile,
     archivefilecopyrequest,
@@ -866,12 +874,27 @@ def simplerequest(
 
     Creates all necessary backrefs.
     """
-    acq = archiveacq(name="simplerequest_acq")
-    file = archivefile(name="simplerequest_file", acq=acq, size_b=2**20)
-    group1 = storagegroup(name="simplerequest_group1")
-    group2 = storagegroup(name="simplerequest_group2")
-    node = storagenode(name="simplerequest_node", group=group1)
+    acq = archiveacq(name="simplecopyrequest_acq")
+    file = archivefile(name="simplecopyrequest_file", acq=acq, size_b=2**20)
+    group1 = storagegroup(name="simplecopyrequest_group1")
+    group2 = storagegroup(name="simplecopyrequest_group2")
+    node = storagenode(name="simplecopyrequest_node", group=group1)
     return archivefilecopyrequest(file=file, node_from=node, group_to=group2)
+
+
+@pytest.fixture
+def simpleimportrequest(
+    archivefileimportrequest,
+    storagenode,
+    storagegroup,
+):
+    """Create a simple ArchiveFileCopyRequest record.
+
+    Creates all necessary backrefs.
+    """
+    group = storagegroup(name="simpleimportrequest_group")
+    node = storagenode(name="simpleimportrequest_node", group=group)
+    return archivefileimportrequest(path="simpleimportrequest", node=node)
 
 
 @pytest.fixture

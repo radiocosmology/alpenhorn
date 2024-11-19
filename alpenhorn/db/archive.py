@@ -85,7 +85,7 @@ class ArchiveFileCopy(base_model):
 
 
 class ArchiveFileCopyRequest(base_model):
-    """Requests for file copies.
+    """Requests for file transfer from node to group.
 
     Attributes
     ----------
@@ -118,3 +118,40 @@ class ArchiveFileCopyRequest(base_model):
 
     class Meta:
         indexes = ((("file", "group_to", "node_from"), False),)  # non-unique index
+
+
+class ArchiveFileImportRequest(base_model):
+    """Requests for the import of new files into a node.
+
+    Attributes
+    ----------
+    node : foreign key
+        The StorageNode on which the import should happen
+    path : string
+        The path to import.  If this is a directory and
+        recurse is True, it will be recursively scanned.
+    recurse : bool
+        If True, recursively scan path for files, if path is a directory.
+    register : bool
+        If False, only files with existing ArchiveFile records will be
+        imported.
+    completed : bool
+        Set to true when the import request has completed.
+    timestamp : datetime
+        The UTC time when the request was made.
+    """
+
+    node = pw.ForeignKeyField(StorageNode, backref="import_requests")
+    path = pw.CharField(max_length=1024)
+    recurse = pw.BooleanField(default=False)
+    register = pw.BooleanField(default=False)
+    completed = pw.BooleanField(default=False)
+    timestamp = pw.DateTimeField(default=pw.utcnow, null=True)
+
+    def complete(self) -> None:
+        """Set this request to complete in the database."""
+
+        # If we're already complete, this function does nothing
+        if not self.completed:
+            self.completed = True
+            self.save(only=[ArchiveFileImportRequest.completed])

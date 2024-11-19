@@ -274,11 +274,15 @@ class DefaultNodeIO(BaseNodeIO):
         # Apparent size
         return path.stat().st_size
 
-    def file_walk(self) -> Iterator[pathlib.PurePath]:
-        """An iterator over all regular files under node.root
+    def file_walk(self, path) -> Iterator[pathlib.PurePath]:
+        """An iterator over all regular files under `node.root/path`
 
         pathlib.PurePaths returned by the iterator are absolute
         """
+
+        # path must not be absolute
+        if path.is_absolute():
+            raise ValueError("path may not be absolute")
 
         def _walk(path):
             """Recurse through directory path, yielding files"""
@@ -294,7 +298,22 @@ class DefaultNodeIO(BaseNodeIO):
                 elif entry.is_file() and not entry.is_symlink():
                     yield pathlib.PurePath(entry)
 
-        return _walk(self.node.root)
+        fullpath = pathlib.Path(self.node.root).joinpath(path)
+
+        if not fullpath.exists():
+            # If path doesn't exist, just return an empty tuple
+            return ()
+
+        if fullpath.is_file() and not fullpath.is_symlink():
+            # If path is just a file, just return that
+            return (fullpath,)
+
+        # Return an iterator over the directory contents if a directory
+        if fullpath.is_dir():
+            return _walk(fullpath)
+
+        # Return nothing, if something weird
+        return ()
 
     def fits(self, size_b: int) -> bool:
         """Does `size_b` bytes fit on this node?

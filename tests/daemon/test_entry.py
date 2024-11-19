@@ -28,7 +28,11 @@ from urllib.parse import quote as urlquote
 
 from alpenhorn.db import database_proxy, EnumField
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
-from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.db.archive import (
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
+)
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
 from alpenhorn.daemon.entry import entry
 
@@ -48,6 +52,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         [
             ArchiveFileCopy,
             ArchiveFileCopyRequest,
+            ArchiveFileImportRequest,
             StorageGroup,
             StorageNode,
             StorageTransferAction,
