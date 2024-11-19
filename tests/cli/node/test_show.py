@@ -8,6 +8,7 @@ from alpenhorn.db import (
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
+    ArchiveFileCopyRequest,
     utcnow,
 )
 
@@ -189,10 +190,48 @@ def test_show_actions(clidb, cli, assert_row_present):
     assert "Node6" not in result.output
 
 
+def test_show_transfers(clidb, cli, assert_row_present):
+    """Test show --transfers."""
+
+    group1 = StorageGroup.create(name="Group1")
+    group2 = StorageGroup.create(name="Group2")
+    node = StorageNode.create(name="Node", group=group1)
+
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+
+    # Transfers
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group1, file=file, completed=0, cancelled=0
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group1, file=file, completed=0, cancelled=0
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group1, file=file, completed=0, cancelled=0
+    )
+
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group2, file=file, completed=0, cancelled=0
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group2, file=file, completed=0, cancelled=1
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group2, file=file, completed=1, cancelled=0
+    )
+
+    result = cli(0, ["node", "show", "Node", "--transfers"])
+
+    assert_row_present(result.output, "Group1", "3", "3.615 kiB")
+    assert_row_present(result.output, "Group2", "1", "1.205 kiB")
+
+
 def test_show_all(clidb, cli, assert_row_present):
     """Test show --all."""
 
     group = StorageGroup.create(name="Group")
+    group2 = StorageGroup.create(name="Group2")
     node = StorageNode.create(
         name="Node",
         group=group,
@@ -213,6 +252,27 @@ def test_show_all(clidb, cli, assert_row_present):
     file = ArchiveFile.create(name="File3", acq=acq, size_b=3456)
     ArchiveFileCopy.create(file=file, node=node, has_file="Y", wants_file="Y")
 
+    # Transfers
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group, file=file, completed=0, cancelled=0
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group, file=file, completed=0, cancelled=0
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group, file=file, completed=0, cancelled=0
+    )
+
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group2, file=file, completed=0, cancelled=0
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group2, file=file, completed=0, cancelled=1
+    )
+    ArchiveFileCopyRequest.create(
+        node_from=node, group_to=group2, file=file, completed=1, cancelled=0
+    )
+
     result = cli(0, ["node", "show", "Node", "--all"])
 
     assert "Total Files: 2" in result.output
@@ -222,6 +282,9 @@ def test_show_all(clidb, cli, assert_row_present):
 
     # 4.58 out of 8 == 57.25 percent
     assert "57.25%" in result.output
+
+    assert_row_present(result.output, "Group", "3", "10.12 kiB")
+    assert_row_present(result.output, "Group2", "1", "3.375 kiB")
 
     assert_row_present(result.output, "Group", "Auto-clean", "File added to that group")
     assert_row_present(result.output, "Group", "Auto-sync", "File added to this node")

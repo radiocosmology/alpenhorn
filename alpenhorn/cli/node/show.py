@@ -6,7 +6,13 @@ import peewee as pw
 from tabulate import tabulate
 
 from ...common.util import pretty_bytes
-from ...db import StorageGroup, StorageNode, StorageTransferAction
+from ...db import (
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
+    ArchiveFileCopyRequest,
+    ArchiveFile,
+)
 from ..cli import echo
 from .stats import get_stats
 
@@ -20,7 +26,10 @@ from .stats import get_stats
 )
 @click.option("all_", "--all", "-a", is_flag=True, help="Show all additional data.")
 @click.option("--stats", is_flag=True, help="Show usage stats of the node.")
-def show(name, actions, all_, stats):
+@click.option(
+    "--transfers", is_flag=True, help="Show pending transfers out from the node."
+)
+def show(name, actions, all_, stats, transfers):
     """Show details of a Storage Node.
 
     Shows details of the Storage Node named NODE.
@@ -29,6 +38,7 @@ def show(name, actions, all_, stats):
     if all_:
         actions = True
         stats = True
+        transfers = True
 
     try:
         node = StorageNode.get(name=name)
@@ -108,7 +118,35 @@ def show(name, actions, all_, stats):
         echo("     Total Size: " + stats["size"])
         echo("          Usage: " + stats["percent"].lstrip() + "%")
 
-    # List transfer actions, if requested
+    # List transfers, if requested
+    if transfers:
+        echo("\nPending outbound transfers:\n")
+
+        query = (
+            ArchiveFileCopyRequest.select(
+                StorageGroup.name,
+                pw.fn.COUNT(ArchiveFileCopyRequest.id).alias("count"),
+                pw.fn.Sum(ArchiveFile.size_b).alias("size"),
+            )
+            .join(ArchiveFile)
+            .switch(ArchiveFileCopyRequest)
+            .join(StorageGroup)
+            .where(
+                ArchiveFileCopyRequest.node_from == node,
+                ArchiveFileCopyRequest.completed == 0,
+                ArchiveFileCopyRequest.cancelled == 0,
+            )
+            .group_by(ArchiveFileCopyRequest.group_to_id)
+            .order_by(StorageGroup.name)
+        )
+
+        data = []
+        for group in query.tuples():
+            data.append((group[0], group[1], pretty_bytes(group[2])))
+
+        echo(tabulate(data, headers=["Dest. Group", "Request Count", "Total Size"]))
+
+    # List auto-actions, if requested
     if actions:
         echo("\nAuto-actions:\n")
 
