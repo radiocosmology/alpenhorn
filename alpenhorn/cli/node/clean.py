@@ -16,7 +16,7 @@ from ...db import (
     utcnow,
 )
 from ...common.util import pretty_bytes
-from ..options import cli_option, not_both
+from ..options import cli_option, files_in_target, not_both, resolve_acqs
 from ..cli import check_then_update, echo
 
 
@@ -86,46 +86,15 @@ def _run_query(
                 raise click.ClickException(f'Cannot clean archive node "{name}".')
 
         # Resolve targets
-        target_files = None
-        for gname in target:
-            # Resolve group name
-            try:
-                group = StorageGroup.get(name=gname)
-            except pw.DoesNotExist:
-                raise click.ClickException("No such target group: " + gname)
+        target_files = files_in_target(target, in_any=False)
 
-            # Get files in target
-            query = (
-                ArchiveFile.select(ArchiveFile.id)
-                .join(ArchiveFileCopy)
-                .join(StorageNode)
-                .where(
-                    StorageNode.group == group,
-                    ArchiveFileCopy.has_file == "Y",
-                    ArchiveFileCopy.wants_file == "Y",
-                )
-            )
-
-            # If we already have a list of files on the target, intersect that
-            # list with this node
-            if target_files:
-                query = query.where(ArchiveFile.id << target_files)
-
-            # Execute the query and record the result
-            target_files = set(query.scalars())
-
-            # Are there any target files left?
-            if not target_files:
-                echo("Nothing to do: no matching files in target.")
-                ctx.exit()
+        # Are there any target files?
+        if target_files is not None and len(target_files) == 0:
+            echo("Nothing to do: no matching files in target.")
+            ctx.exit()
 
         # Resolve acqs
-        acqs = []
-        for acqname in acq:
-            try:
-                acqs.append(ArchiveAcq.get(name=acqname))
-            except pw.DoesNotExist:
-                raise click.ClickException("No such acquisition: " + acqname)
+        acqs = resolve_acqs(acq)
 
         # Find all candidate file copies
         query = ArchiveFileCopy.select().where(ArchiveFileCopy.node == node, has_file)
@@ -296,7 +265,7 @@ def _run_query(
 @click.option(
     "--archive-ok", help="Run the clean, even if NODE is an archive node.", is_flag=True
 )
-@click.option("--cancel", "-x", help="Cancel files marked for cleaning", is_flag=True)
+@cli_option("cancel", help="Cancel existing cleaning requests.")
 @click.option(
     "--check",
     "-c",
@@ -329,13 +298,7 @@ def _run_query(
     type=float,
     help="Stop cleaning files once the total size cleaned reaces SIZE GiB.",
 )
-@click.option(
-    "--target",
-    metavar="GROUP",
-    multiple=True,
-    help="Clean only files already in GROUP.  If specified multiple times, clean only"
-    "files in all GROUPs.",
-)
+@cli_option("target")
 @click.pass_context
 def clean(
     ctx,

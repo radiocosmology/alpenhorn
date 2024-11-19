@@ -22,6 +22,7 @@ from .modify import modify
 from .rename import rename
 from .show import show
 from .stats import stats
+from .sync import sync
 from .verify import verify
 
 RE_LOCK_FILE = re.compile(r"^\..*\.lock$")
@@ -42,6 +43,7 @@ cli.add_command(modify, "modify")
 cli.add_command(rename, "rename")
 cli.add_command(show, "show")
 cli.add_command(stats, "stats")
+cli.add_command(sync, "sync")
 cli.add_command(verify, "verify")
 
 

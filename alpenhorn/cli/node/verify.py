@@ -7,7 +7,7 @@ import peewee as pw
 
 from ...common.util import pretty_bytes
 from ...db import StorageNode, ArchiveAcq, ArchiveFile, ArchiveFileCopy, database_proxy
-from ..options import cli_option, not_both
+from ..options import cli_option, not_both, resolve_acqs
 from ..cli import check_then_update, echo
 
 
@@ -52,12 +52,7 @@ def _run_query(
             raise click.ClickException("no such node: " + name)
 
         # Resolve acqs
-        acqs = []
-        for acqname in acq:
-            try:
-                acqs.append(ArchiveAcq.get(name=acqname))
-            except pw.DoesNotExist:
-                raise click.ClickException("No such acquisition: " + acqname)
+        acqs = resolve_acqs(acq)
 
         # Find all candidate file copies
         query = ArchiveFileCopy.select(ArchiveFileCopy.id).where(
