@@ -46,12 +46,12 @@ class StorageGroup(base_model):
     notes = pw.TextField(null=True)
     io_config = pw.TextField(null=True)
 
-    def filecopy_state(self, file: ArchiveFile) -> str:
+    def state_on_node(self, file: ArchiveFile) -> tuple[str, StorageNode | None]:
         """Return the state of a copy of `file` in the group.
 
         Returns the value of `has_file` for an ArchiveFileCopy for
-        ArchiveFile `file` if found in this group, or "N" if no such
-        copy exists.
+        ArchiveFile `file` if found in this group, and the node it was
+        found on, or "N" and None if no such copy exists.
 
         If multiple file copies exist in the group, then a copy with
         `has_file=="Y"` wins.  Next in priority is "M" then "X".
@@ -64,18 +64,24 @@ class StorageGroup(base_model):
 
         Returns
         -------
+        Always returns a 2-tuple:
+
         filecopy_state : str
             One of:
             - 'Y' file copy exists
             - 'X' file copy is corrupt
             - 'M' file copy needs to be checked
             - 'N' file copy does not exist
+        node : StorageNode or None
+            The StorageNode correpsonding to filecopy_state, or None, if
+            there was no node with a copy of the file.
         """
         from .archive import ArchiveFileCopy
 
         state = "N"
+        node = None
         for copy in (
-            ArchiveFileCopy.select(ArchiveFileCopy.has_file)
+            ArchiveFileCopy.select()
             .join(StorageNode)
             .where(
                 ArchiveFileCopy.node.group == self,
@@ -84,13 +90,15 @@ class StorageGroup(base_model):
         ):
             if copy.has_file == "Y":
                 # No need to check more
-                return "Y"
+                return "Y", copy.node
             elif copy.has_file == "M":
                 state = "M"
+                node = copy.node
             elif copy.has_file == "X" and state == "N":
                 state = "X"
+                node = copy.node
 
-        return state
+        return state, node
 
 
 class StorageNode(base_model):

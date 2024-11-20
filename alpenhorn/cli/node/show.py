@@ -13,7 +13,7 @@ from ...db import (
     ArchiveFileCopyRequest,
     ArchiveFile,
 )
-from ..cli import echo
+from ..cli import echo, pretty_time
 from ..options import cli_option
 from .stats import get_stats
 
@@ -68,11 +68,6 @@ def show(name, actions, all_, stats, transfers):
     else:
         avail = "-"
 
-    if node.avail_gb_last_checked:
-        last_checked = node.avail_gb_last_checked.ctime() + " UTC"
-    else:
-        last_checked = "???"
-
     # Print a report
     echo("   Storage Node: " + node.name)
     echo("  Storage Group: " + node.group.name)
@@ -93,7 +88,7 @@ def show(name, actions, all_, stats, transfers):
     echo("      Max Total: " + max_total)
     echo("      Available: " + avail)
     echo("  Min Available: " + min_avail)
-    echo("   Last Checked: " + last_checked)
+    echo("   Last Checked: " + pretty_time(node.avail_gb_last_checked))
 
     echo("\nI/O Config:\n")
     if node.io_config:

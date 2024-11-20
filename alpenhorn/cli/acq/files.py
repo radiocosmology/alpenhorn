@@ -58,7 +58,7 @@ def files(acq, group, node, show_removed):
                     )
                 )
     elif group:
-        headers = ["Name", "Size", "Group State", "MD5"]
+        headers = ["Name", "Size", "Group State", "Node", "MD5"]
 
         try:
             group = StorageGroup.get(name=group)
@@ -74,7 +74,7 @@ def files(acq, group, node, show_removed):
         )
 
         for copy in query:
-            state = group.filecopy_state(copy.file)
+            state, node = group.state_on_node(copy.file)
 
             if show_removed or state != "N":
                 # Convert state to words
@@ -92,6 +92,7 @@ def files(acq, group, node, show_removed):
                         copy.file.name,
                         pretty_bytes(copy.file.size_b),
                         state,
+                        "-" if node is None else node.name,
                         copy.file.md5sum,
                     )
                 )

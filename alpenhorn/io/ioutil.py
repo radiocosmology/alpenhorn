@@ -353,7 +353,7 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
         StorageTransferAction.group_to != node.group,
         StorageTransferAction.autosync == True,  # noqa: E712
     ):
-        if edge.group_to.filecopy_state(file_) != "Y":
+        if edge.group_to.state_on_node(file_)[0] != "Y":
             log.debug(
                 f"Autosyncing {file_.path} from node {node.name} to group {edge.group_to.name}"
             )

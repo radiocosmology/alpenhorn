@@ -349,7 +349,7 @@ def group_search_async(
     # Before doing anything re-check the DB for something
     # in this group.  The situation may have changed while this
     # task was queued.
-    state = groupio.group.filecopy_state(req.file)
+    state = groupio.group.state_on_node(req.file)[0]
     if state == "Y" or state == "M":
         log.info(
             "Cancelling pull request for "

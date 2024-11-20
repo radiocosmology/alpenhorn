@@ -128,3 +128,11 @@ def update_or_remove(field: str, new: str | None, old: str | None) -> dict:
 
     # Otherwise, no change.  Return no update.
     return {}
+
+
+def pretty_time(time):
+    """Print a human-readable time."""
+
+    if time:
+        return time.ctime() + " UTC"
+    return "-"
