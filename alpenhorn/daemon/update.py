@@ -679,7 +679,7 @@ class UpdateableGroup(updateable_base):
             The pull request to process.
         """
         # What's the current situation on the destination?
-        copy_state = self.db.filecopy_state(req.file)
+        copy_state = self.db.state_on_node(req.file)[0]
         if copy_state == "Y":
             # We mark the AFCR cancelled rather than complete becase
             # _this_ AFCR clearly hasn't been responsible for creating

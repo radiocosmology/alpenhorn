@@ -63,22 +63,28 @@ class ArchiveFileCopy(base_model):
     def state(self) -> str:
         """A human-readable description of the copy state."""
 
-        if self.wants_file == "N":
-            return "Removed" if self.has_file == "N" else "Released"
-        if self.wants_file == "M":
-            return "Removed" if self.has_file == "N" else "Removable"
+        # key is '{has_file}{wants_file}'
+        states = {
+            # has_file == 'Y'
+            "YY": "Present",
+            "YM": "Removable",
+            "YN": "Released",
+            # has_file == 'M'
+            "MY": "Suspect",
+            "MM": "Suspect",
+            "MN": "Released",
+            # has_file == 'X'
+            "XY": "Corrupt",
+            "XM": "Corrupt",
+            "XN": "Released",
+            # has_file == 'N'
+            "NY": "Missing",
+            "NM": "Removed",
+            "NN": "Removed",
+        }
 
-        # Otherwise, wants_file == 'Y'
-        if self.has_file == "Y":
-            return "Present"
-        if self.has_file == "M":
-            return "Suspect"
-        if self.has_file == "N":
-            # i.e. a third-party deleted it
-            return "Missing"
-
-        # wants_file == 'X' and has_file == 'Y' .. or something completely wrong
-        return "Corrupt"
+        key = self.has_file + self.wants_file
+        return states.get(key, "Corrupt")
 
     class Meta:
         indexes = ((("file", "node"), True),)  # (file, node) is unique

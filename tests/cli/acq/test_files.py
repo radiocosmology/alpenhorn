@@ -115,8 +115,8 @@ def test_list_node(clidb, cli, assert_row_present):
     assert_row_present(result.output, "FileXY", "5.545 kiB", "Corrupt", "0 B")
     assert_row_present(result.output, "FileNY", "0 B", "Missing", "-")
     assert_row_present(result.output, "FileYM", "-", "Removable", "-")
-    assert_row_present(result.output, "FileMM", "-", "Removable", "-")
-    assert_row_present(result.output, "FileXM", "-", "Removable", "-")
+    assert_row_present(result.output, "FileMM", "-", "Suspect", "-")
+    assert_row_present(result.output, "FileXM", "-", "Corrupt", "-")
     assert "FileNM" not in result.output
     assert_row_present(result.output, "FileYN", "-", "Released", "-")
     assert_row_present(result.output, "FileMN", "-", "Released", "-")
@@ -185,12 +185,12 @@ def test_list_group_removed(clidb, cli, assert_row_present):
     result = cli(0, ["acq", "files", "Acq1", "--group=Group1", "--show-removed"])
 
     # --group state ignores wants_file
-    assert_row_present(result.output, "FileYY", "123 B", "Present")
-    assert_row_present(result.output, "FileNY", "0 B", "Removed")
-    assert_row_present(result.output, "FileYM", "-", "Present")
-    assert_row_present(result.output, "FileNM", "-", "Removed")
-    assert_row_present(result.output, "FileYN", "-", "Present")
-    assert_row_present(result.output, "FileNN", "-", "Removed")
+    assert_row_present(result.output, "FileYY", "123 B", "Present", "Node1")
+    assert_row_present(result.output, "FileNY", "0 B", "Removed", "-")
+    assert_row_present(result.output, "FileYM", "-", "Present", "Node1")
+    assert_row_present(result.output, "FileNM", "-", "Removed", "-")
+    assert_row_present(result.output, "FileYN", "-", "Present", "Node1")
+    assert_row_present(result.output, "FileNN", "-", "Removed", "-")
     assert result.output.count("File") == 6
 
 
@@ -221,7 +221,7 @@ def test_no_list_node(clidb, cli):
     assert "Name" not in result.output
 
 
-def test_list_node_only_removed(clidb, cli):
+def test_list_node_only_removed(clidb, cli, assert_row_present):
     """Test list --node with only removed files."""
 
     group = StorageGroup.create(name="Group")
@@ -236,7 +236,7 @@ def test_list_node_only_removed(clidb, cli):
 
     result = cli(0, ["acq", "files", "Acq1", "--node=Node1", "--show-removed"])
 
-    assert "File1" in result.output
+    assert_row_present(result.output, "File1", "123 B", "Removed", "-")
 
 
 def test_list_no_group(clidb, cli):
@@ -267,7 +267,7 @@ def test_no_list_group(clidb, cli):
     assert "Name" not in result.output
 
 
-def test_list_group_only_removed(clidb, cli):
+def test_list_group_only_removed(clidb, cli, assert_row_present):
     """Test no list with group constraint."""
 
     group = StorageGroup.create(name="Group1")
@@ -283,13 +283,14 @@ def test_list_group_only_removed(clidb, cli):
 
     result = cli(0, ["acq", "files", "Acq1", "--group=Group1", "--show-removed"])
 
-    # i.e. the header hasn't been printed
-    assert "File1" in result.output
+    assert_row_present(result.output, "File1", "-", "Removed", "-")
 
 
 def test_list_node_group(clidb, cli):
     """Test with both node and group."""
 
     ArchiveAcq.create(name="Acq1")
+    group = StorageGroup.create(name="Group")
+    node = StorageNode.create(name="Node", group=group)
 
     cli(2, ["acq", "files", "Acq1", "--node=Node", "--group=Group"])

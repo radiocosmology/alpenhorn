@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import click
+import pathlib
 import peewee as pw
 from typing import TYPE_CHECKING
 
@@ -405,3 +406,48 @@ def set_io_config(
 
     # Return None instead of an empty I/O config
     return new_config if new_config else None
+
+
+def file_from_path(path: str) -> ArchiveFile:
+    """Get file record given a path
+
+    Given an "acqname/filename" path-like string, find and return
+    the file name.
+
+    If a file cannot be found, raises click.ClickException.
+    """
+
+    path = pathlib.PurePath(path)
+
+    # An absolute path is not allowed
+    if path.is_absolute():
+        raise click.ClickException("No such file: " + str(path))
+
+    # The trick here is path can have multiple path components: a/b/c/d/e
+    # and we don't know which components are part of the acq_name and which
+    # are part of the file_name, so we need to iterate through with the
+    # help of pathlib.
+    #
+    # PurePath.parents starts with the deepest parent and works its way up
+    for acq_name in path.parents:
+        if acq_name == ".":
+            # Ran out of parents
+            break
+
+        file_name = path.relative_to(acq_name)
+
+        # Try to find the file
+        try:
+            return (
+                ArchiveFile.select()
+                .join(ArchiveAcq)
+                .where(
+                    ArchiveFile.name == str(file_name), ArchiveAcq.name == str(acq_name)
+                )
+                .limit(1)
+                .get()
+            )
+        except pw.DoesNotExist:
+            pass
+
+    raise click.ClickException("No such file: " + str(path))
