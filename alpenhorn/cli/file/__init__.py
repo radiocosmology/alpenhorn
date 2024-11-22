@@ -3,6 +3,7 @@
 import click
 import peewee as pw
 
+from .import_ import import_
 from .show import show
 
 
@@ -11,4 +12,5 @@ def cli():
     """Manage Files."""
 
 
+cli.add_command(import_, "import")
 cli.add_command(show, "show")
