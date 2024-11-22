@@ -5,7 +5,7 @@ import peewee as pw
 from tabulate import tabulate
 
 from ...db import StorageGroup, StorageNode
-from ..options import cli_option
+from ..options import cli_option, resolve_group
 from ..cli import echo
 
 
@@ -30,11 +30,7 @@ def list_(active, group, host):
     if active is not None:
         nodes = nodes.where(StorageNode.active == active)
     if group:
-        try:
-            group = StorageGroup.get(name=group)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such group: " + group)
-        nodes = nodes.where(StorageNode.group == group)
+        nodes = nodes.where(StorageNode.group == resolve_group(group))
     if host:
         nodes = nodes.where(StorageNode.host == host)
 

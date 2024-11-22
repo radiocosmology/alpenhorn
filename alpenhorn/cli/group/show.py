@@ -15,7 +15,7 @@ from ...db import (
 )
 from ..cli import echo
 from ..node.stats import get_stats
-from ..options import cli_option
+from ..options import cli_option, resolve_group
 
 
 @click.command()
@@ -41,10 +41,7 @@ def show(group_name, actions, all_, node_details, node_stats, transfers):
         transfers = True
         actions = True
 
-    try:
-        group = StorageGroup.get(name=group_name)
-    except pw.DoesNotExist:
-        raise click.ClickException(f"no such group: {group_name}")
+    group = resolve_group(group_name)
 
     # Print a report
     echo("Storage Group: " + group.name)

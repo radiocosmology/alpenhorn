@@ -5,8 +5,14 @@ import json
 import peewee as pw
 
 from ...db import database_proxy, StorageGroup, StorageNode, ArchiveFileImportRequest
-from ..options import cli_option, exactly_one, set_storage_type, set_io_config
 from ..cli import echo
+from ..options import (
+    cli_option,
+    exactly_one,
+    resolve_group,
+    set_storage_type,
+    set_io_config,
+)
 
 
 @click.command()
@@ -130,10 +136,7 @@ def create(
             except pw.DoesNotExist:
                 group = StorageGroup.create(name=node_name)
         else:
-            try:
-                group = StorageGroup.get(name=group)
-            except pw.DoesNotExist:
-                raise click.ClickException("no such group: " + group)
+            group = resolve_group(group)
 
         node = StorageNode.create(
             name=node_name,

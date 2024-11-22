@@ -5,6 +5,7 @@ import peewee as pw
 
 from ...db import database_proxy, StorageNode
 from ..cli import echo
+from ..options import resolve_node
 
 
 @click.command()
@@ -17,11 +18,7 @@ def deactivate(name):
     """
 
     with database_proxy.atomic():
-        # Check name
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        node = resolve_node(name)
 
         if not node.active:
             echo(f'No change: node "{name}" already inactive.')

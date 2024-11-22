@@ -4,9 +4,15 @@ import click
 import json
 import peewee as pw
 
-from ...db import database_proxy, StorageGroup, StorageNode
+from ...db import database_proxy, StorageNode
 from ..cli import echo, update_or_remove
-from ..options import cli_option, exactly_one, set_storage_type, set_io_config
+from ..options import (
+    cli_option,
+    exactly_one,
+    resolve_node,
+    set_storage_type,
+    set_io_config,
+)
 
 
 @click.command()
@@ -26,11 +32,7 @@ def activate(name, address, host, root, username):
     """
 
     with database_proxy.atomic():
-        # Check name
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        node = resolve_node(name)
 
         # If the node is already active, we don't do an update, even if different
         # metadata was specified

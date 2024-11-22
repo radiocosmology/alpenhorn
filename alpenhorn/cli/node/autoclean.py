@@ -3,8 +3,9 @@
 import click
 import peewee as pw
 
-from ...db import StorageGroup, StorageNode, StorageTransferAction, database_proxy
+from ...db import StorageTransferAction, database_proxy
 from ..cli import echo
+from ..options import resolve_group, resolve_node
 
 
 @click.command()
@@ -16,11 +17,11 @@ from ..cli import echo
     help="Remove (instead of add) GROUP as an autoclean trigger.",
 )
 @click.pass_context
-def autoclean(ctx, group_name, node_name, remove):
+def autoclean(ctx, node_name, group_name, remove):
     """Manage autoclean triggers for this node.
 
     This allows you to add (the default) or remove (using --remove)
-    the StorageGroup named GROUP as a an autoclean trigger for the
+    the Storage Group named GROUP as a an autoclean trigger for the
     Storage Node named NODE.
 
     If GROUP is added as an autoclean trigger for NODE, then, whenever
@@ -29,15 +30,8 @@ def autoclean(ctx, group_name, node_name, remove):
     """
 
     with database_proxy.atomic():
-        try:
-            node = StorageNode.get(name=node_name)
-        except pw.DoesNotExist:
-            raise click.ClickException(f"no such node: {node_name}")
-
-        try:
-            group = StorageGroup.get(name=group_name)
-        except pw.DoesNotExist:
-            raise click.ClickException(f"no such group: {group_name}")
+        node = resolve_node(node_name)
+        group = resolve_group(group_name)
 
         # Sanity check: can't autoclean within a group
         if group == node.group and not remove:

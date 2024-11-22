@@ -190,6 +190,18 @@ def not_both(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> 
         raise click.UsageError(f"cannot use both --{opt1_name} and --{opt2_name}")
 
 
+def both_or_neither(
+    opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str
+) -> None:
+    """Check whether two options which must be used together were.
+
+    If they weren't, raise click.UsageError."""
+
+    # xor
+    if bool(opt1_set) is not bool(opt2_set):
+        raise click.UsageError(f"--{opt1_name} and --{opt2_name} must be used together")
+
+
 def exactly_one(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> None:
     """Check that exactly one of two incompatible options were used.
 
@@ -212,6 +224,56 @@ def requires_other(
         raise click.UsageError(f"--{opt1_name} may only be used with --{opt2_name}")
 
 
+def resolve_group(group: str | list[str]) -> StorageGroup | list[StorageGroup]:
+    """Convert group name(s) into StorageGroup(s).
+
+    If given a single `str`, returns a single `StorageGroup`.
+    Otherwise, should be given a list of str and will return a
+    list of StorageGroups.
+
+    If any name can't be resolved, raises ClickException.
+    """
+    one_group = isinstance(group, str)
+    if one_group:
+        group = [group]
+
+    groups = []
+    for name in group:
+        try:
+            groups.append(StorageGroup.get(name=name))
+        except pw.DoesNotExist:
+            raise click.ClickException("no such group: " + name)
+
+    if one_group:
+        return groups[0]
+    return groups
+
+
+def resolve_node(node: str | list[str]) -> StorageNode | list[StorageNode]:
+    """Convert node name(s) into StorageNode(s).
+
+    If given a single `str`, returns a single `StorageNode`.
+    Otherwise, should be given a list of str and will return a
+    list of StorageNodes.
+
+    If any name can't be resolved, raises ClickException.
+    """
+    one_node = isinstance(node, str)
+    if one_node:
+        node = [node]
+
+    nodes = []
+    for name in node:
+        try:
+            nodes.append(StorageNode.get(name=name))
+        except pw.DoesNotExist:
+            raise click.ClickException("no such node: " + name)
+
+    if one_node:
+        return nodes[0]
+    return nodes
+
+
 def resolve_acqs(acq: list[str]) -> list[ArchiveAcq]:
     """Convert --acq list to ArchiveAcq list.
 
@@ -229,72 +291,190 @@ def resolve_acqs(acq: list[str]) -> list[ArchiveAcq]:
     return acqs
 
 
-def files_in_target(target: list[str], in_any: bool = False) -> list[int] | None:
-    """Take a --target list and return a list of target files.
+def state_constraint(
+    *,
+    corrupt: bool = False,
+    healthy: bool = False,
+    missing: bool = False,
+    suspect: bool = False,
+) -> pw.Expression | None:
+    """Select ArchiveFileCopy constraint for state.
+
+    Processes the --corrupt, --healthy, --missing, --suspect
+    flags and returns a peewee.Expression to be added to
+    a where() clause.
+
+    If none of the flags are set, returns None.
+    """
+
+    if corrupt:
+        expr = (ArchiveFileCopy.has_file == "X") & (ArchiveFileCopy.wants_file != "N")
+    else:
+        expr = None
+
+    if healthy:
+        healthy_expr = (ArchiveFileCopy.has_file == "Y") & (
+            ArchiveFileCopy.wants_file != "N"
+        )
+        if expr:
+            expr = expr | healthy_expr
+        else:
+            expr = healthy_expr
+
+    if missing:
+        missing_expr = (ArchiveFileCopy.has_file == "N") & (
+            ArchiveFileCopy.wants_file == "Y"
+        )
+        if expr:
+            expr = expr | missing_expr
+        else:
+            expr = missing_expr
+
+    if suspect:
+        suspect_expr = (ArchiveFileCopy.has_file == "M") & (
+            ArchiveFileCopy.wants_file != "N"
+        )
+        if expr:
+            expr = expr | suspect_expr
+        else:
+            expr = suspect_expr
+
+    return expr
+
+
+def files_in_nodes(
+    nodes: list[StorageNode],
+    state_expr: pw.Expression | None = None,
+    in_any: bool = False,
+) -> set[int] | None:
+    """Returns a set of files on a set of nodes.
+
+    By default, the intersection is returned; pass `in_any=True`
+    to return the union, instead.
 
     Parameters
     ----------
-    target:
-        list of group names from --target options.
+    nodes:
+        list of StorageNodes.
+    state_expr:
+        if given and not None, a peewee.Expression defining the
+        state of files we're looking for.  If None, a
+        default constraint of only healthy files is used.
     in_any:
-        if True, file needs to be only in one target.
-        If False, file needs to be in all targets.
+        if True, file needs to be only in one group.
+        If False, file needs to be in all group.
 
     Returns
     -------
-    target_files:
+    files_in_nodes:
         If the input list was empty, this is None.  Otherwise,
-        it is a list of ArchiveFile.ids which are in any/all target
-        groups.  The list may be empty, if no files satisfied the
-        constraint.
-
-    Raises
-    ------
-    click.ClickException:
-        a non-exsitent group was found in the target list
+        it is a set of ArchiveFile.ids which are on any/all nodes.
+        The set may be empty, if no files satisfied the constraint.
     """
 
-    target_files = None
-    for name in target:
-        # Resolve group name
-        try:
-            group = StorageGroup.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("No such target group: " + name)
+    node_files = None
+    for node in nodes:
+        # Get files in node
+        query = (
+            ArchiveFile.select(ArchiveFile.id)
+            .join(ArchiveFileCopy)
+            .where(ArchiveFileCopy.node == node)
+        )
 
-        # Get files in target
+        if state_expr is None:
+            query = query.where(state_constraint(healthy=True))
+        else:
+            query = query.where(state_expr)
+
+        if in_any:
+            # In "any" mode, run the query and then compute the set union,
+            # if we already have a file set
+            if node_files:
+                node_files |= set(query.scalars())
+            else:
+                node_files = set(query.scalars())
+        else:
+            # In "all" mode, intersect the current list with the new query
+            # and replace the set with the result
+            if node_files:
+                query = query.where(ArchiveFile.id << node_files)
+
+            # Execute the query and record the result
+            node_files = set(query.scalars())
+
+            # In this mode, there's no reason to continue once the set is empty
+            if not node_files:
+                return []
+
+    return node_files
+
+
+def files_in_groups(
+    groups: list[StorageGroup],
+    state_expr: pw.Expression | None = None,
+    in_any: bool = False,
+) -> set[int] | None:
+    """Returns a set of files in a set of groups.
+
+    By default, the intersection is returned; pass `in_any=True`
+    to return the union, instead.
+
+    Parameters
+    ----------
+    groups:
+        list of StorageGroups.
+    state_expr:
+        if given and not None, a peewee.Expression defining the
+        state of files we're looking for.  If None, a
+        default constraint of has_file='Y & wants_file='Y' is applied.
+    in_any:
+        if True, file needs to be only in one group.
+        If False, file needs to be in all group.
+
+    Returns
+    -------
+    files_in_groups:
+        If the input list was empty, this is None.  Otherwise,
+        it is a set of ArchiveFile.ids which are in any/all groups.
+        The set may be empty, if no files satisfied the constraint.
+    """
+
+    group_files = None
+    for group in groups:
+        # Get files in group
         query = (
             ArchiveFile.select(ArchiveFile.id)
             .join(ArchiveFileCopy)
             .join(StorageNode)
-            .where(
-                StorageNode.group == group,
-                ArchiveFileCopy.has_file == "Y",
-                ArchiveFileCopy.wants_file == "Y",
-            )
+            .where(StorageNode.group == group)
         )
+
+        if state_expr is None:
+            query = query.where(state_constraint(healthy=True))
+        else:
+            query = query.where(state_expr)
 
         if in_any:
             # In "any" mode, run the query and then compute the set union,
-            # if we already have a target set
-            if target_files:
-                target_files |= set(query.scalars())
+            # if we already have a file set
+            if group_files:
+                group_files |= set(query.scalars())
             else:
-                target_files = set(query.scalars())
+                group_files = set(query.scalars())
         else:
             # In "all" mode, intersect the current list with the new query
             # and replace the set with the result
-            if target_files:
-                query = query.where(ArchiveFile.id << target_files)
+            if group_files:
+                query = query.where(ArchiveFile.id << group_files)
 
             # Execute the query and record the result
-            target_files = set(query.scalars())
+            group_files = set(query.scalars())
 
-            # In this mode, there's no reason to continue if the set is empty
-            if not target_files:
+            # In this mode, there's no reason to continue once the set is empty
+            if not group_files:
                 return []
 
-    return target_files
+    return group_files
 
 
 def set_storage_type(
@@ -308,6 +488,8 @@ def set_storage_type(
 
     If none of the options are set, None is returned if `none_ok` is True, otherwise
     the default 'F' is returned.
+
+    Raises a click.UsageError if more than one flag is set.
     """
 
     # Usage checks

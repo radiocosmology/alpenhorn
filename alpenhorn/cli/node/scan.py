@@ -4,8 +4,9 @@ import click
 import pathlib
 import peewee as pw
 
-from ...db import ArchiveFileImportRequest, StorageNode, database_proxy
+from ...db import ArchiveFileImportRequest, database_proxy
 from ..cli import echo
+from ..options import resolve_node
 
 
 @click.command()
@@ -33,10 +34,7 @@ def scan(name, path, register_new):
     """
 
     with database_proxy.atomic():
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        node = resolve_node(name)
 
         # Strip node root, if absolute
         path = pathlib.PurePath(path)
