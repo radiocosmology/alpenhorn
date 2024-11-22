@@ -6,8 +6,8 @@ import click
 import peewee as pw
 
 from ...common.util import pretty_bytes
-from ...db import StorageNode, ArchiveAcq, ArchiveFile, ArchiveFileCopy, database_proxy
-from ..options import cli_option, not_both, resolve_acqs
+from ...db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, database_proxy
+from ..options import cli_option, not_both, resolve_acqs, resolve_node, state_constraint
 from ..cli import check_then_update, echo
 
 
@@ -45,11 +45,7 @@ def _run_query(
     """
 
     with database_proxy.atomic():
-        # Check name
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        node = resolve_node(name)
 
         # Resolve acqs
         acqs = resolve_acqs(acq)
@@ -247,31 +243,10 @@ def verify(ctx, name, acq, all_, cancel, count, corrupt, force, healthy, missing
         # In verify mode, we're always going to set has_file to 'M'
         verify_goal = "M"
 
-        # Build up a peewee.Expression for the types of files we want to find
-        if corrupt:
-            file_selection = (ArchiveFileCopy.has_file == "X") & (
-                ArchiveFileCopy.wants_file != "N"
-            )
-        else:
-            file_selection = None
-
-        if healthy:
-            healthy_expr = (ArchiveFileCopy.has_file == "Y") & (
-                ArchiveFileCopy.wants_file != "N"
-            )
-            if file_selection is None:
-                file_selection = healthy_expr
-            else:
-                file_selection = file_selection | healthy_expr
-
-        if missing:
-            missing_expr = (ArchiveFileCopy.has_file == "N") & (
-                ArchiveFileCopy.wants_file == "Y"
-            )
-            if file_selection is None:
-                file_selection = missing_expr
-            else:
-                file_selection = file_selection | missing_expr
+        # Get a peewee.Expression for the types of files we want to find
+        file_selection = state_constraint(
+            corrupt=corrupt, healthy=healthy, missing=missing
+        )
 
         # Sanity check
         if file_selection is None:

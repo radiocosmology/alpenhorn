@@ -19,10 +19,11 @@ from ...db import (
 from ..cli import check_then_update, echo
 from ..options import (
     cli_option,
-    files_in_target,
+    files_in_groups,
     not_both,
     requires_other,
     resolve_acqs,
+    resolve_group,
 )
 
 
@@ -171,7 +172,7 @@ def _run_sync(
     """
 
     # Get list of target files
-    skipped_files = files_in_target(target, in_any=True)
+    skipped_files = files_in_groups(resolve_group(target), in_any=True)
 
     # If there are no target files, set it to the empty list
     if skipped_files is None:

@@ -4,9 +4,16 @@ import click
 import json
 import peewee as pw
 
-from ...db import database_proxy, StorageGroup, StorageNode
-from ..options import cli_option, not_both, set_storage_type, set_io_config
+from ...db import database_proxy, StorageNode
 from ..cli import echo, update_or_remove
+from ..options import (
+    cli_option,
+    not_both,
+    resolve_group,
+    resolve_node,
+    set_storage_type,
+    set_io_config,
+)
 
 
 @click.command()
@@ -84,18 +91,11 @@ def modify(
     storage_type = set_storage_type(archive, field, transport, none_ok=True)
 
     with database_proxy.atomic():
-        # Check name
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        node = resolve_node(name)
 
         # Get group
         if group:
-            try:
-                group = StorageGroup.get(name=group)
-            except pw.DoesNotExist:
-                raise click.ClickException("no such group: " + group)
+            group = resolve_group(group)
 
         io_config = set_io_config(io_config, io_var, node.io_config)
         if io_config:

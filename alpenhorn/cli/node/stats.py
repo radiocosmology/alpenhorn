@@ -7,9 +7,9 @@ import peewee as pw
 from tabulate import tabulate
 from collections import defaultdict
 
-from ...db import StorageGroup, StorageNode, ArchiveFile, ArchiveFileCopy
+from ...db import StorageNode, ArchiveFile, ArchiveFileCopy
 from ...common.util import pretty_bytes
-from ..options import cli_option
+from ..options import cli_option, resolve_group
 from ..cli import echo
 
 
@@ -165,11 +165,7 @@ def stats(active, group, host, extra_stats):
     if active is not None:
         query = query.where(StorageNode.active == active)
     if group:
-        try:
-            group = StorageGroup.get(name=group)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such group: " + group)
-        query = query.where(StorageNode.group == group)
+        query = query.where(StorageNode.group == resolve_group(group))
     if host:
         query = query.where(StorageNode.host == host)
 

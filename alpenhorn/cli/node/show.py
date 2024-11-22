@@ -8,13 +8,12 @@ from tabulate import tabulate
 from ...common.util import pretty_bytes
 from ...db import (
     StorageGroup,
-    StorageNode,
     StorageTransferAction,
     ArchiveFileCopyRequest,
     ArchiveFile,
 )
 from ..cli import echo, pretty_time
-from ..options import cli_option
+from ..options import cli_option, resolve_node
 from .stats import get_stats
 
 
@@ -41,10 +40,7 @@ def show(name, actions, all_, stats, transfers):
         stats = True
         transfers = True
 
-    try:
-        node = StorageNode.get(name=name)
-    except pw.DoesNotExist:
-        raise click.ClickException(f"no such node: {name}")
+    node = resolve_node(name)
 
     if node.storage_type == "A":
         type_name = "Archive"

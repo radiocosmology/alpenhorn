@@ -3,8 +3,9 @@
 import click
 import peewee as pw
 
-from ...db import database_proxy, ArchiveFileImportRequest, StorageNode
+from ...db import database_proxy, ArchiveFileImportRequest
 from ..cli import echo
+from ..options import resolve_node
 
 
 @click.command()
@@ -25,10 +26,7 @@ def init(name):
     """
 
     with database_proxy.atomic():
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        node = resolve_node(name)
 
         # Add request
         ArchiveFileImportRequest.create(node=node, path="ALPENHORN_NODE")

@@ -8,7 +8,6 @@ import peewee as pw
 
 from ...db import (
     StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
@@ -16,7 +15,14 @@ from ...db import (
     utcnow,
 )
 from ...common.util import pretty_bytes
-from ..options import cli_option, files_in_target, not_both, resolve_acqs
+from ..options import (
+    cli_option,
+    files_in_groups,
+    not_both,
+    resolve_acqs,
+    resolve_node,
+    resolve_group,
+)
 from ..cli import check_then_update, echo
 
 
@@ -70,11 +76,8 @@ def _run_query(
     """
 
     with database_proxy.atomic():
-        # Check name
-        try:
-            node = StorageNode.get(name=name)
-        except pw.DoesNotExist:
-            raise click.ClickException("no such node: " + name)
+        # Resolve name
+        node = resolve_node(name)
 
         # Check to see if we are on an archive node and whether
         # --archive-ok was given
@@ -86,7 +89,7 @@ def _run_query(
                 raise click.ClickException(f'Cannot clean archive node "{name}".')
 
         # Resolve targets
-        target_files = files_in_target(target, in_any=False)
+        target_files = files_in_groups(resolve_group(target), in_any=False)
 
         # Are there any target files?
         if target_files is not None and len(target_files) == 0:
