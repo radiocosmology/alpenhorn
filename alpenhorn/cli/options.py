@@ -72,6 +72,9 @@ def cli_option(option: str, **extra_kwargs):
             "help": "Make node a field node (i.e. neither an archive node "
             "nor a transport node).  Incompatible with --archive or --transport.",
         }
+    elif option == "from_":
+        args = ("from_", "--from")
+        kwargs = {"metavar": "SOURCE_NODE", "help": "Source Node for the transfer."}
     elif option == "group":
         args = ("--group",)
         kwargs = {
@@ -147,6 +150,12 @@ def cli_option(option: str, **extra_kwargs):
             "multiple": True,
             "help": "May be specified multiple times.  Restrict operation to "
             "files which exist in all specified target groups GROUP.",
+        }
+    elif option == "to":
+        args = ("--to",)
+        kwargs = {
+            "metavar": "DEST_GROUP",
+            "help": "Destination Group for the transfer.",
         }
     elif option == "transport":
         args = ("--transport",)
