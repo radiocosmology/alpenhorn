@@ -120,6 +120,12 @@ def cli_option(option: str, **extra_kwargs):
             "type": float,
             "help": "The maximum allowed size of the node, in GiB",
         }
+    elif option == "md5":
+        args = ("--md5",)
+        kwargs = {
+            "metavar": "HASH",
+            "help": "The 128-bit MD5 hash of the file expressed as 32 hex digits.",
+        }
     elif option == "min_avail":
         args = ("--min-avail",)
         kwargs = {
@@ -140,6 +146,14 @@ def cli_option(option: str, **extra_kwargs):
     elif option == "root":
         args = ("--root",)
         kwargs = {"metavar": "ROOT", "help": "The node root or mount point."}
+    elif option == "size":
+        args = ("--size",)
+        kwargs = {
+            "type": int,
+            "default": None,
+            "metavar": "SIZE",
+            "help": "The size in bytes of the file.",
+        }
     elif option == "target":
         args = ("--target",)
         kwargs = {
@@ -633,3 +647,25 @@ def file_from_path(path: str) -> ArchiveFile:
             pass
 
     raise click.ClickException("No such file: " + str(path))
+
+
+def validate_md5(md5: str | None) -> None:
+    """Vet a user-provided MD5 hash
+
+    The MD5 may be None.
+
+    raises click.ClickException if validation fails.
+    """
+
+    # None is fine.
+    if md5 is None:
+        return
+
+    # The hash must be a 128-byte number specified as 32 hex digits
+    if len(md5) != 32:
+        raise click.ClickException(f"invalid hash: {md5}.  Expected 32 hex digits.")
+
+    try:
+        int(md5, base=16)
+    except ValueError:
+        raise click.ClickException(f"invalid hash: {md5}.  Expected 32 hex digits.")
