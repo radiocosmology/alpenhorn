@@ -35,8 +35,24 @@ def _state_flag_help(name):
 
 
 @click.command()
+@click.option(
+    "--absent-group",
+    metavar="GROUP",
+    multiple=True,
+    help="Limit to files absent from GROUP.  May be specified multiple times.",
+)
+@click.option(
+    "--absent-node",
+    metavar="NODE",
+    multiple=True,
+    help="Limit to files absent from NODE.  May be specified multiple times.",
+)
 @cli_option("acq")
-@cli_option("all_", help="Limit to files that exist on all NODEs and GROUPs provided.")
+@cli_option(
+    "all_",
+    help="Limit to files that statisfy all --absent-group, "
+    "--absent-node, --node, and --group constraints (instead of just one).",
+)
 @click.option("--corrupt", is_flag=True, help=_state_flag_help("corrupt"))
 @click.option("--details", is_flag=True, help="Show details for listed files.")
 @click.option(
@@ -50,8 +66,7 @@ def _state_flag_help(name):
     "--group",
     metavar="GROUP",
     multiple=True,
-    help="Limit to files present (or not present) in GROUP.  "
-    "May be specified multiple times.",
+    help="Limit to files present in GROUP.  May be specified multiple times.",
 )
 @click.option("--healthy", is_flag=True, help=_state_flag_help("healthy"))
 @click.option("--missing", is_flag=True, help=_state_flag_help("missing"))
@@ -59,11 +74,7 @@ def _state_flag_help(name):
     "--node",
     metavar="NODE",
     multiple=True,
-    help="Limit to files present (or not present) on NODE.  "
-    "May be specified multiple times.",
-)
-@click.option(
-    "not_", "--not", is_flag=True, help="Limit to files absent from NODEs and GROUPs"
+    help="Limit to files present on NODE.  May be specified multiple times.",
 )
 @click.option("--suspect", is_flag=True, help=_state_flag_help("suspect"))
 @click.option(
@@ -75,6 +86,8 @@ def _state_flag_help(name):
 @click.pass_context
 def list_(
     ctx,
+    absent_group,
+    absent_node,
     acq,
     all_,
     corrupt,
@@ -84,7 +97,6 @@ def list_(
     healthy,
     missing,
     node,
-    not_,
     suspect,
     to,
 ):
@@ -105,18 +117,17 @@ def list_(
     -----------------
 
     To limit the list based on where files are or are not present, use
-    the --node=NODE and/or --group=GROUP options to list places to search.
-    How these are interpreted depend on the "--all" and "--not" options:
+    the --absent-node=NODE, --absent-group=GROUP, --node=NODE and/or --group=GROUP
+    options to list places to search.
 
-    With neither option, files will be listed if they exist on at least one of
-    the NODEs or GROUPs.
+    The first two of these negative constraints (nodes and/or groups which must not
+    have the files) and the second two are positive constraints (nodes and/or groups
+    which must have the file).  For a file to be listed, it must satisfy both the
+    negative and positive constraints.
 
-    With --all, files must exist on all the listed NODEs and GROUPs.
-
-    With --not, files must be absent from all the listed NODEs and GROUPs.
-
-    With --not and --all, files must be absent from at least one of the NODEs or
-    GROUPs.
+    Normally, only one of the location constraints given need be satisfied for a
+    file to be listed, but if you also use "--all", then a file will be listed only
+    if all location constraints are satisfied.
 
     \b
     Limit by file state
@@ -128,15 +139,13 @@ def list_(
     state should be checked.  If multiple state flags are used, files with any
     one of the specified state will be listed.
 
-    The --not flag cannot be used with the state flags.
-
     Note: the "missing" state does not mean simply "absent".  The state "missing"
     is a special state tracked by alpenhorn in the data index for files which are
     absent from a node/group when they are expected to be present (i.e they haven't
     been released).  So, these two commands produce (potentially) different results:
 
     \b
-    group list --not --node=NODE
+    group list --absent-node=NODE
     group list --missing --node=NODE
 
     The first lists all files absent from NODE.  The second lists only files which are
@@ -169,20 +178,18 @@ def list_(
     else:
         state_flag = None
 
-    # Can't use a state flag with --not
-    not_both(not_, "not", state_flag, state_flag)
     # Must use --to and --from together
     both_or_neither(from_, "from", to, "to")
     # Can't use a state with --from or --to
     # (checking --from is enough, given the previous test)
     not_both(from_, "from", state_flag, state_flag)
 
-    # Can't use --not or --all if we haven't used --node or --group
-    if not_ or all_:
-        if not node and not group:
+    # Can't use --all if we haven't used a location constraint
+    if all_:
+        if not node and not group and not absent_group and not absent_node:
             raise click.UsageError(
-                ("--all" if all_ else "--not")
-                + " cannot be used without --node or --group"
+                "--all cannot be used without a location constraint "
+                "(one or more of --absent-group, --absent-node, --group, --node)"
             )
 
     # Figure out the state constraint from the flags
@@ -190,21 +197,57 @@ def list_(
         corrupt=corrupt, healthy=healthy, missing=missing, suspect=suspect
     )
 
-    # Do we want the intersection or union of the nodes and groups?
-    # This is just XOR of --all and --not
-    intersect = all_ ^ not_
-
-    # Resolve nodes, and groups, if provided
+    # Resolve location constraints.
+    #
+    # The "in_any" flag is "all_" for the negative constraints (This comes
+    # from DeMorgan's rule), and "not all_", as expected, for the positive ones.
+    if absent_node:
+        absent_nodes = resolve_node(absent_node)
+        absent_node_files = files_in_nodes(absent_nodes, state_expr, in_any=all_)
+    if absent_group:
+        absent_groups = resolve_group(absent_group)
+        absent_group_files = files_in_groups(absent_groups, state_expr, in_any=all_)
     if node:
         nodes = resolve_node(node)
-        node_files = files_in_nodes(nodes, state_expr, in_any=not intersect)
+        node_files = files_in_nodes(nodes, state_expr, in_any=not all_)
     if group:
         groups = resolve_group(group)
-        group_files = files_in_groups(groups, state_expr, in_any=not intersect)
+        group_files = files_in_groups(groups, state_expr, in_any=not all_)
 
-    # Now make a master list from node and group lists
+    # In --details mode, extra node or group details are provided in very
+    # restricted circumstatnces:
+    #  1. exactly one --group or exactly one --node was specified
+    #  2. not restricted by syncability (i.e. no --from or --to)
+    detail_node = None
+    detail_group = None
+    if details and not from_:
+        if node and not group and len(nodes) == 1:
+            detail_node = nodes[0]
+        elif group and not node and len(groups) == 1:
+            detail_group = groups[0]
+
+    # The negative selection list
+    if absent_node and absent_group:
+        # Negative selection: all_ is a union and not all_ an intersect (DeMorgan again)
+        if all_:
+            omitted_files = absent_node_files | absent_group_files
+        else:
+            omitted_files = absent_node_files & absent_group_files
+    elif absent_node:
+        omitted_files = absent_node_files
+    elif absent_group:
+        omitted_files = absent_group_files
+    else:
+        omitted_files = None
+
+    # If the negative selection is empty, we can just drop it
+    if omitted_files is not None and len(omitted_files) == 0:
+        omitted_files = None
+
+    # The positive selection list
     if node and group:
-        if intersect:
+        # Positive selection: all_ is an intersection and not all_ a union
+        if all_:
             selected_files = node_files & group_files
         else:
             selected_files = node_files | group_files
@@ -216,50 +259,38 @@ def list_(
         selected_files = None
 
     # Apply syncability limit.  This is just a special kind of
-    # file selection where we find files in --from but not in --to.
+    # location selection where we find files in --from but not in --to.
     if from_:
         syncable_files = files_in_nodes([resolve_node(from_)]) - files_in_groups(
             [resolve_group(to)]
         )
 
-        if selected_files is not None:
-            # Merge with selected_files list
-            if not_:
-                # In not mode, we remove selected_files from the syncable ones,
-                selected_files = syncable_files - selected_files
-                # The above has converted the negative constraint to a positive one
-                not_ = False
-            else:
-                # Here we take the intersection of the two selections (ignoring --all)
+        # If we're in --all mode or we don't have a negative constraint, we can
+        # combine with positive constraint now.
+        #
+        # In other cases we have to keep syncable_files separate from selected_files
+        # because they combine differently with omitted_files
+        if all_ or omitted_files is None:
+            if selected_files is not None:
                 selected_files &= syncable_files
-        else:
-            # Otherwise, we're just using the syncable files list
-            selected_files = syncable_files
+            else:
+                selected_files = syncable_files
+            syncable_files = None
+    else:
+        syncable_files = None
 
-    # Handle no matching files
+    # In --all mode, if we have both a positive and negative selection,
+    # we can combine them now by differencing to simplify things
+    if all_ and omitted_files is not None and selected_files is not None:
+        selected_files -= omitted_files
+        omitted_files = None
+
+    # Handle no matching files: if we have an empty positive selection
+    # (either one) there's nothing to list
     if selected_files is not None and len(selected_files) == 0:
-        if not_:
-            # Here we were asked to omit files in the selection, but
-            # there's nothing in the selection, so there's nothing to
-            # omit.
-            selected_files = None
-        else:
-            # Otherwise, we were going to list only the files in the
-            # selection, but there are none, so we're done.
-            ctx.exit()
-
-    # In --details mode, extra node or group details are provided in very
-    # restricted circumstatnces:
-    #  1. exactly one group or exactly one node was specified
-    #  2. --not wasn't used
-    #  3. not restricted by syncability (i.e. no --from or --to)
-    detail_node = None
-    detail_group = None
-    if details and not not_ and not from_:
-        if node and not group and len(nodes) == 1:
-            detail_node = nodes[0]
-        elif group and not node and len(groups) == 1:
-            detail_group = groups[0]
+        ctx.exit()
+    if syncable_files is not None and len(syncable_files) == 0:
+        ctx.exit()
 
     # The base query
     query = (
@@ -272,12 +303,21 @@ def list_(
     if acq:
         query = query.where(ArchiveFile.acq << resolve_acqs(acq))
 
+    # Apply syncability, if present
+    if syncable_files is not None:
+        query = query.where(ArchiveFile.id << syncable_files)
+
     # Apply file selection, if any
-    if selected_files is not None:
-        if not_:
-            query = query.where(ArchiveFile.id.not_in(selected_files))
-        else:
-            query = query.where(ArchiveFile.id << selected_files)
+    if selected_files is not None and omitted_files is not None:
+        # This is a non-all positive and negative slection.  We
+        # need to "or" them together here
+        query = query.where(
+            (ArchiveFile.id << selected_files) | ArchiveFile.id.not_in(omitted_files)
+        )
+    elif selected_files is not None:
+        query = query.where(ArchiveFile.id << selected_files)
+    elif omitted_files is not None:
+        query = query.where(ArchiveFile.id.not_in(omitted_files))
 
     if details:
         # Headers

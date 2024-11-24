@@ -22,16 +22,6 @@ def test_only_from_to(clidb, cli):
     cli(2, ["file", "list", "--to=Group"])
 
 
-def test_state_not(clidb, cli):
-    """State flags and --not can't be used together."""
-
-    group = StorageGroup.create(name="Group")
-    StorageNode.create(name="Node", group=group)
-
-    for state_flag in ["--corrupt", "--missing", "--healthy", "--suspect"]:
-        cli(2, ["file", "list", state_flag, "--not", "--node=Node"])
-
-
 def test_state_to_from(clidb, cli):
     """state flags can't be used with --to or --from."""
 
@@ -42,15 +32,20 @@ def test_state_to_from(clidb, cli):
         cli(2, ["file", "list", state_flag, "--to=Group", "--from=Node"])
 
 
-def test_bare_not_all(clidb, cli):
-    """--all and --not must accompany a --node or --group"""
+def test_bare_all(clidb, cli):
+    """--all must accompany a location constraint"""
 
     group = StorageGroup.create(name="Group")
     StorageNode.create(name="Node", group=group)
 
-    cli(2, ["file", "list", "--not"])
     cli(2, ["file", "list", "--all"])
-    cli(2, ["file", "list", "--all", "--not"])
+
+    # But any of these are fine
+
+    cli(0, ["file", "list", "--all", "--absent-node=Node"])
+    cli(0, ["file", "list", "--all", "--absent-group=Group"])
+    cli(0, ["file", "list", "--all", "--node=Node"])
+    cli(0, ["file", "list", "--all", "--group=Group"])
 
 
 def test_bad_acq(clidb, cli):
@@ -324,74 +319,6 @@ def test_list_all(clidb, cli):
     assert "acq/file4" not in result.output
 
 
-def test_list_not(clidb, cli):
-    """Test --not."""
-
-    group = StorageGroup.create(name="Group")
-    acq = ArchiveAcq.create(name="acq")
-
-    node1 = StorageNode.create(name="Node1", group=group)
-    node2 = StorageNode.create(name="Node2", group=group)
-    node3 = StorageNode.create(name="Node3", group=group)
-
-    file = ArchiveFile.create(name="file1", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
-
-    file = ArchiveFile.create(name="file2", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node2, has_file="N", wants_file="N")
-
-    file = ArchiveFile.create(name="file3", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
-
-    file = ArchiveFile.create(name="file4", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="X", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
-
-    result = cli(0, ["file", "list", "--node=Node1", "--node=Node2", "--not"])
-
-    assert "acq/file1" not in result.output
-    assert "acq/file2" in result.output
-    assert "acq/file3" in result.output
-    assert "acq/file4" in result.output
-
-
-def test_list_not_all(clidb, cli):
-    """Test --not --all."""
-
-    group = StorageGroup.create(name="Group")
-    acq = ArchiveAcq.create(name="acq")
-
-    node1 = StorageNode.create(name="Node1", group=group)
-    node2 = StorageNode.create(name="Node2", group=group)
-    node3 = StorageNode.create(name="Node3", group=group)
-
-    file = ArchiveFile.create(name="file1", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
-
-    file = ArchiveFile.create(name="file2", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node2, has_file="N", wants_file="N")
-
-    file = ArchiveFile.create(name="file3", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
-
-    file = ArchiveFile.create(name="file4", acq=acq)
-    ArchiveFileCopy.create(file=file, node=node1, has_file="X", wants_file="Y")
-    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
-
-    result = cli(0, ["file", "list", "--node=Node1", "--node=Node2", "--not", "--all"])
-
-    assert "acq/file1" not in result.output
-    assert "acq/file2" not in result.output
-    assert "acq/file3" not in result.output
-    assert "acq/file4" in result.output
-
-
 def test_state(clidb, cli):
     """Test the state flags."""
 
@@ -516,7 +443,7 @@ def test_sync_select(clidb, cli):
     assert "file4" in result.output
 
     result = cli(
-        0, ["file", "list", "--from=Node1", "--to=Group2", "--not", "--node=Node3"]
+        0, ["file", "list", "--from=Node1", "--to=Group2", "--absent-node=Node3"]
     )
 
     assert "file1" in result.output
@@ -647,3 +574,157 @@ def test_detail_node(clidb, cli, assert_row_present):
         "Absent",
         "-",
     )
+
+
+def test_absent(clidb, cli):
+    """Test --absent-node and --absent-group."""
+
+    group1 = StorageGroup.create(name="Group1")
+    node1 = StorageNode.create(name="Node1", group=group1)
+    node2 = StorageNode.create(name="Node2", group=group1)
+    group2 = StorageGroup.create(name="Group2")
+    node3 = StorageNode.create(name="Node3", group=group2)
+
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="file12", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file13", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file23", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file1", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file2", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file3", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    result = cli(0, ["file", "list", "--absent-node=Node1"])
+
+    assert "acq/file2" in result.output
+    assert "acq/file23" in result.output
+    assert "acq/file3" in result.output
+    assert result.output.count("acq") == 3
+
+    result = cli(0, ["file", "list", "--absent-node=Node1", "--absent-node=Node2"])
+
+    assert "acq/file13" in result.output
+    assert "acq/file23" in result.output
+    assert "acq/file1" in result.output
+    assert "acq/file2" in result.output
+    assert "acq/file3" in result.output
+    assert result.output.count("acq") == 5
+
+    result = cli(0, ["file", "list", "--absent-group=Group1"])
+
+    assert "acq/file3" in result.output
+    assert result.output.count("acq") == 1
+
+    result = cli(0, ["file", "list", "--absent-node=Node1", "--absent-group=Group2"])
+
+    assert "acq/file12" in result.output
+    assert "acq/file23" in result.output
+    assert "acq/file1" in result.output
+    assert "acq/file2" in result.output
+    assert "acq/file3" in result.output
+    assert result.output.count("acq") == 5
+
+
+def test_positive_negative(clidb, cli):
+    """Test --node and --absent-node together."""
+
+    group1 = StorageGroup.create(name="Group1")
+    node1 = StorageNode.create(name="Node1", group=group1)
+    node2 = StorageNode.create(name="Node2", group=group1)
+    group2 = StorageGroup.create(name="Group2")
+    node3 = StorageNode.create(name="Node3", group=group2)
+
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="file12", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file13", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file23", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file1", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file2", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file3", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    result = cli(0, ["file", "list", "--node=Node1", "--absent-node=Node2"])
+
+    assert "acq/file1" in result.output
+    assert "acq/file12" in result.output
+    assert "acq/file13" in result.output
+    assert "acq/file3" in result.output
+    assert result.output.count("acq") == 4
+
+    result = cli(0, ["file", "list", "--node=Node1", "--absent-node=Node2", "--all"])
+
+    assert "acq/file1" in result.output
+    assert "acq/file13" in result.output
+    assert result.output.count("acq") == 2
+
+
+def test_all_absent(clidb, cli):
+    """Test --absent-node and --absent-group with --all."""
+
+    group1 = StorageGroup.create(name="Group1")
+    node1 = StorageNode.create(name="Node1", group=group1)
+    node2 = StorageNode.create(name="Node2", group=group1)
+    group2 = StorageGroup.create(name="Group2")
+    node3 = StorageNode.create(name="Node3", group=group2)
+
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="file12", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file13", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file23", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file1", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file2", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file3", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node3, has_file="Y", wants_file="Y")
+
+    result = cli(
+        0, ["file", "list", "--absent-node=Node1", "--absent-node=Node2", "--all"]
+    )
+
+    assert "acq/file3" in result.output
+    assert result.output.count("acq") == 1
+
+    result = cli(
+        0, ["file", "list", "--absent-node=Node1", "--absent-group=Group2", "--all"]
+    )
+
+    assert "acq/file2" in result.output
+    assert result.output.count("acq") == 1
