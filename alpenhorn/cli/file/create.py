@@ -11,7 +11,14 @@ from ...db import (
     database_proxy,
 )
 from ..cli import echo
-from ..options import both_or_neither, not_both, requires_other, resolve_acqs
+from ..options import (
+    both_or_neither,
+    cli_option,
+    not_both,
+    requires_other,
+    resolve_acqs,
+    validate_md5,
+)
 
 
 @click.command()
@@ -22,23 +29,13 @@ from ..options import both_or_neither, not_both, requires_other, resolve_acqs
     is_flag=True,
     help="Scan a local copy of the file to compute MD5 and size.",
 )
-@click.option(
-    "--md5",
-    metavar="HASH",
-    help="The 128-bit MD5 hash of the file expressed as 32 hex digits.",
-)
+@cli_option("md5")
 @click.option(
     "--prefix",
     metavar="PREFIX",
     help="Use with --from-file to specify the location of the file to scan.",
 )
-@click.option(
-    "--size",
-    type=int,
-    default=None,
-    metavar="SIZE",
-    help="The size in bytes of the file.",
-)
+@cli_option("size")
 def create(name, acq_name, from_file, md5, prefix, size):
     """Create a new File record.
 
@@ -94,15 +91,7 @@ def create(name, acq_name, from_file, md5, prefix, size):
     if size is not None and size < 0:
         raise click.ClickException(f"negative file size.")
 
-    # Validate MD5 hash
-    if md5 is not None:
-        # The hash must be a 128-byte number specified as 32 hex digits
-        if len(md5) != 32:
-            raise click.ClickException(f"invalid hash: {md5}.  Expected 32 hex digits.")
-        try:
-            int(md5, base=16)
-        except ValueError:
-            raise click.ClickException(f"invalid hash: {md5}.  Expected 32 hex digits.")
+    validate_md5(md5)
 
     # Scan a file, if requested
     if from_file:
