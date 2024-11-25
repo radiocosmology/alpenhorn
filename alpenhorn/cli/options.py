@@ -50,6 +50,12 @@ def cli_option(option: str, **extra_kwargs):
             "help": "Make node an archive node.  Incompatible with --field "
             "or --transport.",
         }
+    elif option == "archive_ok":
+        args = ("--archive-ok",)
+        kwargs = {
+            "is_flag": True,
+            "help": "Run the clean, even if NODE is an archive node.",
+        }
     elif option == "auto_verify":
         args = ("--auto-verify",)
         kwargs = {
@@ -202,15 +208,24 @@ def both_or_neither(
         raise click.UsageError(f"--{opt1_name} and --{opt2_name} must be used together")
 
 
+def at_least_one(
+    opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str
+) -> None:
+    """Check that at least one of two options were used.
+
+    If not, raise click.UsageError."""
+
+    if not (opt1_set or opt2_set):
+        raise click.UsageError(f"missing --{opt1_name} or --{opt2_name}")
+
+
 def exactly_one(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> None:
     """Check that exactly one of two incompatible options were used.
 
     If not, raise click.UsageError."""
 
     not_both(opt1_set, opt1_name, opt2_set, opt2_name)
-
-    if not (opt1_set or opt2_set):
-        raise click.UsageError(f"missing --{opt1_name} or --{opt2_name}")
+    at_least_one(opt1_set, opt1_name, opt2_set, opt2_name)
 
 
 def requires_other(

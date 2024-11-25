@@ -265,9 +265,7 @@ def _run_query(
 @click.command()
 @click.argument("name", metavar="NODE")
 @cli_option("acq")
-@click.option(
-    "--archive-ok", help="Run the clean, even if NODE is an archive node.", is_flag=True
-)
+@cli_option("archive_ok")
 @cli_option("cancel", help="Cancel existing cleaning requests.")
 @click.option(
     "--check",
