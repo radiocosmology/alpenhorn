@@ -6,6 +6,7 @@ import peewee as pw
 from .create import create
 from .import_ import import_
 from .show import show
+from .sync import sync
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -16,3 +17,4 @@ def cli():
 cli.add_command(create, "create")
 cli.add_command(import_, "import")
 cli.add_command(show, "show")
+cli.add_command(sync, "sync")
