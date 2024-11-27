@@ -116,14 +116,13 @@ def list_(
     Limit by location
     -----------------
 
-    To limit the list based on where files are or are not present, use
-    the --absent-node=NODE, --absent-group=GROUP, --node=NODE and/or --group=GROUP
+    To limit the list based on where a file is, or is not, present, use the
+    --absent-node=NODE, --absent-group=GROUP, --node=NODE and/or --group=GROUP
     options to list places to search.
 
-    The first two of these negative constraints (nodes and/or groups which must not
-    have the files) and the second two are positive constraints (nodes and/or groups
-    which must have the file).  For a file to be listed, it must satisfy both the
-    negative and positive constraints.
+    The first two of these options are negative constraints (indicating nodes or
+    groups which must not have the file) and the last two are positive constraints
+    (nodes or groups which must have the file).
 
     Normally, only one of the location constraints given need be satisfied for a
     file to be listed, but if you also use "--all", then a file will be listed only
@@ -203,10 +202,10 @@ def list_(
     # from DeMorgan's rule), and "not all_", as expected, for the positive ones.
     if absent_node:
         absent_nodes = resolve_node(absent_node)
-        absent_node_files = files_in_nodes(absent_nodes, state_expr, in_any=all_)
+        absent_node_files = files_in_nodes(absent_nodes, None, in_any=all_)
     if absent_group:
         absent_groups = resolve_group(absent_group)
-        absent_group_files = files_in_groups(absent_groups, state_expr, in_any=all_)
+        absent_group_files = files_in_groups(absent_groups, None, in_any=all_)
     if node:
         nodes = resolve_node(node)
         node_files = files_in_nodes(nodes, state_expr, in_any=not all_)
@@ -215,7 +214,7 @@ def list_(
         group_files = files_in_groups(groups, state_expr, in_any=not all_)
 
     # In --details mode, extra node or group details are provided in very
-    # restricted circumstatnces:
+    # restricted circumstances:
     #  1. exactly one --group or exactly one --node was specified
     #  2. not restricted by syncability (i.e. no --from or --to)
     detail_node = None

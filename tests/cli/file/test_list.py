@@ -728,3 +728,44 @@ def test_all_absent(clidb, cli):
 
     assert "acq/file2" in result.output
     assert result.output.count("acq") == 1
+
+
+def test_state_absent(clidb, cli):
+    """State flags don't apply to negative location constraints"""
+
+    group = StorageGroup.create(name="Group")
+    node1 = StorageNode.create(name="Node1", group=group)
+    node2 = StorageNode.create(name="Node2", group=group)
+
+    acq = ArchiveAcq.create(name="acq")
+    file = ArchiveFile.create(name="file1", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file2", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="X", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="Y", wants_file="Y")
+
+    file = ArchiveFile.create(name="file3", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="Y", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="X", wants_file="Y")
+
+    file = ArchiveFile.create(name="file4", acq=acq)
+    ArchiveFileCopy.create(file=file, node=node1, has_file="X", wants_file="Y")
+    ArchiveFileCopy.create(file=file, node=node2, has_file="X", wants_file="Y")
+
+    result = cli(
+        0, ["file", "list", "--corrupt", "--node=Node1", "--absent-node=Node2"]
+    )
+
+    assert "acq/file2" in result.output
+    assert "acq/file3" in result.output
+    assert "acq/file4" in result.output
+    assert result.output.count("acq") == 3
+
+    result = cli(
+        0, ["file", "list", "--corrupt", "--node=Node1", "--absent-node=Node2", "--all"]
+    )
+
+    assert "acq/file4" in result.output
+    assert result.output.count("acq") == 1
