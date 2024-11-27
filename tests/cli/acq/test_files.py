@@ -108,7 +108,7 @@ def test_list_node(clidb, cli, assert_row_present):
 
     result = cli(0, ["acq", "files", "Acq1", "--node=Node1"])
 
-    assert_row_present(result.output, "FileYY", "123 B", "Present", "-")
+    assert_row_present(result.output, "FileYY", "123 B", "Healthy", "-")
     assert "File2" not in result.output
     assert "File3" not in result.output
     assert_row_present(result.output, "FileMY", "789 B", "Suspect", "1.205 kiB")
@@ -150,7 +150,7 @@ def test_list_node_removed(clidb, cli, assert_row_present):
 
     result = cli(0, ["acq", "files", "Acq1", "--node=Node1", "--show-removed"])
 
-    assert_row_present(result.output, "FileYY", "123 B", "Present", "-")
+    assert_row_present(result.output, "FileYY", "123 B", "Healthy", "-")
     assert_row_present(result.output, "FileNY", "0 B", "Missing", "-")
     assert_row_present(result.output, "FileYM", "-", "Removable", "-")
     assert_row_present(result.output, "FileNM", "-", "Removed", "-")

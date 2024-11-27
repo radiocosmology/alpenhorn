@@ -48,9 +48,9 @@ def test_everything(clidb, cli, assert_row_present):
 
     result = cli(0, ["file", "find"])
 
-    assert_row_present(result.output, "acq1/file1", "Node1", "Present")
+    assert_row_present(result.output, "acq1/file1", "Node1", "Healthy")
     assert_row_present(result.output, "acq2/file3", "Node1", "Removable")
-    assert_row_present(result.output, "acq2/file3", "Node2", "Present")
+    assert_row_present(result.output, "acq2/file3", "Node2", "Healthy")
     assert result.output.count("acq") == 3
 
 
@@ -69,7 +69,7 @@ def test_acq(clidb, cli, assert_row_present):
 
     result = cli(0, ["file", "find", "--acq=acq1"])
 
-    assert_row_present(result.output, "acq1/file", "Node", "Present")
+    assert_row_present(result.output, "acq1/file", "Node", "Healthy")
     assert result.output.count("acq") == 1
 
 
@@ -100,10 +100,10 @@ def test_node(clidb, cli, assert_row_present):
 
     result = cli(0, ["file", "find", "--node=Node1", "--node=Node2"])
 
-    assert_row_present(result.output, "acq/file1", "Node1", "Present")
-    assert_row_present(result.output, "acq/file1", "Node2", "Present")
-    assert_row_present(result.output, "acq/file2", "Node1", "Present")
-    assert_row_present(result.output, "acq/file3", "Node2", "Present")
+    assert_row_present(result.output, "acq/file1", "Node1", "Healthy")
+    assert_row_present(result.output, "acq/file1", "Node2", "Healthy")
+    assert_row_present(result.output, "acq/file2", "Node1", "Healthy")
+    assert_row_present(result.output, "acq/file3", "Node2", "Healthy")
     assert result.output.count("acq") == 4
 
 
@@ -138,10 +138,10 @@ def test_group(clidb, cli, assert_row_present):
 
     result = cli(0, ["file", "find", "--group=Group1", "--group=Group2"])
 
-    assert_row_present(result.output, "acq/file1", "Node1", "Present")
-    assert_row_present(result.output, "acq/file1", "Node2", "Present")
-    assert_row_present(result.output, "acq/file2", "Node1", "Present")
-    assert_row_present(result.output, "acq/file3", "Node2", "Present")
+    assert_row_present(result.output, "acq/file1", "Node1", "Healthy")
+    assert_row_present(result.output, "acq/file1", "Node2", "Healthy")
+    assert_row_present(result.output, "acq/file2", "Node1", "Healthy")
+    assert_row_present(result.output, "acq/file3", "Node2", "Healthy")
     assert result.output.count("acq") == 4
 
 
@@ -176,10 +176,10 @@ def test_node_group(clidb, cli, assert_row_present):
 
     result = cli(0, ["file", "find", "--group=Group1", "--node=Node1", "--node=Node2"])
 
-    assert_row_present(result.output, "acq/file1", "Node1", "Present")
-    assert_row_present(result.output, "acq/file1", "Node2", "Present")
-    assert_row_present(result.output, "acq/file2", "Node1", "Present")
-    assert_row_present(result.output, "acq/file3", "Node2", "Present")
+    assert_row_present(result.output, "acq/file1", "Node1", "Healthy")
+    assert_row_present(result.output, "acq/file1", "Node2", "Healthy")
+    assert_row_present(result.output, "acq/file2", "Node1", "Healthy")
+    assert_row_present(result.output, "acq/file3", "Node2", "Healthy")
     assert result.output.count("acq") == 4
 
 
@@ -202,7 +202,7 @@ def test_state(clidb, cli, assert_row_present):
             ("acq/FileXM", "Node", "Corrupt"),
         ],
         "healthy": [
-            ("acq/FileYY", "Node", "Present"),
+            ("acq/FileYY", "Node", "Healthy"),
             ("acq/FileYM", "Node", "Removable"),
         ],
         "suspect": [

@@ -167,7 +167,7 @@ def test_show_nodes(clidb, cli, assert_row_present):
 
     result = cli(0, ["file", "show", "Acq/File", "--nodes"])
 
-    assert_row_present(result.output, "NodeYY", "Present", "234 B")
+    assert_row_present(result.output, "NodeYY", "Healthy", "234 B")
     assert_row_present(result.output, "NodeYM", "Removable", "345 B")
     assert_row_present(result.output, "NodeYN", "Released", "456 B")
 
@@ -327,6 +327,6 @@ def test_show_all(clidb, cli, assert_row_present):
 
     assert_row_present(result.output, "Node1a", "Corrupt", "-")
     assert_row_present(result.output, "Node1b", "Suspect", "345 B")
-    assert_row_present(result.output, "Node2", "Present", "456 B")
+    assert_row_present(result.output, "Node2", "Healthy", "456 B")
 
     assert_row_present(result.output, "Node2", "Group1", "Pending", "-", "-", "-")
