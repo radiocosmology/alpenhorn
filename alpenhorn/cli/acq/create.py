@@ -3,6 +3,7 @@
 import click
 import peewee as pw
 
+from ...common.util import invalid_import_path
 from ...db import database_proxy, ArchiveAcq
 from ..options import cli_option
 from ..cli import echo
@@ -16,6 +17,11 @@ def create(name):
     The Acquisition will be called NAME, which must not be the name of
     another existing Acquisition.
     """
+
+    # Validate
+    rejection_reason = invalid_import_path(name)
+    if rejection_reason:
+        raise click.ClickException(f"invalid name: {rejection_reason}")
 
     with database_proxy.atomic():
         try:
