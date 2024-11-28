@@ -262,12 +262,12 @@ def requires_other(
         raise click.UsageError(f"--{opt1_name} may only be used with --{opt2_name}")
 
 
-def resolve_group(group: str | list[str]) -> StorageGroup | list[StorageGroup]:
+def resolve_group(group: str | list[str]) -> StorageGroup | set[StorageGroup]:
     """Convert group name(s) into StorageGroup(s).
 
     If given a single `str`, returns a single `StorageGroup`.
     Otherwise, should be given a list of str and will return a
-    list of StorageGroups.
+    set of StorageGroups.
 
     If any name can't be resolved, raises ClickException.
     """
@@ -275,24 +275,24 @@ def resolve_group(group: str | list[str]) -> StorageGroup | list[StorageGroup]:
     if one_group:
         group = [group]
 
-    groups = []
+    groups = set()
     for name in group:
         try:
-            groups.append(StorageGroup.get(name=name))
+            groups.add(StorageGroup.get(name=name))
         except pw.DoesNotExist:
             raise click.ClickException("no such group: " + name)
 
     if one_group:
-        return groups[0]
+        return groups.pop()
     return groups
 
 
-def resolve_node(node: str | list[str]) -> StorageNode | list[StorageNode]:
+def resolve_node(node: str | list[str]) -> StorageNode | set[StorageNode]:
     """Convert node name(s) into StorageNode(s).
 
     If given a single `str`, returns a single `StorageNode`.
     Otherwise, should be given a list of str and will return a
-    list of StorageNodes.
+    set of StorageNodes.
 
     If any name can't be resolved, raises ClickException.
     """
@@ -300,32 +300,42 @@ def resolve_node(node: str | list[str]) -> StorageNode | list[StorageNode]:
     if one_node:
         node = [node]
 
-    nodes = []
+    nodes = set()
     for name in node:
         try:
-            nodes.append(StorageNode.get(name=name))
+            nodes.add(StorageNode.get(name=name))
         except pw.DoesNotExist:
             raise click.ClickException("no such node: " + name)
 
     if one_node:
-        return nodes[0]
+        return nodes.pop()
     return nodes
 
 
-def resolve_acqs(acq: list[str]) -> list[ArchiveAcq]:
+def resolve_acq(acq: str | list[str]) -> ArchiveAcq | set[ArchiveAcq]:
     """Convert --acq list to ArchiveAcq list.
 
-    If the input list is empty, so is the output list.
+    If given a single `str`, returns a single `ArchiveAcq`.
+    Otherwise, should be given a list of str and will return a
+    set of ArchiveAcqs.
 
     Raises `click.ClickException` if a non-existent acqusition was
     provided.
     """
-    acqs = []
+
+    one_acq = isinstance(acq, str)
+    if one_acq:
+        acq = [acq]
+
+    acqs = set()
     for acqname in acq:
         try:
-            acqs.append(ArchiveAcq.get(name=acqname))
+            acqs.add(ArchiveAcq.get(name=acqname))
         except pw.DoesNotExist:
             raise click.ClickException("No such acquisition: " + acqname)
+
+    if one_acq:
+        return acqs.pop()
     return acqs
 
 

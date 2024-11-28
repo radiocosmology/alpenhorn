@@ -20,7 +20,7 @@ from ..options import (
     both_or_neither,
     files_in_nodes,
     files_in_groups,
-    resolve_acqs,
+    resolve_acq,
     resolve_group,
     resolve_node,
     state_constraint,
@@ -221,9 +221,9 @@ def list_(
     detail_group = None
     if details and not from_:
         if node and not group and len(nodes) == 1:
-            detail_node = nodes[0]
+            detail_node = nodes.pop()
         elif group and not node and len(groups) == 1:
-            detail_group = groups[0]
+            detail_group = groups.pop()
 
     # The negative selection list
     if absent_node and absent_group:
@@ -300,7 +300,7 @@ def list_(
 
     # Apply the --acq limit, if given
     if acq:
-        query = query.where(ArchiveFile.acq << resolve_acqs(acq))
+        query = query.where(ArchiveFile.acq << resolve_acq(acq))
 
     # Apply syncability, if present
     if syncable_files is not None:

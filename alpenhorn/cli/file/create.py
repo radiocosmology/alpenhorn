@@ -16,7 +16,7 @@ from ..options import (
     cli_option,
     not_both,
     requires_other,
-    resolve_acqs,
+    resolve_acq,
     validate_md5,
 )
 
@@ -101,7 +101,7 @@ def create(name, acq_name, from_file, md5, prefix, size):
         # database consistency).
         with database_proxy.atomic():
             # Resolve acq
-            acq = resolve_acqs([acq_name])[0]
+            acq = resolve_acq(acq_name)
 
             # Check that "name" isn't already a file in acq
             try:
@@ -144,7 +144,7 @@ def create(name, acq_name, from_file, md5, prefix, size):
     # Create the ArchiveFile
     with database_proxy.atomic():
         # Resolve acq
-        acq = resolve_acqs([acq_name])[0]
+        acq = resolve_acq(acq_name)
 
         # Check that "name" isn't already a file in acq.  We _may_ have already
         # done this once, but we need to do it again inside this transaction.

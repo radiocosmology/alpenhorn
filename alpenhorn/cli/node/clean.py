@@ -19,7 +19,7 @@ from ..options import (
     cli_option,
     files_in_groups,
     not_both,
-    resolve_acqs,
+    resolve_acq,
     resolve_node,
     resolve_group,
 )
@@ -97,7 +97,7 @@ def _run_query(
             ctx.exit()
 
         # Resolve acqs
-        acqs = resolve_acqs(acq)
+        acqs = resolve_acq(acq)
 
         # Find all candidate file copies
         query = ArchiveFileCopy.select().where(ArchiveFileCopy.node == node, has_file)

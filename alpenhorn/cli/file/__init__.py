@@ -5,6 +5,7 @@ import peewee as pw
 
 from .clean import clean
 from .create import create
+from .find import find
 from .import_ import import_
 from .list import list_
 from .modify import modify
@@ -19,6 +20,7 @@ def cli():
 
 cli.add_command(clean, "clean")
 cli.add_command(create, "create")
+cli.add_command(find, "find")
 cli.add_command(import_, "import")
 cli.add_command(list_, "list")
 cli.add_command(modify, "modify")
