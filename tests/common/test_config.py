@@ -1,6 +1,8 @@
-import os
+"""Test common.config"""
 
+import os
 import pytest
+from click import ClickException
 
 from alpenhorn.common import config
 
@@ -15,7 +17,7 @@ def merge_dict(a, b):
 def test_no_config():
     # Check that alpenhorn fails if it has no appropriate configuration
 
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(ClickException) as excinfo:
         config.load_config(None, False)
 
     assert "No configuration" in str(excinfo.value)

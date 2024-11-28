@@ -182,7 +182,7 @@ def load_config(cli_conf: os.PathLike, cli: bool) -> None:
     if cli_conf:
         config_files.append(cli_conf)
 
-    any_exist = False
+    no_config = True
 
     for cfile in config_files:
         # Expand the configuration file path
@@ -198,7 +198,7 @@ def load_config(cli_conf: os.PathLike, cli: bool) -> None:
                 )
             continue
 
-        any_exist = True
+        no_config = False
 
         log.info("Loading config file %s", cfile)
 
@@ -208,13 +208,10 @@ def load_config(cli_conf: os.PathLike, cli: bool) -> None:
         if conf is not None:
             config = merge_dict_tree(config, conf)
 
-    if not any_exist:
-        if cli:
-            exc = ClickException
-        else:
-            exc = RuntimeError
-
-        raise exc("No configuration files available.")
+    if no_config:
+        raise ClickException(
+            "No configuration files available.  See --help-config for more details."
+        )
 
 
 def merge_dict_tree(a: dict, b: dict) -> dict:
