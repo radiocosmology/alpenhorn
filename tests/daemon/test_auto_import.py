@@ -104,6 +104,24 @@ def test_import_file_no_detect(dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
+def test_import_file_invalid_acqname(dbtables, unode):
+    """Test invalid acq_name from import_detect."""
+
+    with patch(
+        "alpenhorn.common.extensions._id_ext", [lambda path, node: ("acq/", None)]
+    ):
+        with pytest.raises(StopIteration):
+            next(
+                auto_import._import_file(
+                    None, unode, pathlib.PurePath("acq/file"), True, None
+                )
+            )
+
+    # No acq has been added
+    with pytest.raises(pw.DoesNotExist):
+        ArchiveAcq.get(name="acq")
+
+
 def test_import_file_locked(xfs, dbtables, unode):
     """Test bad file in _import_file()"""
 

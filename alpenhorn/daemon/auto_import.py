@@ -15,6 +15,7 @@ from watchdog.events import FileSystemEventHandler
 
 from .. import db
 from ..common import config, extensions
+from ..common.util import invalid_import_path
 from ..db import (
     ArchiveAcq,
     ArchiveFile,
@@ -168,6 +169,15 @@ def _import_file(
     else:
         # Detection failed, so we're done.
         log.info(f"Not importing non-acquisition path: {path}")
+        if req:
+            log.info(f"Completed import request #{req.id}.")
+            req.complete()
+        return
+
+    # Vet acq_name from extension
+    rejection_reason = invalid_import_path(str(acq_name))
+    if rejection_reason:
+        log.warning(f'Rejecting invalid acq path "{acq_name}": {rejection_reason}')
         if req:
             log.info(f"Completed import request #{req.id}.")
             req.complete()

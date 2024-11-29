@@ -491,7 +491,29 @@ class UpdateableNode(updateable_base):
                 continue
 
             if req.recurse:
-                # If recursion was requested, run a scan on the path
+                # Ensure the base directory we want to scan is in-tree
+                fullpath = pathlib.Path(self.db.root, path)
+                try:
+                    fullpath = fullpath.resolve(strict=True)
+                except OSError as e:
+                    log.warning(
+                        f"Ignoring import request of unresolvable scan path: {fullpath}"
+                    )
+                    req.complete()
+                    continue
+
+                # Recompute the relative path after resolution, or skip scan if we're
+                # now out-of-tree
+                try:
+                    path = fullpath.relative_to(self.db.root)
+                except ValueError:
+                    log.warning(
+                        f"Ignoring import request of out-of-tree scan path: {fullpath}"
+                    )
+                    req.complete()
+                    continue
+
+                # Run scan
                 Task(
                     func=auto_import.scan,
                     queue=self._queue,
@@ -500,7 +522,17 @@ class UpdateableNode(updateable_base):
                     name=f'Scan "{path}" on {self.name}',
                 )
             else:
-                # Otherwise, try to directly import the path
+                # Check that the import path is valid
+                rejection_reason = util.invalid_import_path(req.path)
+                if rejection_reason:
+                    log.warning(
+                        f'Ignoring request for import of invalid path "{req.path}": '
+                        + rejection_reason
+                    )
+                    req.complete()
+                    continue
+
+                # Try to directly import the path
                 auto_import.import_file(self, self._queue, req.path, req.register, req)
 
     def update(self) -> None:

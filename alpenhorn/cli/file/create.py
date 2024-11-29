@@ -4,7 +4,7 @@ import click
 import pathlib
 import peewee as pw
 
-from ...common.util import md5sum_file
+from ...common.util import md5sum_file, invalid_import_path
 from ...db import (
     ArchiveAcq,
     ArchiveFile,
@@ -90,6 +90,11 @@ def create(name, acq_name, from_file, md5, prefix, size):
     # Size must be non-negative
     if size is not None and size < 0:
         raise click.ClickException(f"negative file size.")
+
+    # Validate
+    rejection_reason = invalid_import_path(name)
+    if rejection_reason:
+        raise click.ClickException(f"invalid name: {rejection_reason}")
 
     validate_md5(md5)
 

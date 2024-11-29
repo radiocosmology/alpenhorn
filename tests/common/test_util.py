@@ -127,3 +127,33 @@ def test_pretty_deltat():
     assert util.pretty_deltat(0.01) == "0.0s"
     assert util.pretty_deltat(0) == "0.0s"
     assert util.pretty_deltat(-1) == "-1.0s"
+
+
+def test_invalid_import_path():
+    """Test invalid_import_path"""
+
+    # Explicitly forbidden names
+    assert util.invalid_import_path("") is not None
+    assert util.invalid_import_path(".") is not None
+    assert util.invalid_import_path("..") is not None
+
+    # Forbidden starts
+    assert util.invalid_import_path("/name") is not None
+    assert util.invalid_import_path("./name") is not None
+    assert util.invalid_import_path("../name") is not None
+
+    # Forbidden ends
+    assert util.invalid_import_path("name/") is not None
+    assert util.invalid_import_path("name/.") is not None
+    assert util.invalid_import_path("name/..") is not None
+
+    # Forbidden middles
+    assert util.invalid_import_path("name//name") is not None
+    assert util.invalid_import_path("name///name") is not None
+    assert util.invalid_import_path("name/./name") is not None
+    assert util.invalid_import_path("name/../name") is not None
+
+    # These are fine
+    assert util.invalid_import_path("name") is None
+    assert util.invalid_import_path("name/name") is None
+    assert util.invalid_import_path("name/.../name") is None

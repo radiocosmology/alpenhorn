@@ -514,6 +514,52 @@ def test_update_import_absolute(unode, queue, archivefileimportrequest):
     assert ArchiveFileCopy.select().count() == 0
 
 
+def test_update_import_invalid_path(unode, queue, archivefileimportrequest):
+    """update_import() should ignore invalid paths."""
+
+    afir = archivefileimportrequest(path="./path/..", node=unode.db)
+
+    unode.update_import()
+
+    # Nothing queued
+    assert queue.qsize == 0
+
+    # Request is completed
+    assert ArchiveFileImportRequest.get(id=afir.id).completed == 1
+
+
+def test_update_import_outtree_scan(unode, xfs, queue, archivefileimportrequest):
+    """Test rejection of out-of-tree scan paths from import requests"""
+
+    xfs.create_dir("/node/import")
+
+    afir = archivefileimportrequest(path="..", node=unode.db, recurse=True)
+
+    unode.update_import()
+
+    # Nothing queued
+    assert queue.qsize == 0
+
+    # Request is completed
+    assert ArchiveFileImportRequest.get(id=afir.id).completed == 1
+
+
+def test_update_import_unresolve_scan(unode, xfs, queue, archivefileimportrequest):
+    """Test rejection of unresolvable scan paths from import requests"""
+
+    xfs.create_dir("/node/import")
+
+    afir = archivefileimportrequest(path="path/subpath/..", node=unode.db, recurse=True)
+
+    unode.update_import()
+
+    # Nothing queued
+    assert queue.qsize == 0
+
+    # Request is completed
+    assert ArchiveFileImportRequest.get(id=afir.id).completed == 1
+
+
 def test_update_import_no_recurse(unode, queue, archivefileimportrequest):
     """Test update_import() with a non-recursive import request."""
 
@@ -532,8 +578,10 @@ def test_update_import_no_recurse(unode, queue, archivefileimportrequest):
     mock.assert_called_with(unode, queue, "import/path", True, afir)
 
 
-def test_update_import_scan(unode, queue, archivefileimportrequest):
+def test_update_import_scan(unode, xfs, queue, archivefileimportrequest):
     """Test update_import() with a recursive import request."""
+
+    xfs.create_dir("/node/import/path")
 
     afir = archivefileimportrequest(
         path="import/path", node=unode.db, recurse=True, register=True

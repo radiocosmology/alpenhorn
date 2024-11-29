@@ -313,3 +313,47 @@ def pretty_deltat(seconds: float) -> str:
 
     # For short durations, include tenths of a second
     return f"{seconds:.1f}s"
+
+
+def invalid_import_path(name: str) -> str | None:
+    """Is `name` invalid as an import path?
+
+    i.e., can `name` be used as an ArchiveAcq or
+    ArchiveFile name (or both, combined).
+
+    Returns
+    -------
+    rejection_reason: str or None
+        A string describing why `name` was rejected,
+        or None, if the name was valid.
+    """
+
+    # Can't be the null string
+    if name == "":
+        return "empty path"
+
+    # Can't simply be "." or ".."
+    if name == "." or name == "..":
+        return "invalid path"
+
+    # Can't start with "/" or "./" or "../"
+    if name.startswith("/") or name.startswith("./") or name.startswith("../"):
+        return "invalid start"
+
+    # Can't end with "/" or "/." or "/.."
+    if name.endswith("/") or name.endswith("/.") or name.endswith("/.."):
+        return "invalid end"
+
+    # Can't have multiple "/" in a row
+    if "//" in name:
+        return "repeated /"
+
+    # Can't have internal "/./"
+    if "/./" in name:
+        return 'invalid path element "."'
+
+    # Can't have internal "/../"
+    if "/../" in name:
+        return 'invalid path element ".."'
+
+    return None

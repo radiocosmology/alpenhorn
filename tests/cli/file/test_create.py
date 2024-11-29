@@ -16,6 +16,24 @@ def test_no_data(clidb, cli):
     cli(2, ["file", "create", "name", "Acq", "--size=3"])
 
 
+def test_bad_name(clidb, cli):
+    """Test an invalid file name."""
+
+    ArchiveAcq.create(name="Acq")
+
+    cli(
+        1,
+        [
+            "file",
+            "create",
+            "name/../name",
+            "Acq",
+            "--md5=0123456789ABCDEF0123456789ABCDEF",
+            "--size=3",
+        ],
+    )
+
+
 def test_negative_size(clidb, cli):
     """Test a negative size."""
 
