@@ -6,7 +6,7 @@ import logging
 
 from .. import db
 from ..common import config
-from ..common.util import start_alpenhorn, version_option
+from ..common.util import help_config_option, start_alpenhorn, version_option
 from ..scheduler import FairMultiFIFOQueue, pool
 from . import auto_import, update
 
@@ -33,6 +33,7 @@ sys.excepthook = log_exception
     metavar="FILE",
 )
 @version_option
+@help_config_option
 def entry(conf):
     """Alpenhorn data management daemon.
 

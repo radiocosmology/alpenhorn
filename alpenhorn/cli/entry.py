@@ -5,7 +5,7 @@ from __future__ import annotations
 import click
 
 from .. import db
-from ..common.util import start_alpenhorn, version_option
+from ..common.util import help_config_option, start_alpenhorn, version_option
 
 from . import acq, db, file, group, node
 from .options import not_both
@@ -65,6 +65,7 @@ def _verbosity_from_cli(verbose: int, debug: bool, quiet: int) -> int:
     show_default=False,
     default=False,
 )
+@help_config_option
 def entry(conf, quiet, verbose, debug):
     """Alpenhorn data management system.
 

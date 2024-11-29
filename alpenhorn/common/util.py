@@ -14,6 +14,62 @@ from . import config, extensions, logger
 log = logging.getLogger(__name__)
 
 
+def help_config_option(func):
+    """Click --help-config option"""
+
+    # This is the callback
+    def _help_config(ctx, param, value):
+        if not value or ctx.resilient_parsing:
+            return
+
+        click.echo(
+            """
+In order to operate, alpenhorn needs to be configured to point it to the
+SQL database containing its Data Index.  This is done through one or more
+alpenhorn config files.
+
+Alpenhorn searches for config files in the following order:
+\b
+  * /etc/alpenhorn/alpenhorn.conf
+  * /etc/xdg/alpenhorn/alpenhorn.conf
+  * ~/.config/alpenhorn/alpenhorn.conf
+  * the value of the "ALPENHORN_CONFIG_FILE" environment variable
+  * the path passed via "-c" or "--conf" on the command line
+
+If multiple config files from this list are found, all will be read,
+with config from later files overriding earlier ones.  The config files
+are YAML.
+
+Typically, to configure the database connection, the config should define
+a database URL, with a YAML config like this:
+\b
+database:
+	url: mysql://user:passwd@hostname:port/my_database
+
+However, an alternate way to provide database configuration to alpenhorn
+is through a database extension module.  If you use such an extension, you
+should declare it in the config, instead, so alpenhorn can load it:
+\b
+extensions:
+	- my_extensions.alpenhorn_db_extension
+
+The database connection is the only thing that can be configured for the
+alpenhorn CLI.  But further configuration of the daemon is possible.
+Consult the alpenhorn documentation for more information.
+"""
+        )
+        ctx.exit(0)
+
+    return click.option(
+        "--help-config",
+        is_flag=True,
+        callback=_help_config,
+        expose_value=False,
+        is_eager=True,
+        help="Help on configuring alpenhorn.",
+    )(func)
+
+
 def version_option(func):
     """Click --version option"""
     return click.option(
