@@ -441,7 +441,7 @@ def hostname(set_config):
     Returns the hostname."""
 
     config.config = config.merge_dict_tree(
-        set_config, {"base": {"hostname": "alpenhost"}}
+        config.config, {"base": {"hostname": "alpenhost"}}
     )
 
     return "alpenhost"
@@ -471,7 +471,7 @@ def use_chimedb(set_config):
     cdb.test_enable()
 
     config.config = config.merge_dict_tree(
-        set_config, {"extensions": ["chimedb.core.alpenhorn"]}
+        config.config, {"extensions": ["chimedb.core.alpenhorn"]}
     )
 
 
@@ -483,6 +483,11 @@ def dbproxy(set_config):
     """
     # Load extensions
     extensions.load_extensions()
+
+    # Set database.url if not already present
+    config.config = config.merge_dict_tree(
+        {"database": {"url": "sqlite:///:memory:"}}, config.config
+    )
 
     # DB start
     db.connect()
@@ -712,6 +717,18 @@ def clidb_noinit(clidb_uri):
 
     yield db
 
+    # Drop all the tables after the test
+    for table in [
+        StorageGroup,
+        StorageNode,
+        StorageTransferAction,
+        ArchiveAcq,
+        ArchiveFile,
+        ArchiveFileCopy,
+        ArchiveFileCopyRequest,
+        ArchiveFileImportRequest,
+    ]:
+        db.execute_sql(f"DROP TABLE IF EXISTS {table._meta.table_name};")
     db.close()
 
 

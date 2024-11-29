@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any
 
+import click
 import logging
 import peewee as pw
 from playhouse import db_url
@@ -92,7 +93,15 @@ def connect() -> None:
     func = _capability("connect")
     if func is None:
         func = _connect
-    db = func(config=database_config)
+
+    # On connection error, raise click.ClickException
+    try:
+        db = func(config=database_config)
+    except pw.OperationalError as e:
+        raise click.ClickException(
+            f"Unable to connect to the database: {e}.\n"
+            "See --help-config for more details."
+        ) from e
 
     database_proxy.initialize(db)
 
@@ -118,7 +127,9 @@ def _connect(config: dict) -> pw.Database:
     """
 
     try:
-        db = db_url.connect(config.get("url", "sqlite:///:memory:"))
+        db = db_url.connect(config["url"])
+    except KeyError as e:
+        raise pw.OperationalError("No database configured") from e
     except RuntimeError as e:
         raise pw.OperationalError("Database connect failed") from e
 

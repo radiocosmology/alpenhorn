@@ -2,6 +2,7 @@
 
 import click
 
+from ..cli import dbconnect
 from .activate import activate
 from .autoclean import autoclean
 from .clean import clean
@@ -21,6 +22,8 @@ from .verify import verify
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Manage Storage Nodes."""
+
+    dbconnect()
 
 
 cli.add_command(activate, "activate")

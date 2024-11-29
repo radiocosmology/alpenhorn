@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from ..common.logger import echo as echo
 from ..db import (
+    connect as dbconnect,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
