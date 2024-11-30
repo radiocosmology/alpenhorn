@@ -66,7 +66,7 @@ class ArchiveFileCopy(base_model):
         # key is '{has_file}{wants_file}'
         states = {
             # has_file == 'Y'
-            "YY": "Present",
+            "YY": "Healthy",
             "YM": "Removable",
             "YN": "Released",
             # has_file == 'M'
