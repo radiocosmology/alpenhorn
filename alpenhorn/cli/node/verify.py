@@ -7,7 +7,7 @@ import peewee as pw
 
 from ...common.util import pretty_bytes
 from ...db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, database_proxy
-from ..options import cli_option, not_both, resolve_acqs, resolve_node, state_constraint
+from ..options import cli_option, not_both, resolve_acq, resolve_node, state_constraint
 from ..cli import check_then_update, echo
 
 
@@ -48,7 +48,7 @@ def _run_query(
         node = resolve_node(name)
 
         # Resolve acqs
-        acqs = resolve_acqs(acq)
+        acqs = resolve_acq(acq)
 
         # Find all candidate file copies
         query = ArchiveFileCopy.select(ArchiveFileCopy.id).where(

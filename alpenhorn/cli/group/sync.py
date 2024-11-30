@@ -22,7 +22,7 @@ from ..options import (
     files_in_groups,
     not_both,
     requires_other,
-    resolve_acqs,
+    resolve_acq,
     resolve_group,
 )
 
@@ -383,7 +383,7 @@ def run_query(
             raise click.ClickException("No such group: " + node_name)
 
     # Resolve acqs
-    acqs = resolve_acqs(acq)
+    acqs = resolve_acq(acq)
 
     # Cancel and sync are different enough that they've been broken up into two functions:
     if cancel:
