@@ -174,7 +174,7 @@ class LFS:
 
         # Timeout
         if ret is None:
-            log.warning(f"LFS command timed out: " + " ".join(args))
+            log.warning("LFS command timed out: " + " ".join(args))
             result["timeout"] = True
             return result
 
@@ -185,11 +185,11 @@ class LFS:
 
         # Failure, look for a "No such file" remark in stderr
         if stderr and "No such file or directory" in stderr:
-            log.debug(f"LFS missing file: " + " ".join(args))
+            log.debug("LFS missing file: " + " ".join(args))
             result["missing"] = True
         else:
             # Otherwise, report failure
-            log.warning(f"LFS command failed: " + " ".join(args))
+            log.warning("LFS command failed: " + " ".join(args))
             result["failed"] = True
 
         if stderr:

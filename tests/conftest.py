@@ -938,6 +938,6 @@ def assert_row_present():
         regex = r"^\s*" + r"\s+".join(cells) + r"\s*$"
 
         if re.search(regex, text, flags=re.MULTILINE) is None:
-            pytest.fail(f"Row not found:\n   " + text_row)
+            pytest.fail("Row not found:\n   " + text_row)
 
     return _assert_row_present

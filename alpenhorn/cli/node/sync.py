@@ -82,9 +82,9 @@ def sync(
 
     # Must supply GROUP or --all, but not both
     if not all_ and group_name is None:
-        raise click.UsageError(f"GROUP or --all must be provided.")
+        raise click.UsageError("GROUP or --all must be provided.")
     if all_ and group_name is not None:
-        raise click.UsageError(f"Can't use --all with GROUP.")
+        raise click.UsageError("Can't use --all with GROUP.")
 
     # We're using the "group sync" run_query function here, which is why
     # group_name and node_name are backwards

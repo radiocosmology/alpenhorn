@@ -497,7 +497,7 @@ class UpdateableNode(updateable_base):
                     fullpath = fullpath.resolve(strict=True)
                 except OSError as e:
                     log.warning(
-                        f"Ignoring import request of unresolvable scan path: {fullpath}"
+                        f"Ignoring import request of unresolvable scan path: {fullpath}: {e}"
                     )
                     req.complete()
                     continue

@@ -37,7 +37,7 @@ def modify(ctx, path, md5, no_reverify, size):
 
     # Size must be non-negative
     if size is not None and size < 0:
-        raise click.ClickException(f"negative file size.")
+        raise click.ClickException("negative file size.")
 
     # Check MD5
     validate_md5(md5)
@@ -75,7 +75,7 @@ def modify(ctx, path, md5, no_reverify, size):
 
             if count:
                 copies = "copy" if count == 1 else "copies"
-                echo("File updated.  {count} {copies} will be re-verified.")
+                echo(f"File updated.  {count} {copies} will be re-verified.")
             else:
                 echo("File updated.  No additional copies need re-verification.")
         else:

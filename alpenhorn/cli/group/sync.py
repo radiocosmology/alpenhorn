@@ -483,9 +483,9 @@ def sync(
 
     # Must supply NODE or --all, but not both
     if not all_ and node_name is None:
-        raise click.UsageError(f"NODE or --all must be provided.")
+        raise click.UsageError("NODE or --all must be provided.")
     if all_ and node_name is not None:
-        raise click.UsageError(f"Can't use --all with NODE.")
+        raise click.UsageError("Can't use --all with NODE.")
 
     # Run the check-confirm-update loop
     check_then_update(
