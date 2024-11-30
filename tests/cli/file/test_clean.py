@@ -178,7 +178,7 @@ def test_absent(clidb, cli):
     """Test file absent from node."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    StorageNode.create(name="Node", group=group, storage_type="F")
     node2 = StorageNode.create(name="Node2", group=group, storage_type="F")
 
     acq = ArchiveAcq.create(name="Acq")
@@ -194,7 +194,7 @@ def test_cancel_absent(clidb, cli):
     """Test cancel with file absent from node."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    StorageNode.create(name="Node", group=group, storage_type="F")
     node2 = StorageNode.create(name="Node2", group=group, storage_type="F")
 
     acq = ArchiveAcq.create(name="Acq")

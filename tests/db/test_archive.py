@@ -199,16 +199,6 @@ def test_archivefileimportrequest_model(
     archivefileimportrequest(path="min_path", node=minnode)
 
 
-def test_copy_path(simplefile, simplenode, archivefilecopy):
-    """Test ArchiveFileCopy.path."""
-
-    copy = archivefilecopy(file=simplefile, node=simplenode)
-
-    assert copy.path == pathlib.PurePath(
-        simplenode.root, simplefile.acq.name, simplefile.name
-    )
-
-
 def test_importreqeust_complete(simpleimportrequest):
     """Test ArchiveFileImportRequest.complete()."""
 

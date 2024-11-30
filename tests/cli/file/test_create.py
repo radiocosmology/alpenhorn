@@ -203,36 +203,10 @@ def test_with_data(clidb, cli):
     assert file.registered >= before
 
 
-def test_with_data(clidb, cli):
-    """Test creation with data provided."""
-
-    before = utcnow().replace(microsecond=0)
-
-    acq = ArchiveAcq.create(name="Acq")
-
-    cli(
-        0,
-        [
-            "file",
-            "create",
-            "name",
-            "Acq",
-            "--md5=0123456789ABCDEF0123456789ABCDEF",
-            "--size=3",
-        ],
-    )
-
-    file = ArchiveFile.get(name="name")
-    assert file.acq == acq
-    assert file.md5sum.upper() == "0123456789ABCDEF0123456789ABCDEF"
-    assert file.size_b == 3
-    assert file.registered >= before
-
-
 def test_file_not_found(clidb, cli, xfs):
     """Test --from-file with missing file."""
 
-    acq = ArchiveAcq.create(name="Acq")
+    ArchiveAcq.create(name="Acq")
 
     cli(1, ["file", "create", "name", "Acq", "--from-file"])
 
@@ -242,7 +216,7 @@ def test_file_not_file(clidb, cli, xfs):
 
     xfs.create_dir(getcwd() + "/Acq/name")
 
-    acq = ArchiveAcq.create(name="Acq")
+    ArchiveAcq.create(name="Acq")
 
     cli(1, ["file", "create", "name", "Acq", "--from-file"])
 
@@ -252,7 +226,7 @@ def test_file_access(clidb, cli, xfs):
 
     xfs.create_file(getcwd() + "/Acq/name", st_mode=0)
 
-    acq = ArchiveAcq.create(name="Acq")
+    ArchiveAcq.create(name="Acq")
 
     cli(1, ["file", "create", "name", "Acq", "--from-file"])
 

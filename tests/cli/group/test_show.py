@@ -22,7 +22,7 @@ def test_show_defaults(clidb, cli):
     """Test show with default parameters and no nodes."""
 
     # Make a StorageGroup with some nodes in it.
-    group = StorageGroup.create(name="SGroup")
+    StorageGroup.create(name="SGroup")
 
     result = cli(0, ["group", "show", "SGroup"])
 
@@ -72,7 +72,7 @@ def test_show_io_config(clidb, cli):
     """Test show with I/O config."""
 
     # Make a StorageGroup with some nodes in it.
-    group = StorageGroup.create(
+    StorageGroup.create(
         name="SGroup",
         notes="Comment",
         io_class="IOClass",

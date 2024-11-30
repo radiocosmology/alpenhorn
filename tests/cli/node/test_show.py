@@ -24,7 +24,7 @@ def test_show_defaults(clidb, cli):
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup")
-    node = StorageNode.create(name="SNode", group=group)
+    StorageNode.create(name="SNode", group=group)
 
     result = cli(0, ["node", "show", "SNode"])
 

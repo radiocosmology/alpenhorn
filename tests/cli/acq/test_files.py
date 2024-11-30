@@ -130,7 +130,6 @@ def test_list_node_removed(clidb, cli, assert_row_present):
 
     group = StorageGroup.create(name="Group")
     node1 = StorageNode.create(name="Node1", group=group)
-    node2 = StorageNode.create(name="Node2", group=group)
 
     acq = ArchiveAcq.create(name="Acq1")
     file = ArchiveFile.create(name="FileYY", acq=acq, size_b=123)
@@ -164,7 +163,6 @@ def test_list_group_removed(clidb, cli, assert_row_present):
 
     group = StorageGroup.create(name="Group1")
     node1 = StorageNode.create(name="Node1", group=group)
-    node2 = StorageNode.create(name="Node2", group=group)
 
     acq = ArchiveAcq.create(name="Acq1")
     file = ArchiveFile.create(name="FileYY", acq=acq, size_b=123)
@@ -291,6 +289,6 @@ def test_list_node_group(clidb, cli):
 
     ArchiveAcq.create(name="Acq1")
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group)
+    StorageNode.create(name="Node", group=group)
 
     cli(2, ["acq", "files", "Acq1", "--node=Node", "--group=Group"])

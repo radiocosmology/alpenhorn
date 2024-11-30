@@ -95,7 +95,7 @@ def test_decline(clidb, cli):
     """Test declining confirmation."""
 
     group1 = StorageGroup.create(name="Group1")
-    node1 = StorageNode.create(name="Node1", group=group1)
+    StorageNode.create(name="Node1", group=group1)
 
     group2 = StorageGroup.create(name="Group2")
     node2 = StorageNode.create(name="Node2", group=group2)
@@ -117,7 +117,7 @@ def test_force(clidb, cli):
     """Test forcing."""
 
     group1 = StorageGroup.create(name="Group1")
-    node1 = StorageNode.create(name="Node1", group=group1)
+    StorageNode.create(name="Node1", group=group1)
 
     group2 = StorageGroup.create(name="Group2")
     node2 = StorageNode.create(name="Node2", group=group2)
@@ -139,7 +139,7 @@ def test_check(clidb, cli):
     """Test --check."""
 
     group1 = StorageGroup.create(name="Group1")
-    node1 = StorageNode.create(name="Node1", group=group1)
+    StorageNode.create(name="Node1", group=group1)
 
     group2 = StorageGroup.create(name="Group2")
     node2 = StorageNode.create(name="Node2", group=group2)
@@ -164,7 +164,7 @@ def test_cancel_acq(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq1")
     file1 = ArchiveFile.create(name="File", acq=acq, size_b=1234)
@@ -211,7 +211,7 @@ def test_show_acqs(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq1 = ArchiveAcq.create(name="Acq1")
 
@@ -254,7 +254,7 @@ def test_show_acqs_files(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq1 = ArchiveAcq.create(name="Acq1")
 
@@ -307,7 +307,7 @@ def test_show_files(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq1 = ArchiveAcq.create(name="Acq1")
 
@@ -349,7 +349,7 @@ def test_all(clidb, cli):
     """Test --cancel --all."""
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     group_from = StorageGroup.create(name="GroupFrom")
     node1 = StorageNode.create(name="Node1", group=group_from)

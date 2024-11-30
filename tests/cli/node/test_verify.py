@@ -43,7 +43,7 @@ def test_check_force(clidb, cli):
     """Test --check --force fails."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "verify", "NODE", "--check", "--force"])
 
@@ -52,7 +52,7 @@ def test_cancel_multistatus(clidb, cli):
     """Test --cancel with multiple statuses chosen."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "verify", "NODE", "--cancel", "--corrupt", "--healthy"])
     cli(2, ["node", "verify", "NODE", "--cancel", "--corrupt", "--missing"])
@@ -298,25 +298,6 @@ def test_cancel_corrupt(clidb, cli, file_gamut):
 
 
 def test_cancel_missing(clidb, cli, file_gamut):
-    """Test verify --cancel --missing."""
-
-    node, files = file_gamut
-
-    result = cli(0, ["node", "verify", "NODE", "--cancel", "--missing"], input="Y\n")
-
-    # should have run on 'MY', 'MM', and set has_file to 'N'
-    for item in files:
-        if item[0] == "M" and item[1] == "Y":
-            assert ArchiveFileCopy.get(node=node, file=item[2]).has_file == "N"
-        elif item[0] == "M" and item[1] == "M":
-            assert ArchiveFileCopy.get(node=node, file=item[2]).has_file == "N"
-        else:
-            assert ArchiveFileCopy.get(node=node, file=item[2]).has_file == item[0]
-
-    assert "Updated 2 files" in result.output
-
-
-def test_cancel_missing(clidb, cli, file_gamut):
     """Test verify --cancel --healthy."""
 
     node, files = file_gamut
@@ -357,7 +338,7 @@ def test_cancel_all(clidb, cli, file_gamut):
 def test_verify_bad_acq(clidb, cli, file_gamut):
     """Test verify with bad --acq."""
 
-    result = cli(1, ["node", "verify", "NODE", "--acq=BAD"])
+    cli(1, ["node", "verify", "NODE", "--acq=BAD"])
 
 
 def test_verify_acq(clidb, cli):
@@ -375,7 +356,7 @@ def test_verify_acq(clidb, cli):
     file3 = ArchiveFile.create(name="File", acq=acq)
     ArchiveFileCopy.create(node=node, file=file3, has_file="X", wants_file="Y")
 
-    result = cli(0, ["node", "verify", "NODE", "--acq=Acq1", "--acq=Acq2"], input="Y\n")
+    cli(0, ["node", "verify", "NODE", "--acq=Acq1", "--acq=Acq2"], input="Y\n")
 
     # only 1 and 2 should be updated
     assert ArchiveFileCopy.get(node=node, file=file1).has_file == "M"

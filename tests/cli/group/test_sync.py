@@ -112,7 +112,7 @@ def test_sync_existing(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq")
 
@@ -146,7 +146,7 @@ def test_sync_prior(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq")
 
@@ -245,7 +245,7 @@ def test_sync_declined(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq")
 
@@ -265,7 +265,7 @@ def test_sync_force(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq")
 
@@ -286,7 +286,7 @@ def test_sync_check(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq")
 
@@ -307,7 +307,7 @@ def test_sync_acq(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq = ArchiveAcq.create(name="Acq1")
     file1 = ArchiveFile.create(name="File", acq=acq, size_b=1234)
@@ -344,7 +344,7 @@ def test_sync_target(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     target1g = StorageGroup.create(name="Target1")
     target1n = StorageNode.create(name="Target1", group=target1g)
@@ -394,7 +394,7 @@ def test_sync_show_acqs(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq1 = ArchiveAcq.create(name="Acq1")
 
@@ -429,7 +429,7 @@ def test_sync_show_acqs_files(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq1 = ArchiveAcq.create(name="Acq1")
 
@@ -466,7 +466,7 @@ def test_sync_show_files(clidb, cli):
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
 
     group_to = StorageGroup.create(name="GroupTo")
-    node_to = StorageNode.create(name="NodeTo", group=group_to)
+    StorageNode.create(name="NodeTo", group=group_to)
 
     acq1 = ArchiveAcq.create(name="Acq1")
 
