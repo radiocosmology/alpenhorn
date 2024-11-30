@@ -3,6 +3,7 @@
 import click
 import peewee as pw
 
+from ..cli import dbconnect
 from .clean import clean
 from .create import create
 from .find import find
@@ -16,6 +17,8 @@ from .sync import sync
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Manage Files."""
+
+    dbconnect()
 
 
 cli.add_command(clean, "clean")
