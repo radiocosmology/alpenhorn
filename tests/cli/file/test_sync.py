@@ -7,7 +7,6 @@ from alpenhorn.db import (
     ArchiveFileCopyRequest,
     StorageGroup,
     StorageNode,
-    utcnow,
 )
 
 

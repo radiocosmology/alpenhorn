@@ -1,15 +1,13 @@
 """Test CLI: alpenhorn node verify"""
 
 import pytest
-from datetime import timedelta
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
-    utcnow,
+    StorageGroup,
+    StorageNode,
 )
 
 

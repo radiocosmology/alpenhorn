@@ -4,12 +4,12 @@ But not "alpenhorn group sync --cancel" tests.
 """
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
     utcnow,
 )
 

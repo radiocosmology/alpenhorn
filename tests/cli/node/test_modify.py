@@ -1,7 +1,9 @@
 """Test CLI: alpenhorn node modify"""
 
 import json
+
 import pytest
+
 from alpenhorn.db import StorageGroup, StorageNode
 
 

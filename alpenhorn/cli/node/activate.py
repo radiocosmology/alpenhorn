@@ -1,18 +1,10 @@
 """alpenhorn node activate command"""
 
 import click
-import json
-import peewee as pw
 
-from ...db import database_proxy, StorageNode
+from ...db import StorageNode, database_proxy
 from ..cli import echo, update_or_remove
-from ..options import (
-    cli_option,
-    exactly_one,
-    resolve_node,
-    set_storage_type,
-    set_io_config,
-)
+from ..options import cli_option, resolve_node
 
 
 @click.command()

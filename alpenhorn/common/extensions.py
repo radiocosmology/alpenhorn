@@ -68,17 +68,17 @@ are ignored.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Tuple
 
-import logging
 import importlib
+import logging
+from typing import TYPE_CHECKING
 
 from . import config
 
 if TYPE_CHECKING:
     import pathlib
-    from types import ModuleType
     from collections.abc import Callable
+    from types import ModuleType
 
     from .alpenhorn import ArchiveAcq, ArchiveFile
     from .archive import ArchiveFileCopy
@@ -89,15 +89,16 @@ if TYPE_CHECKING:
     ]
     ImportDetect = Callable[
         [pathlib.Path, UpdateableNode],
-        Tuple[pathlib.Path | str | None, ImportCallback | None],
+        tuple[pathlib.Path | str | None, ImportCallback | None],
     ]
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
 # Internal variables for holding the extension references
 _db_ext = None
 _id_ext = None
-_io_ext = dict()
+_io_ext = {}
 
 
 def load_extensions() -> None:
@@ -124,7 +125,7 @@ def load_extensions() -> None:
     # Initialise globals
     global _db_ext, _id_ext
 
-    _id_ext = list()
+    _id_ext = []
 
     if "extensions" not in config.config:
         log.debug("No extensions to load.")

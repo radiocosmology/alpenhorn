@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import json
-import click
 import pathlib
+
+import click
 import peewee as pw
-from typing import TYPE_CHECKING
 
 from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
-
-if TYPE_CHECKING:
-    from typing import Any
-del TYPE_CHECKING
 
 
 def cli_option(option: str, **extra_kwargs):

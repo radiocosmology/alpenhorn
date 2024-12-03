@@ -1,8 +1,9 @@
 """Test the UpDownLock"""
 
-import pytest
 import threading
 from time import sleep
+
+import pytest
 
 from alpenhorn.io.updownlock import UpDownLock
 
@@ -152,7 +153,7 @@ def test_threads_up(udlock):
         udlock.up.release()
 
     # Create threads
-    threads = list()
+    threads = []
     for _ in range(n):
         threads.append(
             threading.Thread(target=thread, args=(udlock, barrier), daemon=True)
@@ -194,7 +195,7 @@ def test_threads_down(udlock):
         udlock.down.release()
 
     # Create threads
-    threads = list()
+    threads = []
     for _ in range(n):
         threads.append(
             threading.Thread(target=thread, args=(udlock, barrier), daemon=True)

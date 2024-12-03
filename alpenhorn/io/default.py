@@ -9,26 +9,28 @@ has the value "Default").
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, IO
 
-import os
 import logging
+import os
 import pathlib
 import threading
+from typing import IO, TYPE_CHECKING
+
 from watchdog.observers import Observer
 
-from . import ioutil
-from .base import BaseNodeIO, BaseGroupIO, BaseNodeRemote
-from .updownlock import UpDownLock
 from ..common import util
 from ..db import ArchiveAcq, ArchiveFile
 from ..scheduler import Task
+from . import ioutil
 
 # The asyncs are over here:
-from ._default_asyncs import pull_async, check_async, delete_async, group_search_async
+from ._default_asyncs import check_async, delete_async, group_search_async, pull_async
+from .base import BaseGroupIO, BaseNodeIO, BaseNodeRemote
+from .updownlock import UpDownLock
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
     from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
     from ..service.queue import FairMultiFIFOQueue
     from ..service.update import UpdateableNode
@@ -39,7 +41,7 @@ log = logging.getLogger(__name__)
 # Reserved byte counts are stored here, indexed by node name and protected
 # by the mutex
 _mutex = threading.Lock()
-_reserved_bytes = dict()
+_reserved_bytes = {}
 
 # This sets how often we run the clean-up idle task.  What
 # we're counting here is number of not-idle -> idle transitions
@@ -217,7 +219,7 @@ class DefaultNodeIO(BaseNodeIO):
                     f'Node name in file "{self.node.root}/ALPENHORN_NODE" does not '
                     f"match expected: {self.node.name}."
                 )
-        except IOError:
+        except OSError:
             log.warning(
                 f'Node file "{self.node.root}/ALPENHORN_NODE" could not be read.'
             )
@@ -292,8 +294,7 @@ class DefaultNodeIO(BaseNodeIO):
             for entry in os.scandir(path):
                 if entry.is_dir():
                     # Recurse
-                    for subentry in _walk(entry):
-                        yield subentry
+                    yield from _walk(entry)
                 # is_file() on a symlink to a file returns true, so we need both
                 elif entry.is_file() and not entry.is_symlink():
                     yield pathlib.PurePath(entry)
@@ -346,10 +347,10 @@ class DefaultNodeIO(BaseNodeIO):
         # Create file
         try:
             with open(
-                pathlib.Path(self.node.root).joinpath("ALPENHORN_NODE"), mode="wt"
+                pathlib.Path(self.node.root).joinpath("ALPENHORN_NODE"), mode="w"
             ) as f:
                 f.write(self.node.name + "\n")
-        except IOError as e:
+        except OSError as e:
             log.warning(f"Node initialistion failed: {e}")
             return False
 
@@ -446,7 +447,8 @@ class DefaultNodeIO(BaseNodeIO):
 
         if self.node.under_min:
             log.info(
-                f"Skipping pull for StorageNode {self.node.name}: hit minimum free space: "
+                f"Skipping pull for StorageNode {self.node.name}: "
+                "hit minimum free space: "
                 f"({self.node.avail_gb:.2f} GiB < {self.node.min_avail_gb:.2f} GiB)"
             )
             return
@@ -454,7 +456,8 @@ class DefaultNodeIO(BaseNodeIO):
         if self.node.check_over_max():
             log.info(
                 f"Skipping pull for StorageNode {self.node.name}: node full. "
-                f"({self.node.get_total_gb():.2f} GiB >= {self.node.max_total_gb:.2f} GiB)"
+                f"({self.node.get_total_gb():.2f} GiB "
+                f">= {self.node.max_total_gb:.2f} GiB)"
             )
             return
 
@@ -495,7 +498,8 @@ class DefaultNodeIO(BaseNodeIO):
         with _mutex:
             if _reserved_bytes[self.node.name] < size:
                 raise ValueError(
-                    f"attempted to release too many bytes: {_reserved_bytes[self.node.name]} < {size}"
+                    "attempted to release too many bytes: "
+                    f"{_reserved_bytes[self.node.name]} < {size}"
                 )
             _reserved_bytes[self.node.name] -= size
 

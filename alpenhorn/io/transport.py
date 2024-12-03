@@ -1,16 +1,18 @@
 """Transport Group I/O."""
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
 import logging
+from typing import TYPE_CHECKING
 
 from .default import DefaultGroupIO
 
 if TYPE_CHECKING:
     import pathlib
+
     from ..archive import ArchiveFileCopyRequest
     from ..update import UpdateableNode
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +54,7 @@ class TransportGroupIO(DefaultGroupIO):
         ValueError
             none of the supplied `nodes` were Transport nodes.
         """
-        self._nodes = list()
+        self._nodes = []
         for node in nodes:
             if node.db.storage_type != "T":
                 log.warning(

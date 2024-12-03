@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Alpenhorn documentation build configuration file, created by
 # sphinx-quickstart on Sat Feb 27 14:18:05 2016.
 #

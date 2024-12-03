@@ -1,7 +1,8 @@
 """Test TransportGroupIO."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopyRequest
@@ -80,7 +81,8 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
     for index, node in enumerate(nodes):
         # All the node pull methods are mocked to avoid running them.
         node.io.pull = MagicMock(return_value=None)
-        # mock bytes_avail to simply return avail_gb to avoid having to mess about with pyfakefs
+        # mock bytes_avail to simply return avail_gb to avoid having to mess about
+        # with pyfakefs
         node.io.bytes_avail = MagicMock(
             return_value=None if node.db.avail_gb is None else node.db.avail_gb * 2**30
         )
@@ -100,11 +102,9 @@ def remote_req(
     """Create a non-local ArchiveFileCopyRequest targetting the transport group."""
     group_to, _ = transport_fleet
     node_from = storagenode(name="src", group=simplegroup, host="other-host")
-    req = archivefilecopyrequest(
+    return archivefilecopyrequest(
         file=simplefile, node_from=node_from, group_to=group_to.db
     )
-
-    return req
 
 
 @pytest.fixture
@@ -233,7 +233,8 @@ def test_pull_size(req, transport_fleet):
 
 
 def test_pull_minmax(req, archivefilecopy, transport_fleet):
-    """Test TransportGroupIO.pull_force() correctly rejecting under-min and over-max nodes."""
+    """Test TransportGroupIO.pull_force()
+    correctly rejecting under-min and over-max nodes."""
     group, nodes = transport_fleet
 
     # Make nodes[0] under-min

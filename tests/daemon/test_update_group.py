@@ -1,7 +1,8 @@
 """Tests for UpdateableGroup."""
 
+from unittest.mock import call, patch
+
 import pytest
-from unittest.mock import patch, call
 
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopyRequest
@@ -22,7 +23,11 @@ def make_afcr(
 ):
     """Create an ArchiveFileCopyRequest with ArchiveFileCopies on src and dest.
 
-    Returns a 4-tuple: ArchiveFile, source-ArchiveFileCopy, dest-ArchiveFileCopy, Request
+    Returns a 4-tuple:
+    * ArchiveFile
+    * source-ArchiveFileCopy
+    * dest-ArchiveFileCopy
+    * Request
     """
     file = archivefile(name=name, acq=acq)
     srccopy = archivefilecopy(node=srcnode, file=file, has_file=srcstate)

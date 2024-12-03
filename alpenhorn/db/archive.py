@@ -1,5 +1,5 @@
 import pathlib
-import datetime
+
 import peewee as pw
 
 from ._base import EnumField, base_model

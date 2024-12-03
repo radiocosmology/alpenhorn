@@ -1,7 +1,6 @@
 """alpenhorn db init command"""
 
 import click
-import peewee as pw
 
 from ...db import (
     ArchiveAcq,

@@ -2,28 +2,22 @@
 
 from __future__ import annotations
 
-import click
 import datetime
+
+import click
 import peewee as pw
 
-from ...db import (
-    StorageGroup,
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    database_proxy,
-    utcnow,
-)
 from ...common.util import pretty_bytes
+from ...db import ArchiveFile, ArchiveFileCopy, database_proxy, utcnow
+from ..cli import check_then_update, echo
 from ..options import (
     cli_option,
     files_in_groups,
     not_both,
     resolve_acq,
-    resolve_node,
     resolve_group,
+    resolve_node,
 )
-from ..cli import check_then_update, echo
 
 
 def _run_query(
@@ -231,25 +225,36 @@ def _run_query(
         if size and results["S"]["count"]:
             files = "files" if results["S"]["count"] != 1 else "file"
             echo(
-                f'{results["S"]["count"]} {files} ({pretty_bytes(results["S"]["size"])}) already contributing to size constraint.'
+                f'{results["S"]["count"]} {files} '
+                f'({pretty_bytes(results["S"]["size"])}) '
+                "already contributing to size constraint."
             )
 
         if breakdown:
             if results["Y"]["count"]:
                 files = "files" if results["Y"]["count"] != 1 else "file"
-                echo(
-                    f'  {results["Y"]["count"]} present {files} ({pretty_bytes(results["Y"]["size"])})'
+                size = (
+                    "unknown size"
+                    if results["Y"]["size"] is None
+                    else pretty_bytes(results["Y"]["size"])
                 )
+                echo(f'  {results["Y"]["count"]} present {files} ({size})')
             if results["M"]["count"]:
                 files = "files" if results["M"]["count"] != 1 else "file"
-                echo(
-                    f'  {results["M"]["count"]} marked {files} ({pretty_bytes(results["M"]["size"])})'
+                size = (
+                    "unknown size"
+                    if results["M"]["size"] is None
+                    else pretty_bytes(results["M"]["size"])
                 )
+                echo(f'  {results["M"]["count"]} marked {files} ({size})')
             if results["N"]["count"]:
                 files = "files" if results["N"]["count"] != 1 else "file"
-                echo(
-                    f'  {results["N"]["count"]} released {files} ({pretty_bytes(results["N"]["size"])})'
+                size = (
+                    "unknown size"
+                    if results["N"]["size"] is None
+                    else pretty_bytes(results["N"]["size"])
                 )
+                echo(f'  {results["N"]["count"]} released {files} ({size})')
 
         # Now update, if needed
         if update:

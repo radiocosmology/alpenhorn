@@ -6,10 +6,11 @@ for a module.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
 import logging
 import pathlib
+from typing import TYPE_CHECKING
+
 import peewee as pw
 from watchdog.events import FileSystemEventHandler
 
@@ -27,7 +28,8 @@ from ..io import ioutil
 from ..scheduler import Task
 
 if TYPE_CHECKING:
-    from ..db import StorageNode
+    import os
+
     from ..scheduler import FairMultiFIFOQueue
     from .update import UpdateableNode
 del TYPE_CHECKING
@@ -64,7 +66,8 @@ def import_file(
 
     path = pathlib.PurePath(path)
 
-    # Occasionally the watchdog sends events on the node root directory itself. Skip these.
+    # Occasionally the watchdog sends events on the node root directory itself.
+    # Skip these.
     if path == pathlib.PurePath(node.db.root):
         log.debug("Skipping import request of node root")
         if req:
@@ -239,14 +242,15 @@ def _import_file(
 
         try:
             copy = ArchiveFileCopy.get(file=file_, node=node.db)
-            # If we're importing a file that's missing (has_file == N but wants_file == Y),
-            # set has_file='M' to trigger a integrity check.  If it's recorded as
-            # having been properly removed, though, just set it to 'Y' and assume it's good
-            # now.
+            # If we're importing a file that's missing (has_file == N but
+            # wants_file == Y), set has_file='M' to trigger a integrity check.
+            # If it's recorded as having been properly removed, though, just
+            # set it to 'Y' and assume it's good now.
             if copy.wants_file == "Y":
                 copy.has_file = "M"
                 log.warning(
-                    f'Imported missing file "{path}" on node {node.name}.  Marking suspect.'
+                    f'Imported missing file "{path}" on node {node.name}.'
+                    "  Marking suspect."
                 )
             else:
                 copy.has_file = "Y"
@@ -300,7 +304,7 @@ class RegisterFile(FileSystemEventHandler):
     def __init__(self, node: UpdateableNode, queue: FairMultiFIFOQueue) -> None:
         self.node = node
         self.queue = queue
-        super(RegisterFile, self).__init__()
+        super().__init__()
 
     def on_created(self, event):
         import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
@@ -329,10 +333,10 @@ class RegisterFile(FileSystemEventHandler):
 # =============================================
 
 # Observer threads.  One per node I/O class.
-_observers = dict()
+_observers = {}
 
 # Event watchers.  One per watched node.
-_watchers = dict()
+_watchers = {}
 
 
 def update_observer(
@@ -492,5 +496,5 @@ def stop_observers() -> None:
         obs.join()
 
     # Reset globals
-    _observers = dict()
-    _watchers = dict()
+    _observers = {}
+    _watchers = {}

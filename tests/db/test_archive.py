@@ -1,9 +1,10 @@
 """Test the alpenhorn.archive module"""
 
-import pytest
-import pathlib
 import datetime
+import pathlib
+
 import peewee as pw
+import pytest
 
 from alpenhorn.db.archive import (
     ArchiveFileCopy,

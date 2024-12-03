@@ -1,19 +1,19 @@
 """Common fixtures"""
 
+import logging
 import os
 import re
-import sys
-import yaml
-import pytest
 import shutil
-import logging
-import pathlib
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from urllib.parse import quote as urlquote
 
+import pytest
+import yaml
+
 import alpenhorn.common.logger
-from alpenhorn.common import config, extensions
 from alpenhorn import db
+from alpenhorn.common import config, extensions
+from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,
     ArchiveFile,
@@ -25,7 +25,6 @@ from alpenhorn.db import (
     StorageTransferAction,
 )
 from alpenhorn.scheduler import FairMultiFIFOQueue
-from alpenhorn.daemon.update import UpdateableNode, UpdateableGroup
 
 
 def pytest_configure(config):
@@ -124,7 +123,7 @@ def set_config(request, logger):
     config.config = None
     extensions._db_ext = None
     extensions._id_ext = None
-    extensions._io_ext = dict()
+    extensions._io_ext = {}
 
 
 @pytest.fixture
@@ -137,7 +136,7 @@ def mock_run_command(request, set_config):
     This fixture yields a function which returns a dictionary containing
     the arguments passed to run_command.
     """
-    run_command_report = dict()
+    run_command_report = {}
 
     marker = request.node.get_closest_marker("run_command_result")
     if marker is None:
@@ -221,13 +220,13 @@ def mock_lfs(have_lfs, request):
 
     marker = request.node.get_closest_marker("lfs_dont_mock")
     if marker is None:
-        lfs_dont_mock = list()
+        lfs_dont_mock = []
     else:
         lfs_dont_mock = marker.args
 
     marker = request.node.get_closest_marker("lfs_hsm_state")
     if marker is None:
-        lfs_hsm_state = dict()
+        lfs_hsm_state = {}
     else:
         lfs_hsm_state = marker.args[0]
 
@@ -311,7 +310,7 @@ def mock_lfs(have_lfs, request):
         nonlocal lfs_quota
         return lfs_quota
 
-    patches = list()
+    patches = []
     if "hsm_state" not in lfs_dont_mock:
         patches.append(patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state))
     if "hsm_release" not in lfs_dont_mock:
@@ -646,6 +645,7 @@ def cli(request, xfs, cli_config):
         nonlocal runner
 
         import traceback
+
         from alpenhorn.cli import entry
 
         result = runner.invoke(entry, *args, **kwargs)
@@ -707,7 +707,8 @@ def clidb_noinit(clidb_uri):
     Yields the connector."""
 
     import peewee as pw
-    from alpenhorn.db import database_proxy, EnumField
+
+    from alpenhorn.db import EnumField, database_proxy
 
     # Open
     db = pw.SqliteDatabase(clidb_uri, uri=True)

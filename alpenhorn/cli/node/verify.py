@@ -6,9 +6,9 @@ import click
 import peewee as pw
 
 from ...common.util import pretty_bytes
-from ...db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, database_proxy
-from ..options import cli_option, not_both, resolve_acq, resolve_node, state_constraint
+from ...db import ArchiveFile, ArchiveFileCopy, database_proxy
 from ..cli import check_then_update, echo
+from ..options import cli_option, not_both, resolve_acq, resolve_node, state_constraint
 
 
 def _run_query(

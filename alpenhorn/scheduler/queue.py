@@ -15,10 +15,10 @@ The queue is unbounded.
 
 import heapq
 import threading
-from typing import Any
-from time import monotonic, sleep
 from collections import deque
 from collections.abc import Hashable
+from time import monotonic, sleep
+from typing import Any
 
 
 class FairMultiFIFOQueue:
@@ -64,7 +64,7 @@ class FairMultiFIFOQueue:
         self._all_tasks_done = threading.Condition(self._lock)
 
         # Deferred puts.  This is a heapq.
-        self._deferrals = list()
+        self._deferrals = []
         # Are we in a join() call?
         self._joining = False
         # The lock for _deferrals and _joining, which can be held independently
@@ -152,7 +152,7 @@ class FairMultiFIFOQueue:
         # Discard deferred puts
         with self._dlock:
             self._joining = True
-            self._deferrals = list()
+            self._deferrals = []
 
         with self._all_tasks_done:
             while self._total_inprogress > 0 or self._total_queued > 0:
@@ -425,7 +425,7 @@ class FairMultiFIFOQueue:
         self._inprogress_counts[key] = count
         # Extend _keys_by_inprogress if necessary
         if len(self._keys_by_inprogress) == count:
-            self._keys_by_inprogress.append(set([key]))
+            self._keys_by_inprogress.append({key})
         else:
             self._keys_by_inprogress[count].add(key)
 

@@ -1,8 +1,8 @@
 """alpenhorn node scan command"""
 
-import click
 import pathlib
-import peewee as pw
+
+import click
 
 from ...db import ArchiveFileImportRequest, database_proxy
 from ..cli import echo

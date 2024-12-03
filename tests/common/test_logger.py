@@ -1,11 +1,13 @@
 """Test alpenhorn.common.logger"""
 
-import pytest
-import socket
 import logging
 import pathlib
+import socket
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 import alpenhorn.common.logger
-from unittest.mock import patch, MagicMock
 
 
 def test_max_bytes_from_config():

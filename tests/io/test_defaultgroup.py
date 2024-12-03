@@ -1,9 +1,10 @@
 """Test DefaultGroupIO."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from alpenhorn.daemon.update import UpdateableNode, UpdateableGroup
+import pytest
+
+from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io._default_asyncs import group_search_async
 

@@ -2,22 +2,12 @@
 
 from __future__ import annotations
 
-import click
-import datetime
-import peewee as pw
 from typing import TYPE_CHECKING
 
-from ..common.logger import echo as echo
-from ..db import (
-    connect as dbconnect,
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    ArchiveFileCopyRequest,
-    StorageGroup,
-    StorageNode,
-    StorageTransferAction,
-)
+import click
+
+from ..common.logger import echo
+from ..db import connect as dbconnect  # noqa: F401
 
 if TYPE_CHECKING:
     from collections.abc import Callable

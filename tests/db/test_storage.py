@@ -1,8 +1,9 @@
 """test alpenhorn.storage."""
 
-import pytest
 import pathlib
+
 import peewee as pw
+import pytest
 
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
 

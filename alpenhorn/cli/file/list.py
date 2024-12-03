@@ -1,25 +1,17 @@
 """alpenhorn file list command."""
 
 import click
-import peewee as pw
 from tabulate import tabulate
 
 from ...common.util import pretty_bytes
-from ...db import (
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    ArchiveFileCopyRequest,
-    StorageGroup,
-    StorageNode,
-)
+from ...db import ArchiveAcq, ArchiveFile, ArchiveFileCopy
 from ..cli import echo, pretty_time
 from ..options import (
-    cli_option,
-    not_both,
     both_or_neither,
-    files_in_nodes,
+    cli_option,
     files_in_groups,
+    files_in_nodes,
+    not_both,
     resolve_acq,
     resolve_group,
     resolve_node,
@@ -30,8 +22,10 @@ from ..options import (
 def _state_flag_help(name):
     """Returns help for one of the state flags"""
 
-    return "Limit to " + name + "files.  Must be accompanied by at least one "
-    "--node or --group to provide a place to probe file state.",
+    return (
+        "Limit to " + name + " files.  Must be accompanied by at least one "
+        "--node or --group to provide a place to probe file state."
+    )
 
 
 @click.command()
@@ -364,7 +358,6 @@ def list_(
 
             data = []
             for file in file_data:
-                copy = copies[file]
                 data.append(
                     (
                         *file_data[file],

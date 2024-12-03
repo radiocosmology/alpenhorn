@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import click
 import peewee as pw
-from collections import defaultdict
 
 from ...common.util import pretty_bytes
 from ...db import (
-    StorageGroup,
-    StorageNode,
+    ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
-    database_proxy,
+    StorageGroup,
+    StorageNode,
     utcnow,
 )
 from ..cli import check_then_update, echo
@@ -288,7 +289,8 @@ def _run_sync(
         stop = "."
 
     echo(
-        f'{verb} {count} {files} ({size}) from Node "{node.name}" to Group "{group.name}"{stop}'
+        f'{verb} {count} {files} ({size}) from Node "{node.name}" '
+        f'to Group "{group.name}"{stop}'
     )
 
     # Show what's going to happen, but only once
@@ -385,7 +387,7 @@ def run_query(
     # Resolve acqs
     acqs = resolve_acq(acq)
 
-    # Cancel and sync are different enough that they've been broken up into two functions:
+    # Cancel and sync are different enough that they've been broken up
     if cancel:
         _run_cancel(
             update,

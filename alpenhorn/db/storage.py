@@ -2,19 +2,21 @@
 
 # Type annotation shennanigans
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
 import logging
-import datetime
+from typing import TYPE_CHECKING
+
 import peewee as pw
 from peewee import fn
 
-from ._base import EnumField, base_model
 from ..common import util
+from ._base import EnumField, base_model
 
 if TYPE_CHECKING:
     import pathlib
+
     from .acquisition import ArchiveFile
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +93,7 @@ class StorageGroup(base_model):
             if copy.has_file == "Y":
                 # No need to check more
                 return "Y", copy.node
-            elif copy.has_file == "M":
+            if copy.has_file == "M":
                 state = "M"
                 node = copy.node
             elif copy.has_file == "X" and state == "N":
@@ -226,7 +228,7 @@ class StorageNode(base_model):
             True if there is an ArchiveFileCopy with `has_file!='N'`
             for the specified path.  False otherwise.
         """
-        from .acquisition import ArchiveFile, ArchiveAcq
+        from .acquisition import ArchiveAcq, ArchiveFile
         from .archive import ArchiveFileCopy
 
         # Try to find the ArchiveFile record
@@ -338,7 +340,7 @@ class StorageNode(base_model):
         from .archive import ArchiveFileCopy
 
         # Which filecopy states are we looking for?
-        states = list()
+        states = []
 
         if present:
             states.append("Y")

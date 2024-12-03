@@ -2,12 +2,13 @@
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
 import json
-import time
 import logging
 import pathlib
+import time
+from typing import TYPE_CHECKING
+
 import peewee as pw
 
 from ..common import config, util
@@ -16,16 +17,17 @@ from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     ArchiveFileImportRequest,
-    StorageNode,
     StorageGroup,
+    StorageNode,
     utcnow,
 )
-from ..scheduler import global_abort, WorkerPool, EmptyPool, Task
+from ..scheduler import EmptyPool, Task, WorkerPool, global_abort
 from . import auto_import
 from .querywalker import QueryWalker
 
 if TYPE_CHECKING:
     from .queue import FairMultiFIFOQueue
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ class updateable_base:
         Returns
         -------
         io_config : dict
-            The parsed I/O config, or an empty dict() if `config_json`
+            The parsed I/O config, or an empty dict if `config_json`
             was `None.  This value is also assigned to `self._io_config`.
 
         Raises
@@ -102,7 +104,7 @@ class updateable_base:
             `config_json` did not evaluate to a dict.
         """
         if config_json is None:
-            self._io_config = dict()
+            self._io_config = {}
         else:
             self._io_config = json.loads(config_json)
 
@@ -129,7 +131,8 @@ class updateable_base:
         module = io_module(io_name)
         if module is None:
             log.error(
-                f'No module for I/O class "{io_name}".  Ignoring {obj_type} {self.name}.'
+                f'No module for I/O class "{io_name}".  '
+                f"Ignoring {obj_type} {self.name}."
             )
             return None
 
@@ -345,7 +348,8 @@ class UpdateableNode(updateable_base):
 
         if self.db.avail_gb is not None:
             log.info(
-                f"Node {self.name}: {util.pretty_bytes(self.db.avail_gb * 2**30)} available."
+                f"Node {self.name}: "
+                f"{util.pretty_bytes(self.db.avail_gb * 2**30)} available."
             )
 
     def run_auto_verify(self) -> None:
@@ -425,7 +429,7 @@ class UpdateableNode(updateable_base):
             dfclause = ArchiveFileCopy.wants_file == "N"
 
         # Search db for candidates on this node to delete.
-        del_copies = list()
+        del_copies = []
         for copy in (
             ArchiveFileCopy.select()
             .where(
@@ -448,7 +452,8 @@ class UpdateableNode(updateable_base):
                 .count()
             ):
                 log.info(
-                    f"Skipping delete of {copy.file.path} on node {self.name}: transfer pending"
+                    f"Skipping delete of {copy.file.path} on node {self.name}: "
+                    "transfer pending"
                 )
                 continue
 
@@ -485,7 +490,8 @@ class UpdateableNode(updateable_base):
                 # This part of the update only runs if the node is already initialised,
                 # so this request can't be something we need to deal with here
                 log.info(
-                    f'Ignoring node init request for "{self.name}": already initialised.'
+                    f'Ignoring node init request for "{self.name}": '
+                    "already initialised."
                 )
                 req.complete()
                 continue
@@ -497,7 +503,8 @@ class UpdateableNode(updateable_base):
                     fullpath = fullpath.resolve(strict=True)
                 except OSError as e:
                     log.warning(
-                        f"Ignoring import request of unresolvable scan path: {fullpath}: {e}"
+                        "Ignoring import request of unresolvable scan path: "
+                        f"{fullpath}: {e}"
                     )
                     req.complete()
                     continue
@@ -725,14 +732,14 @@ class UpdateableGroup(updateable_base):
                 ArchiveFileCopyRequest.id == req.id
             ).execute()
             return
-        elif copy_state == "M":
+        if copy_state == "M":
             log.warning(
                 f"Skipping pull request for "
                 f"{req.file.acq.name}/{req.file.name}: "
                 f"existing copy in group {self.name} needs check."
             )
             return
-        elif copy_state == "X":
+        if copy_state == "X":
             # If the file is corrupt, we continue with the
             # pull to overwrite the corrupt file
             pass
@@ -768,7 +775,7 @@ class UpdateableGroup(updateable_base):
                 ArchiveFileCopyRequest.id == req.id
             ).execute()
             return
-        elif state == "M":
+        if state == "M":
             log.info(
                 f"Skipping request for {req.file.acq.name}/{req.file.name}:"
                 f" source needs check on node {req.node_from.name}."
@@ -871,8 +878,8 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
     # each time through the main loop, whenever the underlying storage objects
     # change.  These are stored as dicts with keys being the name of the node
     # or group for faster look-up
-    nodes = dict()
-    groups = dict()
+    nodes = {}
+    groups = {}
 
     while not global_abort.is_set():
         loop_start = time.time()
@@ -892,7 +899,7 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
                 )
             }
         except pw.DoesNotExist:
-            new_nodes = dict()
+            new_nodes = {}
 
         if len(new_nodes) == 0:
             log.warning(f"No active nodes on host ({host})!")
@@ -907,7 +914,7 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
                 del nodes[name]
 
         # List of groups present this update loop
-        new_groups = dict()
+        new_groups = {}
 
         # Update the list of nodes:
         for name in new_nodes:

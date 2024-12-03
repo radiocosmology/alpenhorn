@@ -1,8 +1,8 @@
 """test alpenhorn.common.extensions."""
 
-import pytest
+from unittest.mock import MagicMock, patch
 
-from unittest.mock import patch, MagicMock
+import pytest
 
 from alpenhorn.common import extensions
 
@@ -45,7 +45,7 @@ def test_good_db(set_config):
 
     # Make a fake DB module
     test_module = MagicMock()
-    test_module.register_extension.return_value = {"database": dict()}
+    test_module.register_extension.return_value = {"database": {}}
 
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
@@ -58,10 +58,10 @@ def test_two_dbs(set_config):
 
     # Make a couple of fake DB modules
     db1 = MagicMock()
-    db1.register_extension.return_value = {"database": dict()}
+    db1.register_extension.return_value = {"database": {}}
 
     db2 = MagicMock()
-    db2.register_extension.return_value = {"database": dict()}
+    db2.register_extension.return_value = {"database": {}}
 
     # Patch sys.modules so import can find them.
     with patch.dict("sys.modules", db1=db1, db2=db2):

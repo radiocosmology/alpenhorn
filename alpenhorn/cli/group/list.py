@@ -2,6 +2,7 @@
 
 import click
 from tabulate import tabulate
+
 from ...db import StorageGroup
 from ..cli import echo
 

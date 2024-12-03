@@ -1,6 +1,5 @@
 """Test CLI: alpenhorn group list"""
 
-import pytest
 from alpenhorn.db import StorageGroup
 
 

@@ -2,8 +2,8 @@
 
 import logging
 from collections import deque
-from inspect import isgenerator
 from collections.abc import Callable, Hashable
+from inspect import isgenerator
 
 from .queue import FairMultiFIFOQueue
 
@@ -83,8 +83,8 @@ class Task:
         requeue: bool = False,
         exclusive: bool = False,
         name: str = "Task",
-        args: tuple | list = tuple(),
-        kwargs: dict = dict(),
+        args: tuple | list = (),
+        kwargs: dict = {},
     ) -> None:
         self._func = func
         self._args = args
@@ -184,8 +184,8 @@ class Task:
     def on_cleanup(
         self,
         func: Callable,
-        args: tuple | list = tuple(),
-        kwargs: dict = dict(),
+        args: tuple | list = (),
+        kwargs: dict = {},
         first: bool = True,
     ) -> None:
         """Register a cleanup function.

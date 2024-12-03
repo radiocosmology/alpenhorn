@@ -1,7 +1,8 @@
 """Test DefaultNodeIO."""
 
-import pytest
 import pathlib
+
+import pytest
 
 
 def test_bytes_avail(xfs, unode):
@@ -73,7 +74,7 @@ def test_file_walk(unode, xfs):
     xfs.create_file("/node/dir/subdir/file4")
     xfs.create_link("/node/dir/file2", "/node/dir/subdir/file5")
 
-    assert sorted(list(unode.io.file_walk(pathlib.PurePath(".")))) == [
+    assert sorted(unode.io.file_walk(pathlib.PurePath("."))) == [
         pathlib.PurePath("/node/dir/file1"),
         pathlib.PurePath("/node/dir/file2"),
         pathlib.PurePath("/node/dir/subdir/file4"),
@@ -90,7 +91,7 @@ def test_file_walk_path(unode, xfs):
     xfs.create_file("/node/dir2/file3")
     xfs.create_file("/node/dir2/file4")
 
-    assert sorted(list(unode.io.file_walk(pathlib.PurePath("dir1")))) == [
+    assert sorted(unode.io.file_walk(pathlib.PurePath("dir1"))) == [
         pathlib.PurePath("/node/dir1/file1"),
         pathlib.PurePath("/node/dir1/file2"),
     ]

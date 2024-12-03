@@ -24,8 +24,8 @@ The lock ensures only one operation (creation or removal) can
 happen at any given time.
 """
 
-import time
 import threading
+import time
 from collections import defaultdict
 
 
@@ -35,7 +35,7 @@ class _UpDownLock:
     Used to prevent a reference loop.
     """
 
-    __slots__ = ["count", "_lock", "_owners", "_is_unlocked"]
+    __slots__ = ["_is_unlocked", "_lock", "_owners", "count"]
 
     def __init__(self) -> None:
         # This tracks the state of the lock:
@@ -167,7 +167,7 @@ class _UpDownAccessor:
     This accessor can also be used as a context manager.
     """
 
-    __slots__ = ["_is_down", "_internals"]
+    __slots__ = ["_internals", "_is_down"]
 
     def __init__(self, is_down: bool, internals: _UpDownLock) -> None:
         self._is_down = is_down
@@ -246,7 +246,7 @@ class UpDownLock:
     managers.
     """
 
-    __slots__ = ["up", "down", "_internals"]
+    __slots__ = ["_internals", "down", "up"]
 
     def __init__(self) -> None:
         self._internals = _UpDownLock()

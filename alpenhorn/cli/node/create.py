@@ -1,17 +1,18 @@
 """alpenhorn node create command"""
 
-import click
 import json
+
+import click
 import peewee as pw
 
-from ...db import database_proxy, StorageGroup, StorageNode, ArchiveFileImportRequest
+from ...db import ArchiveFileImportRequest, StorageGroup, StorageNode, database_proxy
 from ..cli import echo
 from ..options import (
     cli_option,
     exactly_one,
     resolve_group,
-    set_storage_type,
     set_io_config,
+    set_storage_type,
 )
 
 
@@ -117,7 +118,7 @@ def create(
     if min_avail < 0:
         raise click.UsageError("--min-avail must be non-negative")
 
-    io_config = set_io_config(io_config, io_var, dict())
+    io_config = set_io_config(io_config, io_var, {})
     storage_type = set_storage_type(archive, field, transport)
 
     with database_proxy.atomic():

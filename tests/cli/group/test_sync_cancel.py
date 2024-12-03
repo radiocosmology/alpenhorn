@@ -1,12 +1,11 @@
 """Test CLI: alpenhorn group sync --cancel"""
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
-    ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
 )
 
 

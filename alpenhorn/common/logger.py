@@ -42,11 +42,12 @@ The initial verbosity can be specified in the `init_logging` call.  The
 default verbosity is 3.   May be changed at runtime by calling `set_verbosity`.
 """
 
-import click
-import socket
 import logging
-import pathlib
 import logging.handlers
+import pathlib
+import socket
+
+import click
 
 from . import config
 
@@ -90,7 +91,7 @@ class StartupHandler(logging.handlers.BufferingHandler):
 
     def __init__(self, capacity: int) -> None:
         super().__init__(capacity)
-        self.targets = list()
+        self.targets = []
 
     def addTarget(self, handler: logging.Handler) -> None:
         """Add `handler` to the list of targets."""
@@ -127,7 +128,7 @@ class StartupHandler(logging.handlers.BufferingHandler):
         """Discard all targets and drop the buffer."""
         self.acquire()
         try:
-            self.targets = list()
+            self.targets = []
             super().close()
         finally:
             self.release()
@@ -139,7 +140,7 @@ def echo(*args, **kwargs) -> None:
     Suppresses output when verbosity is less than three.
     """
     if _cli_echo:
-        return click.echo(*args, **kwargs)
+        click.echo(*args, **kwargs)
 
 
 def set_verbosity(verbosity: int) -> None:
@@ -364,7 +365,8 @@ def configure_file_logging(file_config: dict) -> logging.Handler:
         raise ValueError(
             "logging.file.rotate and logging.file.watch both true in config"
         )
-    elif rotate:
+
+    if rotate:
         # Alpenhorn is rotating the log
         try:
             backup_count = int(file_config.get("backup_count", 100))
@@ -420,7 +422,7 @@ def configure_logging() -> None:
         if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             raise ValueError(f"Log level {level} defined by {source} is not valid")
 
-    logger_config = config.config.get("logging", dict())
+    logger_config = config.config.get("logging", {})
 
     # Set the overall level
     level = logger_config["level"].upper()

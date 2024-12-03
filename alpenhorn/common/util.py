@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import click
-import socket
 import asyncio
 import hashlib
 import logging
+import socket
 import subprocess
+
+import click
 
 from . import config, extensions, logger
 
@@ -44,14 +45,14 @@ Typically, to configure the database connection, the config should define
 a database URL, with a YAML config like this:
 \b
 database:
-	url: mysql://user:passwd@hostname:port/my_database
+    url: mysql://user:passwd@hostname:port/my_database
 
 However, an alternate way to provide database configuration to alpenhorn
 is through a database extension module.  If you use such an extension, you
 should declare it in the config, instead, so alpenhorn can load it:
 \b
 extensions:
-	- my_extensions.alpenhorn_db_extension
+    - my_extensions.alpenhorn_db_extension
 
 The database connection is the only thing that can be configured for the
 alpenhorn CLI.  But further configuration of the daemon is possible.
@@ -85,8 +86,9 @@ def version_option(func):
 def print_version(ctx, param, value):
     """Click callback for the --version eager option."""
 
-    from .. import __version__
     import sys
+
+    from .. import __version__
 
     if not value or ctx.resilient_parsing:
         return
@@ -270,7 +272,7 @@ def get_hostname() -> str:
 
     If there is a host name specified in the config, that is returned
     otherwise the local hostname up to the first '.' is returned"""
-    if config.config is not None and "hostname" in config.config.get("base", dict()):
+    if config.config is not None and "hostname" in config.config.get("base", {}):
         return config.config["base"]["hostname"]
 
     return socket.gethostname().split(".")[0]
@@ -318,10 +320,9 @@ def pretty_bytes(num: int | None) -> str:
             num /= 2 ** ((1 + x) * 10)
             if num >= 100:
                 return f"{num:.1f} {p}iB"
-            elif num >= 10:
+            if num >= 10:
                 return f"{num:.2f} {p}iB"
-            else:
-                return f"{num:.3f} {p}iB"
+            return f"{num:.3f} {p}iB"
 
     # overflow or something: in this case lets just go
     # with what we were given and get on with our day.

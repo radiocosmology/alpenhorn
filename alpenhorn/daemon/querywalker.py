@@ -25,7 +25,7 @@ class QueryWalker:
         The query produced no results
     """
 
-    __slots__ = ["_model", "_expressions", "_id"]
+    __slots__ = ["_expressions", "_id", "_model"]
 
     def __init__(self, model: pw.Model, *expressions: pw.Expression) -> None:
         self._model = model

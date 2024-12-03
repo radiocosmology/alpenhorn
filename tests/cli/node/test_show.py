@@ -1,14 +1,13 @@
 """Test CLI: alpenhorn node show"""
 
-import pytest
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
-    StorageTransferAction,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
     utcnow,
 )
 

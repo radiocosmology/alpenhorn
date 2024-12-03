@@ -1,7 +1,6 @@
 """Test CLI: alpenhorn file create"""
 
 from os import getcwd
-import datetime
 
 from alpenhorn.db import ArchiveAcq, ArchiveFile, utcnow
 

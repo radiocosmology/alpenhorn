@@ -1,8 +1,9 @@
 """Tests for `alpenhorn.acquisition` module."""
 
-import pytest
 import pathlib
+
 import peewee as pw
+import pytest
 
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
 

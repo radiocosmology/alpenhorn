@@ -23,13 +23,14 @@ extended ArchiveFile table.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Tuple
 
-import re
-import os
 import json
-import peewee as pw
+import os
+import re
 from functools import partial
+from typing import TYPE_CHECKING
+
+import peewee as pw
 
 from alpenhorn.db import ArchiveAcq, ArchiveFile, base_model
 
@@ -37,8 +38,8 @@ if TYPE_CHECKING:
     import pathlib
 
     from alpenhorn.common.extensions import ImportCallback
-    from alpenhorn.db.archive import ArchiveFileCopy
     from alpenhorn.daemon.update import UpdateableNode
+    from alpenhorn.db.archive import ArchiveFileCopy
 del TYPE_CHECKING
 
 
@@ -212,7 +213,7 @@ def register_file(
 
 def detect(
     path: pathlib.PurePath, node: UpdateableNode
-) -> Tuple[pathlib.PurePath | None, ImportCallback | None]:
+) -> tuple[pathlib.PurePath | None, ImportCallback | None]:
     """The primary detection routine for this extension.
 
     Parameters

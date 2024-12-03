@@ -2,20 +2,10 @@
 
 import click
 import peewee as pw
-from tabulate import tabulate
 
-from ...common.util import pretty_bytes
-from ...db import (
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    ArchiveFileCopyRequest,
-    StorageGroup,
-    StorageNode,
-    database_proxy,
-)
-from ..cli import echo, pretty_time
-from ..options import cli_option, file_from_path, not_both, resolve_node
+from ...db import ArchiveFileCopy, database_proxy
+from ..cli import echo
+from ..options import file_from_path, not_both, resolve_node
 
 
 def _update_state(ctx, path, node_name, set_, ready, unready):
@@ -59,10 +49,10 @@ def _update_state(ctx, path, node_name, set_, ready, unready):
         if ready:
             if new_state != "healthy":
                 raise click.ClickException("can't set ready bit: file not present.")
-            else:
-                updates["ready"] = True
-                # So we don't try to set it again
-                ready = False
+
+            updates["ready"] = True
+            # So we don't try to set it again
+            ready = False
 
     with database_proxy.atomic():
         file = file_from_path(path)
@@ -82,8 +72,7 @@ def _update_state(ctx, path, node_name, set_, ready, unready):
             # We can only ready a file if it's present
             if not copy or copy.has_file != "Y":
                 raise click.ClickException("can't set ready bit: file not present.")
-            else:
-                updates["ready"] = True
+            updates["ready"] = True
         elif unready:
             updates["ready"] = False
 

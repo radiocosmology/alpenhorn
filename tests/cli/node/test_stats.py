@@ -1,12 +1,13 @@
 """Test CLI: alpenhorn node stats"""
 
 import pytest
+
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
+    StorageGroup,
+    StorageNode,
 )
 
 

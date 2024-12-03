@@ -1,14 +1,15 @@
 """Tests for UpdateableNode."""
 
-import pytest
 import datetime
 import pathlib
-import peewee as pw
-from unittest.mock import call, patch, MagicMock
+from unittest.mock import MagicMock, call, patch
 
+import peewee as pw
+import pytest
+
+from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
 from alpenhorn.db.storage import StorageNode
-from alpenhorn.daemon.update import UpdateableNode
 
 
 def test_bad_ioclass(simplenode):

@@ -30,12 +30,11 @@ run these commands:
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
-import shutil
 import logging
-import pathlib
+import shutil
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from alpenhorn.common import util
 
@@ -169,7 +168,7 @@ class LFS:
         args = [str(arg) for arg in args]
 
         ret, stdout, stderr = util.run_command(
-            [self._lfs] + args, timeout=self._timeout
+            [self._lfs, *args], timeout=self._timeout
         )
 
         # Timeout

@@ -2,13 +2,13 @@
 
 import os
 import signal
-import peewee
 import threading
 from time import sleep
 
+import peewee
 import pytest
 
-from alpenhorn.scheduler.pool import WorkerPool, EmptyPool, setsignals, global_abort
+from alpenhorn.scheduler.pool import EmptyPool, WorkerPool, global_abort, setsignals
 
 # Event to indicate that the worker that consumed the opperr_task
 # is exiting
@@ -194,7 +194,7 @@ def test_worker_id(queue, pool):
     # Synchronisation
     barrier = threading.Barrier(3)
 
-    ids = dict()
+    ids = {}
 
     def task():
         """A task that reports its worker ID."""

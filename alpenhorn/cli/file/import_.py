@@ -1,7 +1,8 @@
 """alpenhorn file import command."""
 
-import click
 import pathlib
+
+import click
 
 from ...db import ArchiveFileImportRequest, database_proxy
 from ..cli import echo

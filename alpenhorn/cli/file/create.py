@@ -1,15 +1,12 @@
 """alpenhorn file create command."""
 
-import click
 import pathlib
+
+import click
 import peewee as pw
 
-from ...common.util import md5sum_file, invalid_import_path
-from ...db import (
-    ArchiveAcq,
-    ArchiveFile,
-    database_proxy,
-)
+from ...common.util import invalid_import_path, md5sum_file
+from ...db import ArchiveFile, database_proxy
 from ..cli import echo
 from ..options import (
     both_or_neither,

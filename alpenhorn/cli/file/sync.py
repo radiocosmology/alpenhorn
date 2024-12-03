@@ -1,7 +1,6 @@
 """alpenhorn file sync command."""
 
 import click
-import peewee as pw
 
 from ...db import ArchiveFileCopyRequest, database_proxy
 from ..cli import echo

@@ -5,14 +5,7 @@ import peewee as pw
 from tabulate import tabulate
 
 from ...common.util import pretty_bytes
-from ...db import (
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    ArchiveFileCopyRequest,
-    StorageGroup,
-    StorageNode,
-)
+from ...db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageGroup, StorageNode
 from ..cli import echo, pretty_time
 from ..options import cli_option, file_from_path
 

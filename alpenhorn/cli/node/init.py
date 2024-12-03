@@ -1,9 +1,8 @@
 """alpenhorn node init command"""
 
 import click
-import peewee as pw
 
-from ...db import database_proxy, ArchiveFileImportRequest
+from ...db import ArchiveFileImportRequest, database_proxy
 from ..cli import echo
 from ..options import resolve_node
 

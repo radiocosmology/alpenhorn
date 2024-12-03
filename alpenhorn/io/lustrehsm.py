@@ -13,27 +13,28 @@ This module provides:
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, IO
 
-import time
 import logging
 import pathlib
+import time
+from typing import IO, TYPE_CHECKING
+
 import peewee as pw
 
 from ..common.util import pretty_bytes, pretty_deltat
+from ..daemon.querywalker import QueryWalker
 from ..db import ArchiveFileCopy, utcnow
 from ..scheduler import Task
-from ..daemon.querywalker import QueryWalker
 from .base import BaseNodeRemote
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO
 
-
 if TYPE_CHECKING:
     import os
+
     from ..db import ArchiveFile, ArchiveFileCopyRequest
     from ..scheduler import FairMultiFIFOQueue
-    from ..service.update import UpdateableNode, UpdateableGroup
+    from ..service.update import UpdateableGroup, UpdateableNode
 del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         self._restoring = set()
 
         # For informational purposes.  Keys are elements in self._restoring.
-        self._restore_start = dict()
+        self._restore_start = {}
 
         # For idle-time HSM state updates
         self._nrelease = config.get("release_check_count", 100)
@@ -135,7 +136,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # What's the current situation?
         state = self._lfs.hsm_state(copy.path)
 
-        if state == None:
+        if state is None:
             log.warning(f"Unable to restore {copy.path}: state check failed.")
             self._restore_start.pop(copy.file.id, None)
             self._restoring.discard(copy.file.id)
@@ -156,7 +157,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
             # Tell the caller to wait
             return True
-        elif state != self._lfs.HSM_RELEASED:
+        if state != self._lfs.HSM_RELEASED:
             # i.e. file is restored or unarchived, so we're done.
             if copy.file.id not in self._restoring:
                 log.debug(f"Already restored: {copy.path}")
@@ -187,7 +188,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
             # Report failure
             return None
-        elif result is None:
+        if result is None:
             # Might have worked.  Caller should check again in a bit.
             log.warning(f"Restore request timeout: {copy.path}")
 
@@ -323,7 +324,8 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 state = lfs.hsm_state(copy.path)
                 if state is None:
                     log.warning(
-                        f"Unable to determine state for {copy.file.path} on node {node.name}."
+                        f"Unable to determine state for {copy.file.path} "
+                        f"on node {node.name}."
                     )
                 elif state == lfs.HSM_MISSING:
                     # File is unexpectedly gone.
@@ -678,7 +680,8 @@ class LustreHSMGroupIO(DefaultGroupIO):
         """
         if len(nodes) != 2:
             raise ValueError(
-                f"need exactly two nodes in StorageGroup group {self.group.name} (have {len(nodes)})"
+                "need exactly two nodes in StorageGroup "
+                f"group {self.group.name} (have {len(nodes)})"
             )
 
         if nodes[0].db.io_class == "LustreHSM":

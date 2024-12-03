@@ -3,12 +3,11 @@
 from datetime import datetime
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
-    ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
 )
 
 
