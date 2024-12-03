@@ -93,7 +93,7 @@ def test_with_group(clidb, cli):
 def test_group_create_group(clidb, cli):
     """Test passing both --group and --create-group"""
 
-    group = StorageGroup.create(name="GROUP")
+    StorageGroup.create(name="GROUP")
 
     cli(2, ["node", "create", "TEST", "--group=GROUP", "--create-group"])
 
@@ -115,7 +115,7 @@ def test_create_ioconifg(clidb, cli):
 def test_create_iovar(clidb, cli):
     """Test create with --io-var."""
 
-    result = cli(
+    cli(
         0,
         [
             "node",
@@ -138,7 +138,7 @@ def test_create_iovar(clidb, cli):
 def test_create_ioconfig_var(clidb, cli):
     """Test create with --io-config AND --io-var."""
 
-    result = cli(
+    cli(
         0,
         [
             "node",

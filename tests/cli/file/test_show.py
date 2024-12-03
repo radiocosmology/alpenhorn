@@ -76,12 +76,12 @@ def test_show_groups(clidb, cli, assert_row_present):
     )
     group3 = StorageGroup.create(name="Group3")
     node3a = StorageNode.create(name="Node3a", group=group3)
-    node3b = StorageNode.create(name="Node3b", group=group3)
+    StorageNode.create(name="Node3b", group=group3)
     ArchiveFileCopy.create(
         node=node3a, file=file, has_file="N", wants_file="Y", size_b=567
     )
     group4 = StorageGroup.create(name="Group4")
-    node4 = StorageNode.create(name="Node4", group=group4)
+    StorageNode.create(name="Node4", group=group4)
 
     result = cli(0, ["file", "show", "Acq/File", "--groups"])
 
@@ -95,7 +95,7 @@ def test_show_no_groups(clidb, cli, assert_row_present):
     """Test show with --groups, but nothing to show."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq, size_b=123)
+    ArchiveFile.create(name="File", acq=acq, size_b=123)
 
     result = cli(0, ["file", "show", "Acq/File", "--groups"])
 
@@ -189,7 +189,7 @@ def test_show_no_nodes(clidb, cli, assert_row_present):
     """Test show --nodes with no nodes to show."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq, size_b=123)
+    ArchiveFile.create(name="File", acq=acq, size_b=123)
 
     result = cli(0, ["file", "show", "Acq/File", "--nodes"])
 
@@ -283,7 +283,7 @@ def test_show_no_transfers(clidb, cli, assert_row_present):
     """Test show --transfers with no transfers to show."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq, size_b=123)
+    ArchiveFile.create(name="File", acq=acq, size_b=123)
 
     result = cli(0, ["file", "show", "Acq/File", "--transfers"])
 

@@ -23,7 +23,7 @@ def test_cancel_now(clidb, cli):
     """Test --cancel --now fails."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "clean", "NODE", "--cancel", "--now"])
 
@@ -32,7 +32,7 @@ def test_cancel_size(clidb, cli):
     """Test --cancel --size fails."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "clean", "NODE", "--cancel", "--size=3"])
 
@@ -41,7 +41,7 @@ def test_check_force(clidb, cli):
     """Test --check --force fails."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "clean", "NODE", "--check", "--force"])
 
@@ -50,7 +50,7 @@ def test_bad_days(clidb, cli):
     """Test non-positive --days."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "clean", "NODE", "--days=0"])
     cli(2, ["node", "clean", "NODE", "--days=-1"])
@@ -60,7 +60,7 @@ def test_bad_size(clidb, cli):
     """Test non-positive --size."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, storage_type="F")
 
     cli(2, ["node", "clean", "NODE", "--size=0"])
     cli(2, ["node", "clean", "NODE", "--size=-1"])
@@ -347,7 +347,7 @@ def test_empty_acq(clidb, cli):
     ArchiveFileCopy.create(node=node, file=file2, has_file="Y", wants_file="Y")
 
     # Acq3 is empty
-    acq3 = ArchiveAcq.create(name="Acq3")
+    ArchiveAcq.create(name="Acq3")
 
     cli(0, ["node", "clean", "NODE", "--force", "--acq=Acq3"])
 

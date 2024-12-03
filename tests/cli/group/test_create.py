@@ -43,7 +43,7 @@ def test_create_ioconifg(clidb, cli):
 def test_create_iovar(clidb, cli):
     """Test create with --io-var."""
 
-    result = cli(
+    cli(
         0,
         ["group", "create", "TEST", "--io-var=a=3", "--io-var", "b=4", "--io-var=a=5"],
     )
@@ -57,7 +57,7 @@ def test_create_iovar(clidb, cli):
 def test_create_ioconfig_var(clidb, cli):
     """Test create with --io-config AND --io-var."""
 
-    result = cli(
+    cli(
         0,
         [
             "group",

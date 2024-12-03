@@ -174,7 +174,7 @@ def test_show_no_groups(clidb, cli):
     assert result.output.count("Size") == 1
 
 
-def test_show_groups_nodes(clidb, cli):
+def test_show_no_groups_nodes(clidb, cli):
     """Test show with --show-groups and --show-nodes with no groups to show."""
 
     group = StorageGroup.create(name="Group1")

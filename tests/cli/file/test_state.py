@@ -13,7 +13,7 @@ def test_bad_file(clidb, cli):
     """Test bad file."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group)
+    StorageNode.create(name="Node", group=group)
 
     cli(1, ["file", "state", "MIS/SING", "Node"])
 
@@ -22,7 +22,7 @@ def test_bad_node(clidb, cli):
     """Test bad node."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(1, ["file", "state", "Acq/File", "Node"])
 
@@ -79,16 +79,16 @@ def test_set_bad_file(clidb, cli):
     """Test bad file during set."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group)
+    StorageNode.create(name="Node", group=group)
 
     cli(1, ["file", "state", "MIS/SING", "Node", "--ready"])
 
 
-def test_bad_node(clidb, cli):
+def test_set_bad_node(clidb, cli):
     """Test bad node during set."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(1, ["file", "state", "Acq/File", "Node", "--ready"])
 
@@ -165,11 +165,11 @@ def test_creation(clidb, cli):
     file = ArchiveFile.create(name="File", acq=acq)
 
     # Doesn't create a record
-    result = cli(0, ["file", "state", "Acq/File", "Node", "--set=Absent"])
+    cli(0, ["file", "state", "Acq/File", "Node", "--set=Absent"])
 
     assert ArchiveFileCopy.select().count() == 0
 
-    result = cli(0, ["file", "state", "Acq/File", "Node", "--set=Suspect"])
+    cli(0, ["file", "state", "Acq/File", "Node", "--set=Suspect"])
 
     copy = ArchiveFileCopy.get(id=1)
     assert copy.file == file

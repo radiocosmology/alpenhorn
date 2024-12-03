@@ -1,6 +1,6 @@
 """Test CLI: alpenhorn node sync
 
-Most of the test of the functionality for this command 
+Most of the test of the functionality for this command
 happen in the "node sync" tests.
 """
 
@@ -132,7 +132,7 @@ def test_all(clidb, cli):
         file=file, node_from=node_from, group_to=group1, cancelled=0, completed=0
     )
     ArchiveFileCopyRequest.create(
-        file=file, node_from=node_from, group_to=group1, cancelled=0, completed=0
+        file=file, node_from=node_from, group_to=group2, cancelled=0, completed=0
     )
 
     cli(

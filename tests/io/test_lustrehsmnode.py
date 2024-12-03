@@ -435,8 +435,6 @@ def test_ready_pull_restored(mock_lfs, node, queue, archivefilecopyrequest):
 def test_ready_pull_restoring(mock_lfs, node, queue, archivefilecopyrequest):
     """Test LustreHSMNodeIO.ready_pull on file already being restored."""
 
-    before = pw.utcnow().replace(microsecond=0)
-
     copy = ArchiveFileCopy.get(id=1)
     copy.ready = False
     copy.save()

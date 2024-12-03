@@ -460,9 +460,7 @@ def test_update_node_run(
     # And something already ready (i.e. no need to re-ready)
     readyfile = archivefile(name="skip_me", acq=simpleacq)
     archivefilecopy(node=unode.db, file=readyfile, has_file="Y", ready=True)
-    afcr_skip = archivefilecopyrequest(
-        node_from=unode.db, group_to=simplegroup, file=readyfile
-    )
+    archivefilecopyrequest(node_from=unode.db, group_to=simplegroup, file=readyfile)
 
     # Mock the remote so the ready can happen
     pull_ready_calls = set()
@@ -609,7 +607,7 @@ def test_update_import_alpenhorn_node(unode, queue, archivefileimportrequest):
     Even if we try to trick it...
     """
 
-    afir = archivefileimportrequest(
+    archivefileimportrequest(
         path="./ALPENHORN_NODE", node=unode.db, recurse=False, register=True
     )
 

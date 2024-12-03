@@ -18,7 +18,7 @@ def test_bad_file(clidb, cli):
     StorageNode.create(name="DestNode", group=dest)
 
     group = StorageGroup.create(name="SrcGroup")
-    src = StorageNode.create(name="Src", group=group)
+    StorageNode.create(name="Src", group=group)
 
     cli(1, ["file", "sync", "MIS/SING", "--from=Src", "--to=Dest"])
 
@@ -30,7 +30,7 @@ def test_no_source(clidb, cli):
     StorageNode.create(name="DestNode", group=dest)
 
     acq = ArchiveAcq.create(name="Acq")
-    file_ = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(2, ["file", "sync", "Acq/File", "--to=Dest"])
 
@@ -42,7 +42,7 @@ def test_bad_source(clidb, cli):
     StorageNode.create(name="DestNode", group=dest)
 
     acq = ArchiveAcq.create(name="Acq")
-    file_ = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(1, ["file", "sync", "Acq/File", "--from=MISSING", "--to=Dest"])
 
@@ -51,10 +51,10 @@ def test_no_dest(clidb, cli):
     """Test missing dest group."""
 
     group = StorageGroup.create(name="SrcGroup")
-    src = StorageNode.create(name="Src", group=group)
+    StorageNode.create(name="Src", group=group)
 
     acq = ArchiveAcq.create(name="Acq")
-    file_ = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(2, ["file", "sync", "Acq/File", "--from=Src"])
 
@@ -63,10 +63,10 @@ def test_bad_dest(clidb, cli):
     """Test a bad dest group."""
 
     group = StorageGroup.create(name="SrcGroup")
-    src = StorageNode.create(name="Src", group=group)
+    StorageNode.create(name="Src", group=group)
 
     acq = ArchiveAcq.create(name="Acq")
-    file_ = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(1, ["file", "sync", "Acq/File", "--from=Src", "--to=MISSING"])
 
@@ -75,13 +75,13 @@ def test_no_src(clidb, cli):
     """Test file missing from src."""
 
     dest = StorageGroup.create(name="Dest")
-    node = StorageNode.create(name="DestNode", group=dest)
+    StorageNode.create(name="DestNode", group=dest)
 
     group = StorageGroup.create(name="SrcGroup")
-    src = StorageNode.create(name="Src", group=group)
+    StorageNode.create(name="Src", group=group)
 
     acq = ArchiveAcq.create(name="Acq")
-    file_ = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(0, ["file", "sync", "Acq/File", "--from=Src", "--to=Dest"])
 
@@ -93,7 +93,7 @@ def test_sync(clidb, cli):
     """Test a good sync."""
 
     dest = StorageGroup.create(name="Dest")
-    node = StorageNode.create(name="DestNode", group=dest)
+    StorageNode.create(name="DestNode", group=dest)
 
     group = StorageGroup.create(name="SrcGroup")
     src = StorageNode.create(name="Src", group=group)
@@ -117,7 +117,7 @@ def test_force(clidb, cli):
     """Test force with no source file."""
 
     dest = StorageGroup.create(name="Dest")
-    node = StorageNode.create(name="DestNode", group=dest)
+    StorageNode.create(name="DestNode", group=dest)
 
     group = StorageGroup.create(name="SrcGroup")
     src = StorageNode.create(name="Src", group=group)
@@ -202,7 +202,7 @@ def test_cancel_bad_node(clidb, cli):
     """Test --cancel with a bad --from."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(1, ["file", "sync", "Acq/File", "--cancel", "--from=Missing"])
 
@@ -234,7 +234,7 @@ def test_cancel_bad_group(clidb, cli):
     """Test --cancel with a bad --to."""
 
     acq = ArchiveAcq.create(name="Acq")
-    file = ArchiveFile.create(name="File", acq=acq)
+    ArchiveFile.create(name="File", acq=acq)
 
     cli(1, ["file", "sync", "Acq/File", "--cancel", "--to=Missing"])
 
