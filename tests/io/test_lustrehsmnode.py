@@ -1,8 +1,9 @@
 """Test LustreHSMNodeIO."""
 
-import pytest
+from unittest.mock import MagicMock, patch
+
 import peewee as pw
-from unittest.mock import patch, MagicMock
+import pytest
 
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopy

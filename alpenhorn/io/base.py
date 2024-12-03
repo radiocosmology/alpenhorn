@@ -8,24 +8,25 @@ by subclassing from DefaultIO instead of from here directly.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, IO
 
 import logging
 import pathlib
+from typing import IO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import os
     from collections.abc import Iterator
+
+    from ..daemon.update import UpdateableNode
     from ..db import (
         ArchiveFile,
         ArchiveFileCopy,
         ArchiveFileCopyRequest,
-        ArchiveFileImportRequest,
-        StorageNode,
         StorageGroup,
+        StorageNode,
     )
     from ..scheduler import FairMultiFIFOQueue
-    from ..daemon.update import UpdateableNode
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 

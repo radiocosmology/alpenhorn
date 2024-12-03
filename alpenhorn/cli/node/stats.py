@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import click
 import peewee as pw
 from tabulate import tabulate
-from collections import defaultdict
 
-from ...db import StorageNode, ArchiveFile, ArchiveFileCopy
 from ...common.util import pretty_bytes
-from ..options import cli_option, resolve_group
+from ...db import ArchiveFile, ArchiveFileCopy, StorageNode
 from ..cli import echo
+from ..options import cli_option, resolve_group
 
 
 def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
@@ -113,7 +114,7 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
         if "count" not in node_stats or not node_stats["count"]:
             stats[node.id]["count"] = 0
 
-        if "size" in node_stats and node_stats["size"]:
+        if node_stats.get("size"):
             if node.max_total_gb:
                 percent = 100.0 * node_stats["size"] / node.max_total_gb / 2**30
                 stats[node.id]["percent"] = f"{percent:5.2f}"

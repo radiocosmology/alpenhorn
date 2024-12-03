@@ -1,9 +1,10 @@
 """Test DefaultNodeIO.pull()"""
 
 import os
-import pytest
 import pathlib
 from unittest.mock import patch
+
+import pytest
 
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest

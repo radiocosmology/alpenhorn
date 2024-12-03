@@ -1,9 +1,6 @@
 """Alpenhorn CLI for operations on `ArchiveAcq`s."""
 
-import re
-import sys
 import click
-import peewee as pw
 
 from ..cli import dbconnect
 from .create import create

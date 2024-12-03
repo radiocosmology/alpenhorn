@@ -1,11 +1,11 @@
 """Test CLI: alpenhorn file create"""
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
+    StorageGroup,
+    StorageNode,
 )
 
 
@@ -217,7 +217,8 @@ def test_unready(clidb, cli):
     acq = ArchiveAcq.create(name="Acq")
     file = ArchiveFile.create(name="File", acq=acq)
 
-    # Fake-works: a copy with no record is automatically not ready, so this is a successful NOP
+    # Fake-works: a copy with no record is automatically not ready,
+    # so this is a successful NOP
     cli(0, ["file", "state", "Acq/File", "Node", "--unready"])
 
     # No record was created

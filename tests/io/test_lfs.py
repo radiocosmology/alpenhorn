@@ -1,10 +1,10 @@
 """Test alpenhorn.io.lfs LFS wrapper."""
 
-import pytest
 import pathlib
 
+import pytest
+
 from alpenhorn.io.lfs import LFS
-from alpenhorn.db import StorageNode
 
 
 @pytest.mark.run_command_result(0, "lfs_out", "lfs_err")
@@ -21,7 +21,7 @@ def test_run_lfs_success(have_lfs, mock_run_command):
     }
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
-        "kwargs": dict(),
+        "kwargs": {},
         "timeout": 60,
     }
 
@@ -35,7 +35,7 @@ def test_run_lfs_stringify(have_lfs, mock_run_command):
     assert lfs.run_lfs(pathlib.Path("path"), 2)["output"] == "lfs_out"
     assert mock_run_command() == {
         "cmd": ["LFS", "path", "2"],
-        "kwargs": dict(),
+        "kwargs": {},
         "timeout": 60,
     }
 
@@ -54,7 +54,7 @@ def test_run_lfs_fail(have_lfs, mock_run_command):
     }
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
-        "kwargs": dict(),
+        "kwargs": {},
         "timeout": 60,
     }
 
@@ -73,7 +73,7 @@ def test_run_lfs_timeout(have_lfs, mock_run_command):
     }
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
-        "kwargs": dict(),
+        "kwargs": {},
         "timeout": 60,
     }
 
@@ -94,7 +94,7 @@ def test_run_lfs_missing(have_lfs, mock_run_command):
     }
     assert mock_run_command() == {
         "cmd": ["LFS", "arg1", "arg2"],
-        "kwargs": dict(),
+        "kwargs": {},
         "timeout": 60,
     }
 

@@ -1,7 +1,8 @@
 """Test LustreHSMGroupIO."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 
@@ -60,11 +61,9 @@ def req(
     """Create an ArchiveFileCopyRequest targetting the hsm group."""
     group_to = group[0].db
     node_from = storagenode(name="src", group=simplegroup)
-    req = archivefilecopyrequest(
+    return archivefilecopyrequest(
         file=simplefile, node_from=node_from, group_to=group_to
     )
-
-    return req
 
 
 def test_init(storagegroup, storagenode, queue, mock_lfs):
@@ -154,7 +153,9 @@ def test_exists(xfs, group):
 
 
 def test_pull_small(req, group):
-    """Test TransportGroupIO.pull_force() hands off a small file to the smallfile node."""
+    """Test TransportGroupIO.pull_force()
+
+    hands off a small file to the smallfile node."""
     group, hsm, smallfile = group
 
     req.file.size_b = 1  # A very small file

@@ -35,6 +35,12 @@ test = [
 alpenhorn = "alpenhorn.cli:entry"
 alpenhornd = "alpenhorn.daemon:entry"
 
+[tool.ruff]
+lint.select = ["E", "F", "I", "UP", "NPY", "RUF", "BLE", "C4", "RET"]
+
+[tool.ruff.lint.per-file-ignores]
+"alpenhorn/*/__init__.py" = ["I", "F401"]
+
 [tool.setuptools.packages]
 find = {}
 

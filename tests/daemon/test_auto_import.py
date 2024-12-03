@@ -1,16 +1,17 @@
 """Test auto_import.py"""
 
-import pytest
-import pathlib
 import datetime
-import peewee as pw
+import pathlib
 from unittest.mock import call, patch
+
+import peewee as pw
+import pytest
 from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn.daemon import auto_import
 from alpenhorn.daemon.update import UpdateableNode
-from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
+from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.io.lfs import HSMState
 
 

@@ -1,8 +1,9 @@
 """Tests of alpenhorn.db module."""
 
-import pytest
-import peewee as pw
 import threading
+
+import peewee as pw
+import pytest
 
 from alpenhorn.db import _base as db
 

@@ -1,8 +1,6 @@
 """Test CLI: alpenhorn node rename"""
 
-import json
-import pytest
-from alpenhorn.db import StorageNode, StorageGroup
+from alpenhorn.db import StorageGroup, StorageNode
 
 
 def test_no_rename(clidb, cli):

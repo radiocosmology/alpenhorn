@@ -1,6 +1,7 @@
 """Test common.config"""
 
 import os
+
 import pytest
 from click import ClickException
 

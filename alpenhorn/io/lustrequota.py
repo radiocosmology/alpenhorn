@@ -12,9 +12,9 @@ or else set to a fixed value via the `io_config`.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
 import logging
+from typing import TYPE_CHECKING
 
 from .default import DefaultNodeIO
 from .lfs import LFS
@@ -22,6 +22,7 @@ from .lfs import LFS
 if TYPE_CHECKING:
     from ..queue import FairMultiFIFOQueue
     from ..storage import StorageNode
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 

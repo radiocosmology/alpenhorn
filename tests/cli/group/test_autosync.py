@@ -1,6 +1,5 @@
 """Test CLI: alpenhorn group autosync"""
 
-import pytest
 from alpenhorn.db import StorageGroup, StorageNode, StorageTransferAction
 
 

@@ -1,6 +1,5 @@
 """Test CLI: alpenhorn node autoclean"""
 
-import pytest
 from alpenhorn.db import StorageGroup, StorageNode, StorageTransferAction
 
 

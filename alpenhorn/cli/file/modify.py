@@ -1,7 +1,6 @@
 """alpenhorn file show command."""
 
 import click
-import peewee as pw
 
 from ...db import ArchiveFile, ArchiveFileCopy, database_proxy
 from ..cli import echo, update_or_remove

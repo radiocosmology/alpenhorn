@@ -1,16 +1,19 @@
 """I/O utility functions."""
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
+import errno
+import logging
+import pathlib
 import re
 import time
-import errno
-import pathlib
-import peewee as pw
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
+
+import peewee as pw
 
 from .. import db
+from ..common import config, util
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
@@ -20,15 +23,15 @@ from ..db import (
     utcnow,
 )
 from ..scheduler import threadlocal
-from ..common import config, util
 
 if TYPE_CHECKING:
     import os
+
+    from ..acquisition import ArchiveFile
     from .base import BaseNodeIO
     from .updownlock import UpDownLock
-    from ..acquisition import ArchiveFile
+del TYPE_CHECKING
 
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -191,8 +194,8 @@ def bbcp(source: str | os.PathLike, target: str | os.PathLike, size_b: int) -> d
                 "stderr": "Unable to read m5sum from bbcp output",
                 "check_src": False,
             }
-        else:
-            ioresult["md5sum"] = mo.group(1)
+
+        ioresult["md5sum"] = mo.group(1)
 
     return ioresult
 
@@ -233,7 +236,7 @@ def rsync(
     """
 
     if local:
-        remote_args = list()
+        remote_args = []
     else:
         remote_args = [
             "--compress",
@@ -242,9 +245,9 @@ def rsync(
         ]
 
     ret, stdout, stderr = util.run_command(
-        ["rsync"]
-        + remote_args
-        + [
+        [
+            "rsync",
+            *remote_args,
             "--quiet",
             "--times",
             "--protect-args",
@@ -355,7 +358,8 @@ def post_add(node: StorageNode, file_: ArchiveFile) -> None:
     ):
         if edge.group_to.state_on_node(file_)[0] != "Y":
             log.debug(
-                f"Autosyncing {file_.path} from node {node.name} to group {edge.group_to.name}"
+                f"Autosyncing {file_.path} from node {node.name} "
+                f"to group {edge.group_to.name}"
             )
 
             ArchiveFileCopyRequest.create(
@@ -550,7 +554,7 @@ def remove_filedir(
                 if e.errno == errno.ENOTEMPTY:
                     # This is fine, but stop trying to rmdir.
                     break
-                elif e.errno == errno.ENOENT:
+                if e.errno == errno.ENOENT:
                     # Already deleted, which is fine.
                     pass
                 else:

@@ -5,12 +5,12 @@ happen in the "node sync" tests.
 """
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
     utcnow,
 )
 

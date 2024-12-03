@@ -1,6 +1,6 @@
 """Test CLI: alpenhorn node init"""
 
-from alpenhorn.db import StorageGroup, StorageNode, ArchiveFileImportRequest, utcnow
+from alpenhorn.db import ArchiveFileImportRequest, StorageGroup, StorageNode
 
 
 def test_no_node(clidb, cli):

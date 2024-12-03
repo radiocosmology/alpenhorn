@@ -1,7 +1,6 @@
 """Alpenhorn CLI for operations on `StorageGroup`s."""
 
 import click
-import peewee as pw
 
 from ..cli import dbconnect
 from .autosync import autosync

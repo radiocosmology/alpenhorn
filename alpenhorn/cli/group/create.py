@@ -1,12 +1,13 @@
 """alpenhorn group create command"""
 
-import click
 import json
+
+import click
 import peewee as pw
 
-from ...db import database_proxy, StorageGroup
-from ..options import cli_option, set_io_config
+from ...db import StorageGroup, database_proxy
 from ..cli import echo
+from ..options import cli_option, set_io_config
 
 
 @click.command()
@@ -21,7 +22,7 @@ def create(group_name, io_class, io_config, io_var, notes):
     The group will be called NAME, which must not already exist.
     """
 
-    io_config = set_io_config(io_config, io_var, dict())
+    io_config = set_io_config(io_config, io_var, {})
 
     with database_proxy.atomic():
         try:

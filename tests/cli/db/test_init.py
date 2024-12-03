@@ -1,16 +1,16 @@
 """Test CLI: alpenhorn db init"""
 
-import pytest
 import peewee as pw
+import pytest
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
-    StorageTransferAction,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
 )
 
 

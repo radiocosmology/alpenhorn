@@ -1,14 +1,13 @@
 """Test CLI: alpenhorn node clean"""
 
-import pytest
 from datetime import timedelta
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
+    StorageGroup,
+    StorageNode,
     utcnow,
 )
 

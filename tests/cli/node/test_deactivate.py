@@ -1,6 +1,5 @@
 """Test CLI: alpenhorn node deactivate"""
 
-import pytest
 from alpenhorn.db import StorageGroup, StorageNode
 
 

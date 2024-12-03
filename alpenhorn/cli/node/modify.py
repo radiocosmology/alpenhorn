@@ -1,18 +1,18 @@
 """alpenhorn node create command"""
 
-import click
 import json
-import peewee as pw
 
-from ...db import database_proxy, StorageNode
+import click
+
+from ...db import StorageNode, database_proxy
 from ..cli import echo, update_or_remove
 from ..options import (
     cli_option,
     not_both,
     resolve_group,
     resolve_node,
-    set_storage_type,
     set_io_config,
+    set_storage_type,
 )
 
 

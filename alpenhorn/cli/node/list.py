@@ -1,12 +1,11 @@
 """alpenhorn node list command"""
 
 import click
-import peewee as pw
 from tabulate import tabulate
 
 from ...db import StorageGroup, StorageNode
-from ..options import cli_option, resolve_group
 from ..cli import echo
+from ..options import cli_option, resolve_group
 
 
 @click.command()

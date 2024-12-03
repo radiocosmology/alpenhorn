@@ -1,7 +1,6 @@
 """alpenhorn acq list command."""
 
 import click
-import tabulate
 import peewee as pw
 from tabulate import tabulate
 

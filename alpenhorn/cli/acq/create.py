@@ -4,8 +4,7 @@ import click
 import peewee as pw
 
 from ...common.util import invalid_import_path
-from ...db import database_proxy, ArchiveAcq
-from ..options import cli_option
+from ...db import ArchiveAcq, database_proxy
 from ..cli import echo
 
 

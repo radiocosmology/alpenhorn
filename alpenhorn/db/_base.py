@@ -1,10 +1,11 @@
 """Alpenhorn Database Base Implementation."""
 
 from __future__ import annotations
+
+import logging
 from typing import Any
 
 import click
-import logging
 import peewee as pw
 from playhouse import db_url
 
@@ -81,13 +82,13 @@ def connect() -> None:
         # The fallback gets implemented via the default_cap
         # dict defined in _capability()
         log.debug("Using internal database module.")
-        _db_ext = dict()
+        _db_ext = {}
 
     # If fetch the database config, if present
     if "database" in config.config:
         database_config = config.config["database"]
     else:
-        database_config = dict()
+        database_config = {}
 
     # Call the connect function from the database extension (or fallback)
     func = _capability("connect")
@@ -105,7 +106,7 @@ def connect() -> None:
 
     database_proxy.initialize(db)
 
-    if isinstance(db, (pw.MySQLDatabase, pw.PostgresqlDatabase)):
+    if isinstance(db, pw.MySQLDatabase | pw.PostgresqlDatabase):
         db.field_types["enum"] = "enum"
         EnumField.native = True
     else:
@@ -220,31 +221,31 @@ class EnumField(pw.Field):
     def field_type(self):
         if self.native:
             return "enum"
-        else:
-            return "string"
+
+        return "string"
 
     def __init__(self, enum_list, *args, **kwargs):
         self.enum_list = enum_list
 
         self.value = []
         for e in enum_list:
-            self.value.append("'%s'" % e)
+            self.value.append(f"'{e}'")
 
         self.maxlen = max([len(val) for val in self.enum_list])
 
-        super(EnumField, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def clone_base(self, **kwargs):
         # Add the extra parameter so the field is cloned properly
-        return super(EnumField, self).clone_base(enum_list=self.enum_list, **kwargs)
+        return super().clone_base(enum_list=self.enum_list, **kwargs)
 
     def get_modifiers(self):
         # This routine seems to be for setting the arguments for creating the
         # column.
         if self.native:
             return self.value or None
-        else:
-            return [self.maxlen]
+
+        return [self.maxlen]
 
     def db_value(self, val):
         """Verify supplied value before handing off to DB."""
@@ -254,14 +255,14 @@ class EnumField(pw.Field):
         # be rejected by the database, but that's not our problem.)
         if self.native or val in self.enum_list or val is None:
             return val
-        else:
-            raise ValueError(f'invalid value "{val}" for EnumField')
+
+        raise ValueError(f'invalid value "{val}" for EnumField')
 
 
 class base_model(pw.Model):
     """Base class for all models."""
 
-    class Meta(object):
+    class Meta:
         database = database_proxy
 
         # TODO: consider whether to use only_save_dirty = True here

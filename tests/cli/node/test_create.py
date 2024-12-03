@@ -1,8 +1,8 @@
 """Test CLI: alpenhorn node create"""
 
 import json
-import pytest
-from alpenhorn.db import StorageGroup, StorageNode, ArchiveFileImportRequest
+
+from alpenhorn.db import ArchiveFileImportRequest, StorageGroup, StorageNode
 
 
 def test_no_group(clidb, cli):

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import pathlib
 import logging
-import datetime
+import pathlib
 
 import peewee as pw
 

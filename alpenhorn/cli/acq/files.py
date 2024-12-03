@@ -17,7 +17,10 @@ from ..options import cli_option, not_both
 @click.option(
     "--show-removed",
     is_flag=True,
-    help="If used with --node or --group, also list files that have been removed from the node/group.",
+    help=(
+        "If used with --node or --group, also list files "
+        "that have been removed from the node/group."
+    ),
 )
 def files(acq, group, node, show_removed):
     """List files in an Acqusition.

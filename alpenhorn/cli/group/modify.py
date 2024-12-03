@@ -1,6 +1,7 @@
 """alpenhorn group modify command"""
 
 import json
+
 import click
 import peewee as pw
 
@@ -39,7 +40,7 @@ def modify(group_name, io_class, io_config, io_var, notes):
         io_config = set_io_config(io_config, io_var, group.io_config)
 
         # collect the updated parameters
-        updates = dict()
+        updates = {}
         if notes != group.notes:
             updates["notes"] = notes
         if io_class != group.io_class:

@@ -1,9 +1,10 @@
 """Test alpenhorn.io.ioutil.copy_request_done()."""
 
-import time
-import pytest
 import datetime
-from unittest.mock import patch, MagicMock
+import time
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db import utcfromtimestamp, utcnow

@@ -1,6 +1,7 @@
 """Test CLI: alpenhorn node list"""
 
 import pytest
+
 from alpenhorn.db import StorageGroup, StorageNode
 
 

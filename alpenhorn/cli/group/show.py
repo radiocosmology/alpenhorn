@@ -1,17 +1,17 @@
 """alpenhorn group show command"""
 
 import json
+
 import click
 import peewee as pw
 from tabulate import tabulate
 
 from ...common.util import pretty_bytes
 from ...db import (
-    StorageGroup,
+    ArchiveFile,
+    ArchiveFileCopyRequest,
     StorageNode,
     StorageTransferAction,
-    ArchiveFileCopyRequest,
-    ArchiveFile,
 )
 from ..cli import echo
 from ..node.stats import get_stats

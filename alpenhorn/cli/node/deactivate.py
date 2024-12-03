@@ -1,9 +1,8 @@
 """alpenhorn node activate command"""
 
 import click
-import peewee as pw
 
-from ...db import database_proxy, StorageNode
+from ...db import StorageNode, database_proxy
 from ..cli import echo
 from ..options import resolve_node
 

@@ -1,8 +1,9 @@
 """Alpenhorn daemon entry point."""
 
-import sys
-import click
 import logging
+import sys
+
+import click
 
 from .. import db
 from ..common import config

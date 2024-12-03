@@ -1,8 +1,9 @@
 """FairMultiFIFOQueue tests."""
 
-import pytest
 import threading
 from time import time
+
+import pytest
 
 
 @pytest.fixture
@@ -104,7 +105,7 @@ def test_concurrency(clean_queue):
     """Test concurrent puts and gets"""
 
     # Threads to join later
-    threads = list()
+    threads = []
 
     # Producer thread
     def producer(clean_queue, fifo):

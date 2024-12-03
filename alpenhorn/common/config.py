@@ -73,8 +73,9 @@ Example config:
             # Defaults to "user".
             facility: user
 
-            # Set to True to use TCP, instead of UDP, to send messages to the syslog server.
-            # Ignored if using a Unix domain socket (i.e. `port` is zero).  Default is False.
+            # Set to True to use TCP, instead of UDP, to send messages to the
+            # syslog server.  Ignored if using a Unix domain socket (i.e. `port`
+            # is zero).  Default is False.
             use_tcp: false
 
         # File logging.
@@ -138,11 +139,11 @@ Example config:
 
 from __future__ import annotations
 
-from click import ClickException
 import logging
 import os
 
 import yaml
+from click import ClickException
 
 log = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ def load_config(cli_conf: os.PathLike, cli: bool) -> None:
 
         log.info("Loading config file %s", cfile)
 
-        with open(absfile, "r") as fh:
+        with open(absfile) as fh:
             conf = yaml.safe_load(fh)
 
         if conf is not None:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import click
 
 from ..common.util import help_config_option, start_alpenhorn, version_option
-
 from . import acq, db, file, group, node
 from .options import not_both
 

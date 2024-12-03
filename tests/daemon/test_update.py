@@ -1,7 +1,8 @@
 """Tests for the alpenhorn.update module."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from alpenhorn.daemon import update
 from alpenhorn.db.storage import StorageGroup, StorageNode

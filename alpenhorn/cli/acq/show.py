@@ -40,8 +40,9 @@ def show(acq, show_groups, show_nodes):
     echo(" Total Size: " + pretty_bytes(totals["size"]))
 
     if show_nodes:
-        # If show_groups and show_nodes are True, keys are group names and value are sub-dicts.
-        # If only show_nodes is Ture, keys are node names.  Not set if show_nodes is False.
+        # If show_groups and show_nodes are True, keys are group names
+        # and value are sub-dicts.  If only show_nodes is Ture, keys are
+        # node names.  Not set if show_nodes is False.
         node_totals = {}
 
         query = (

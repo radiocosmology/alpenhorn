@@ -1,11 +1,11 @@
 """Test CLI: alpenhorn acq files"""
 
 from alpenhorn.db import (
-    StorageGroup,
-    StorageNode,
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
+    StorageGroup,
+    StorageNode,
 )
 
 

@@ -1,7 +1,7 @@
 """Test QueryWalker"""
 
-import pytest
 import peewee as pw
+import pytest
 
 from alpenhorn.daemon.querywalker import QueryWalker
 from alpenhorn.db import base_model
@@ -36,9 +36,7 @@ def query_walker(testtable):
 
     It contains three elements.
     """
-    qw = QueryWalker(Table, Table.value < 4)
-
-    return qw
+    return QueryWalker(Table, Table.value < 4)
 
 
 def test_empty(testtable):
@@ -74,7 +72,8 @@ def test_overget(query_walker):
     values = query_walker.get(4)
     assert len(values) == 4
 
-    # Since there are only three values in this query, the first and last values are the same.
+    # Since there are only three values in this query,
+    # the first and last values are the same.
     assert values[0] == values[3]
 
 

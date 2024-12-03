@@ -1,8 +1,9 @@
 """Test DefaultNodeIO.delete()."""
 
-import pytest
 import pathlib
 from unittest.mock import patch
+
+import pytest
 
 from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.io._default_asyncs import delete_async
@@ -11,7 +12,8 @@ from alpenhorn.io.updownlock import UpDownLock
 
 @pytest.fixture
 def mock_archive_count():
-    """Mock ArchiveFile.archive_count to return a number big enough to allow deletion."""
+    """Mock ArchiveFile.archive_count to return a
+    number big enough to allow deletion."""
 
     @property
     def _mock_archive_count(self):
@@ -40,7 +42,8 @@ def test_ncopies(
     archivefilecopy,
     storage_type="F",
 ):
-    """Test not deleting from non-archival node when there are not enough other copies of the file."""
+    """Test not deleting from non-archival node
+    when there are not enough other copies of the file."""
 
     # Need to make the containing directory
     xfs.create_dir("/node/simpleacq")
@@ -128,7 +131,7 @@ def test_delete_dirs(
     """Test deleting directories (and some files)."""
     node = storagenode(name="node", group=simplegroup, root="/node")
 
-    copies = list()
+    copies = []
 
     acq1 = archiveacq(name="acq/1")
     copies.append(

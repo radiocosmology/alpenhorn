@@ -1,11 +1,12 @@
 """Test alpenhorn.io.ioutil"""
 
-import pytest
-import pathlib
 import datetime
-import peewee as pw
+import pathlib
 
-from alpenhorn.db.archive import ArchiveFileCopyRequest, ArchiveFileCopy
+import peewee as pw
+import pytest
+
+from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 from alpenhorn.io import ioutil
 from alpenhorn.io.updownlock import UpDownLock
 

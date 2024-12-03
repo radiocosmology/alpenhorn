@@ -16,17 +16,17 @@ of the main update loop.
 """
 
 import os
-import sys
-import yaml
-import pytest
-import shutil
 import pathlib
-import peewee as pw
+import shutil
+import sys
 from unittest.mock import patch
-from click.testing import CliRunner
 from urllib.parse import quote as urlquote
 
-from alpenhorn.db import database_proxy, EnumField
+import pytest
+import yaml
+from click.testing import CliRunner
+
+from alpenhorn.daemon.entry import entry
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.db.archive import (
     ArchiveFileCopy,
@@ -34,7 +34,6 @@ from alpenhorn.db.archive import (
     ArchiveFileImportRequest,
 )
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
-from alpenhorn.daemon.entry import entry
 
 # Import pattern_importer from the examples directory
 sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))

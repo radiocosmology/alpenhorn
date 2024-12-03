@@ -2,6 +2,7 @@
 
 import click
 import pytest
+
 from alpenhorn.cli.options import set_io_config
 
 

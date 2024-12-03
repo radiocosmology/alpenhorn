@@ -1,7 +1,5 @@
 """Test CLI: alpenhorn acq create"""
 
-import json
-import pytest
 from alpenhorn.db import ArchiveAcq
 
 

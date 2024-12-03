@@ -1,9 +1,10 @@
 """Worker thread framework."""
 
-import signal
 import logging
+import signal
 import threading
 from types import FrameType
+
 from peewee import OperationalError
 
 from .queue import FairMultiFIFOQueue
@@ -74,10 +75,10 @@ class Worker(threading.Thread):
             # Exit if told to stop
             if global_abort.is_set():
                 log.info("Stopped due to global abort.")
-                return
+                return None
             if self._worker_stop.is_set():
                 log.info("Stopped.")
-                return
+                return None
 
             # Wait for a task:
             item = self._queue.get(timeout=5)
@@ -89,7 +90,7 @@ class Worker(threading.Thread):
                 if global_abort.is_set():
                     log.info("Stopped due to global abort.")
                     self._queue.task_done(key)
-                    return
+                    return None
 
                 # Otherwise, execute the task.
                 log.info(f"Beginning task {task}")
@@ -154,7 +155,7 @@ class WorkerPool:
         The task queue
     """
 
-    __slots__ = ["_queue", "_mutex", "_all_workers", "_workers"]
+    __slots__ = ["_all_workers", "_mutex", "_queue", "_workers"]
 
     def __init__(self, num_workers: int, queue: FairMultiFIFOQueue) -> None:
         self._queue = queue
@@ -163,12 +164,12 @@ class WorkerPool:
         self._mutex = threading.Lock()
 
         # Running workers (ones being monitored)
-        self._workers = list()
+        self._workers = []
 
         # A list of _all_ workers which aren't known to be dead.  In
         # addition to all the workers in _workers, this also includes all
         # workers stopped by del_worker(), which may still be running.
-        self._all_workers = list()
+        self._all_workers = []
 
         # Start initial workers
         for _ in range(num_workers):
@@ -305,8 +306,8 @@ class WorkerPool:
                 worker.join()
 
             # Probably we're about to exit, but just so everything stays copacetic:
-            self._workers = list()
-            self._all_workers = list()
+            self._workers = []
+            self._all_workers = []
 
 
 class EmptyPool:

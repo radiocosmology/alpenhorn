@@ -1,18 +1,10 @@
 """alpenhorn file clean command."""
 
 import click
-import peewee as pw
 
 from ...db import ArchiveFileCopy, database_proxy
 from ..cli import echo
-from ..options import (
-    at_least_one,
-    cli_option,
-    file_from_path,
-    not_both,
-    resolve_group,
-    resolve_node,
-)
+from ..options import at_least_one, cli_option, file_from_path, not_both, resolve_node
 
 
 @click.command()
