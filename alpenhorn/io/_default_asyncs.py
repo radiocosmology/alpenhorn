@@ -189,7 +189,7 @@ async def _size_from_stat(fullpath: pathlib.Path) -> int | None:
         async with asyncio.timeout(600):
             stat = await asyncio.to_thread(fullpath.stat)
     except TimeoutError:
-        log.error(f"Timeout trying to stat {copyname} on node {io.node.name}!")
+        log.error(f"Timeout trying to stat {fullpath}!")
         return None
 
     if stat:

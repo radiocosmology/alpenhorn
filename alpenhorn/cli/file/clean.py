@@ -104,4 +104,4 @@ def clean(ctx, path, archive_ok, cancel, node, now):
         else:
             echo(f'Marked "{path}" for discretionary cleaning on Node "{node.name}".')
     else:
-        echo(f"No change.")
+        echo("No change.")

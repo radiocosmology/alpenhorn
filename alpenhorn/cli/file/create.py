@@ -89,7 +89,7 @@ def create(name, acq_name, from_file, md5, prefix, size):
 
     # Size must be non-negative
     if size is not None and size < 0:
-        raise click.ClickException(f"negative file size.")
+        raise click.ClickException("negative file size.")
 
     # Validate
     rejection_reason = invalid_import_path(name)
