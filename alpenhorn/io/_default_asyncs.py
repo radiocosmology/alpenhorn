@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import errno
 import logging
 import pathlib
@@ -12,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
+from ..common.util import timeout_call
 from ..daemon.update import RemoteNode
 from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
 from . import ioutil
@@ -32,8 +32,9 @@ def pull_async(
 
     Things to try:
         - hard link (for nodes on the same filesystem)
-        - bbcp (if source is not on this host)
-        - rsync if all else fails
+        - bbcp (remote transfers only)
+        - rsync
+        - shutil.copy (local transfers only)
 
     Parameters
     ----------
@@ -154,8 +155,11 @@ def pull_async(
                 log.info(f"Pulling local file {req.file.path} using rsync")
                 ioresult = ioutil.rsync(from_path, to_file, req.file.size_b, local)
             else:
-                log.error("No commands available to complete local pull.")
-                ioresult = {"ret": -1, "check_src": False}
+                # No rsync?  Just use shutil.copy, I guess
+                log.warning("Falling back on shutil.copy to complete local pull.")
+                ioresult = ioutil.local_copy(
+                    from_path, to_dir, req.file.name, req.file.size_b
+                )
 
     # Delete the placeholder, if we created it
     placeholder.unlink(missing_ok=True)
@@ -181,21 +185,6 @@ def pull_async(
     # This was a fast update, so don't save "None" to the database
     if new_avail is not None:
         io.node.update_avail_gb(new_avail)
-
-
-async def _size_from_stat(fullpath: pathlib.Path) -> int | None:
-    """Asynchronously stat a file to get its size."""
-
-    try:
-        async with asyncio.timeout(600):
-            stat = await asyncio.to_thread(fullpath.stat)
-    except TimeoutError:
-        log.error(f"Timeout trying to stat {fullpath}!")
-        return None
-
-    if stat:
-        return stat.st_size
-    return None
 
 
 def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
@@ -225,10 +214,12 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     # Does the copy exist?
     if fullpath.exists():
         # First check the size
-        size = asyncio.run(_size_from_stat(fullpath))
-        if size is None:
+        try:
+            size = timeout_call(fullpath.stat, 600).st_size
+        except (OSError, TimeoutError):
             # Abandon the check attempt if we can't stat
             return
+
         if copy.file.size_b and size != copy.file.size_b:
             log.error(
                 f"File {copyname} on node {io.node.name} is corrupt! "

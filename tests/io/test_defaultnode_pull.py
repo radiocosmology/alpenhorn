@@ -2,7 +2,7 @@
 
 import os
 import pathlib
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -345,16 +345,16 @@ def test_pull_async_link_arccontam(queue, pull_async):
 
     # Call the async
     task, key = queue.get()
-    task()
+
+    # Mock local_copy.  We'll end up falling back on this
+    # due to no other copy method working
+    mock = MagicMock()
+    with patch("alpenhorn.io.ioutil.local_copy", mock):
+        task()
     queue.task_done(key)
 
-    # Req isn't resolved because we have no rsync, so failure
-    afcr = ArchiveFileCopyRequest.get(id=req.id)
-    assert afcr.completed is False
-    assert afcr.cancelled is False
-
-    # Source is not being re-checked
-    assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
+    # Local copy happened.
+    mock.assert_called_once()
 
 
 @pytest.mark.run_command_result(0, "", "stderr")
@@ -413,7 +413,8 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file == "M"
 
 
-def test_pull_fail_unlink(xfs, queue, pull_async):
+@pytest.mark.run_command_result(1, "", "rsync_stderr")
+def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async):
     """Test failure deleting the destination."""
 
     node, req = pull_async
