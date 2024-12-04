@@ -6,6 +6,7 @@ import errno
 import logging
 import pathlib
 import re
+import shutil
 import time
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
@@ -302,7 +303,7 @@ def hardlink(
     ----------
     from_path : path-like
         Source location
-    to_dir : spath-like
+    to_dir : path-like
         Destination directory
     filename : str
         Destination filename
@@ -310,7 +311,8 @@ def hardlink(
     Returns
     -------
     ioresult : dict or None
-        None if hardlinking failed otherwise, the dict
+        `{"ret": 1}` if the attempt timed out;
+        None if hardlinking failed; otherwise, the dict
         `{"ret": 0, "md5sum": True}`
     """
 
@@ -321,20 +323,98 @@ def hardlink(
     # an existing file with a hardlink, so we have to do this ridiculousness:
     try:
         # Create a temporary directory as a subdirectory of the destination dir
-        with TemporaryDirectory(dir=to_dir) as tmpdir:
+        with TemporaryDirectory(dir=to_dir, prefix=".alpentemp") as tmpdir:
             # We can be certain that we can create anything we want in here
             tmp_path = pathlib.Path(tmpdir, filename)
+
             # Try to create the new hardlink in the tempdir
-            tmp_path.hardlink_to(from_path)
+            util.timeout_call(tmp_path.hardlink_to, 600, from_path)
+
             # Hardlink succeeded!  Overwrite any existing file atomically
             tmp_path.rename(dest_path)
     except OSError as e:
         # Link creation failed for some reason
         log.debug(f"hardlink failed: {e}")
         return None
+    except TimeoutError:
+        log.warning(f'Timeout trying to hardlink "{dest_path}".')
+        return {"ret": 1}
 
     # md5sum is obviously correct
     return {"ret": 0, "md5sum": True}
+
+
+def local_copy(
+    from_path: str | os.PathLike, to_dir: str | os.PathLike, filename: str, size_b: int
+) -> dict:
+    """Copy `from_path` to `to_dir/filename` using `shutil`
+
+    Atomically overwrites an existing `to_dir/filename`.
+
+    Copy attempt times out after `_pull_timeout(size_b)` seconds have elapsed.
+
+    After a successful copy, `common.util.md5sum_file` will be called to verify
+    the transfer was successful.
+
+    Parameters
+    ----------
+    from_path : path-like
+        Source location
+    to_dir : path-like
+        Destination directory
+    filename : str
+        Destination filename
+    size_b : int
+        Size in bytes of file
+
+    Returns
+    -------
+    ioresult : dict
+        Result of the transfer, with keys:
+        "ret": int
+            0 if copy succeeded; 1 if it failed
+        "md5sum": str
+            Only present if ret == 0: md5sum of the file computed via
+            `util.md5sum_file`
+        "stderr": str
+            Only present if ret == 1: a message indicating what went wrong.
+        "check_src": bool
+            True unless it's clear that a failure wasn't
+            due to a problem with the source file.
+    """
+
+    from_path = pathlib.Path(from_path)
+    dest_path = pathlib.Path(to_dir, filename)
+
+    # We create the copy in a temporary place so that the destination filename
+    # never points to a partially transferred file.
+    try:
+        # Create a temporary directory as a subdirectory of the destination dir
+        with TemporaryDirectory(dir=to_dir, prefix=".alpentemp") as tmpdir:
+            # Timeout for the pull
+            timeout = _pull_timeout(size_b)
+
+            # If no timeout, just directly call shutil
+            if timeout is None:
+                tmp_path = shutil.copy2(from_path, tmpdir)
+            else:
+                # Otherwise copy the source into the dest, with timeout.
+                # Raises OSError or TimeoutError on failure
+                tmp_path = util.timeout_call(shutil.copy2, timeout, from_path, tmpdir)
+
+            # Copy succeeded!  Overwrite any existing file atomically
+            pathlib.Path(tmp_path).rename(dest_path)
+
+        # Now MD5 the file to verify it.
+        log.info(f'verifying "{dest_path}" after local copy')
+        md5 = util.md5sum_file(dest_path)
+    except (OSError, TimeoutError) as e:
+        # Copy failed for some reason
+        log.warning(f"local copy failed: {e}")
+        return {"ret": 1, "stderr": str(e)}
+
+    # Copy succeeded
+    return {"ret": 0, "md5sum": md5}
 
 
 def post_add(node: StorageNode, file_: ArchiveFile) -> None:

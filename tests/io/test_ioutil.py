@@ -208,57 +208,51 @@ def test_rsync_fail(mock_run_command):
     }
 
 
-def test_hardlink(tmp_path):
+def test_hardlink(xfs):
     """Test successful ioutil.hardlink() call."""
 
-    # Create src and dest in a temporary directory
-    srcdir = tmp_path.joinpath("src")
-    srcdir.mkdir()
-    file = srcdir.joinpath("file")
-    file.write_text("data")
-    dstdir = tmp_path.joinpath("dst")
-    dstdir.mkdir()
+    # Create src and dest
+    file = "/src/file"
+    xfs.create_file(file, contents="data")
+    dstdir = pathlib.Path("/dest")
+    xfs.create_dir(dstdir)
     destfile = dstdir.joinpath("file")
 
     assert ioutil.hardlink(file, dstdir, "file") == {"ret": 0, "md5sum": True}
     assert destfile.read_text() == "data"
 
 
-def test_hardlink_clobber(tmp_path):
+def test_hardlink_clobber(xfs):
     """Test successful overwrite in ioutil.hardlink() call."""
 
-    # Create src and dest in a temporary directory
-    srcdir = tmp_path.joinpath("src")
-    srcdir.mkdir()
-    file = srcdir.joinpath("file")
-    file.write_text("data")
-    dstdir = tmp_path.joinpath("dst")
-    dstdir.mkdir()
+    # Create src and dest
+    file = "/src/file"
+    xfs.create_file(file, contents="data")
+    dstdir = pathlib.Path("/dest")
     destfile = dstdir.joinpath("file")
-    destfile.write_text("other_data")
+    xfs.create_file(destfile, contents="other_data")
 
     assert destfile.read_text() == "other_data"
     assert ioutil.hardlink(file, dstdir, "file") == {"ret": 0, "md5sum": True}
     assert destfile.read_text() == "data"
 
 
-def test_hardlink_fail(tmp_path):
+def test_hardlink_fail(xfs):
     """Test failed ioutil.hardlink() call."""
 
-    # Create src but not dest
-    srcdir = tmp_path.joinpath("src")
-    srcdir.mkdir()
-    file = srcdir.joinpath("file")
-    file.write_text("data")
-    dstdir = tmp_path.joinpath("dst")
+    # Create src but not destdir
+    file = "/src/file"
+    xfs.create_file(file, contents="data")
+    dstdir = pathlib.Path("/dest")
     destfile = dstdir.joinpath("file")
 
     assert ioutil.hardlink(file, dstdir, "file") is None
     with pytest.raises(FileNotFoundError):
         destfile.read_text()
 
-    # Try with access error instead
-    dstdir.mkdir(mode=0o400)
+    # Try with access error instead.
+    xfs.create_file(destfile, contents="other_data")
+    xfs.chmod(dstdir, 0o400)
 
     assert ioutil.hardlink(file, dstdir, "file") is None
     with pytest.raises(PermissionError):
@@ -487,3 +481,66 @@ def test_remove_filedir_nonempty(simplenode, xfs):
     assert pathlib.Path(f"{simplenode.root}/a/b").exists()
     assert pathlib.Path(f"{simplenode.root}/a").exists()
     assert pathlib.Path(simplenode.root).exists()
+
+
+def test_local_copy(xfs, set_config):
+    """Test successful ioutil.local_copy() call."""
+
+    # Create src and dest
+    file = "/src/file"
+    xfs.create_file(file, contents="data")
+    dstdir = pathlib.Path("/dest")
+    xfs.create_dir(dstdir)
+    destfile = dstdir.joinpath("file")
+
+    assert ioutil.local_copy(file, dstdir, "file", 4) == {
+        "ret": 0,
+        "md5sum": "8d777f385d3dfec8815d20f7496026dc",
+    }
+    assert destfile.read_text() == "data"
+
+
+def test_local_copy_clobber(xfs, set_config):
+    """Test successful overwrite in ioutil.local_copy() call."""
+
+    # Create src and dest
+    file = "/src/file"
+    xfs.create_file(file, contents="data")
+    dstdir = pathlib.Path("/dest")
+    destfile = dstdir.joinpath("file")
+    xfs.create_file(destfile, contents="other_data")
+
+    assert destfile.read_text() == "other_data"
+    assert ioutil.local_copy(file, dstdir, "file", 4) == {
+        "ret": 0,
+        "md5sum": "8d777f385d3dfec8815d20f7496026dc",
+    }
+    assert destfile.read_text() == "data"
+
+
+def test_local_copy_fail(xfs, set_config):
+    """Test failed ioutil.local_copy() call."""
+
+    # Create src but not destdir
+    file = "/src/file"
+    xfs.create_file(file, contents="data")
+    dstdir = pathlib.Path("/dest")
+    destfile = dstdir.joinpath("file")
+
+    result = ioutil.local_copy(file, dstdir, "file", 4)
+    assert result["ret"] != 0
+    assert "stderr" in result
+
+    with pytest.raises(FileNotFoundError):
+        destfile.read_text()
+
+    # Try with access error instead.
+    xfs.create_file(destfile, contents="other_data")
+    xfs.chmod(dstdir, 0o400)
+
+    result = ioutil.local_copy(file, dstdir, "file", 4)
+    assert result["ret"] != 0
+    assert "stderr" in result
+
+    with pytest.raises(PermissionError):
+        destfile.read_text()

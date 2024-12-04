@@ -7,10 +7,15 @@ import hashlib
 import logging
 import socket
 import subprocess
+from typing import TYPE_CHECKING, Any
 
 import click
 
 from . import config, extensions, logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
@@ -191,6 +196,51 @@ def run_command(
         stdout_val.decode(errors="replace"),
         stderr_val.decode(errors="replace"),
     )
+
+
+def timeout_call(func: Callable, timeout: float, /, *args: Any, **kwargs: Any) -> Any:
+    """Call a (non-awaitable) function with a timeout.
+
+    Uses asyncio.to_thread to call a function in a thread that
+    will be killed if it runs over time.
+
+    Parameters
+    ----------
+    func : Callable
+        the function to call
+    timeout : float
+        timeout, in seconds
+    args, kwargs:
+        passed to `func`
+
+    Returns
+    -------
+    result:
+        The return value of func
+
+    Raises
+    ------
+    TimeoutError:
+        The call exceeded the timeout
+    """
+
+    # await-able wrapper
+    async def _async_wrapper(
+        func: Callable, timeout: float, args: tuple, kwargs: dict
+    ) -> Any:
+        try:
+            async with asyncio.timeout(timeout):
+                return await asyncio.to_thread(func, *args, **kwargs)
+        except TimeoutError:
+            log.error(f"Timeout after {pretty_deltat(timeout)} calling {func}.")
+            raise
+
+    # If timeout is not positive, don't even try
+    if timeout <= 0:
+        raise TimeoutError(f'Negative timeout for "{func}" in timeout_call.')
+
+    # Otherwise call via asyncio
+    return asyncio.run(_async_wrapper(func, timeout, args, kwargs))
 
 
 async def _md5sum_file(filename: str, hr: bool = True) -> str | None:
