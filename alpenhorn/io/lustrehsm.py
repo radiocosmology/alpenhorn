@@ -84,6 +84,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         * release_check_count : integer
             The number of files to check at a time when doing idle HSM status
             update (see idle_update()).  Default is 100.
+        * restore_wait : integer
+            The number of seconds to wait between checking if a restore request
+            has completed.  Default is 600 seconds (10 minutes).
     """
 
     remote_class = LustreHSMNodeRemote
@@ -106,8 +109,15 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # For informational purposes.  Keys are elements in self._restoring.
         self._restore_start = {}
 
+        self._restore_wait_time = int(config.get("restore_wait", 600))
+        if self._restore_wait_time < 1:
+            raise ValueError(
+                "io_config key 'restore_wait' non-positive "
+                f"(={self._restore_wait_time})"
+            )
+
         # For idle-time HSM state updates
-        self._nrelease = config.get("release_check_count", 100)
+        self._nrelease = int(config.get("release_check_count", 100))
         if self._nrelease < 1:
             raise ValueError(
                 f"io_config key 'release_check_count' non-positive (={self._nrelease})"
@@ -411,7 +421,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             restore_wait = node_io._restore_wait(copy)
             while restore_wait:
                 # Wait for a bit
-                yield 600
+                yield self._restore_wait_time
 
                 # Now check again
                 restore_wait = node_io._restore_wait(copy)
@@ -581,7 +591,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             restore_wait = node_io._restore_wait(copy)
             while restore_wait:
                 # Wait for a bit
-                yield 600
+                yield self._restore_wait_time
 
                 # Now check again
                 restore_wait = node_io._restore_wait(copy)

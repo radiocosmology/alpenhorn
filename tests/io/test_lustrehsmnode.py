@@ -59,11 +59,23 @@ def test_init_no_headroom(have_lfs, simplenode):
 
 
 def test_init_bad_release_count(simplenode, have_lfs):
-    """Check for bad realse_check_count."""
+    """Check for bad release_check_count."""
 
     simplenode.io_class = "LustreHSM"
     simplenode.io_config = (
         '{"quota_group": "qgroup", "headroom": 300000, "release_check_count": -1}'
+    )
+
+    with pytest.raises(ValueError):
+        UpdateableNode(None, simplenode)
+
+
+def test_init_bad_restore_wait(simplenode, have_lfs):
+    """Check for bad restore_wait."""
+
+    simplenode.io_class = "LustreHSM"
+    simplenode.io_config = (
+        '{"quota_group": "qgroup", "headroom": 300000, "restore_wait": -1}'
     )
 
     with pytest.raises(ValueError):
