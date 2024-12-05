@@ -114,8 +114,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         host=hostname,
         active=True,
         avail_gb=2000.0 / 2**30,
-        # This is mostly ignored
-        io_config='{"quota_group": "qgroup", "headroom": 10}',
+        io_config='{"quota_group": "qgroup", "headroom": 10, "restore_wait": 1}',
     )
     sf1 = StorageNode.create(
         name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True
@@ -304,7 +303,7 @@ def e2e_config(xfs, hostname, clidb_uri):
         ],
         "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
         "logging": {"level": "debug"},
-        "daemon": {"num_workers": 0},
+        "daemon": {"num_workers": 0, "update_interval": 1},
     }
 
     # Put it in a file
@@ -318,17 +317,18 @@ def e2e_config(xfs, hostname, clidb_uri):
         "/nl1/acq1/release.me": "restored",
     }
 )
-def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
+@pytest.mark.lfs_hsm_restore_result("restore")
+def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync):
     runner = CliRunner()
 
-    result = runner.invoke(entry, catch_exceptions=False)
+    result = runner.invoke(entry, ["--once"], catch_exceptions=False)
 
     assert result.exit_code == 0
 
     # Check HSM
     lfs = mock_lfs(quota_group="qgroup")
     assert lfs.hsm_state("/nl2/acq1/correct.me") == lfs.HSM_RESTORED
-    assert lfs.hsm_state("/nl1/acq1/restore.me") == lfs.HSM_RESTORING
+    assert lfs.hsm_state("/nl1/acq1/restore.me") == lfs.HSM_RESTORED
     assert lfs.hsm_state("/nl1/acq1/release.me") == lfs.HSM_RELEASED
 
     # Check results
@@ -347,9 +347,9 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync, loop_once):
     correctme = ArchiveFile.get(name="correct.me")
     assert ArchiveFileCopy.get(file=correctme).ready
 
-    # restore.me is not ready (because the main loop only ran once).
+    # restore.me is ready
     restoreme = ArchiveFile.get(name="restore.me")
-    assert not ArchiveFileCopy.get(file=restoreme).ready
+    assert ArchiveFileCopy.get(file=restoreme).ready
 
     # pull.me has been pulled
     tp1 = StorageNode.get(name="tp1")

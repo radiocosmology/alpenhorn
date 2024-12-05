@@ -53,7 +53,7 @@ def test_update_abort():
 
     # This should do nothing except exit, so passing
     # a couple of Nones shouldn't be a problem
-    update.update_loop(None, None)
+    update.update_loop(None, None, False)
 
     # Reset
     pool.global_abort.clear()
@@ -64,7 +64,7 @@ def test_update_no_nodes(
 ):
     """Test update_loop with no active nodes."""
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     mock_serial_io.assert_called_once_with(queue)
 
@@ -83,7 +83,7 @@ def test_update_node_not_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -107,7 +107,7 @@ def test_update_node_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -130,7 +130,7 @@ def test_update_node_cancelled(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -221,7 +221,7 @@ def test_update_group_not_idle_node(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -258,7 +258,7 @@ def test_update_group_not_idle_group(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Idle update didn't happen
     mockio.group.idle_update.assert_not_called()
@@ -280,7 +280,7 @@ def test_update_group_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Group update started
     mockio.group.before_update.assert_called_once()
@@ -305,7 +305,7 @@ def test_update_group_cancelled(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool)
+    update.update_loop(queue, emptypool, False)
 
     # Group update started
     mockio.group.before_update.assert_called_once()
