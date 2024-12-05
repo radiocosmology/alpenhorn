@@ -33,12 +33,25 @@ sys.excepthook = log_exception
     default=None,
     metavar="FILE",
 )
+@click.option(
+    "once",
+    "--exit-after-update",
+    "-o",
+    "--once",
+    is_flag=True,
+    help="Run the update loop once, wait for updates to complete, and then exit.",
+)
 @version_option
 @help_config_option
-def entry(conf):
-    """Alpenhorn data management daemon.
+def entry(conf, once):
+    """Alpenhornd: data management daemon.
 
-    This daemon can be used to manage Storage Nodes.
+    The alpenhorn daemon can be used to manage Storage Nodes.  See the alpenhorn
+    documentation for details on how to run the daemon.
+
+    By default, the daemon will keep running until killed, but you can instead tell
+    it to run only a single update pass and then exit after updates have completed
+    by using the "--exit-after-update" flag.
     """
 
     # Initialise alpenhorn
@@ -65,7 +78,7 @@ def entry(conf):
 
     # Enter main loop
     try:
-        update.update_loop(queue, wpool)
+        update.update_loop(queue, wpool, once)
     # Catch keyboard interrupt
     except KeyboardInterrupt:
         log.info("Exiting due to SIGINT")
