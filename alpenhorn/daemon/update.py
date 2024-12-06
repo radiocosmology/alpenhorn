@@ -846,7 +846,9 @@ class UpdateableGroup(updateable_base):
             self.io.idle_update()
 
 
-def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None:
+def update_loop(
+    queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool, once: bool
+) -> None:
     """Main loop of alepnhornd.
 
     This is the main update loop for the alpenhorn daemon.
@@ -857,9 +859,12 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
         the task manager
     pool : WorkerPool
         the pool of worker threads (may be empty)
+    once : bool
+        If True, only run the loop once, wait for the queue to empty,
+        and then exit.  If False, loop forever.
 
-    The daemon cycles through the update loop until it is terminated in
-    one of three ways:
+    If `once` is false, the daemon cycles through the update loop until it is
+    terminated in one of three ways:
 
     - receiving SIGINT (AKA KeyboardInterrupt).  This causes a clean exit.
     - a global abort caused by an uncaught exception in a worker thread.  This
@@ -1017,12 +1022,33 @@ def update_loop(queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool) -> None
             f"{queue.inprogress_size} in-progress on {len(pool)} workers"
         )
 
-        # Avoid looping too fast.
-        remaining = config.config["daemon"]["update_interval"] - loop_time
-        if remaining > 0:
-            global_abort.wait(remaining)  # Stops waiting if a global abort is triggered
+        if once:
+            # If we're in Exit-after-update mode, wait for updates to complete
+            # and then return
+            first_time = True
+            while True:
+                if queue.qsize + queue.inprogress_size + queue.deferred_size == 0:
+                    log.info("Update complete.  Exiting.")
+                    return
 
-    # Warn on exit
+                if first_time:
+                    first_time = False
+                    log.info("Waiting for updates to complete.")
+
+                # Wait a bit
+                global_abort.wait(config.config["daemon"]["update_interval"])
+                log.info(
+                    f"Tasks: {queue.qsize} queued, {queue.deferred_size} deferred, "
+                    f"{queue.inprogress_size} in-progress on {len(pool)} workers"
+                )
+        else:
+            # Not in EAU mode.  Avoid looping too fast.
+            remaining = config.config["daemon"]["update_interval"] - loop_time
+            if remaining > 0:
+                # Stops waiting if a global abort is triggered
+                global_abort.wait(remaining)
+
+    # Warn on abnormal exit
     log.warning("Exiting due to global abort")
 
 
