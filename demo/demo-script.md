@@ -14,10 +14,10 @@ Preliminaries
 2. Initialize Alpenhorn database
 
     ```
-    alpenhorn init
-    alpenhorn create_group group_1
-    alpenhorn create_node --auto_import=yes node_1 /data host_1 group_1
-    alpenhorn mount --user root --address host_1 node_1
+    alpenhorn db init
+    alpenhorn group create group_1
+    alpenhorn node create node_1 --auto-import --root=/data --group=group_1 --host=host_1
+    alpenhorn node activate node_1 --username root --address host_1
     ```
 
 
@@ -35,7 +35,7 @@ Importing files
 4. Client
     ```
     docker-compose exec host_1 bash -l
-    alpenhorn status
+    alpenhorn node status
     ```
    
    Two files on host_1
@@ -47,13 +47,13 @@ Start more nodes
 5. Create storage
 
     ```
-    alpenhorn create_group group_2
-    alpenhorn create_node --auto_import=yes node_2 /data host_2 group_2
-    alpenhorn mount --user root --address host_2 --hostname host_2 node_2
+    alpenhorn group create group_2
+    alpenhorn node create node_2 --auto-import --root=/data --group=group_2 --host=host_2
+    alpenhorn node activate node_3 --user root --address host_2 --hostname host_2
 
-    alpenhorn create_group group_3
-    alpenhorn create_node --auto_import=yes node_3 /data host_3 group_3
-    alpenhorn mount --user root --address host_3 --hostname host_3 node_3
+    alpenhorn group create group_3
+    alpenhorn node create node_3 --auto-import --root=/data --group=group_3 --host=host_3
+    alpenhorn node activate node_3 --user root --address host_3 --hostname host_3
     ```
 
 6. Start the service
@@ -72,7 +72,6 @@ Syncing files
 7. Client
     ```
     docker-compose exec host_2 bash -l
-    alpenhorn verify
     find /data
     ```
    
@@ -80,7 +79,7 @@ Syncing files
 
 8. Start a sync
     ```
-    alpenhorn sync node_1 group_2 --show_files
+    alpenhorn node sync node_1 group_2 --show_files
     ```
     
     Note the server copying
