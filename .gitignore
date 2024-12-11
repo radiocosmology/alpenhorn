@@ -72,3 +72,8 @@ target/
 *~
 .*sw*
 \#*\#
+
+# Files created by the alpenhorn demo
+demo/data
+!demo/data/host_1/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc
+!demo/data/host_1/2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt

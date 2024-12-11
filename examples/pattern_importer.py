@@ -6,10 +6,11 @@ new data files which need import, both as part of the auto-import
 functionality, but also when requesting manual imports with the
 alpenhorn CLI.
 
-This extension re-implements the AcqType and FileType tables
-formerly found in alpenhorn proper and then extends them with
-two new fields ("glob" and "patterns") which provide configuration
-data for matching the acq/file name against one ore more patterns.
+This creates two tables: AcqType and FileType which provide
+configuration data for matching the acq/file name against one or
+more patterns.  It also adds columns to the alpenhorn tables
+ArchiveAcq and ArchiveFile (see the `ExtendedAcq` and `ExtendedFile`
+classes).
 
 The detection function is `detect`.  This function is provided to
 alpenhorn via `register_extension`.  The `detect` function loops
@@ -32,7 +33,8 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from alpenhorn.db import ArchiveAcq, ArchiveFile, base_model
+from alpenhorn.common import config as alpenconf
+from alpenhorn.db import ArchiveAcq, ArchiveFile, base_model, connect, database_proxy
 
 if TYPE_CHECKING:
     import pathlib
@@ -60,7 +62,6 @@ class TypeBase(base_model):
     """
 
     name = pw.CharField(max_length=64, unique=True)
-    glob = pw.BooleanField(default=False)
     patterns = pw.TextField()
     notes = pw.TextField(null=True)
 
@@ -78,7 +79,8 @@ class TypeBase(base_model):
         Returns
         -------
         match
-            True if a successful match was made.
+            The matched substring, if a successful match was made.
+            None if matching failed.
 
         Raises
         ------
@@ -101,10 +103,11 @@ class TypeBase(base_model):
 
         # Loop over patterns and check for matches
         for pattern in self._pattern_list:
-            if re.match(pattern, name):
-                return True
+            result = re.match(pattern, name)
+            if result:
+                return result[0]
 
-        return False
+        return None
 
 
 # These are just differently named copies of TypeBase
@@ -243,9 +246,10 @@ def detect(
             break  # Out of path elements
 
         for type_ in AcqType.select():
-            if type_.check_match(str(name)):
+            result = type_.check_match(str(name))
+            if result:
                 acq_type = type_
-                acq_name = name
+                acq_name = result
                 break
 
         # If the inner loop found a match, stop trying path elements
@@ -274,6 +278,59 @@ def detect(
 
     # Return success
     return acq_name, callback
+
+
+def demo_init() -> None:
+    """Extension init for alpenhorn demo
+
+    This function initialised this extension for the alpenhorn demo
+    (see alpenhorn/dmeo/demo-script.md).
+
+    It creates the AcqType, FileType and extended ArchiveAcq and ArchiveFile
+    tables and then populates the AcqType and FileType tables to allow the
+    demo alpenhorn instances to find the demo data.
+
+    Because this function creates extended versions of the alpenhorn
+    ArchiveAcq and ArchiveFile tables, it must be called before
+    "alpenhorn db init" is run to create the alpenhorn data index.
+    """
+
+    # Load the alpenhorn config to find the database connection details
+    alpenconf.load_config(None, True)
+
+    # Connect to the database
+    connect()
+
+    # Create the tables, if necessary
+    database_proxy.create_tables(
+        [AcqType, FileType, ExtendedAcq, ExtendedFile], safe=True
+    )
+
+    # Populate AcqType.  There is only acq type in the demo
+    AcqType.create(
+        name="demo_acq",
+        patterns=json.dumps(
+            [
+                r"20[0-9][0-9]/(0[1-9]|1[012])/(0[1-9]|[12][0-9]|3[01])/acq_.*_inst_[a-z0-9]+"
+            ]
+        ),
+        notes="AcqType for alpenhorn demo",
+    )
+
+    # Populate FileType.  There are two of these
+    FileType.create(
+        name="acq_summary",
+        patterns=json.dumps([r"summary\.txt"]),
+        notes="Summary files for alpenhorn demo",
+    )
+    FileType.create(
+        name="zcx",
+        patterns=json.dumps([r"acq_data/x_([0-9]*_[0-9])_data/raw/acq_\1\.zxc"]),
+        notes="ZXC file for alpenhorn demo",
+    )
+
+    # Indicate success
+    print("Plugin init complete complete.")
 
 
 def register_extension() -> dict:
