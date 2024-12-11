@@ -1,0 +1,41 @@
+## Generate an image that automatically starts alpenhornd and sshd (for
+## transfers)
+
+# Use an official Python runtime as a base image
+FROM python:3.11
+
+LABEL maintainer="D. V. Wiebe <dvw@phas.ubc.ca>"
+
+# System prerequisites for the test image
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    vim \
+    ssh \
+    rsync \
+    netcat-openbsd \
+    default-mysql-client
+RUN pip install --no-cache-dir mysqlclient
+
+# Set up ssh key based login for root
+RUN ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa
+RUN cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys
+RUN echo 'Host *\n\
+    StrictHostKeyChecking no\n' > /root/.ssh/config
+
+# Make port 22 available to the world outside this container
+EXPOSE 22
+
+# Copy the configuration file and create the log directory
+COPY demo/alpenhorn.conf /etc/alpenhorn/alpenhorn.conf
+RUN mkdir /var/log/alpenhorn
+
+# Install the import detect extension
+COPY examples/pattern_importer.py /root/python/pattern_importer.py
+ENV PYTHONPATH /root/python/
+
+# Install alpenhorn and dependencies
+ADD . /build
+RUN cd /build && pip install .
+
+# Run alpenhorn and ssh
+CMD service ssh start && \
+    alpenhornd

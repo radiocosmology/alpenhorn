@@ -7,38 +7,55 @@ Preliminaries
 
 1. Start the DB and enter the first container
     ```
-    docker-compose up -d db
-    docker-compose run host_1 bash -l
+    docker compose up --remove-orphans --detach db
+    docker compose run host_1 bash -l
     ```
 
 2. Initialize Alpenhorn database
 
     ```
-    alpenhorn init
-    alpenhorn create_group group_1
-    alpenhorn create_node --auto_import=yes node_1 /data host_1 group_1
-    alpenhorn mount --user root --address host_1 node_1
+    python -c 'import pattern_importer; pattern_importer.demo_init()'
+    alpenhorn db init
+    alpenhorn group create group_1
+    alpenhorn node create node_1 --auto-import --root=/data --group=group_1 --host=host_1
+    alpenhorn node activate node_1 --username root --address host_1
     ```
 
 
-Importing files
----------------
+Auto-Importing files
+--------------------
 
 3. Start the service
     ```
-    docker-compose up host_1
+    docker compose up --remove-orphans --detach host_1
+    docker compose logs host_1
     ```
    
    Note files being imported. 
-   (Could also do `docker-compose logs host_1 | head -30`.)
+   (Could also do `docker compose logs host_1 | head -30`.)
    
 4. Client
     ```
-    docker-compose exec host_1 bash -l
-    alpenhorn status
+    docker compose exec host_1 bash -l
+    alpenhorn node stats
     ```
    
-   Two files on host_1
+   Two files on node_1:
+
+   ```
+   root@host_1:/# alpenhorn node stats
+   Name      File Count    Total Size    % Full
+   ------  ------------  ------------  --------
+   node_1             2          15 B         -
+   ```
+
+   ```
+   root@host_1:/# alpenhorn file list --node=node_1 --details
+File                                                                                  Size    MD5 Hash                          Registration Time             State    Size on Node
+------------------------------------------------------------------------------------  ------  --------------------------------  ----------------------------  -------  --------------
+2017/03/21/acq_xy1_45678901T000000Z_inst_zab/acq_data/x_123_1_data/raw/acq_123_1.zxc  15 B    9ef14b877f34ed94c8dc3e700db49dad  Wed Jan 22 22:14:03 2025 UTC  Healthy  4.000 kiB
+2017/03/21/acq_xy1_45678901T000000Z_inst_zab/summary.txt                              0 B     d41d8cd98f00b204e9800998ecf8427e  Wed Jan 22 22:14:03 2025 UTC  Healthy  0 B
+   ```
 
 
 Start more nodes
@@ -47,20 +64,20 @@ Start more nodes
 5. Create storage
 
     ```
-    alpenhorn create_group group_2
-    alpenhorn create_node --auto_import=yes node_2 /data host_2 group_2
-    alpenhorn mount --user root --address host_2 --hostname host_2 node_2
+    alpenhorn group create group_2
+    alpenhorn node create node_2 --auto-import --root=/data --group=group_2 --host=host_2
+    alpenhorn node activate node_2 --username root --address host_2
 
-    alpenhorn create_group group_3
-    alpenhorn create_node --auto_import=yes node_3 /data host_3 group_3
-    alpenhorn mount --user root --address host_3 --hostname host_3 node_3
+    alpenhorn group create group_3
+    alpenhorn node create node_3 --auto-import --root=/data --group=group_3 --host=host_3
+    alpenhorn node activate node_3 --username root --address host_3
     ```
 
 6. Start the service
     ```
-    docker-compose up -d host_1
-    docker-compose up host_2
-    docker-compose up host_3
+    docker compose up -d host_1
+    docker compose up host_2
+    docker compose up host_3
     ```
    
    Note no files are being imported.
@@ -71,16 +88,15 @@ Syncing files
 
 7. Client
     ```
-    docker-compose exec host_2 bash -l
-    alpenhorn verify
+    docker compose exec host_2 bash -l
     find /data
     ```
    
-   No files on host_2
+    No files on host_2
 
 8. Start a sync
     ```
-    alpenhorn sync node_1 group_2 --show_files
+    alpenhorn node sync node_1 group_2 --show_files
     ```
     
     Note the server copying
@@ -92,7 +108,7 @@ Syncing files
 
 9. Sync an explicit acquisition
     ```
-    docker-compose exec host_3 bash -l
+    docker compose exec host_3 bash -l
     find /data
     alpenhorn sync node_1 group_3 --acq=12345678T000000Z_inst_zab --show_files
     ```
@@ -115,7 +131,7 @@ Add a new file
 
 11. create a new file
     ```
-    docker-compose exec host_2 bash -l
+    docker compose exec host_2 bash -l
     echo foo bar > /data/12345678T000000Z_inst_zab/jim.out
     ```
 
@@ -123,7 +139,7 @@ Add a new file
     ```
     alpenhorn sync --acq 12345678T000000Z_inst_zab node_2 group_3 --show_files
     alpenhorn status
-    docker-compose up host_3
+    docker compose up host_3
     ```
     
     Highlight "transferring file ... jim.out"
