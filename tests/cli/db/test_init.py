@@ -8,6 +8,7 @@ from alpenhorn.db import (
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
     StorageGroup,
     StorageNode,
     StorageTransferAction,
@@ -45,6 +46,9 @@ def test_init(clidb_noinit, cli):
     ArchiveFileCopyRequest.create(file_id=1, node_from_id=1, group_to_id=1)
     assert ArchiveFileCopyRequest.get(file_id=1, node_from_id=1, group_to_id=1).id == 1
 
+    ArchiveFileImportRequest.create(path="path", node_id=1)
+    assert ArchiveFileImportRequest.get(path="path", node_id=1).id == 1
+
 
 def test_init_safe(clidb, cli):
     """Test DB init doesn't overwrite tables"""
@@ -57,6 +61,7 @@ def test_init_safe(clidb, cli):
     ArchiveFile.create(name="Test", acq_id=1)
     ArchiveFileCopy.create(file_id=1, node_id=1)
     ArchiveFileCopyRequest.create(file_id=1, node_from_id=1, group_to_id=1)
+    ArchiveFileImportRequest.create(path="path", node_id=1)
 
     cli(0, ["db", "init"])
 
@@ -68,3 +73,4 @@ def test_init_safe(clidb, cli):
     assert ArchiveFile.get(name="Test", acq_id=1).id == 1
     assert ArchiveFileCopy.get(file_id=1, node_id=1).id == 1
     assert ArchiveFileCopyRequest.get(file_id=1, node_from_id=1, group_to_id=1).id == 1
+    assert ArchiveFileImportRequest.get(path="path", node_id=1).id == 1
