@@ -10,7 +10,7 @@ LABEL maintainer="D. V. Wiebe <dvw@phas.ubc.ca>"
 RUN apt-get update && apt-get install --no-install-recommends -y \
     ssh \
     rsync \
-    netcat \
+    netcat-openbsd \
     default-mysql-client
 RUN pip install --no-cache-dir mysqlclient
 
@@ -24,7 +24,7 @@ RUN echo 'Host *\n\
 EXPOSE 22
 
 # Copy the configuration file and create the log directory
-COPY tests/docker/alpenhorn.conf /etc/alpenhorn/alpenhorn.conf
+COPY demo/alpenhorn.conf /etc/alpenhorn/alpenhorn.conf
 RUN mkdir /var/log/alpenhorn
 
 # Install the import detect extension
@@ -33,7 +33,7 @@ ENV PYTHONPATH /root/python/
 
 # Install alpenhorn and dependencies
 ADD . /build
-RUN pip install .
+RUN cd /build && pip install .
 
 # Run alpenhorn and ssh
 CMD service ssh start && \

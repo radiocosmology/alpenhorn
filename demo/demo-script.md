@@ -7,8 +7,8 @@ Preliminaries
 
 1. Start the DB and enter the first container
     ```
-    docker-compose up -d db
-    docker-compose run host_1 bash -l
+    docker compose up --detach db
+    docker compose run host_1 bash -l
     ```
 
 2. Initialize Alpenhorn database
@@ -26,15 +26,15 @@ Importing files
 
 3. Start the service
     ```
-    docker-compose up host_1
+    docker compose up host_1
     ```
    
    Note files being imported. 
-   (Could also do `docker-compose logs host_1 | head -30`.)
+   (Could also do `docker compose logs host_1 | head -30`.)
    
 4. Client
     ```
-    docker-compose exec host_1 bash -l
+    docker compose exec host_1 bash -l
     alpenhorn node status
     ```
    
@@ -58,9 +58,9 @@ Start more nodes
 
 6. Start the service
     ```
-    docker-compose up -d host_1
-    docker-compose up host_2
-    docker-compose up host_3
+    docker compose up -d host_1
+    docker compose up host_2
+    docker compose up host_3
     ```
    
    Note no files are being imported.
@@ -71,7 +71,7 @@ Syncing files
 
 7. Client
     ```
-    docker-compose exec host_2 bash -l
+    docker compose exec host_2 bash -l
     find /data
     ```
    
@@ -91,7 +91,7 @@ Syncing files
 
 9. Sync an explicit acquisition
     ```
-    docker-compose exec host_3 bash -l
+    docker compose exec host_3 bash -l
     find /data
     alpenhorn sync node_1 group_3 --acq=12345678T000000Z_inst_zab --show_files
     ```
@@ -114,7 +114,7 @@ Add a new file
 
 11. create a new file
     ```
-    docker-compose exec host_2 bash -l
+    docker compose exec host_2 bash -l
     echo foo bar > /data/12345678T000000Z_inst_zab/jim.out
     ```
 
@@ -122,7 +122,7 @@ Add a new file
     ```
     alpenhorn sync --acq 12345678T000000Z_inst_zab node_2 group_3 --show_files
     alpenhorn status
-    docker-compose up host_3
+    docker compose up host_3
     ```
     
     Highlight "transferring file ... jim.out"
