@@ -117,7 +117,7 @@ def _run_cancel(
                     acq_files[acq].append("    " + str(req.file.path))
 
             for acq in sorted(acq_counts, key=lambda x: x.name):
-                requests = "requests" if acq_counts[acq] == 1 else "requests"
+                requests = "request" if acq_counts[acq] == 1 else "requests"
                 echo(f"{acq.name} [{acq_counts[acq]} {requests}]")
                 if show_files:
                     echo("\n".join(sorted(acq_files[acq])))
