@@ -336,17 +336,54 @@ def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy)
         has_file="Y",
         wants_file="Y",
     )
-    copyM = archivefilecopy(
+    copyM1 = archivefilecopy(
         node=unode.db,
-        file=archivefile(name="fileM", acq=simpleacq),
+        file=archivefile(name="fileM1", acq=simpleacq),
         has_file="Y",
         wants_file="M",
+        size_b=2 * 2**30,
     )
-    copyN = archivefilecopy(
+    copyN1 = archivefilecopy(
         node=unode.db,
-        file=archivefile(name="fileN", acq=simpleacq),
+        file=archivefile(name="fileN1", acq=simpleacq),
         has_file="Y",
         wants_file="N",
+        size_b=2 * 2**30,
+    )
+    copyM2 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileM2", acq=simpleacq),
+        has_file="Y",
+        wants_file="M",
+        size_b=2 * 2**30,
+    )
+    archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileM3", acq=simpleacq),
+        has_file="Y",
+        wants_file="M",
+        size_b=2 * 2**30,
+    )
+    copyN2 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileN2", acq=simpleacq),
+        has_file="Y",
+        wants_file="N",
+        size_b=2 * 2**30,
+    )
+    archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileM4", acq=simpleacq),
+        has_file="Y",
+        wants_file="M",
+        size_b=2 * 2**30,
+    )
+    copyN3 = archivefilecopy(
+        node=unode.db,
+        file=archivefile(name="fileN3", acq=simpleacq),
+        has_file="Y",
+        wants_file="N",
+        size_b=2 * 2**30,
     )
 
     # Force under min and not archive
@@ -359,7 +396,8 @@ def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy)
     mock_delete = MagicMock()
     with patch.object(unode.io, "delete", mock_delete):
         unode.update_delete()
-    mock_delete.assert_called_once_with([copyM, copyN])
+    # copyY, copyM3 and copyM4 are not deleted
+    mock_delete.assert_called_once_with([copyM1, copyN1, copyM2, copyN2, copyN3])
 
 
 def test_update_delete_over_min(unode, simpleacq, archivefile, archivefilecopy):
