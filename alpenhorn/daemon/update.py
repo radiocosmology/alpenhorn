@@ -1,5 +1,4 @@
-"""Routines for updating the state of a node.
-"""
+"""Routines for updating the state of a node."""
 
 from __future__ import annotations
 
@@ -414,21 +413,25 @@ class UpdateableNode(updateable_base):
 
         # Find all file copies needing deletion on this node
         #
-        # If we have less than the minimum available space, we should consider all
-        # files not explicitly wanted (i.e. wants_file != 'Y') as candidates for
-        # deletion, provided the copy is not on an archive node. If we have more
-        # than the minimum space, or we are on archive node then only those
-        # explicitly marked (wants_file == 'N') will be removed.
+        # If we have less than the minimum available space, we need to delete
+        # remove some of the files marked for discretionary clearning (i.e.
+        # wants_file == 'M').  Figure out how much space we need to free to
+        # get back above the minimum.
         if self.db.under_min and not self.db.archive:
+            # under_min returns False if avail_gb is None, so this should be safe to do:
+            avail_needed = int((self.db.min_avail_gb - self.db.avail_gb) * 2**30)
             log.info(
                 f"Hit minimum available space on {self.name} -- "
-                "considering all unwanted files for deletion!"
+                f"will attempt to free {util.pretty_bytes(avail_needed)}."
             )
             dfclause = ArchiveFileCopy.wants_file != "Y"
         else:
             dfclause = ArchiveFileCopy.wants_file == "N"
+            avail_needed = 0
 
-        # Search db for candidates on this node to delete.
+        # Search db for candidates on this node to delete.  The `dfclause` means
+        # this query will only return wants_file == 'M' file copies when there's a
+        # chance we'll delete them.
         del_copies = []
         for copy in (
             ArchiveFileCopy.select()
@@ -439,6 +442,13 @@ class UpdateableNode(updateable_base):
             )
             .order_by(ArchiveFileCopy.id)
         ):
+            # Only delete files marked for discretionary cleaning (wants_file == 'M')
+            # when we need to get back over min_avail_gb.  Because avail_needed
+            # decreases as we add files to the file deletion list, we'll never delete
+            # more of these than the amount of space we need to clear up.
+            if copy.wants_file == "M" and avail_needed <= 0:
+                continue
+
             # Don't delete file copies which are the source for pending
             # copy requests
             if (
@@ -456,6 +466,14 @@ class UpdateableNode(updateable_base):
                     "transfer pending"
                 )
                 continue
+
+            # If we are trying to get back above min_avail_gb, keep a running total
+            # of how much more deletion is needed.
+            if avail_needed > 0:
+                if copy.size_b:
+                    avail_needed -= copy.size_b
+                elif copy.file.size_b:
+                    avail_needed -= copy.file.size_b
 
             # Group a bunch of these together to reduce the number of I/O Tasks
             # created.  TODO: figure out if this actually helps
