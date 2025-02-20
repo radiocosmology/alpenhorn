@@ -283,8 +283,8 @@ def detect(
 def demo_init() -> None:
     """Extension init for alpenhorn demo
 
-    This function initialised this extension for the alpenhorn demo
-    (see alpenhorn/dmeo/demo-script.md).
+    This function initialises the alpenhorn data index to support this extension
+    when used in the the alpenhorn demo (see alpenhorn/dmeo/demo-script.md).
 
     It creates the AcqType, FileType and extended ArchiveAcq and ArchiveFile
     tables and then populates the AcqType and FileType tables to allow the
