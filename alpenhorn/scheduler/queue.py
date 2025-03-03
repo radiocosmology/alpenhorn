@@ -20,6 +20,8 @@ from collections.abc import Hashable
 from time import monotonic, sleep
 from typing import Any
 
+from ..common.metrics import Metric
+
 
 class FairMultiFIFOQueue:
     """Create a new Fair Multi-FIFO Queue"""
@@ -35,6 +37,10 @@ class FairMultiFIFOQueue:
         "_keys_by_inprogress",
         "_lock",
         "_not_empty",
+        "_qcount",
+        "_qcount_all",
+        "_qcount_any",
+        "_qlock",
         "_total_inprogress",
         "_total_queued",
     ]
@@ -70,6 +76,56 @@ class FairMultiFIFOQueue:
         # The lock for _deferrals and _joining, which can be held independently
         # of the primary _lock.
         self._dlock = threading.Lock()
+
+        # Metrics
+
+        # Count of tasks
+        self._qcount = Metric(
+            "queue_count", "Count of queued tasks", unbound=["fifo", "status"]
+        )
+
+        # Marginalised over status
+        self._qcount_any = Metric(
+            "queue_count",
+            "Count of queued tasks",
+            unbound=["fifo"],
+            bound={"status": "any"},
+        )
+
+        # Marignalised over fifo
+        self._qcount_all = Metric(
+            "queue_count",
+            "Count of queued tasks",
+            unbound=["status"],
+            bound={"fifo": "_ALL_"},
+        )
+
+        # Track locked fifos
+        self._qlock = Metric(
+            "queue_locked", "The queue fifo is locked", unbound=["fifo"]
+        )
+
+    def _inc_metrics(self, fifo: str, status: str) -> None:
+        """Increment the queue_count metric.
+
+        Adds one to the metric with fifo=fifo and status=status.  Also adds
+        one to the marginalised ..._any and ..._all metrics.
+        """
+
+        self._qcount.inc(fifo=fifo, status=status)
+        self._qcount_any.inc(fifo=fifo)
+        self._qcount_all.inc(status=status)
+
+    def _dec_metrics(self, fifo: str, status: str) -> None:
+        """Decrement the queue_count metric.
+
+        Subtracts one from the metric with fifo=fifo and status=status.  Also
+        subtracts one from the marginalised ..._any and ..._all metrics.
+        """
+
+        self._qcount.dec(fifo=fifo, status=status)
+        self._qcount_any.dec(fifo=fifo)
+        self._qcount_all.dec(status=status)
 
     def task_done(self, key: Hashable) -> None:
         """Report that a task from the FIFO named `key` is done.
@@ -108,11 +164,13 @@ class FairMultiFIFOQueue:
             # because there can't be anything else in-progress from this FIFO.  So,
             # it's always reasonable to try to unlock a FIFO here.
             self._fifo_locks.discard(key)
+            self._qlock.set(0, fifo=key)
 
             # Decrement counts
             count -= 1
             self._inprogress_counts[key] = count
             self._total_inprogress -= 1
+            self._dec_metrics(fifo=key, status="in-progress")
 
             # Put the fifo back in the ordered list.
             #
@@ -161,6 +219,9 @@ class FairMultiFIFOQueue:
 
         with self._dlock:
             self._joining = False
+
+        # Clear the metric.  This clears the marginalised versions, too
+        self._qcount.clear()
 
     @property
     def qsize(self) -> int:
@@ -240,6 +301,8 @@ class FairMultiFIFOQueue:
         fifo.append((item, exclusive))
         self._total_queued += 1
 
+        self._inc_metrics(fifo=key, status="queued")
+
     def put(
         self, item: Any, key: Hashable, exclusive: bool = False, wait: float = 0
     ) -> bool:
@@ -295,6 +358,7 @@ class FairMultiFIFOQueue:
                 heapq.heappush(
                     self._deferrals, (monotonic() + wait, item, key, exclusive)
                 )
+                self._inc_metrics(fifo=key, status="deferred")
         else:
             # Immediate put
             with self._not_empty:
@@ -350,6 +414,7 @@ class FairMultiFIFOQueue:
             while len(self._deferrals) > 0 and self._deferrals[0][0] <= monotonic():
                 # heappop removes and returns self._deferrals[0]
                 _, item, key, exclusive = heapq.heappop(self._deferrals)
+                self._dec_metrics(fifo=key, status="deferred")
                 self._put(item, key, exclusive)
 
         # If the queue is still empty, time out
@@ -415,9 +480,14 @@ class FairMultiFIFOQueue:
         self._total_queued -= 1
         self._total_inprogress += 1
 
+        # Update metrics
+        self._inc_metrics(fifo=key, status="in-progress")
+        self._dec_metrics(fifo=key, status="queued")
+
         # Lock this FIFO, if item is exclusive
         if exclusive:
             self._fifo_locks.add(key)
+            self._qlock.set(1, fifo=key)
 
         # Increment the in-progress count and file the key in the right
         # place in _keys_by_inprogress

@@ -162,11 +162,3 @@ class ArchiveFileImportRequest(base_model):
     register = pw.BooleanField(default=False)
     completed = pw.BooleanField(default=False)
     timestamp = pw.DateTimeField(default=pw.utcnow, null=True)
-
-    def complete(self) -> None:
-        """Set this request to complete in the database."""
-
-        # If we're already complete, this function does nothing
-        if not self.completed:
-            self.completed = True
-            self.save(only=[ArchiveFileImportRequest.completed])
