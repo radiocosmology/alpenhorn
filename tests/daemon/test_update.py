@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from alpenhorn.daemon import update
-from alpenhorn.db.storage import StorageGroup, StorageNode
+from alpenhorn.db import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseGroupIO, BaseNodeIO
-from alpenhorn.scheduler import pool
+from alpenhorn.scheduler import Task, pool
 from alpenhorn.scheduler.queue import FairMultiFIFOQueue
 
 
@@ -315,3 +315,70 @@ def test_update_group_cancelled(
 
     # After update hook called
     mockio.group.after_update.assert_called_once()
+
+
+def test_serialio_defer(xfs, simplenode, emptypool, queue, hostname):
+    """Test deferring tasks in serialio."""
+
+    simplenode.host = hostname
+    simplenode.save()
+    xfs.create_file("/node/ALPENHORN_NODE", contents="simplenode")
+
+    success = False
+
+    # This is the task
+    def _task(task):
+        nonlocal success
+        yield 0
+        success = True
+        pool.global_abort.set()
+
+    # queue
+    Task(_task, queue, "test_fifo")
+
+    update.update_loop(queue, emptypool, False)
+
+    # Task completed
+    assert success
+
+
+@pytest.mark.alpenhorn_config(
+    {"daemon": {"serial_io_timeout": 0.1, "update_interval": 0.1}}
+)
+def test_deactivate_update(
+    xfs, dbtables, emptypool, queue, storagegroup, storagenode, hostname
+):
+    """Test deactivating a node during update."""
+
+    # Create groups and nodes
+    group = storagegroup(name="group1")
+    node1 = storagenode(
+        name="node1", group=group, root="/node1", host=hostname, active=True
+    )
+    group = storagegroup(name="group2")
+    storagenode(name="node2", group=group, root="/node2", host=hostname, active=True)
+    xfs.create_file("/node1/ALPENHORN_NODE", contents="node1")
+    xfs.create_file("/node2/ALPENHORN_NODE", contents="node2")
+
+    def _task(task):
+        """This task controls the test"""
+
+        nonlocal node1
+
+        # Sleep for half a second
+        yield 0.5
+
+        # Deactivate the node
+        StorageNode.update(active=False).where(StorageNode.id == node1.id).execute()
+
+        # Sleep for half a second
+        yield 0.5
+
+        # Abort the main loop
+        pool.global_abort.set()
+
+    # queue the task.
+    Task(_task, queue, "test_fifo")
+
+    # Start the loop
+    update.update_loop(queue, emptypool, False)

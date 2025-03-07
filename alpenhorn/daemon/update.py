@@ -928,13 +928,16 @@ def update_loop(
             log.warning(f"No active nodes on host ({host})!")
 
         # Drop any nodes that have gone away
-        for name in nodes:
+        vetted_nodes = {}
+        for name, node in nodes.items():
             if name not in new_nodes:
                 # Stop auto-import, if running
-                auto_import.update_observer(nodes[name], queue, force_stop=True)
+                auto_import.update_observer(node, queue, force_stop=True)
 
                 log.info(f'Node "{name}" no longer available.')
-                del nodes[name]
+            else:
+                vetted_nodes[name] = node
+        nodes = vetted_nodes
 
         # List of groups present this update loop
         new_groups = {}
@@ -980,10 +983,13 @@ def update_loop(
                 )
 
         # Drop groups that are no longer available
-        for name in groups:
+        vetted_groups = {}
+        for name, group in groups.items():
             if name not in new_groups:
                 log.info(f'Group "{name}" no longer available.')
-                del groups[name]
+            else:
+                vetted_groups[name] = group
+        groups = vetted_groups
 
         # Update the list of groups:
         for name in new_groups:
