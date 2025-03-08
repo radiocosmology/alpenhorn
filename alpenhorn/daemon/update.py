@@ -10,8 +10,9 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from ..common import config, util
+from ..common import config, metrics, util
 from ..common.extensions import io_module
+from ..common.metrics import Metric
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
@@ -241,6 +242,22 @@ class UpdateableNode(updateable_base):
         self.db = None
         self.reinit(node)
 
+        # Metrics that we want to delete when this node goes away
+        self._idle_metric = Metric(
+            "node_idle", "Node is idle", bound={"name": self.name}
+        )
+
+    def __del__(self):
+        # Delete metrics
+        try:
+            self._idle_metric.remove()
+        except (KeyError, AttributeError):
+            # AttributeError will be raised if this instance wasn't fully initialised
+            # KeyError will be raised if the prom metric was never created (because
+            #   we never set the metric to anything)
+            #   cf. https://github.com/prometheus/client_python/pull/1077
+            pass
+
     def reinit(self, node: StorageNode) -> bool:
         """Re-initialise the instance with a new database object.
 
@@ -289,19 +306,19 @@ class UpdateableNode(updateable_base):
         ) -> None:
             """Task async to initialise `node`, if necessary.
 
-            Calls `req.complete()` if initialisation succeeds.
+            Completes `req` only if initialisation succeeds.
             """
 
             # recheck
             if node.io.check_init():
                 log.info(f'Node "{node.name}" already initialised.')
-                req.complete()
+                auto_import.import_request_done(req, "duplicate")
                 return
 
             # Run the init and check result
             if node.io.init() and node.io.check_init():
                 log.info(f'Node "{node.name}" initialised.')
-                req.complete()
+                auto_import.import_request_done(req, "success")
                 return
 
             # Otherwise, fail, and don't complete req
@@ -398,6 +415,8 @@ class UpdateableNode(updateable_base):
         The idle updates are run if the regular update() ran but
         the node is currently idle.
         """
+
+        self._idle_metric.set(self.idle)
         if self._updated and self.idle:
             # Do any I/O class idle updates
             self.io.idle_update(self._io_happened)
@@ -501,7 +520,7 @@ class UpdateableNode(updateable_base):
             path = pathlib.Path(req.path)
             if path.is_absolute():
                 log.info(f'Not importing to "{self.name}" absolute path: {path}')
-                req.complete()
+                auto_import.import_request_done(req, "invalid")
                 continue
 
             if req.path == "ALPENHORN_NODE":
@@ -511,7 +530,7 @@ class UpdateableNode(updateable_base):
                     f'Ignoring node init request for "{self.name}": '
                     "already initialised."
                 )
-                req.complete()
+                auto_import.import_request_done(req, "duplicate")
                 continue
 
             if req.recurse:
@@ -524,7 +543,7 @@ class UpdateableNode(updateable_base):
                         "Ignoring import request of unresolvable scan path: "
                         f"{fullpath}: {e}"
                     )
-                    req.complete()
+                    auto_import.import_request_done(req, "invalid")
                     continue
 
                 # Recompute the relative path after resolution, or skip scan if we're
@@ -535,7 +554,7 @@ class UpdateableNode(updateable_base):
                     log.warning(
                         f"Ignoring import request of out-of-tree scan path: {fullpath}"
                     )
-                    req.complete()
+                    auto_import.import_request_done(req, "invalid")
                     continue
 
                 # Run scan
@@ -554,7 +573,7 @@ class UpdateableNode(updateable_base):
                         f'Ignoring request for import of invalid path "{req.path}": '
                         + rejection_reason
                     )
-                    req.complete()
+                    auto_import.import_request_done(req, "invalid")
                     continue
 
                 # Try to directly import the path
@@ -584,6 +603,12 @@ class UpdateableNode(updateable_base):
 
         if idle and do_update:
             log.info(f'Updating node "{self.name}".')
+            Metric(
+                "node_update",
+                "Count of updates on a node",
+                counter=True,
+                bound={"name": self.name},
+            ).inc()
 
             # Check the integrity of any questionable files (has_file=M)
             for copy in ArchiveFileCopy.select().where(
@@ -677,6 +702,21 @@ class UpdateableGroup(updateable_base):
 
         self.reinit(group=group, nodes=nodes, idle=idle)
 
+        # Metrics that we want to delete when this node goes away
+        self._idle_metric = Metric(
+            "group_idle", "Group is idle", bound={"name": self.name}
+        )
+
+    def __del__(self):
+        # Delete metrics
+        try:
+            self._idle_metric.remove()
+        except (KeyError, AttributeError):
+            # AttributeError will be raised if this instance wasn't fully initialised
+            # KeyError will be raised if the prom metric was never created (because
+            #   we never set the metric to anything)
+            pass
+
     def reinit(
         self, *, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
     ) -> None:
@@ -735,6 +775,14 @@ class UpdateableGroup(updateable_base):
         req : ArchiveFileCopyRequest
             The pull request to process.
         """
+
+        # The only label left unbound here is "result"
+        comp_metric = metrics.by_name("requests_completed").bind(
+            type="copy",
+            node=req.node_from.name,
+            group=req.group_to.name,
+        )
+
         # What's the current situation on the destination?
         copy_state = self.db.state_on_node(req.file)[0]
         if copy_state == "Y":
@@ -749,6 +797,7 @@ class UpdateableGroup(updateable_base):
             ArchiveFileCopyRequest.update(cancelled=True).where(
                 ArchiveFileCopyRequest.id == req.id
             ).execute()
+            comp_metric.inc(result="duplicate")
             return
         if copy_state == "M":
             log.warning(
@@ -792,6 +841,7 @@ class UpdateableGroup(updateable_base):
             ArchiveFileCopyRequest.update(cancelled=True).where(
                 ArchiveFileCopyRequest.id == req.id
             ).execute()
+            comp_metric.inc(result="missing")
             return
         if state == "M":
             log.info(
@@ -831,6 +881,12 @@ class UpdateableGroup(updateable_base):
         # cancelled the update
         if self._init_idle and do_update:
             log.info(f'Updating group "{self.name}".')
+            Metric(
+                "group_update",
+                "Count of updates on a group",
+                counter=True,
+                bound={"name": self.name},
+            ).inc()
 
             # Remember ArchiveFiles that we're pulling, so we don't end up with
             # overlapping pulls (which would try to write to the same file).
@@ -860,6 +916,7 @@ class UpdateableGroup(updateable_base):
         The idle updates are run if the regular update() ran but
         the group was idle when it finished.
         """
+        self._idle_metric.set(1 if self._do_idle_updates else 0)
         if self._do_idle_updates:
             self.io.idle_update()
 
@@ -904,6 +961,23 @@ def update_loop(
     nodes = {}
     groups = {}
 
+    loop_time_metric = Metric(
+        "main_loop_time_seconds", description="Main loop execution time", counter=False
+    )
+    loop_count_metric = Metric(
+        "main_loops", description="Completed main loops", counter=True
+    )
+    node_avail_metric = Metric(
+        "node_available",
+        description="Node is available (active and initialized)",
+        unbound={"name"},
+    )
+    group_avail_metric = Metric(
+        "group_available",
+        description="Group is available (active and initialized)",
+        unbound={"name"},
+    )
+
     while not global_abort.is_set():
         loop_start = time.time()
 
@@ -935,6 +1009,7 @@ def update_loop(
                 auto_import.update_observer(node, queue, force_stop=True)
 
                 log.info(f'Node "{name}" no longer available.')
+                node_avail_metric.set(0, name=name)
             else:
                 vetted_nodes[name] = node
         nodes = vetted_nodes
@@ -952,6 +1027,7 @@ def update_loop(
             else:
                 # No existing node: create a new one.
                 log.info(f'Node "{name}" now available.')
+                node_avail_metric.set(1, name=name)
                 nodes[name] = UpdateableNode(queue, new_nodes[name])
 
             node = nodes[name]
@@ -987,6 +1063,7 @@ def update_loop(
         for name, group in groups.items():
             if name not in new_groups:
                 log.info(f'Group "{name}" no longer available.')
+                group_avail_metric.set(0, name=name)
             else:
                 vetted_groups[name] = group
         groups = vetted_groups
@@ -1001,6 +1078,7 @@ def update_loop(
             else:
                 # No existing group: create a new one.
                 log.info(f'Group "{name}" now available.')
+                group_avail_metric.set(1, name=name)
                 groups[name] = UpdateableGroup(queue=queue, **new_groups[name])
 
         # Node updates
@@ -1039,6 +1117,9 @@ def update_loop(
         # Check the time spent so far
         loop_time = time.time() - loop_start
         log.info(f"Main loop execution was {util.pretty_deltat(loop_time)}.")
+
+        loop_time_metric.set(loop_time)
+        loop_count_metric.inc()
 
         # Pool and queue info
         log.info(
@@ -1084,6 +1165,10 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
     """
     start_time = time.time()
 
+    task_metric = Metric(
+        "serialio_tasks", "Count of tasks run via Serial I/O", counter=True
+    )
+
     # Handle tasks for, say, 15 minutes at most
     while time.time() - start_time < config.config["daemon"]["serial_io_timeout"]:
         # Get a task
@@ -1093,6 +1178,8 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
         if item is None:
             break
 
+        task_metric.inc()
+
         # Run the task
         task, key = item
 
@@ -1100,3 +1187,5 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
         task()
         queue.task_done(key)
         log.info(f"Finished task {task}")
+
+    Metric("serialio_loops", "Count of Serial I/O loops", counter=True).inc()

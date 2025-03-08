@@ -7,6 +7,7 @@ from types import FrameType
 
 from peewee import OperationalError
 
+from ..common.metrics import Metric
 from .queue import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
@@ -70,26 +71,44 @@ class Worker(threading.Thread):
         # Put the worker id in `threadlocal`, so tasks can access it
         global threadlocal
         threadlocal.worker_id = self._worker_id
+        metric_running = Metric(
+            "worker_running",
+            "worker is running",
+            counter=False,
+            bound={"id": self._worker_id},
+        )
+        metric_running.set(1)
+        metric_idle = Metric(
+            "worker_idle",
+            "worker is idle (waiting for a task)",
+            counter=False,
+            bound={"id": self._worker_id},
+        )
 
         while True:
+            metric_idle.set(1)
             # Exit if told to stop
             if global_abort.is_set():
                 log.info("Stopped due to global abort.")
+                metric_running.set(0)
                 return None
             if self._worker_stop.is_set():
                 log.info("Stopped.")
+                metric_running.set(0)
                 return None
 
             # Wait for a task:
             item = self._queue.get(timeout=5)
 
             if item is not None:
+                metric_idle.set(0)
                 task, key = item
 
                 # Abandon working if alpenhornd is aborting
                 if global_abort.is_set():
                     log.info("Stopped due to global abort.")
                     self._queue.task_done(key)
+                    metric_running.set(0)
                     return None
 
                 # Otherwise, execute the task.
@@ -115,6 +134,7 @@ class Worker(threading.Thread):
                         log.exception(
                             "Aborting due to uncaught exception in task cleanup"
                         )
+                        metric_running.set(0)
                         return 1
 
                     log.info(f"Finished task {task}")
@@ -124,10 +144,12 @@ class Worker(threading.Thread):
                     task.requeue()
 
                     log.error(f"Exiting due to db error: {operr}")
+                    metric_running.set(0)
                     return 1  # Thread exits, will be respawned in the main loop
                 except Exception:
                     global_abort.set()
                     log.exception("Aborting due to uncaught exception in task")
+                    metric_running.set(0)
                     return 1
 
                 self._queue.task_done(key)
@@ -155,7 +177,7 @@ class WorkerPool:
         The task queue
     """
 
-    __slots__ = ["_all_workers", "_mutex", "_queue", "_workers"]
+    __slots__ = ["_all_workers", "_metric_worker_count", "_mutex", "_queue", "_workers"]
 
     def __init__(self, num_workers: int, queue: FairMultiFIFOQueue) -> None:
         self._queue = queue
@@ -170,6 +192,13 @@ class WorkerPool:
         # addition to all the workers in _workers, this also includes all
         # workers stopped by del_worker(), which may still be running.
         self._all_workers = []
+
+        self._metric_worker_count = Metric(
+            "worker_count",
+            "Number of worker threads",
+            counter=False,
+            bound={"pool_type": "WorkerPool"},
+        )
 
         # Start initial workers
         for _ in range(num_workers):
@@ -210,6 +239,8 @@ class WorkerPool:
 
         # Start working
         worker.start()
+
+        self._metric_worker_count.inc()
 
     def add_worker(self, blocking: bool = True) -> None:
         """Increment the number of workers in the pool.
@@ -253,6 +284,8 @@ class WorkerPool:
 
                 # Fire the stop event
                 worker.stop_working()
+
+                self._metric_worker_count.dec()
 
             # Release the lock
             self._mutex.release()
@@ -308,6 +341,7 @@ class WorkerPool:
             # Probably we're about to exit, but just so everything stays copacetic:
             self._workers = []
             self._all_workers = []
+            self._metric_worker_count.set(0)
 
 
 class EmptyPool:
@@ -315,6 +349,15 @@ class EmptyPool:
 
     It has the same methods as WorkerPool, but does nothing and is always
     empty."""
+
+    def __init__(self) -> None:
+        # This is never updated
+        Metric(
+            "worker_count",
+            "Number of worker threads",
+            counter=False,
+            bound={"pool_type": "EmptyPool"},
+        )
 
     def __len__(self) -> None:
         return 0

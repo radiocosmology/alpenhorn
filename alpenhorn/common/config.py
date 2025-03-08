@@ -135,12 +135,20 @@ Example config:
         # job will rum forever if it doesn't exit; not recommended).
         pull_timeout_base: 300
         pull_bytes_per_second: 20000000
+
+        # Prometheus client port.  Setting this to a positive value will
+        # cause the daemon to start the prometheus client HTTP server to
+        # serve GET requests on that port (but only when not running in
+        # --exit-after-update mode).  If not set, or set to a non-positive
+        # value, then the prometheus client is not started.
+        prom_client_port: 8080
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 import yaml
 from click import ClickException
@@ -155,6 +163,7 @@ _default_config = {
         "auto_import_interval": 30,
         "auto_verify_min_days": 7,
         "num_workers": 0,
+        "prom_client_port": 0,
         "serial_io_timeout": 900,
         "update_interval": 60,
     },
@@ -215,7 +224,7 @@ def load_config(cli_conf: os.PathLike, cli: bool) -> None:
         )
 
 
-def merge_dict_tree(a: dict, b: dict) -> dict:
+def merge_dict_tree(a: Any, b: Any) -> Any:
     """Merge two dictionaries recursively.
 
     The following rules applied:

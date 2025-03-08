@@ -198,21 +198,3 @@ def test_archivefileimportrequest_model(
 
     # Not unique
     archivefileimportrequest(path="min_path", node=minnode)
-
-
-def test_importreqeust_complete(simpleimportrequest):
-    """Test ArchiveFileImportRequest.complete()."""
-
-    assert simpleimportrequest.completed == 0
-    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 0
-
-    simpleimportrequest.complete()
-
-    assert simpleimportrequest.completed == 1
-    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
-
-    # Can be called multiple times
-    simpleimportrequest.complete()
-
-    assert simpleimportrequest.completed == 1
-    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1

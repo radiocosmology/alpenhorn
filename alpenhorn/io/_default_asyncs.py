@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
+from ..common import metrics
+from ..common.metrics import Metric
 from ..common.util import timeout_call
 from ..daemon.update import RemoteNode
 from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
@@ -48,6 +50,18 @@ def pull_async(
         The request we're fulfilling.
     """
 
+    comp_metric = metrics.by_name("requests_completed").bind(
+        type="copy",
+        node=req.node_from.name,
+        group=req.group_to.name,
+    )
+    pullrun_metric = Metric(
+        "pull_running_count",
+        "Count of in-progress pulls",
+        unbound={"method", "remote"},
+        bound={"node": io.node.name},
+    )
+
     # Recheck the database to see if a file hasn't shown
     # up somehow
     if io.node.filecopy_state(req.file) == "Y":
@@ -58,6 +72,7 @@ def pull_async(
         ArchiveFileCopyRequest.update(cancelled=1).where(
             ArchiveFileCopyRequest.id == req.id
         ).execute()
+        comp_metric.inc(result="duplicate")
         return
 
     # Before we were queued, NodeIO reserved space for this file.
@@ -124,11 +139,15 @@ def pull_async(
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             log.info(f"Pulling remote file {req.file.path} using bbcp")
+            pullrun_metric.inc(method="bbcp", remote="1")
             ioresult = ioutil.bbcp(from_path, to_file, req.file.size_b)
+            pullrun_metric.dec(method="bbcp", remote="1")
         elif shutil.which("rsync") is not None:
             # Next try rsync over ssh.
             log.info(f"Pulling remote file {req.file.path} using rsync")
+            pullrun_metric.inc(method="rsync", remote="1")
             ioresult = ioutil.rsync(from_path, to_file, req.file.size_b, local)
+            pullrun_metric.dec(method="rsync", remote="1")
         else:
             # We have no idea how to transfer the file...
             log.error("No commands available to complete remote pull.")
@@ -143,7 +162,9 @@ def pull_async(
         # But don't do this if it creates a hardlink between an archive node and
         # a non-archive node
         if req.node_from.archive == io.node.archive:
+            pullrun_metric.inc(method="link", remote="0")
             ioresult = ioutil.hardlink(from_path, to_dir, req.file.name)
+            pullrun_metric.dec(method="link", remote="0")
             if ioresult is not None:
                 log.info(f"Hardlinked local file {req.file.path}")
         else:
@@ -153,13 +174,17 @@ def pull_async(
         if ioresult is None:
             if shutil.which("rsync") is not None:
                 log.info(f"Pulling local file {req.file.path} using rsync")
+                pullrun_metric.inc(method="rsync", remote="0")
                 ioresult = ioutil.rsync(from_path, to_file, req.file.size_b, local)
+                pullrun_metric.dec(method="rsync", remote="0")
             else:
                 # No rsync?  Just use shutil.copy, I guess
                 log.warning("Falling back on shutil.copy to complete local pull.")
+                pullrun_metric.inc(method="internal", remote="0")
                 ioresult = ioutil.local_copy(
                     from_path, to_dir, req.file.name, req.file.size_b
                 )
+                pullrun_metric.dec(method="internal", remote="0")
 
     # Delete the placeholder, if we created it
     placeholder.unlink(missing_ok=True)
@@ -210,6 +235,13 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
 
     copyname = copy.file.path
     fullpath = copy.path
+
+    Metric(
+        "verification_checks",
+        "Count of verification checks",
+        counter=True,
+        bound={"node": io.node.name},
+    ).inc()
 
     # Does the copy exist?
     if fullpath.exists():
@@ -296,6 +328,19 @@ def delete_async(
         fullpath = copy.path
         try:
             fullpath.unlink()  # Remove the actual file
+            Metric(
+                "deleted_files",
+                "Count of deleted files",
+                counter=True,
+                bound={"node": name},
+            ).inc()
+            if copy.file.size_b:
+                Metric(
+                    "deleted_bytes",
+                    "Size of deleted files",
+                    counter=True,
+                    bound={"node": name},
+                ).add(copy.file.size_b)
             log.info(f"Removed file copy {shortname} on {name}")
         except OSError as e:
             if e.errno == errno.ENOENT:

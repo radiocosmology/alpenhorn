@@ -6,7 +6,7 @@ import sys
 import click
 
 from .. import db
-from ..common import config
+from ..common import config, metrics
 from ..common.util import help_config_option, start_alpenhorn, version_option
 from ..scheduler import FairMultiFIFOQueue, pool
 from . import auto_import, update
@@ -59,6 +59,10 @@ def entry(conf, once):
 
     # Connect to the database
     db.connect()
+
+    # Start the prometheus client, if appropriate.
+    if not once:
+        metrics.start_promclient()
 
     # Set up the task queue
     queue = FairMultiFIFOQueue()
