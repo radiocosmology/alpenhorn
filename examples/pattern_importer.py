@@ -103,7 +103,7 @@ class TypeBase(base_model):
 
         # Loop over patterns and check for matches
         for pattern in self._pattern_list:
-            result = re.match(pattern, name)
+            result = re.fullmatch(pattern, name)
             if result:
                 return result[0]
 
@@ -309,24 +309,20 @@ def demo_init() -> None:
     # Populate AcqType.  There is only acq type in the demo
     AcqType.create(
         name="demo_acq",
-        patterns=json.dumps(
-            [
-                r"20[0-9][0-9]/(0[1-9]|1[012])/(0[1-9]|[12][0-9]|3[01])/acq_.*_inst_[a-z0-9]+"
-            ]
-        ),
+        patterns=json.dumps([r"20[0-9][0-9]/(0[1-9]|1[012])/(0[1-9]|[12][0-9]|3[01])"]),
         notes="AcqType for alpenhorn demo",
     )
 
     # Populate FileType.  There are two of these
     FileType.create(
-        name="acq_summary",
-        patterns=json.dumps([r"summary\.txt"]),
-        notes="Summary files for alpenhorn demo",
+        name="demo_data",
+        patterns=json.dumps([r"(0[0-9]|2[0-3])/[0-5][0-9][0-5][0-9].dat"]),
+        notes="Data files for alpenhorn demo",
     )
     FileType.create(
-        name="zcx",
-        patterns=json.dumps([r"acq_data/x_([0-9]*_[0-9])_data/raw/acq_\1\.zxc"]),
-        notes="ZXC file for alpenhorn demo",
+        name="demo_meta",
+        patterns=json.dumps([r"meta.txt$"]),
+        notes="Metadata file for alpenhorn demo",
     )
 
     # Indicate success
