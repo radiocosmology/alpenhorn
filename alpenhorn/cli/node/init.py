@@ -30,4 +30,4 @@ def init(name):
         # Add request
         ArchiveFileImportRequest.create(node=node, path="ALPENHORN_NODE")
 
-    echo('Requested initialisation of Node "{name}".')
+    echo(f'Requested initialisation of Node "{name}".')
