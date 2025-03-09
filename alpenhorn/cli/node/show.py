@@ -10,6 +10,7 @@ from ...common.util import pretty_bytes
 from ...db import (
     ArchiveFile,
     ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
     StorageGroup,
     StorageTransferAction,
 )
@@ -26,11 +27,14 @@ from .stats import get_stats
     help="Show post-transfer auto-actions affecting this group.",
 )
 @cli_option("all_", help="Show all additional data.")
+@click.option(
+    "--imports", is_flag=True, help="Show pending import requests for the node."
+)
 @click.option("--stats", is_flag=True, help="Show usage stats of the node.")
 @click.option(
     "--transfers", is_flag=True, help="Show pending transfers out from the node."
 )
-def show(name, actions, all_, stats, transfers):
+def show(name, actions, all_, imports, stats, transfers):
     """Show details of a Storage Node.
 
     Shows details of the Storage Node named NODE.
@@ -38,6 +42,7 @@ def show(name, actions, all_, stats, transfers):
 
     if all_:
         actions = True
+        imports = True
         stats = True
         transfers = True
 
@@ -110,6 +115,42 @@ def show(name, actions, all_, stats, transfers):
         echo("    Total Files: " + str(stats["count"]))
         echo("     Total Size: " + stats["size"])
         echo("          Usage: " + stats["percent"].lstrip() + "%")
+
+    # List imports, if requested
+    if imports:
+        echo("\nPending import requests:\n")
+
+        query = (
+            ArchiveFileImportRequest.select()
+            .where(
+                ArchiveFileImportRequest.node == node,
+                ArchiveFileImportRequest.completed == 0,
+            )
+            .order_by(ArchiveFileImportRequest.timestamp)
+        )
+
+        inits = []
+        reqs = []
+        for req in query.execute():
+            if req.path == "ALPENHORN_NODE":
+                # Handle node init requests separately
+                inits.append(("[Node Init]", "-", "-", req.timestamp))
+            else:
+                reqs.append(
+                    (
+                        req.path,
+                        "Yes" if req.recurse else "No",
+                        "Yes" if req.register else "No",
+                        req.timestamp,
+                    )
+                )
+
+        # The node init requests are always put at the top of the table
+        echo(
+            tabulate(
+                inits + reqs, headers=["Path", "Scan", "Register New", "Request Time"]
+            )
+        )
 
     # List transfers, if requested
     if transfers:
