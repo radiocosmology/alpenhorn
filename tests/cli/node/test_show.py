@@ -1,10 +1,13 @@
 """Test CLI: alpenhorn node show"""
 
+from datetime import timedelta
+
 from alpenhorn.db import (
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
     StorageGroup,
     StorageNode,
     StorageTransferAction,
@@ -226,6 +229,96 @@ def test_show_transfers(clidb, cli, assert_row_present):
     assert_row_present(result.output, "Group2", "1", "1.205 kiB")
 
 
+def test_show_imports(clidb, cli, assert_row_present):
+    """Test show --imports."""
+
+    group = StorageGroup.create(name="Group1")
+    node = StorageNode.create(name="Node", group=group)
+
+    time4 = utcnow().replace(microsecond=0)
+    time3 = time4 - timedelta(seconds=2)
+    time2 = time3 - timedelta(seconds=5)
+    time1 = time2 - timedelta(seconds=8)
+
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="path/1",
+        recurse=False,
+        register=False,
+        completed=False,
+        timestamp=time1,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="path/2",
+        recurse=False,
+        register=False,
+        completed=True,
+        timestamp=time3,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="path/3",
+        recurse=False,
+        register=True,
+        completed=False,
+        timestamp=time4,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="path/4",
+        recurse=True,
+        register=False,
+        completed=False,
+        timestamp=time2,
+    )
+
+    # These are init requests
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="ALPENHORN_NODE",
+        recurse=True,
+        register=False,
+        completed=False,
+        timestamp=time1,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="ALPENHORN_NODE",
+        recurse=True,
+        register=False,
+        completed=True,
+        timestamp=time2,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="ALPENHORN_NODE",
+        recurse=False,
+        register=False,
+        completed=True,
+        timestamp=time3,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="ALPENHORN_NODE",
+        recurse=False,
+        register=True,
+        completed=False,
+        timestamp=time4,
+    )
+
+    result = cli(0, ["node", "show", "Node", "--imports"])
+
+    assert_row_present(result.output, "[Node Init]", "-", "-", str(time1))
+    assert_row_present(result.output, "[Node Init]", "-", "-", str(time4))
+    assert result.output.count("[Node Init]") == 2
+
+    assert_row_present(result.output, "path/1", "No", "No", str(time1))
+    assert_row_present(result.output, "path/4", "Yes", "No", str(time2))
+    assert "path/2" not in result.output
+    assert_row_present(result.output, "path/3", "No", "Yes", str(time4))
+
+
 def test_show_all(clidb, cli, assert_row_present):
     """Test show --all."""
 
@@ -272,6 +365,25 @@ def test_show_all(clidb, cli, assert_row_present):
         node_from=node, group_to=group2, file=file, completed=1, cancelled=0
     )
 
+    # Imports (and inits)
+    now = utcnow().replace(microsecond=0)
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="import/path",
+        recurse=False,
+        register=True,
+        completed=False,
+        timestamp=now,
+    )
+    ArchiveFileImportRequest.create(
+        node=node,
+        path="ALPENHORN_NODE",
+        recurse=False,
+        register=False,
+        completed=False,
+        timestamp=now,
+    )
+
     result = cli(0, ["node", "show", "Node", "--all"])
 
     assert "Total Files: 2" in result.output
@@ -281,6 +393,9 @@ def test_show_all(clidb, cli, assert_row_present):
 
     # 4.58 out of 8 == 57.25 percent
     assert "57.25%" in result.output
+
+    assert_row_present(result.output, "[Node Init]", "-", "-", str(now))
+    assert_row_present(result.output, "import/path", "No", "Yes", str(now))
 
     assert_row_present(result.output, "Group", "3", "10.12 kiB")
     assert_row_present(result.output, "Group2", "1", "3.375 kiB")
