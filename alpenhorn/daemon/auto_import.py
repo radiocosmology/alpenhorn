@@ -15,7 +15,7 @@ import peewee as pw
 from watchdog.events import FileSystemEventHandler
 
 from .. import db
-from ..common import config, extensions
+from ..common import config, extensions, metrics
 from ..common.util import invalid_import_path
 from ..db import (
     ArchiveAcq,
@@ -36,6 +36,41 @@ del TYPE_CHECKING
 
 
 log = logging.getLogger(__name__)
+
+
+def import_request_done(req: ArchiveFileImportRequest | None, result: str) -> None:
+    """Record a completed import request.
+
+    Including updating metrics.
+
+    Parameters
+    ----------
+    req:
+        Request that has been completed.  If None, this function does nothing.
+    result:
+        The result of the import request.  Used in the metric
+    """
+
+    if not req:
+        return
+
+    count = (
+        ArchiveFileImportRequest.update(completed=1)
+        .where(ArchiveFileImportRequest.id == req.id)
+        .execute()
+    )
+
+    # Only update metrics if this actually completed the request
+    if not count:
+        return
+
+    log.info(f"Completed import request #{req.id}.")
+    metrics.by_name("requests_completed").inc(
+        type="import",
+        result=result,
+        node=req.node.name,
+        group=req.node.group.name,
+    )
 
 
 def import_file(
@@ -70,9 +105,7 @@ def import_file(
     # Skip these.
     if path == pathlib.PurePath(node.db.root):
         log.debug("Skipping import request of node root")
-        if req:
-            log.info(f"Completed import request #{req.id}.")
-            req.complete()
+        import_request_done(req, "ignored")
         return
 
     # Strip node root, if path is absolute
@@ -84,9 +117,7 @@ def import_file(
             log.warning(
                 f"Ignoring import of {path}: not rooted under node {node.db.root}"
             )
-            if req:
-                log.info(f"Completed import request #{req.id}.")
-                req.complete()
+            import_request_done(req, "ignored")
             return
 
     # Ignore the node info file.  NB: this happens even on nodes which
@@ -96,9 +127,7 @@ def import_file(
         node.db.root
     ).joinpath("ALPENHORN_NODE"):
         log.debug("ignoring ALPENHORN_NODE file during import")
-        if req:
-            log.info(f"Completed import request #{req.id}.")
-            req.complete()
+        import_request_done(req, "ignored")
         return
 
     # New import task.
@@ -143,9 +172,7 @@ def _import_file(
     fullpath = pathlib.Path(node.db.root).joinpath(path)
     if fullpath.is_symlink() or not fullpath.is_file():
         log.debug(f'Not importing "{path}": not a file.')
-        if req:
-            log.info(f"Completed import request #{req.id}.")
-            req.complete()
+        import_request_done(req, "invalid")
         return
 
     log.debug(f'Considering "{path}" for import to node {node.name}.')
@@ -172,18 +199,14 @@ def _import_file(
     else:
         # Detection failed, so we're done.
         log.info(f"Not importing non-acquisition path: {path}")
-        if req:
-            log.info(f"Completed import request #{req.id}.")
-            req.complete()
+        import_request_done(req, "no_detection")
         return
 
     # Vet acq_name from extension
     rejection_reason = invalid_import_path(str(acq_name))
     if rejection_reason:
         log.warning(f'Rejecting invalid acq path "{acq_name}": {rejection_reason}')
-        if req:
-            log.info(f"Completed import request #{req.id}.")
-            req.complete()
+        import_request_done(req, "bad_acq")
         return
 
     file_name = path.relative_to(acq_name)
@@ -191,9 +214,7 @@ def _import_file(
     # If a copy already exists, we're done
     if node.db.named_copy_tracked(acq_name, file_name):
         log.debug(f"Not importing {path}: already known")
-        if req:
-            log.info(f"Completed import request #{req.id}.")
-            req.complete()
+        import_request_done(req, "duplicate")
         return
 
     # Begin a transaction
@@ -210,9 +231,7 @@ def _import_file(
                 log.info(f'Acquisition "{acq_name}" added to DB.')
             else:
                 log.info(f'Not importing unregistered acquistion: "{acq_name}".')
-                if req:
-                    log.info(f"Completed import request #{req.id}.")
-                    req.complete()
+                import_request_done(req, "unregistered")
                 return
 
         # Add the file, if necessary.
@@ -235,9 +254,7 @@ def _import_file(
                 log.info(f'File "{path}" added to DB.')
             else:
                 log.info(f'Not importing unregistered file: "{path}".')
-                if req:
-                    log.info(f"Completed import request #{req.id}.")
-                    req.complete()
+                import_request_done(req, "unregistered")
                 return
 
         try:
@@ -272,9 +289,7 @@ def _import_file(
             )
             log.info(f'Imported file copy "{path}" on node "{node.name}".')
 
-    if req:
-        log.info(f"Completed import request #{req.id}.")
-        req.complete()
+    import_request_done(req, "success")
 
     # Run post-add actions, if any
     ioutil.post_add(node.db, file_)
@@ -477,9 +492,9 @@ def scan(
         else:
             import_file(node, queue, file, register, None)
 
-    if req:
-        log.info(f"Completed import request #{req.id}.")
-        req.complete()
+    # This is successful because we've successfully scanned the
+    # tree, whether or not that resulted in any imports.
+    import_request_done(req, "success")
 
 
 def stop_observers() -> None:

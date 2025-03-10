@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING
 import peewee as pw
 
 from .. import db
-from ..common import config, util
+from ..common import config, metrics, util
+from ..common.metrics import Metric
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
@@ -505,10 +506,17 @@ def copy_request_done(
         or False if the transfer failed.
     """
 
+    # The only label left unbound here is "result"
+    transf_metric = metrics.by_name("transfers").bind(
+        node_from=req.node_from.name,
+        group_to=req.group_to.name,
+    )
+
     # Check the result
     if not success:
         if stderr is None:
             stderr = "Unspecified error."
+            transf_metric.inc(result="failure")
         if check_src:
             # If the copy didn't work, then the remote file may be corrupted.
             log.error("Copy failed.  Marking source file suspect.")
@@ -517,10 +525,12 @@ def copy_request_done(
                 ArchiveFileCopy.file == req.file,
                 ArchiveFileCopy.node == req.node_from,
             ).execute()
+            transf_metric.inc(result="check_src")
         else:
             # An error occurred that can't be due to the source being corrupt
             log.error("Copy failed")
             log.info(f"Output: {stderr}")
+            transf_metric.inc(result="failure")
         return False
 
     # Otherwise, transfer was completed, remember end time
@@ -538,6 +548,7 @@ def copy_request_done(
             ArchiveFileCopy.file == req.file,
             ArchiveFileCopy.node == req.node_from,
         ).execute()
+        transf_metric.inc(result="integrity")
         return False
 
     # Transfer successful
@@ -580,6 +591,23 @@ def copy_request_done(
             transfer_completed=utcfromtimestamp(end_time),
         ).where(ArchiveFileCopyRequest.id == req.id).execute()
 
+    # Update metrics
+    metrics.by_name("requests_completed").inc(
+        type="copy",
+        node=req.node_from.name,
+        group=req.group_to.name,
+        result="success",
+    )
+    transf_metric.inc(result="success")
+
+    # This can be used to measure throughput
+    Metric(
+        "pulled_bytes",
+        "Count of bytes pulled",
+        counter=True,
+        bound={"node_from": req.node_from.name, "group_to": req.group_to.name},
+    ).add(req.file.size_b)
+
     # Run post-add actions, if any
     post_add(io.node, req.file)
 
@@ -589,7 +617,7 @@ def copy_request_done(
 def remove_filedir(
     node: StorageNode, dirname: pathlib.Path, tree_lock: UpDownLock
 ) -> None:
-    """Try to delete an file's parenty directorie(s) from a node
+    """Try to delete a file's parent directory(s) from a node
 
     Will attempt to remove the enitre tree given as `dirname`
     while holding the `tree_lock` down until reaching `node.root`.

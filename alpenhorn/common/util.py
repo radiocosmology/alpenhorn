@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from . import config, extensions, logger
+from .metrics import Metric
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -314,7 +315,13 @@ def md5sum_file(filename: str, hr: bool = True) -> str | None:
     --------
     http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-python
     """
-    return asyncio.run(_md5sum_file(filename, hr))
+    metric = Metric("hash_running_count", "Count of in-progress MD5 hashing")
+
+    metric.inc()
+    result = asyncio.run(_md5sum_file(filename, hr))
+    metric.dec()
+
+    return result
 
 
 def get_hostname() -> str:

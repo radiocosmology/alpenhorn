@@ -11,8 +11,23 @@ from watchdog.observers.api import BaseObserver, ObservedWatch
 from alpenhorn.daemon import auto_import
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
-from alpenhorn.db.archive import ArchiveFileCopy
+from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
 from alpenhorn.io.lfs import HSMState
+
+
+def test_import_request_done(simpleimportrequest):
+    """Test import_request_done()."""
+
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 0
+
+    auto_import.import_request_done(simpleimportrequest, True)
+
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
+
+    # Can be called multiple times
+    auto_import.import_request_done(simpleimportrequest, True)
+
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
 
 
 def test_import_file_bad_paths(queue, unode):

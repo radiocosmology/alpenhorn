@@ -24,6 +24,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+prometheus = [
+  "prometheus_client",
+]
 test = [
   "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
   "docker >= 3.0",
