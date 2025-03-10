@@ -83,7 +83,7 @@ To start the database container, run the following from the `/demo` subdirectory
 
 If you get a `no configuration file provided: not found` error, you're not in the right
 directory.  (The directory also should have the `Dockerfile.alpenhorn` file and the
-`docker-compose.yaml` which came with this demo.)
+`docker-compose.yaml` file, both of which came with this demo.)
 
 Doing this the first time will probably cause docker to download the latest MySQL image:
 ```(console)
@@ -119,8 +119,9 @@ You can stop the docker containers running this demo at any time by executing:
 ```
 docker compose stop
 ```
-This will stop all running containers.  To restar the demo, run the appropriate `docker compose up` commands.
-Stopping the demo does not delete the containers or volumes containing the database and the storage node data.
+This will stop all running containers.  To restart the demo, run the appropriate `docker compose up`
+commands.  Stopping the demo does not delete the containers or volumes containing the database and
+the storage node data.
 
 If you want to also remove the demo containers:
 ```
@@ -131,14 +132,14 @@ To remove the containers _and_ the volumes containing the database and the stora
 ```
 docker compose down --remove-orphans --volumes
 ```
-Doing this will require rebuilding the database as described below.
+Removing the volumes will require rebuilding the database as described below.
 
-Finally, to remove the alpenhorn container image which gets built the first time the containers is
+Finally, to remove the alpenhorn container image, which gets built the first time the containers is
 run:
 ```
 docker rmi alpenhorn:latest
 ```
-You should do this if you want to update the alpenhorn version used by the demo, or if you've
+You should do this if you want to update the version of alpenhorn used by the demo, or if you've
 made changes to the demo's `Dockerfile.alpenhorn` or `docker-compose.yaml` files.  (You can
 also remove the `mysql:latest` image if you want to run a newer version of the database
 container.)
@@ -147,8 +148,8 @@ container.)
 ## Initialising the database
 
 Now we need to use some `alpenhorn` commands to create the Data Index (the alpenhorn database)
-and the storage infrastructure in it.  The data index must exist before we can start the first
-alpenhorn container.
+and the define the start of our storage infrastructure in it.  The data index must exist before we
+can start the first alpenhorn daemon.
 
 To create the data index we'll need access to the database.  We'll do that by creating a
 temporary container running the image from the first alpenhorn node (`alpen1`):
@@ -220,18 +221,22 @@ Once at the root prompt, we can build the data index and start populating it.
 
 Because alpenhorn is data agnostic, it doesn't have any facilities out-of-the-box to import files.
 To be able to import files, alpenhorn needs one or more "import-detect extensions" to be loaded.
-For the purposes of this demo, we use the simple `pattern_importer` example import-detect extension
-provided in the `/examples` directory.
+For the purposes of this demo, we'll use the simple `pattern_importer` example extension provided in
+the `/examples` directory.  This extension has already been incorporated into the alpenhorn
+container image that we're running, and alpenhorn has been set up to use it.
 
-As explained in the `pattern_importer` example documentation, the extension adds fields to two
-alpenhorn tables: `ArchiveAcq` and `ArchiveFile`.  Because of this, we need to run the extension
-initialisation before we can create the rest of the data index proper.
+As explained in the documentation for the `pattern_importer` example, the extension adds fields to
+two alpenhorn tables: `ArchiveAcq` and `ArchiveFile`, as well as creating some of its own tables in
+the Data Index.  Because of this, we need to run the extension initialisation before we can create
+the rest of the data index proper.
 
 To initialise the database for the extension, run the `demo_init` function provided by the
 extension:
 ```
   python -c 'import pattern_importer; pattern_importer.demo_init()'
 ```
+If you get a `ModuleNotFoundError: No module named 'pattern_importer'` error, you're probably not
+executing this command in the root-shell in the `alpen1` container.
 
 You should see a success message:
 ```(console)
@@ -258,8 +263,8 @@ root@alpen1:/#
 We need to start with a place to put some files.  We'll create the first `StorageNode`, which will
 be hosted on `alpen1`.  Before we can do that, though we first need to create a `StorageGroup` to
 house the node.  All `StorageNode`s need to be contained in a `StorageGroup`.  Typically each group
-contains only a single node, but certain group types support or require multiple nodes (such as the
-transport group that we'll create later).
+contains only a single node, but certain group classes support or require multiple nodes (such as
+the transport group that we'll create later).
 
 To create the group, which we'll call `demo_storage1`, run:
 ```
@@ -272,7 +277,7 @@ Created storage group "demo_storage1".
 ```
 If instead you get an error: `Error: Group "demo_storage1" already exists.` then likely you're
 trying to run this demo using an old instance of the database.  In this case, you can stop the demo
-and delete the old database as explained above.
+and delete the old database volume as explained above, if you want to start with a clean demo.
 
 Now that the group is created, we can create a node within it.  We'll also call the node
 `demo_storage1`.  (By convention, when a StorageGroup contains only one StorageNode, the node and
@@ -281,7 +286,7 @@ group have the same name, though that's not required.)
   alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import --root=/data --host=alpen1
 ```
 This command will create a new StorageNode called `demo_storage1` and put it in the
-identically-named group.  Auto-import will be turned on, the mount point in the filesystem will be
+identically-named group.  Auto-import will be turned on; the mount point in the filesystem will be
 set to `/data` and we declare it to be available on host `alpen1`:
 ```(console)
 root@alpen1:/# alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import 
@@ -294,14 +299,12 @@ That's enough to get us started.  Exit the temporary `alpen1` container:
 exit
 ```
 
-Docker should remove the container once you've exited.
+Docker should remove the temporary container once you've exited.
 
 ## Start the first daemon
 
 Now it's time to start the first daemon.  The alpenhorn container is set-up to run the alpenhorn
-daemon by default.  We suggest you do this in a separate sesson from the one where you have the
-root prompt on `alpen1` to simplify running `alpenhorn` commands whilst the daemons are running.
-
+daemon automatically.  Start it by running the `docker compose up` command:
 ```
 docker compose up --detach alpen1
 ```
@@ -329,6 +332,8 @@ alpen1-1  | Feb 21 00:38:32 INFO >> [Worker#1] Started.
 alpen1-1  | Feb 21 00:38:32 INFO >> [Worker#2] Started.
 ```
 Two worker threads are started because that's what's specified in the `demo/alpenhornd.conf` file.
+It has also loaded the `pattern_exporter` extension, since that's also specified in the config
+file.
 
 Almost immediately, the daemon will notice that there are no _active_ ndoes on `alpen1`.  It
 will perform this check roughly every ten seconds, which is the update interval time set in
@@ -344,16 +349,18 @@ alpen1-1  | Feb 21 00:38:42 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 0 
 
 We can fix this by activating the node we created.
 
-Start bash session in the runing `alpen1` container:
+Start a bash session in the runing `alpen1` container:
 ```
 docker compose exec alpen1 bash -l
 ```
 (Note the use of `exec` here instead of `run` which we used to start the bash session earlier.  The
-difference between `exec` and `run` is: `exec` will execute the command in the running `alpen1` container.
-Using `run` would have created a separate instance of the `alpen1` container to run the command.
+difference between `exec` and `run` is: `exec` will execute the command in the running `alpen1`
+container.  Using `run` would have created a separate instance of the `alpen1` container to run the
+command.
 
-You will be issuing a lot of `alpenhorn` commands over the course of this demo.  We suggest leaving this
-root shell open to make it more convenient to issue them.
+You will be issuing a lot of `alpenhorn` commands over the course of this demo.  We suggest leaving
+this root shell open to make it more convenient to issue them.  If you ever need open a new root
+session on `alpen1`, just run the above `docker compose exec` command again.
 
 In the `alpen1` container, at the root prompt, we can now activate the node:
 ```
@@ -375,8 +382,8 @@ alpen1-1  | Feb 21 00:40:22 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 0 
 ```
 
 We need to initialise the node so `alpenhorn` can use it.  In this case, we could do this by
-manually creating the `/data/ALPENHORN_NODE` file that it can't find.  But, generally, it's easier to
-tell the daemon to initialise the node for us:
+manually creating the `/data/ALPENHORN_NODE` file that it can't find.  But, generally, it's easier
+to tell the daemon to initialise the node for us:
 ```
 alpenhorn node init demo_storage1
 ```
@@ -385,8 +392,8 @@ alpenhorn node init demo_storage1
 root@alpen1:/# alpenhorn node init demo_storage1
 Requested initialisation of Node "demo_storage1".
 ```
-A node only ever needs to be initialised once, when it is first created, but it's always safe to run this
-command: a request to initialise an already-initialised node is simply ignored.
+A node only ever needs to be initialised once, when it is first created, but it's always safe to run
+this command: a request to initialise an already-initialised node is simply ignored.
 
 You should see the node being initialised by one of the daemon workers:
 ```
@@ -402,9 +409,10 @@ alpen1-1  | Feb 21 00:40:52 INFO >> [Worker#1] Node "demo_storage1" initialised.
 alpen1-1  | Feb 21 00:40:52 INFO >> [Worker#1] Finished task: Init Node "demo_storage1"
 ```
 
-After it does that, it will finally be happy with the storage node and start the auto-import monitor.
-The start of auto-import triggers a "catch-up" job which searches for unknown, pre-existing files that
-need import.  As this is an empty node, though, it won't find anything:
+After initialisation is complete, the daemon will finally be happy with the Storage Node and start
+the auto-import monitor.  The start of auto-import triggers a "catch-up" job which searches for
+unknown, pre-existing files that need import.  As this is an empty node, though, it won't find
+anything:
 ```
 alpen1-1  | Feb 21 00:41:02 INFO >> [MainThread] Node "demo_storage1" now available.
 alpen1-1  | Feb 21 00:41:02 INFO >> [MainThread] Group "demo_storage1" now available.
@@ -437,25 +445,25 @@ alpen1-1  | Feb 21 00:41:12 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 0 
 
 ## Importing files
 
-Let's experiment now with importing files into alpenhorn, using both the auto-import system and manually
-importing them.
+Let's experiment now with importing files into alpenhorn, using both the auto-import system and
+manually importing them.
 
 ### What kind of files can be imported?
 
-As mentioned before, alpenhorn itself is agnostic to data files.  All decisions on which files
-are imported into the data index are made by the import detect extensions, which can be tailored to
-the specific data being managed.  For this demo, the only import detect function we're using is the
-example `pattern_importer` extension.  This extension uses a regular expressions to match against the
-pathnames of candidate files to determine whether they should be imported or not.
+As mentioned before, alpenhorn itself is agnostic to data file contents.  All decisions on which
+files are imported into the data index are made by the import detect extensions, which can be
+tailored to the specific data being managed.  For this demo, the only import detect function we're
+using is the example `pattern_importer` extension.  This extension uses a regular expressions to
+match against the pathnames of candidate files to determine whether they should be imported or not.
 
 The `demo_init` function that we called earlier to initialise the database for this demo, added one
-allowed ArchiveAcq name pattern consisting of a nested directory tree with the date: `YYYY/MM/DD` and
-two allowed ArchiveFile name patterns.  The first of these is a file called "meta.txt" in the top
-acquisition directory (i.e. `YYYY/MM/DD/meta.txt`), which provides metadata for our notional acquisition,
-and then data files with the time of day, sorted further into hourly directories (i.e.
+allowed ArchiveAcq name pattern consisting of a nested directory tree with the date: `YYYY/MM/DD`
+and two allowed ArchiveFile name patterns.  The first of these is a file called "meta.txt" in the
+top acquisition directory (i.e. `YYYY/MM/DD/meta.txt`), which provides metadata for our notional
+acquisition, and then data files with the time of day, sorted further into hourly directories (i.e.
 `YYYY/MM/DD/hh/mmss.dat`).
 
-It bears repeating: the _contents_ of these files are not interesting to alpenhorn per se, but a
+It bears repeating: the _contents_ of these files are not interesting to alpenhorn per se, but an
 import detect extension may be implemented which inspects the data of the files being imported, if
 desired.
 
@@ -464,9 +472,9 @@ concern about the file contents.
 
 ### Auto-importing files and lock files
 
-Let's start with auto-importing files.  When auto-import is turned on for a node, like it has been for
-our `demo_storage1` node, then files will automatically be discovered by alpenhorn as they are added
-to the node filesystem.
+Let's start with auto-importing files.  When auto-import is turned on for a node, like it has been
+for our `demo_storage1` node, then files will automatically be discovered by alpenhorn as they are
+added to the node filesystem.
 
 Care must be taken when writing files to a node filesystem when auto-import is turned on to prevent
 alpenhorn from trying to import a file before it is fully written.  To prevent this from happening,
@@ -492,8 +500,8 @@ alpen1-1  | Feb 21 23:04:21 INFO >> [Worker#1] Skipping "2025/02/21/meta.txt": l
 alpen1-1  | Feb 21 23:04:21 INFO >> [Worker#1] Finished task: Import 2025/02/21/meta.txt on demo_storage1
 ```
 Note: in some cases file creation can cause multiple import requests to be scheduled.  This is
-hamless: alpenhorn is prepared to handle multiple simultaneous attempts to import the same file and will
-only ever import a file once.
+harmless: alpenhorn is prepared to handle multiple simultaneous attempts to import the same file and
+will only ever import a file once.
 
 Once the file has been created, the lock file can be deleted, to trigger import of the file:
 ```
@@ -513,7 +521,8 @@ Note here that the the three lines in the middle of the daemon output above indi
 has created three new records in the database:
 * an `ArchiveAcq` record for the new acquisition, with name `2025/02/21`
 * an `ArchiveFile` record for the new file, with name `21/meta.txt` in the new acqusition
-* an `ArchiveFileCopy` record recording that a copy of the newly-created `ArchiveFile` exists on `demo_storage1`
+* an `ArchiveFileCopy` record recording that a copy of the newly-created `ArchiveFile` exists on
+    `demo_storage1`
 
 
 You can use the alpenhorn CLI to see that this file is now present on the `demo_storage1` node:
@@ -531,7 +540,7 @@ File                 Size    MD5 Hash                          Registration Time
 ### Auto-importing files and temporary names
 
 Another option for writing files to a node filesystem when auto-import is turned on, may be to
-write them to a path which the import detect extensions won't recognise, although whether this
+write them to a path which the import detect extensions won't accept, although whether this
 is possible will depend on the particular import detect extensions being used.  For this demo,
 we can use any name which doesn't match the patterns which the `pattern_importer` will accept.
 
@@ -564,7 +573,7 @@ alpen1-1  | Feb 21 23:52:20 INFO >> [Worker#2] Imported file copy "2025/02/21/23
 alpen1-1  | Feb 21 23:52:20 INFO >> [Worker#2] Finished task: Import 2025/02/21/23/1324.dat on demo_storage1
 ```
 
-Unlike when we imported the first file, now only two new records are created in the database. because
+Unlike when we imported the first file, now only two new records are created in the database because
 the acquistion record already existsed:
 * an `ArchiveFile` for the new file
 * an `ArchiveFileCopy` for the copy of the new file on `demo_storage1`
@@ -588,12 +597,13 @@ Let's now turn to the case where we _don't_ have auto-import turned on for a nod
 there's no difficulty writing to the node, since filesystem events won't trigger automatic attempts
 to import files.
 
-First, turn off auto-import on the node:
+First, turn off auto-import on the node by modifying its properties:
 ```
 alpenhorn node modify demo_storage1 --no-auto-import
 ```
 
-If you want, you can verify that auto-import has been turned off for the node by checking its properties:
+If you want, you can verify that auto-import has been turned off for the node by checking its
+metadata:
 ```
 root@alpen1:/# alpenhorn node modify demo_storage1 --no-auto-import
 Node updated.
@@ -707,7 +717,7 @@ Let's now move on to syncing, or transferring, files between different hosts.
 ### Starting up the second and third nodes
 
 Before being able to transfer files, we need to create somewhere to transfer them to.
-We'll start by creating the second storage nodes, on the second host:
+We'll start by creating the second storage node on the second host:
 
 ```
 alpenhorn node create demo_storage2 --create-group --root=/data --host=alpen2
@@ -732,7 +742,7 @@ or transfer requests, do not require the target node to be active, nor do they r
 alpenhorn daemon to be managing them.  Requests made on inactive nodes will remain pending
 in the database until they can be handled by an alpenhorn daemon instance.
 
-You can see pending requests, including this import request, using the alpenhorn CLI:
+You can see pending requests, including this init request, using the alpenhorn CLI:
 ```
 root@alpen1:/# alpenhorn node show demo_storage2 --all
    Storage Node: demo_storage2
@@ -778,9 +788,10 @@ Auto-actions:
 
   none
 ```
-(Node init requests are handled, under the hood, as a special kind of import request.)
+(Node init requests are handled, under the hood, as a special kind of import request, which is
+why the Node Init request appears in the import request table.)
 
-This nodes is initially empty:
+This node is initially empty:
 ```
 root@alpen1:/# alpenhorn node stats
 Name             File Count    Total Size    % Full
@@ -797,8 +808,8 @@ active we can do this by modifying the node record:
 alpenhorn node modify demo_storage1 --username root --address alpen1
 ```
 
-For the second node, we can do it when we activate it.  (We could have also specified
-these values when we created the node.):
+For the second node, we can do it when we activate it.  We could have also specified
+these values when we created the node:
 ```
 alpenhorn node activate demo_storage2 --username root --address alpen2
 ```
@@ -817,7 +828,7 @@ You can monitor this nodes in the same way you did with alpen1:
 ```
 docker compose logs alpen2
 ```
-but it may be easier to monitor all nodes at once:
+but it's also possible to monitor all nodes at once:
 ```
 docker compose logs --follow
 ```
@@ -881,8 +892,9 @@ alpen2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Pull of 2025/02/21/meta.txt compl
 alpen2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Finished task: AFCR#1: demo_storage1 -> demo_storage2
 ```
 
-The default tool for remote transfers is `rsync`, but alpenhorn will also try to use `bbcp`, a GridFTP
-implementation, which allows for higher-rate transfers, if it is available on to the daemon.
+The default tool for remote transfers is `rsync`, but alpenhorn will also try to use
+[bbcp](https://www.slac.stanford.edu/~abh/bbcp/), a GridFTP implementation, which may allow for
+higher-rate transfers, if it is available on to the daemon.
 
 Now there is one file on `demo_storage2`:
 ```
@@ -907,7 +919,7 @@ $ docker compose exec alpen2 find /data
 ### Bulk transfers
 
 Rather than the tedious operation of requesting individual files for transfer, it is more typical
-to request _all_ files present on a source node and absent from a destination be transferred:
+to request _all_ files present on a source node and absent from a destination group be transferred:
 ```
 alpenhorn node sync demo_storage1 demo_storage2 --show-files
 ```
@@ -1038,7 +1050,7 @@ root@alpen1:/# md5sum /data/2025/02/21/23/1324.dat
 3412f7b66a30b90ae3d3085c96615f00  /data/2025/02/21/23/1324.dat
 ```
 
-However, alpenhorn has noticed this:
+However, alpenhorn hasn't noticed this:
 
 ```(console)
 root@alpen1:/# alpenhorn node stats --extra-stats
@@ -1049,15 +1061,15 @@ demo_storage2             5         101 B         -                -            
 ```
 It still lists no corrupt files on `demo_storage1`.  This is because alpenhorn
 doesn't normally automatically detect corruption to files it is managing.  You
-can turn on "auto-verify" on a node, but that can be I/O expensive, and should be
-used with caution.
+can turn on "auto-verify" on a node, but that won't result in instantaneous detection
+of corruption either, and can be I/O expensive, (and, so, should be used with caution).
 
-In some cases, file corruption can be detected by alenhorn when copying an unexpectedly corrupt
+In some cases, file corruption will be detected by alenhorn when copying an unexpectedly corrupt
 file from one node to another.  For now, we can manually request a verification of the file.
 We'll do this by requesting verifciation for the entire acqusition, even though we've only
 corrupted one of the files.
 
-To request verifcation of all files in the acqusition, run:
+To request verifcation of all files in the acqusition on the node `demo_storage1`, run:
 ```
 alpenhorn node verify --all --acq=2025/02/21 demo_storage1
 ```
@@ -1075,6 +1087,9 @@ Updated 5 files.
 
 The daemon on `alpen1` will respond to this command by re-verifying all files in that acqusition:
 ```
+alpen1-1  | Mar 07 01:48:25 INFO >> [MainThread] Checking copy "2025/02/21/meta.txt" on node demo_storage1.
+alpen1-1  | Mar 07 01:48:25 INFO >> [MainThread] Checking copy "2025/02/21/23/1324.dat" on node demo_storage1.
+alpen1-1  | Mar 07 01:48:25 INFO >> [MainThread] Checking copy "2025/02/21/23/1330.dat" on node demo_storage1.
 alpen1-1  | Mar 07 01:48:25 INFO >> [MainThread] Checking copy "2025/02/21/23/1349.dat" on node demo_storage1.
 alpen1-1  | Mar 07 01:48:25 INFO >> [MainThread] Checking copy "2025/02/21/23/1342.dat" on node demo_storage1.
 alpen1-1  | Mar 07 01:48:25 ERROR >> [Worker#2] File 2025/02/21/23/1324.dat on node demo_storage1 is corrupt! Size: 9; expected: 12
@@ -1111,17 +1126,19 @@ demo_storage2             5         101 B         -                -            
 root@alpen1:/# alpenhorn file state 2025/02/21/23/1324.dat demo_storage1
 Corrupt Ready
 ```
+Also note that the file count for `demo_storage1` is down to four: a known corrupt file is not
+considered "present" on a node, since it can't be used as a good copy of the file.
 
 ## Recovering corrupt files
 
 The standard way to recover a corrupt file copy is to re-transfer a known-good copy of the
-file over the corrupt version.  We can do this by syncing the files back from `alpen2`:
+file over top of the corrupt version.  We can do this by syncing the file back from `alpen2`:
 
 ```
 alpenhorn node sync demo_storage2 demo_storage1
 ```
 
-It will tell you there is one file to transfer (the corrupt file) and ask for confirmation:
+It will tell you there is only one file to transfer (the corrupt file) and ask for confirmation:
 ```(console)
 root@alpen1:/# alpenhorn node sync demo_storage2 demo_storage1
 Would sync 1 file (12 B) from Node "demo_storage2" to Group "demo_storage1".
@@ -1153,10 +1170,11 @@ demo_storage2             5         101 B         -                -            
 
 ## Deleting files
 
-Typically you'll want to delete files off your acqusition nodes once they've been transferred off-site.
-File deletion can be accomplished with the `clean` command.
+Typically you'll want to delete files off your acqusition nodes once they've been transferred
+off-site.  File deletion can be accomplished with the `clean` command.
 
-Since we've copied some files from `alpen1` to `alpen2`, let's try deleting one of the files from `alpen1`:
+Since we've copied some files from `alpen1` to `alpen2`, let's try deleting one of the files from
+`alpen1`:
 ```
 alpenhorn file clean --now --node=demo_storage1 2025/02/21/meta.txt
 ```
@@ -1166,28 +1184,36 @@ The CLI should release the file immediately:
 root@alpen1:/# alpenhorn file clean --now --node=demo_storage1 2025/02/21/meta.txt
 Released "2025/02/21/meta.txt" for immediate removal on Node "demo_storage1".
 ```
+The `--now` flag tells alpenhorn to delete the file as soon as possible.  Without that flag,
+instead of being released for removal, the file is marked for "discretionary cleaning", which
+tells alpenhorn that it can decide to delete the file if it wants to clear space on the node, but
+in this demo alpenhorn would never decide to do that, so we'll opt for immediate removal.
 
-However, if you look at the daemon log on `alpen1`, you'll see that it's refused to delete the file:
+Despite our request, if you look at the daemon log on `alpen1`, you'll see that it's refused to
+delete the file:
 ```
 alpen1-1  | Mar 07 02:21:25 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 1 in-progress on 2 workers
 alpen1-1  | Mar 07 02:21:25 WARNING >> [Worker#1] Too few archive copies (0) to delete 2025/02/21/meta.txt on demo_storage1.
 alpen1-1  | Mar 07 02:21:25 INFO >> [Worker#1] Finished task: Delete copies [1] from demo_storage1
 ```
 
-To prevent data loss, alpenhorn will only delete file copies if at least two other copies
-of the file exist on archive nodes.  Currently we have no archive nodes, so we can't delete files.
+To prevent data loss, alpenhorn will only delete file copies from a node if at least two other
+copies of the file exist on other archive nodes.  Currently we have no archive nodes, so we can't
+delete files.
 
-Let's fix that.  While we do, the `alpen1` daemon will keep checking whether it can delete that file.
+Let's fix that.  While we do, the `alpen1` daemon will keep checking whether it can delete that
+file.
 
 ### Archive nodes
 
-An archive node is any storage node with the "archive" storage type.  Let's change `demo_storage2` into
-an archive node.  We do that by modifying it's metadata:
+An archive node is any storage node with the "archive" storage type.  Let's change `demo_storage2`
+into an archive node.  We do that by modifying it's metadata:
 ```
 alpenhorn node modify --archive demo_storage2
 ```
 
-After running this command, you can look at the node metadata to see that it now has the "archive" storage type:
+After running this command, you can look at the node metadata to see that it now has the "archive"
+storage type:
 ```(console)
 root@alpen1:/# alpenhorn node modify --archive demo_storage2
 Node updated.
@@ -1224,9 +1250,9 @@ alpen1-1  | Mar 07 02:28:55 INFO >> [Worker#1] Finished task: Delete copies [1] 
 ```
 
 We'll need another archive node with this file on it if we want the deletion to happen.  So, let's
-create the final storage host, `alpen3`.
+set up the final storage host, `alpen3`.
 
-First let's set up the storage node in the database.  We can make this one an archive node when we
+First let's create the storage node in the database.  We'll make this one an archive node when we
 create it:
 ```
 alpenhorn node create demo_storage3 --create-group --archive --root=/data --host=alpen3 \
@@ -1240,13 +1266,14 @@ docker compose up --detach alpen3
 docker compose logs --follow alpen3
 ```
 
-Sync everything on `demo_storage1` to `demo_storage3`:
+Sync everything on `demo_storage2` to `demo_storage3`:
 ```
-alpenhorn node sync --force demo_storage1 demo_storage3
+alpenhorn node sync --force demo_storage2 demo_storage3
 ```
-Using `--force` here skips the confirmation step.
+Using `--force` here skips the confirmation step.  You can use `--force` with any alpenhorn
+command that would ask for confirmation, but you should be careful when using it.
 
-As soon as the file is transferred to `demo_storage3`, the daemon on `alpen1` will happily
+As soon as the file is transferred to `demo_storage3`, the daemon on `alpen1` will finally
 delete the file:
 
 ```
@@ -1324,7 +1351,7 @@ Alpenhorn can be configured to copy data onto a set of physical media at one loc
 data are produced and then, later, copy data off those media once they have been transported
 to a data ingest site.
 
-To demonstrate this, we'll use a transport disk to simulate transferring data back from
+To demonstrate this, we'll use a transport device to simulate transferring data back from
 `demo_storage3` to `demo_storage1`, as if these two nodes were unable to communicate directly
 over the network.
 
@@ -1374,8 +1401,8 @@ alpen3-1  | Mar 07 09:21:03 INFO >> [Worker#1] Node "transport1" initialised.
 ### Copying Data to the Transport Group
 
 Remember that, when copy files, data always flows from a node to a group.  To get
-data into the transport node, we need to transfer data into the transport group.  Logic
-within the Transport I/O class then determines which of the available transport nodes the
+data onto the transport node, we need to transfer data into the transport group.  Logic
+defined by the Transport I/O class then determines which of the available transport nodes the
 transferred files will be written to.
 
 Briefly, the Transport logic works like this:
@@ -1383,6 +1410,7 @@ Briefly, the Transport logic works like this:
   group will only ever copy data onto transport nodes at the same location as the source
   node).
 * the transport group will try to fill up one transport node before copying data to another
+* all other things being equal, all transport nodes have the same priority for accepting data
 
 In our case we only have a single transport node, so it's easy to figure out which node the
 data will end up on.
@@ -1437,9 +1465,11 @@ transport1             5  101 B         -
 
 Now let's simulate what would happen if we wanted to move this transport node
 from `alpen3` to `alpen1` over the Snearkernet.  (Normally, to increase throughput
-of the Snearkernet, we would wait for the node to fill up.)
+of the Snearkernet, we would wait for the node to fill up, but we're not going to
+wait for that in this demo.)
 
-The first step is to deactivate the alpenhorn node:
+The first step is to deactivate the alpenhorn node to tell alpenhorn to stop
+managing it:
 ```
 alpenhorn node deactivate transport1
 ```
@@ -1453,7 +1483,7 @@ alpen3-1  | Mar 09 04:10:07 INFO >> [MainThread] Group "transport_group" no long
 If this were a real transport device, the next steps would be to:
 * unmount the filesystem
 * eject the media
-* remove the device from the machine
+* remove the physical storage device from the machine
 
 Next, the trasnport device would need to travel (via Sneakernet) from the site containing
 `alpen3` to the site containing `alpen1` where we would do the reverse procedure, installing
@@ -1464,10 +1494,11 @@ using to simulate the transport device has already been made available in the `a
 so let's proceed with the last step of the transport process, which is to update the alpenhorn
 data index to record the movement of the transport device.
 
-There are generally, four fields we may need to upate for a transport device after it's been moved:
+In addition to activating the node to tell alpenhorn to start managing it again, there are,
+generally, four fields we may need to upate for a transport device after it's been moved:
 * its `host`, to let alpenhorn know which daemon should now be able to access the disk
 * its `username` and `address` to set the log-in details for remote access to the device.  If
-  remote access to the node isn't needed, this may not be necessary to do.
+  remote access to the transport node isn't needed, this may not be necessary to do.
 * its `root` to tell alpenhorn where we have mounted the transport device's filesystem.
 
 We can do this all using the `node activate` command, which has been designed with this use
@@ -1483,10 +1514,10 @@ alpen1-1  | Mar 09 04:21:44 INFO >> [MainThread] Node "transport1" now available
 alpen1-1  | Mar 09 04:21:44 INFO >> [MainThread] Group "transport_group" now available.
 ```
 
-Let's now copy all the data off the transport media onto the `demo_storage1` node to
-complete our transfer:
+Now let's now copy all the data off the transport media onto the `demo_storage1` node to
+complete our long-distance transfer:
 ```
-alpenhorn node sync --force transport1 demo_storage1
+alpenhorn node sync transport1 demo_storage1
 ```
 
 Once the transfers are complete, we've now got data back on `demo_storage1` courtesy
@@ -1509,3 +1540,8 @@ alpenhorn node clean --now --force transport1 --target=demo_storage1
 ```
 The `--target` option ensures we only delete files from `transport1` which are present
 on `demo_storage1`.
+
+## Next steps
+
+This is the end of the curated part of the alpenhorn demo, but you can use this demo system to
+experiment with running alpenhorn.  Remember: you can always reset this demo to its inital state.
