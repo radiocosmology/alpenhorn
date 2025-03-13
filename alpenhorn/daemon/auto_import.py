@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 import peewee as pw
 from watchdog.events import FileSystemEventHandler
 
-from .. import db
 from ..common import config, extensions, metrics
 from ..common.util import invalid_import_path
 from ..db import (
@@ -96,6 +95,8 @@ def import_file(
         True if we should register new files (files without ArchiveFile records),
         or False to only import already registered files.
     req : ArchiveFileImportRequest or None
+        This will be None when the import request was triggered by the auto-import
+        watchdog.  Otherwise, this is the import request which is being handled.
         If not None, req will be marked as complete if the import isn't skipped.
     """
 
@@ -171,7 +172,7 @@ def _import_file(
     # Skip non-files
     fullpath = pathlib.Path(node.db.root).joinpath(path)
     if fullpath.is_symlink() or not fullpath.is_file():
-        log.debug(f'Not importing "{path}": not a file.')
+        log.info(f'Not importing "{path}": not a file.')
         import_request_done(req, "invalid")
         return
 
@@ -179,14 +180,14 @@ def _import_file(
 
     # Wait for file to become ready
     while not node.io.ready_path(path):
-        log.debug(
-            f'Path "{path}" not ready for I/O during import.  Waiting 60 seconds.'
+        log.info(
+            f'Path "{path}" not ready for I/O during import.  Waiting 600 seconds.'
         )
         yield 600  # wait 600 seconds and re-queue
 
     # Skip the file if there is still a lock on it.
     if node.io.locked(path):
-        log.debug(f'Skipping "{path}": locked.')
+        log.info(f'Skipping "{path}": locked.')
         # In this case we don't complete the import request.
         return
 
@@ -217,67 +218,84 @@ def _import_file(
         import_request_done(req, "duplicate")
         return
 
-    # Begin a transaction
-    with db.database_proxy.atomic():
-        # Add the acqusition, if necessary
-        try:
-            acq = ArchiveAcq.get(ArchiveAcq.name == acq_name)
-            new_acq = None
-            log.debug(f'Acquisition "{acq_name}" already in DB.')
-        except pw.DoesNotExist:
-            if register:
+    # Add the acqusition, if necessary
+    try:
+        acq = ArchiveAcq.get(ArchiveAcq.name == acq_name)
+        new_acq = None
+        log.debug(f'Acquisition "{acq_name}" already in DB.')
+    except pw.DoesNotExist:
+        if register:
+            try:
                 acq = ArchiveAcq.create(name=acq_name)
                 new_acq = acq
                 log.info(f'Acquisition "{acq_name}" added to DB.')
-            else:
-                log.info(f'Not importing unregistered acquistion: "{acq_name}".')
-                import_request_done(req, "unregistered")
-                return
+            except pw.IntegrityError:
+                # i.e. record was created by someone else between the first get and
+                #      the subsequent create
+                acq = ArchiveAcq.get(ArchiveAcq.name == acq_name)
+                new_acq = None
+                log.debug(f'Acquisition "{acq_name}" already in DB.')
+        else:
+            log.info(f'Not importing unregistered acquistion: "{acq_name}".')
+            import_request_done(req, "unregistered")
+            return
 
-        # Add the file, if necessary.
-        try:
-            file_ = ArchiveFile.get(
-                ArchiveFile.name == file_name, ArchiveFile.acq == acq
-            )
-            new_file = None
-            log.debug(f'File "{path}" already in DB.')
-        except pw.DoesNotExist:
-            if register:
-                log.debug(f'Computing md5sum of "{path}".')
-                md5sum = node.io.md5(acq_name, file_name)
-                size_b = node.io.filesize(path)
+    # Add the file, if necessary.
+    try:
+        file_ = ArchiveFile.get(ArchiveFile.name == file_name, ArchiveFile.acq == acq)
+        new_file = None
+        log.debug(f'File "{path}" already in DB.')
+    except pw.DoesNotExist:
+        if register:
+            log.debug(f'Computing md5sum of "{path}".')
+            md5sum = node.io.md5(acq_name, file_name)
+            size_b = node.io.filesize(path)
 
+            try:
                 file_ = ArchiveFile.create(
                     acq=acq, name=file_name, size_b=size_b, md5sum=md5sum
                 )
                 new_file = file_
                 log.info(f'File "{path}" added to DB.')
-            else:
-                log.info(f'Not importing unregistered file: "{path}".')
-                import_request_done(req, "unregistered")
-                return
-
-        try:
-            copy = ArchiveFileCopy.get(file=file_, node=node.db)
-            # If we're importing a file that's missing (has_file == N but
-            # wants_file == Y), set has_file='M' to trigger a integrity check.
-            # If it's recorded as having been properly removed, though, just
-            # set it to 'Y' and assume it's good now.
-            if copy.wants_file == "Y":
-                copy.has_file = "M"
-                log.warning(
-                    f'Imported missing file "{path}" on node {node.name}.'
-                    "  Marking suspect."
+            except pw.IntegrityError:
+                # i.e. record was created by someone else between the first get and
+                #      the subsequent create
+                #
+                # We _cannot_ assume that this is due to another worker in _this_
+                # daemon: there may be an import for the same file happening at the
+                # same time on another host, as unlikely as that seems.
+                file_ = ArchiveFile.get(
+                    ArchiveFile.name == file_name, ArchiveFile.acq == acq
                 )
-            else:
-                copy.has_file = "Y"
-                copy.wants_file = "Y"
-                log.info(f'Imported file copy "{path}" on node "{node.name}".')
-            copy.ready = True
-            copy.last_update = utcnow()
-            copy.save()
-        except pw.DoesNotExist:
-            # No existing file copy; create a new one.
+                new_file = None
+                log.debug(f'File "{path}" already in DB.')
+        else:
+            log.info(f'Not importing unregistered file: "{path}".')
+            import_request_done(req, "unregistered")
+            return
+
+    try:
+        copy = ArchiveFileCopy.get(file=file_, node=node.db)
+        # If we're importing a file that's missing (has_file == N but
+        # wants_file == Y), set has_file='M' to trigger a integrity check.
+        # If it's recorded as having been properly removed, though, just
+        # set it to 'Y' and assume it's good now.
+        if copy.wants_file == "Y":
+            copy.has_file = "M"
+            log.warning(
+                f'Imported missing file "{path}" on node {node.name}.'
+                "  Marking suspect."
+            )
+        else:
+            copy.has_file = "Y"
+            copy.wants_file = "Y"
+            log.info(f'Imported file copy "{path}" on node "{node.name}".')
+        copy.ready = True
+        copy.last_update = utcnow()
+        copy.save()
+    except pw.DoesNotExist:
+        # No existing file copy; create a new one.
+        try:
             copy = ArchiveFileCopy.create(
                 file=file_,
                 node=node.db,
@@ -288,6 +306,18 @@ def _import_file(
                 last_update=utcnow(),
             )
             log.info(f'Imported file copy "{path}" on node "{node.name}".')
+        except pw.IntegrityError:
+            log.debug("ArchiveFileCopy created by another worker!")
+            # The ArchiveFileCopy record has been created by someone else
+            # between our initial .get() and the subsequent .create().
+            #
+            # In this case, we assume another worker from _this_ daemon
+            # has just imported the file, likely due to multiple idential
+            # import requests, so just mark the request we're working on as
+            # completed and let the other worker deal with fixing up the
+            # copy and doing all the post-import stuff
+            import_request_done(req, "duplicate")
+            return
 
     import_request_done(req, "success")
 
@@ -316,32 +346,39 @@ class RegisterFile(FileSystemEventHandler):
         The task queue.  Import tasks will be submitted to this queue.
     """
 
+    def _is_lock_file(self, path):
+        """Returns True if event does not refer to a lock file."""
+        basename = pathlib.PurePath(path).name
+        return basename[0] == "." and basename[-5:] == ".lock"
+
     def __init__(self, node: UpdateableNode, queue: FairMultiFIFOQueue) -> None:
         self.node = node
         self.queue = queue
         super().__init__()
 
     def on_created(self, event):
-        import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
-        return
-
-    def on_modified(self, event):
-        import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
+        if not event.is_directory and not self._is_lock_file(event.src_path):
+            import_file(
+                self.node, self.queue, pathlib.PurePath(event.src_path), True, None
+            )
         return
 
     def on_moved(self, event):
-        import_file(self.node, self.queue, pathlib.PurePath(event.src_path), True, None)
+        if not event.is_directory and not self._is_lock_file(event.dest_path):
+            import_file(
+                self.node, self.queue, pathlib.PurePath(event.dest_path), True, None
+            )
         return
 
     def on_deleted(self, event):
         # For lockfiles: ensure that the file that was locked is added: it is
         # possible that the watchdog notices that a file has been closed before the
         # lockfile is deleted.
-        path = pathlib.Path(event.src_path)
-        basename = path.name
-        if basename[0] == "." and basename[-5:] == ".lock":
-            basename = basename[1:-5]
-            import_file(self.node, self.queue, path.with_name(basename), True, None)
+        if not event.is_directory and self._is_lock_file(event.src_path):
+            path = pathlib.Path(event.src_path)
+            import_file(
+                self.node, self.queue, path.with_name(path.name[1:-5]), True, None
+            )
 
 
 # Routines to control the filesystem watchdogs.
