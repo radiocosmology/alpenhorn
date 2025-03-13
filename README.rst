@@ -1,4 +1,6 @@
-.. image:: https://github.com/radiocosmology/alpenhorn/workflows/alpenhorn-ci-build/badge.svg
+.. image:: https://github.com/radiocosmology/alpenhorn/workflows/Linting/badge.svg
+    :target: https://github.com/radiocosmology/alpenhorn/actions/
+.. image:: https://github.com/radiocosmology/alpenhorn/workflows/Test%20Suite/badge.svg
     :target: https://github.com/radiocosmology/alpenhorn/actions/
 
 Alpenhorn
