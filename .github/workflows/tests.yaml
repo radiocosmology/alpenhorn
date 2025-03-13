@@ -1,0 +1,35 @@
+name: Test Suite
+on:
+  pull_request:
+    branches:
+    - master
+  push:
+    branches:
+    - master
+
+jobs:
+  run-tests:
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install with dependencies
+      run: pip install -e .[test]
+
+    - name: Run tests without prometheus client
+      run: pytest -v .
+
+    - name: Install prometheus client
+      run: pip install prometheus_client
+
+    - name: Run tests with prometheus client
+      run: pytest -v .
