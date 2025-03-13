@@ -60,8 +60,8 @@ def test_filesize(unode, xfs):
 
     assert unode.io.filesize("dir/file1") == 1000
     assert unode.io.filesize("/node/dir/file1") == 1000
-    assert unode.io.filesize("/node/dir/file1", actual=True) == 1024
-    assert unode.io.filesize("dir/file1", actual=True) == 1024
+    assert unode.io.filesize("/node/dir/file1", actual=True) == 4096
+    assert unode.io.filesize("dir/file1", actual=True) == 4096
 
 
 def test_file_walk(unode, xfs):
