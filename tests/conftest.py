@@ -355,32 +355,6 @@ def mock_statvfs(fs):
 
 
 @pytest.fixture
-def mock_stat(fs):
-    """Mocks pathlib.PosixPath.stat to work with pyfakefs."""
-
-    def _mocked_stat(path, follow_symlinks=False):
-        """Mock of pathlib.PosixPath.stat to report the size of pyfakefs files."""
-        nonlocal fs
-
-        from math import ceil
-
-        file = fs.get_object(path, check_read_perm=False)
-        size = file.size
-
-        # Anything with a __dict__ works here.
-        class Result:
-            # stat reports sizes in 512-byte blocks
-            st_blocks = ceil(size / 512)
-            st_size = size
-            st_mode = file.st_mode
-
-        return Result
-
-    with patch("pathlib.PosixPath.stat", _mocked_stat):
-        yield
-
-
-@pytest.fixture
 def mock_exists(fs):
     """Mocks pathlib.PosixPath.exists to work with pyfakefs."""
 
@@ -426,7 +400,7 @@ def mock_observer():
 
 
 @pytest.fixture
-def xfs(fs, mock_observer, mock_statvfs, mock_stat, mock_exists):
+def xfs(fs, mock_observer, mock_statvfs, mock_exists):
     """An extended pyfakefs.
 
     Patches more stuff for proper behaviour with alpenhorn unittests"""
