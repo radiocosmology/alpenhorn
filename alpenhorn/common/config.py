@@ -169,21 +169,47 @@ _default_config = {
     },
 }
 
+_test_isolation = False
+
+
+def test_isolation(enable: bool = True) -> None:
+    """Enable or disable test isolation.
+
+    Test isolation disables the reading of config files installed
+    in the standard paths, but still allows specifying a config
+    file via command line or environmental variable.
+
+    For this function to have an effect, it must be called before
+    the first `load_config` call.  Ideally, put it in an early
+    test fixture in your test suite.
+
+    Parameters:
+    -----------
+    enable : bool
+        Whether to enable (the default) or disable test
+        isolation.
+    """
+    global _test_isolation
+    _test_isolation = enable
+
 
 def load_config(cli_conf: os.PathLike, cli: bool) -> None:
     """Find and load the configuration from a file."""
 
-    global config
+    global config, _test_isolation
 
     # Initialise with the default configuration
     config = _default_config.copy()
 
     # Construct the configuration file path
-    config_files = [
-        "/etc/alpenhorn/alpenhorn.conf",
-        "/etc/xdg/alpenhorn/alpenhorn.conf",
-        "~/.config/alpenhorn/alpenhorn.conf",
-    ]
+    if _test_isolation:
+        config_files = []
+    else:
+        config_files = [
+            "/etc/alpenhorn/alpenhorn.conf",
+            "/etc/xdg/alpenhorn/alpenhorn.conf",
+            "~/.config/alpenhorn/alpenhorn.conf",
+        ]
 
     enviro_conf = os.environ.get("ALPENHORN_CONFIG_FILE", None)
     if enviro_conf:

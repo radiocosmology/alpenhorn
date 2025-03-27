@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from ..common import config
 from ..common.util import help_config_option, start_alpenhorn, version_option
 from . import acq, db, file, group, node
 from .options import not_both
@@ -49,6 +50,14 @@ def _verbosity_from_cli(verbose: int, debug: bool, quiet: int) -> int:
     count=True,
 )
 @click.option(
+    "--test-isolation",
+    is_flag=True,
+    help=(
+        "Enable test isolation.  Using this option prevents alpenhorn "
+        "from reading config from the standard config paths."
+    ),
+)
+@click.option(
     "--verbose",
     "-v",
     help="Increase verbosity.  May be specified mulitple times: "
@@ -64,11 +73,14 @@ def _verbosity_from_cli(verbose: int, debug: bool, quiet: int) -> int:
     default=False,
 )
 @help_config_option
-def entry(conf, quiet, verbose, debug):
+def entry(conf, quiet, test_isolation, verbose, debug):
     """Alpenhorn data management system.
 
     This is the command-line interface to the alpenhorn data index.
     """
+
+    # Turn on test isolation, if requested
+    config.test_isolation(enable=test_isolation)
 
     # Initialise alpenhorn
     start_alpenhorn(

@@ -41,9 +41,17 @@ sys.excepthook = log_exception
     is_flag=True,
     help="Run the update loop once, wait for updates to complete, and then exit.",
 )
+@click.option(
+    "--test-isolation",
+    is_flag=True,
+    help=(
+        "Enable test isolation.  Using this option prevents alpenhornd "
+        "from reading config from the standard config paths."
+    ),
+)
 @version_option
 @help_config_option
-def entry(conf, once):
+def entry(conf, once, test_isolation):
     """Alpenhornd: data management daemon.
 
     The alpenhorn daemon can be used to manage Storage Nodes.  See the alpenhorn
@@ -53,6 +61,9 @@ def entry(conf, once):
     it to run only a single update pass and then exit after updates have completed
     by using the "--exit-after-update" flag.
     """
+
+    # Turn on test isolation, if requested
+    config.test_isolation(enable=test_isolation)
 
     # Initialise alpenhorn
     start_alpenhorn(conf, cli=False)
