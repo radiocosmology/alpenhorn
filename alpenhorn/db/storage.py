@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import pathlib
 from typing import TYPE_CHECKING
 
 import peewee as pw
@@ -13,8 +14,6 @@ from ..common import util
 from ._base import EnumField, base_model
 
 if TYPE_CHECKING:
-    import pathlib
-
     from .acquisition import ArchiveFile
 del TYPE_CHECKING
 
@@ -333,10 +332,11 @@ class StorageNode(base_model):
         Returns
         -------
         all_files : set of pathlib.PurePath
-            A set of paths relative to `root` for all files with the
-            requested criteria.  If all parameters are set to `False`,
-            an empty set is returned without raising an error.
+            A set of paths relative to `root` for all files with the requested criteria.
+            If all parameters are set to `False`, or no files match, an empty
+            set is returned without raising an error.
         """
+        from .acquisition import ArchiveAcq, ArchiveFile
         from .archive import ArchiveFileCopy
 
         # Which filecopy states are we looking for?
@@ -359,11 +359,13 @@ class StorageNode(base_model):
         # does with the output of this function is test to see if some path is
         # in the returned set.
         return {
-            copy.file.path
+            pathlib.PurePath(copy[0], copy[1])
             for copy in (
-                ArchiveFileCopy.select().where(
-                    ArchiveFileCopy.node == self, ArchiveFileCopy.has_file << states
-                )
+                ArchiveFileCopy.select(ArchiveAcq.name, ArchiveFile.name)
+                .join(ArchiveFile)
+                .join(ArchiveAcq)
+                .where(ArchiveFileCopy.node == self, ArchiveFileCopy.has_file << states)
+                .tuples()
             )
         }
 
