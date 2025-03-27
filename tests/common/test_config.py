@@ -15,13 +15,48 @@ def merge_dict(a, b):
     return c
 
 
-def test_no_config():
+def test_no_config(fs):
     # Check that alpenhorn fails if it has no appropriate configuration
 
     with pytest.raises(ClickException) as excinfo:
         config.load_config(None, False)
 
     assert "No configuration" in str(excinfo.value)
+
+
+def test_isolation(fs, monkeypatch):
+    """Test common.config.test_isolation()"""
+
+    # Create the canary
+    fs.create_file("/etc/alpenhorn/alpenhorn.conf", contents="canary: true\n")
+
+    # This should always get loaded
+    fs.create_file("/test/from/env/test.yaml", contents="env_data: true\n")
+    monkeypatch.setenv("ALPENHORN_CONFIG_FILE", "/test/from/env/test.yaml")
+    config.load_config(None, False)
+
+    # Not isolated
+    config.load_config(None, False)
+    assert "canary" in config.config
+    assert "env_data" in config.config
+
+    # Reset
+    config.config = None
+
+    # Isolated
+    config.test_isolation()
+    config.load_config(None, False)
+    assert "canary" not in config.config
+    assert "env_data" in config.config
+
+    # Reset
+    config.config = None
+
+    # Not isolated again
+    config.test_isolation(False)
+    config.load_config(None, False)
+    assert "canary" in config.config
+    assert "env_data" in config.config
 
 
 def test_config_env(fs, monkeypatch):
