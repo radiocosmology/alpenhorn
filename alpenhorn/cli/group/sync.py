@@ -19,7 +19,9 @@ from ...db import (
 )
 from ..cli import check_then_update, echo
 from ..options import (
+    check_if_from_stdin,
     cli_option,
+    files_from_file,
     files_in_groups,
     not_both,
     requires_other,
@@ -34,6 +36,7 @@ def _run_cancel(
     group: StorageGroup,
     node: StorageNode,
     acqs: list[ArchiveAcq],
+    listed_files: set[ArchiveFile],
     show_acqs: bool,
     show_files: bool,
     first_time: bool,
@@ -54,6 +57,8 @@ def _run_cancel(
         StorageNode soruce, or None if not given
     acqs:
         list of ArchiveAcqs to limit to.  May be the empty list for no limit
+    listed_files:
+        set of ArchiveFiles listed in a --from-file file.
     show_acqs:
         List acqusitions affected by the command
     show_files:
@@ -72,6 +77,10 @@ def _run_cancel(
         query = query.where(ArchiveFileCopyRequest.node_from == node)
     if group is not None:
         query = query.where(ArchiveFileCopyRequest.group_to == group)
+
+    # Limit to listed files, if given
+    if listed_files:
+        query = query.where(ArchiveFileCopyRequest.file << listed_files)
 
     # Apply acq constraint, if any
     if acqs:
@@ -143,6 +152,7 @@ def _run_sync(
     group: StorageGroup,
     node: StorageNode,
     acqs: list[ArchiveAcq],
+    listed_files: set[ArchiveFile],
     show_acqs: bool,
     show_files: bool,
     target: list[str],
@@ -162,6 +172,8 @@ def _run_sync(
         StorageNode soruce
     acqs:
         list of ArchiveAcqs to limit to.  May be the empty list for no limit
+    listed_files:
+        set of ArchiveFiles listed in a --from-file file.
     show_acqs:
         List acqusitions affected by the command
     show_files:
@@ -199,6 +211,10 @@ def _run_sync(
             ~(ArchiveFileCopy.file_id << skipped_files),
         )
     )
+
+    # Limit to listed files, if given
+    if listed_files:
+        query = query.where(ArchiveFile.id << listed_files)
 
     # Limit to acqs, if needed
     if acqs:
@@ -335,6 +351,7 @@ def run_query(
     node_name: str | None,
     acq: list,
     cancel: bool,
+    listed_files: set[ArchiveFile],
     show_acqs: bool,
     show_files: bool,
     target: list,
@@ -358,6 +375,8 @@ def run_query(
         list of --acq from command line
     cancel:
         True if we're cancelling transfers.
+    listed_files:
+        set of ArchiveFiles listed in a --from-file file.
     show_acqs:
         List acqusitions affected by the command
     show_files:
@@ -395,6 +414,7 @@ def run_query(
             group,
             node,
             acqs,
+            listed_files,
             show_acqs,
             show_files,
             first_time,
@@ -406,6 +426,7 @@ def run_query(
             group,
             node,
             acqs,
+            listed_files,
             show_acqs,
             show_files,
             target,
@@ -436,6 +457,7 @@ def run_query(
     help="Force update (skips confirmation).  Incompatible with --check",
     is_flag=True,
 )
+@cli_option("from_file")
 @click.option("--show-acqs", help="List acquisitions to be copied.", is_flag=True)
 @click.option("--show-files", help="List files to be copied.", is_flag=True)
 @cli_option(
@@ -453,6 +475,7 @@ def sync(
     cancel,
     check,
     force,
+    from_file,
     show_acqs,
     show_files,
     target,
@@ -464,7 +487,7 @@ def sync(
     running on the desination.  Only files which are not already in GROUP will
     be copied.
 
-    Which files are copied may be further limited with the --acq and
+    Which files are copied may be further limited with the --acq, --from-file and
     --target options.
 
     \b
@@ -474,8 +497,8 @@ def sync(
     Using the --cancel flag, this command can also be used to cancel pending
     transfers into GROUP.  With a NODE, transfers from NODE to GROUP are cancelled,
     but you can instead of NODE use the special flag --all to cancel all inbound
-    transfers into GROUP.  Cancelling can still be further limited by --acq,
-    but not --target.
+    transfers into GROUP.  Cancelling can still be further limited by --acq and
+    --from-file, but not --target.
     """
 
     # Usage checks
@@ -489,11 +512,26 @@ def sync(
     if all_ and node_name is not None:
         raise click.UsageError("Can't use --all with NODE.")
 
+    # Set check mode if --from-file=- was used to redirect stdin and no --force
+    check = check_if_from_stdin(from_file, check, force)
+
+    # Load file list, if any
+    listed_files = files_from_file(from_file)
+
     # Run the check-confirm-update loop
     check_then_update(
         not force,
         not check,
         run_query,
         ctx,
-        args=[group_name, node_name, acq, cancel, show_acqs, show_files, target],
+        args=[
+            group_name,
+            node_name,
+            acq,
+            cancel,
+            listed_files,
+            show_acqs,
+            show_files,
+            target,
+        ],
     )

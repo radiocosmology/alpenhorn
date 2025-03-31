@@ -494,3 +494,163 @@ def test_sync_show_files(clidb, cli):
     assert "Acq1/File2" in result.output
     assert "Acq2/File3" in result.output
     assert "Acq2/File4" in result.output
+
+
+def test_from_file_missing(clidb, cli):
+    """Test sync --from_file with non-existent file."""
+
+    group = StorageGroup.create(name="Group")
+    StorageNode.create(name="Node", group=group)
+
+    cli(2, ["group", "sync", "Group", "Node", "--from-file=missing"])
+
+
+def test_from_file_bad_file(clidb, cli, xfs):
+    """Test sync --from_file with a bad entry."""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from)
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+
+    cli(
+        1,
+        [
+            "group",
+            "sync",
+            "GroupTo",
+            "NodeFrom",
+            "--force",
+            "--from-file=/from_file",
+        ],
+    )
+
+    # No files synced
+    assert ArchiveFileCopyRequest.select().count() == 0
+
+
+def test_from_file(clidb, cli, xfs):
+    """Test sync --from_file."""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from)
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    file3 = ArchiveFile.create(name="File3", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
+
+    # No newline at the end of this file
+    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+
+    cli(
+        0,
+        [
+            "group",
+            "sync",
+            "GroupTo",
+            "NodeFrom",
+            "--force",
+            "--from-file=/from_file",
+        ],
+    )
+
+    # File1 and File3 are transferred
+    assert ArchiveFileCopyRequest.select().count() == 2
+    assert ArchiveFileCopyRequest.get(id=1).file == file1
+    assert ArchiveFileCopyRequest.get(id=2).file == file3
+
+
+def test_from_stdin(clidb, cli):
+    """Test sync --from_file=-."""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from)
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    file3 = ArchiveFile.create(name="File3", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
+
+    cli(
+        0,
+        [
+            "group",
+            "sync",
+            "GroupTo",
+            "NodeFrom",
+            "--force",
+            "--from-file=-",
+        ],
+        input="Acq/File1\n# Comment\nAcq/File3",
+    )
+
+    # File1 and File3 are transferred
+    assert ArchiveFileCopyRequest.select().count() == 2
+    assert ArchiveFileCopyRequest.get(id=1).file == file1
+    assert ArchiveFileCopyRequest.get(id=2).file == file3
+
+
+def test_from_stdin_unforced(clidb, cli):
+    """Test sync --from_file=-. without --force"""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from)
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    file3 = ArchiveFile.create(name="File3", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
+
+    cli(
+        0,
+        [
+            "group",
+            "sync",
+            "GroupTo",
+            "NodeFrom",
+            "--from-file=-",
+        ],
+        input="Acq/File1\n# Comment\nAcq/File3",
+    )
+
+    # Nothing is transferred because --check was turned on
+    assert ArchiveFileCopyRequest.select().count() == 0

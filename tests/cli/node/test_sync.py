@@ -1,7 +1,7 @@
 """Test CLI: alpenhorn node sync
 
 Most of the test of the functionality for this command
-happen in the "node sync" tests.
+happen in the "group sync" tests.
 """
 
 from alpenhorn.db import (
@@ -144,3 +144,44 @@ def test_all(clidb, cli):
     # Both requests are cancelled
     assert ArchiveFileCopyRequest.get(id=1).cancelled == 1
     assert ArchiveFileCopyRequest.get(id=2).cancelled == 1
+
+
+def test_from_file(clidb, cli, xfs):
+    """Test sync --from_file."""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from)
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    file3 = ArchiveFile.create(name="File3", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
+
+    # No newline at the end of this file
+    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+
+    cli(
+        0,
+        [
+            "node",
+            "sync",
+            "NodeFrom",
+            "GroupTo",
+            "--force",
+            "--from-file=/from_file",
+        ],
+    )
+
+    # File1 and File3 are transferred
+    assert ArchiveFileCopyRequest.select().count() == 2
+    assert ArchiveFileCopyRequest.get(id=1).file == file1
+    assert ArchiveFileCopyRequest.get(id=2).file == file3

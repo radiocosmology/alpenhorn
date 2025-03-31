@@ -3,7 +3,7 @@
 import click
 import pytest
 
-from alpenhorn.cli.options import set_io_config
+from alpenhorn.cli.options import check_if_from_stdin, set_io_config
 
 
 def test_sic_empty():
@@ -96,3 +96,17 @@ def test_sic_default_decode_override():
     io_config = set_io_config("", ("a=29",), "rawr")
 
     assert io_config == {"a": 29}
+
+
+def test_check_if_from_stdin():
+    """Test check_if_from_stdin"""
+
+    assert check_if_from_stdin("path", True, True) is True
+    assert check_if_from_stdin("path", True, False) is True
+    assert check_if_from_stdin("path", False, True) is False
+    assert check_if_from_stdin("path", False, False) is False
+
+    assert check_if_from_stdin("-", True, True) is True
+    assert check_if_from_stdin("-", True, False) is True
+    assert check_if_from_stdin("-", False, True) is False
+    assert check_if_from_stdin("-", False, False) is True

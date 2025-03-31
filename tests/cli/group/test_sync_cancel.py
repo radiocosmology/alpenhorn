@@ -372,3 +372,41 @@ def test_all(clidb, cli):
     # Both requests are cancelled
     assert ArchiveFileCopyRequest.get(id=1).cancelled == 1
     assert ArchiveFileCopyRequest.get(id=2).cancelled == 1
+
+
+def test_from_file(clidb, cli, xfs):
+    """Test sync --cancel --from_file."""
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node = StorageNode.create(name="Node1", group=group_from)
+
+    acq = ArchiveAcq.create(name="Acq")
+    file1 = ArchiveFile.create(name="File1", acq=acq)
+    file2 = ArchiveFile.create(name="File2", acq=acq)
+    file3 = ArchiveFile.create(name="File3", acq=acq)
+
+    ArchiveFileCopyRequest.create(
+        file=file1, node_from=node, group_to=group_to, cancelled=0, completed=0
+    )
+    ArchiveFileCopyRequest.create(
+        file=file2, node_from=node, group_to=group_to, cancelled=0, completed=0
+    )
+    ArchiveFileCopyRequest.create(
+        file=file3, node_from=node, group_to=group_to, cancelled=0, completed=0
+    )
+
+    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+
+    cli(
+        0,
+        ["group", "sync", "GroupTo", "--cancel", "--all", "--from-file=/from_file"],
+        input="Y\n",
+    )
+
+    # File1 and File3 are cancelled
+    assert ArchiveFileCopyRequest.get(file=file1).cancelled == 1
+    assert ArchiveFileCopyRequest.get(file=file2).cancelled == 0
+    assert ArchiveFileCopyRequest.get(file=file3).cancelled == 1

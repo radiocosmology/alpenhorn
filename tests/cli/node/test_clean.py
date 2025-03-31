@@ -490,3 +490,31 @@ def test_include_bad(clidb, cli):
     assert ArchiveFileCopy.get(node=node, file=fileY).wants_file == "N"
     assert ArchiveFileCopy.get(node=node, file=fileM).wants_file == "N"
     assert ArchiveFileCopy.get(node=node, file=fileX).wants_file == "N"
+
+
+def test_from_file(clidb, cli, xfs):
+    """Test clean with --from-file"""
+
+    group = StorageGroup.create(name="Group1")
+    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file1, has_file="Y", wants_file="Y")
+    file2 = ArchiveFile.create(name="File2", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file2, has_file="Y", wants_file="Y")
+    file3 = ArchiveFile.create(name="File3", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file3, has_file="Y", wants_file="Y")
+    file4 = ArchiveFile.create(name="File4", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file4, has_file="Y", wants_file="Y")
+
+    xfs.create_file("/from_file", contents="Acq/File1\n\n# Comment\nAcq/File3\n")
+
+    cli(0, ["node", "clean", "NODE", "--force", "--from-file=/from_file"])
+
+    # Only File1 and File3 were cleaned
+    assert ArchiveFileCopy.get(node=node, file=file1).wants_file == "M"
+    assert ArchiveFileCopy.get(node=node, file=file2).wants_file == "Y"
+    assert ArchiveFileCopy.get(node=node, file=file3).wants_file == "M"
+    assert ArchiveFileCopy.get(node=node, file=file4).wants_file == "Y"
