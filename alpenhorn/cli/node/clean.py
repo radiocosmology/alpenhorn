@@ -11,7 +11,9 @@ from ...common.util import pretty_bytes
 from ...db import ArchiveFile, ArchiveFileCopy, database_proxy, utcnow
 from ..cli import check_then_update, echo
 from ..options import (
+    check_if_from_stdin,
     cli_option,
+    files_from_file,
     files_in_groups,
     not_both,
     resolve_acq,
@@ -28,6 +30,7 @@ def _run_query(
     archive_ok,
     days: datetime.datetime,
     has_file: pw.Expression,
+    listed_files: set[ArchiveFile],
     size: int,
     target,
     clean_goal: str,
@@ -62,6 +65,8 @@ def _run_query(
         That is: an object which is the result of evaluating, say,
         (ArchiveFileCopy.has_file == 'Y'), which we'll pass on to the where()
         clause in the query.
+    listed_files:
+        set of ArchiveFiles listed in a --file-list file.
     size:
         Converted to bytes
     first_time:
@@ -100,10 +105,11 @@ def _run_query(
         if acqs or days or size:
             query = query.join(ArchiveFile)
 
-        # Add a wants_file constraint, if appropriate (with --size)
-        # we need to skip this: we need to scan through all the files
-        # so the totals are correct.  In that case, this constraint
-        # is handled when looping through copies.
+        # Add a wants_file constraint, if appropriate
+        #
+        # If --size is used, we need to skip this because we need to
+        # scan through all the files so the totals are correct.  In
+        # that case, this constraint is handled when looping through copies.
         if not size:
             # Without a size, we filter out everything that's not a
             # candidate for update
@@ -119,6 +125,10 @@ def _run_query(
         # Limit to acquisitions, if any
         if acqs:
             query = query.where(ArchiveFile.acq << acqs)
+
+        # Limit by file-list, if given
+        if listed_files:
+            query = query.where(ArchiveFileCopy.file << listed_files)
 
         # Limit to registration time, if requested.  This will implicitly
         # drop any file copies where the registration time is unknown.
@@ -286,6 +296,7 @@ def _run_query(
     type=int,
     help="Only clean files registered more than COUNT days ago.",
 )
+@cli_option("file_list")
 @click.option(
     "--force",
     help="Force cleaning (skips confirmation).  Incompatible with --check",
@@ -302,7 +313,7 @@ def _run_query(
     "-s",
     metavar="SIZE",
     type=float,
-    help="Stop cleaning files once the total size cleaned reaces SIZE GiB.",
+    help="Stop cleaning files once the total size cleaned reaches SIZE GiB.",
 )
 @cli_option("target")
 @click.pass_context
@@ -315,6 +326,7 @@ def clean(
     check,
     days,
     force,
+    file_list,
     include_bad,
     now,
     size,
@@ -347,7 +359,7 @@ def clean(
 
     In normal operation, this command will schedule *all* files on NODE for
     cleaning, but the operation may be limited with the "--acq", "--days",
-    "--size", and "--target" options.
+    "--file-list", "--size", and "--target" options.
 
     Multiple --acq options may be given to provide a list of acquisitions to
     restrict cleaning to.  Files not in one of the specified acqusitions will
@@ -375,8 +387,8 @@ def clean(
     -------------------
 
     You may unschedule files for cleaning using the "--cancel" flag, which can
-    be similarly restricted with "--acq", "--days", and "--target", but not
-    "--size".
+    be similarly restricted with "--acq", "--days", "--file-list", and
+    "--target", but not "--size".
 
     Both kinds of cleaning (discretionary and immediate) will be cancelled,
     but only for files not yet removed from the NODE by the daemon.
@@ -389,6 +401,9 @@ def clean(
         raise click.UsageError("--days must be positive")
     if size is not None and size <= 0:
         raise click.UsageError("--size must be positive")
+
+    # Set check mode if --file-list=- was used to redirect stdin and no --force
+    check = check_if_from_stdin(file_list, check, force)
 
     # Convert days to a datetime
     if days:
@@ -413,11 +428,24 @@ def clean(
     else:
         has_file = ArchiveFileCopy.has_file == "Y"
 
+    # Load file list, if any
+    listed_files = files_from_file(file_list)
+
     # Do a check-then-update with the `_run_query` function.
     check_then_update(
         not force,
         not check,
         _run_query,
         ctx,
-        args=[name, acq, archive_ok, days, has_file, size, target, clean_goal],
+        args=[
+            name,
+            acq,
+            archive_ok,
+            days,
+            has_file,
+            listed_files,
+            size,
+            target,
+            clean_goal,
+        ],
     )

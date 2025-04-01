@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import fileinput
 import json
+import logging
 import pathlib
 
 import click
@@ -73,6 +75,19 @@ def cli_option(option: str, **extra_kwargs):
             "is_flag": True,
             "help": "Make node a field node (i.e. neither an archive node "
             "nor a transport node).  Incompatible with --archive or --transport.",
+        }
+    elif option == "file_list":
+        args = ("-F", "--file-list")
+        kwargs = {
+            "metavar": "PATH",
+            "type": click.Path(
+                exists=True, dir_okay=False, readable=True, allow_dash=True
+            ),
+            "help": (
+                "Limit operation to files listed in text file at PATH.  "
+                "If PATH is -, stdin will be read.  In that case, --check will be "
+                "assumed if --force isn't used."
+            ),
         }
     elif option == "from_":
         args = ("from_", "--from")
@@ -634,20 +649,36 @@ def set_io_config(
     return new_config if new_config else None
 
 
-def file_from_path(path: str) -> ArchiveFile:
+def file_from_path(path: str, source: str | None = None) -> ArchiveFile:
     """Get file record given a path
 
     Given an "acqname/filename" path-like string, find and return
     the file name.
 
-    If a file cannot be found, raises click.ClickException.
+    Parameters
+    ----------
+    path:
+        The path to resolve into an ArchiveFile
+    source:
+        If not None, a location (i.e. a line in a file) added
+        to an error string.
+
+    Raises:
+    -------
+    click.ClickException:
+        A record for `path` could not be found.
     """
 
     path = pathlib.PurePath(path)
 
+    if source:
+        errstr = "No such file " + source + ": " + str(path)
+    else:
+        errstr = "No such file: " + str(path)
+
     # An absolute path is not allowed
     if path.is_absolute():
-        raise click.ClickException("No such file: " + str(path))
+        raise click.ClickException(errstr)
 
     # The trick here is path can have multiple path components: a/b/c/d/e
     # and we don't know which components are part of the acq_name and which
@@ -676,7 +707,87 @@ def file_from_path(path: str) -> ArchiveFile:
         except pw.DoesNotExist:
             pass
 
-    raise click.ClickException("No such file: " + str(path))
+    raise click.ClickException(errstr)
+
+
+def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
+    """Check whether to automatically turn on check mode
+
+    The intent here is that the output of this function will be assigned to
+    `check` in the caller.  Emits a warning if check mode is to be turned on.
+
+    Parameters
+    ----------
+    path:
+        the argument to --file-list
+    check:
+        the state of the --check flag
+    force:
+        the state of the --force flag
+
+    Returns
+    -------
+    check:
+        True if `check` is True or if `check` and `force` are False
+        and `path` is "-".  False otherwise.
+    """
+
+    # If mode is already selected, just return the input `check` value
+    if check or force:
+        return check
+
+    # Warn in turning on check mode
+    if path == "-":
+        log = logging.getLogger(__name__)
+        log.warning(
+            "stdin has been redirected without --force.  "
+            "Automatically enabling --check mode."
+        )
+        return True
+
+    # Otherwise, continue
+    return False
+
+
+def files_from_file(path: str) -> None:
+    """Read a file list from a file given with --file-list
+
+    Returns a set of ArchiveFiles.  If path is None, the empty set is returned.
+    """
+
+    files = set()
+
+    # Not given; return empty set
+    if not path:
+        return files
+
+    name = "stdin" if path == "-" else path
+
+    try:
+        for line in fileinput.input(files=[path]):
+            # Skip comment lines.  Note this check happens before whiespace
+            # stripping, meaning the "#" _must_ appear in the first column
+            # and may not have whitespace before it.
+            if line[0] == "#":
+                continue
+
+            # Strip leading and trailing whitespace
+            line = line.strip()
+
+            # Skip empty lines
+            if not line:
+                continue
+
+            files.add(
+                file_from_path(
+                    line,
+                    source=f"on line {fileinput.filelineno()} of {name}",
+                )
+            )
+    except OSError as e:
+        raise click.ClickException("error reading {name}: {e}") from e
+
+    return files
 
 
 def validate_md5(md5: str | None) -> None:

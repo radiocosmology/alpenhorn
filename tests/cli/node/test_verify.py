@@ -360,3 +360,26 @@ def test_verify_acq(clidb, cli):
     assert ArchiveFileCopy.get(node=node, file=file1).has_file == "M"
     assert ArchiveFileCopy.get(node=node, file=file2).has_file == "M"
     assert ArchiveFileCopy.get(node=node, file=file3).has_file == "X"
+
+
+def test_file_list(clidb, cli, xfs):
+    """Test verify with --file-list."""
+
+    group = StorageGroup.create(name="Group")
+    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    acq = ArchiveAcq.create(name="Acq")
+    file1 = ArchiveFile.create(name="File1", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file1, has_file="X", wants_file="Y")
+    file2 = ArchiveFile.create(name="File2", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file2, has_file="X", wants_file="Y")
+    file3 = ArchiveFile.create(name="File3", acq=acq)
+    ArchiveFileCopy.create(node=node, file=file3, has_file="X", wants_file="Y")
+
+    xfs.create_file("/file_list", contents="Acq/File1\nAcq/File3\n")
+
+    cli(0, ["node", "verify", "NODE", "--file-list=/file_list"], input="Y\n")
+
+    # only 1 and 3 should be updated
+    assert ArchiveFileCopy.get(node=node, file=file1).has_file == "M"
+    assert ArchiveFileCopy.get(node=node, file=file2).has_file == "X"
+    assert ArchiveFileCopy.get(node=node, file=file3).has_file == "M"

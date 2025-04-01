@@ -1,9 +1,11 @@
 """Common fixtures"""
 
+import fileinput
 import logging
 import os
 import re
 import shutil
+import traceback
 from unittest.mock import MagicMock, patch
 from urllib.parse import quote as urlquote
 
@@ -616,13 +618,14 @@ def cli(request, xfs, cli_config):
     runner = CliRunner(**kwargs)
 
     def _cli_wrapper(expected_result, *args, **kwargs):
-        nonlocal runner
-
-        import traceback
-
         from alpenhorn.cli import entry
 
+        nonlocal runner
+
         result = runner.invoke(entry, *args, **kwargs)
+
+        # Clean up fileinput
+        fileinput.close()
 
         # Show traceback if one was created
         if (

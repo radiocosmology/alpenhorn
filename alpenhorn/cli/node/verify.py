@@ -8,7 +8,15 @@ import peewee as pw
 from ...common.util import pretty_bytes
 from ...db import ArchiveFile, ArchiveFileCopy, database_proxy
 from ..cli import check_then_update, echo
-from ..options import cli_option, not_both, resolve_acq, resolve_node, state_constraint
+from ..options import (
+    check_if_from_stdin,
+    cli_option,
+    files_from_file,
+    not_both,
+    resolve_acq,
+    resolve_node,
+    state_constraint,
+)
 
 
 def _run_query(
@@ -17,10 +25,11 @@ def _run_query(
     name: str,
     acq: list,
     file_selection: pw.Expression,
+    listed_files: set[ArchiveFile],
     verify_goal: str,
     first_time: bool,
 ):
-    """Run the veroify query, either in check mode or update mode.
+    """Run the verify query, either in check mode or update mode.
 
     Must be done twice because the DB contents can change while we wait
     for the user's confirmation.
@@ -28,7 +37,7 @@ def _run_query(
     Parameters:
     -----------
     update:
-        True if in "update" mode.  False in "count" mode.
+        True if in "update" mode.  False in "check" mode.
     ctx:
         click context object
     name:
@@ -39,6 +48,8 @@ def _run_query(
         a peewee.Expression encapsulating the --corrupt, --missing, and
         --healthy optons.  This is a constraint which will be applied to
         the `where` clause of the `ArchiveFileCopy` query.
+    listed_files:
+        set of ArchiveFiles listed in a --file-list file.
     verify_goal:
         The value we want to set has_file to.  This is 'M' except in
         --cancel mode.
@@ -58,6 +69,10 @@ def _run_query(
         # Limit to acquisitions, if any
         if acqs:
             query = query.join(ArchiveFile).where(ArchiveFile.acq << acqs)
+
+        # Limit by file-list, if given
+        if listed_files:
+            query = query.where(ArchiveFileCopy.file << listed_files)
 
         # Perform the query
         copies = list(query.execute())
@@ -129,7 +144,7 @@ def _run_query(
     help="Cancel existing verifcation requests by explicitly setting their status",
 )
 @click.option(
-    "--count",
+    "--check",
     is_flag=True,
     help="Don't actually perform the operation, just print how many files "
     "would be affected",
@@ -140,9 +155,10 @@ def _run_query(
     "verify known corrupt files",
     is_flag=True,
 )
+@cli_option("file_list")
 @click.option(
     "--force",
-    help="Force update (skips confirmation).  Incompatible with --count",
+    help="Force update (skips confirmation).  Incompatible with --check",
     is_flag=True,
 )
 @click.option(
@@ -158,7 +174,9 @@ def _run_query(
     is_flag=True,
 )
 @click.pass_context
-def verify(ctx, name, acq, all_, cancel, count, corrupt, force, healthy, missing):
+def verify(
+    ctx, name, acq, all_, cancel, check, corrupt, force, file_list, healthy, missing
+):
     """Verify files on a Storage Node.
 
     Use this command to request verification of files on NODE, or to
@@ -177,10 +195,9 @@ def verify(ctx, name, acq, all_, cancel, count, corrupt, force, healthy, missing
     --all, --corrupt, --healthy, and --missing flags.  If any of these flags
     are used, the default selection is ignored.
 
-    Files to verify may be further restricted by specifying one or
-    more acqusitions to limit the operation to (via the --acq option).
-    Files which have been released for immediate removal (via, say, the
-    "node clean" command) are always skipped.
+    Files to verify may be further restricted using the --acq and --file-list
+    options.  Files which have been released for immediate removal (via, say,
+    the "node clean" command) are always skipped.
 
     NOTE: Be careful when you request re-verification.  After this command
     sets an affected file to "suspect", that file will not be available for
@@ -205,7 +222,10 @@ def verify(ctx, name, acq, all_, cancel, count, corrupt, force, healthy, missing
     will override whatever status you set manually.
     """
     # usage checks
-    not_both(count, "count", force, "force")
+    not_both(check, "check", force, "force")
+
+    # Set check mode if --file-list=- was used to redirect stdin and no --force
+    check = check_if_from_stdin(file_list, check, force)
 
     # Cancel and non-cancel modes are fairly different about what most
     # of the flags mean
@@ -252,11 +272,14 @@ def verify(ctx, name, acq, all_, cancel, count, corrupt, force, healthy, missing
         if file_selection is None:
             raise RuntimeError("Something went wrong!  Selection expression is empty.")
 
+    # Load file list, if any
+    listed_files = files_from_file(file_list)
+
     # Do a check-then-update with the `_run_query` function.
     check_then_update(
         not force,
-        not count,
+        not check,
         _run_query,
         ctx,
-        args=[name, acq, file_selection, verify_goal],
+        args=[name, acq, file_selection, listed_files, verify_goal],
     )

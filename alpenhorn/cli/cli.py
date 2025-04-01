@@ -26,7 +26,7 @@ def check_then_update(
     1. If `do_check` is False, skips to step 6
     2. Calls `func` in "check" mode.
     3. If `do_update` is False, program exits
-    4. `click.confirm("Continue?")
+    4. Asks user for confirmation.
     5. If user declines confirmation, program exits
     6. If `do_update` is True, calls `func` in "update" mode.
 
@@ -36,7 +36,7 @@ def check_then_update(
         "update" mode (step 6)
     2. `ctx`: the click context object
     3. any positional parameters given in in `args`
-    4. `first_time`: a bool keyword arguemnt which is True the first time
+    4. `first_time`: a bool keyword argument which is True the first time
         `func` is called, and False the second time (if called twice).
 
     Anything returned by `func` is ignored.
