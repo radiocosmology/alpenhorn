@@ -51,7 +51,8 @@ sys.excepthook = log_exception
 )
 @version_option
 @help_config_option
-def entry(conf, once, test_isolation):
+@click.pass_context
+def entry(ctx, conf, once, test_isolation):
     """Alpenhornd: data management daemon.
 
     The alpenhorn daemon can be used to manage Storage Nodes.  See the alpenhorn
@@ -93,11 +94,15 @@ def entry(conf, once, test_isolation):
 
     # Enter main loop
     try:
-        update.update_loop(queue, wpool, once)
+        result = update.update_loop(queue, wpool, once)
     # Catch keyboard interrupt
     except KeyboardInterrupt:
         log.info("Exiting due to SIGINT")
+        result = 1
 
     # Attempt to exit cleanly
     auto_import.stop_observers()
     wpool.shutdown()
+
+    # Exit with result
+    ctx.exit(result)
