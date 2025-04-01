@@ -146,8 +146,8 @@ def test_all(clidb, cli):
     assert ArchiveFileCopyRequest.get(id=2).cancelled == 1
 
 
-def test_from_file(clidb, cli, xfs):
-    """Test sync --from_file."""
+def test_file_list(clidb, cli, xfs):
+    """Test sync --file-list."""
 
     group_from = StorageGroup.create(name="GroupFrom")
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
@@ -167,7 +167,7 @@ def test_from_file(clidb, cli, xfs):
     ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
 
     # No newline at the end of this file
-    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+    xfs.create_file("/file_list", contents="Acq/File1\n# Comment\nAcq/File3")
 
     cli(
         0,
@@ -177,7 +177,7 @@ def test_from_file(clidb, cli, xfs):
             "NodeFrom",
             "GroupTo",
             "--force",
-            "--from-file=/from_file",
+            "--file-list=/file_list",
         ],
     )
 

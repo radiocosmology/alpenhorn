@@ -66,7 +66,7 @@ def _run_query(
         (ArchiveFileCopy.has_file == 'Y'), which we'll pass on to the where()
         clause in the query.
     listed_files:
-        set of ArchiveFiles listed in a --from-file file.
+        set of ArchiveFiles listed in a --file-list file.
     size:
         Converted to bytes
     first_time:
@@ -126,7 +126,7 @@ def _run_query(
         if acqs:
             query = query.where(ArchiveFile.acq << acqs)
 
-        # Limit by from-file, if given
+        # Limit by file-list, if given
         if listed_files:
             query = query.where(ArchiveFileCopy.file << listed_files)
 
@@ -296,12 +296,12 @@ def _run_query(
     type=int,
     help="Only clean files registered more than COUNT days ago.",
 )
+@cli_option("file_list")
 @click.option(
     "--force",
     help="Force cleaning (skips confirmation).  Incompatible with --check",
     is_flag=True,
 )
-@cli_option("from_file")
 @click.option(
     "--include-bad",
     help="Include suspect and corrupt files in the operation.",
@@ -326,7 +326,7 @@ def clean(
     check,
     days,
     force,
-    from_file,
+    file_list,
     include_bad,
     now,
     size,
@@ -359,7 +359,7 @@ def clean(
 
     In normal operation, this command will schedule *all* files on NODE for
     cleaning, but the operation may be limited with the "--acq", "--days",
-    "--from-file", "--size", and "--target" options.
+    "--file-list", "--size", and "--target" options.
 
     Multiple --acq options may be given to provide a list of acquisitions to
     restrict cleaning to.  Files not in one of the specified acqusitions will
@@ -387,7 +387,7 @@ def clean(
     -------------------
 
     You may unschedule files for cleaning using the "--cancel" flag, which can
-    be similarly restricted with "--acq", "--days", "--from-file", and
+    be similarly restricted with "--acq", "--days", "--file-list", and
     "--target", but not "--size".
 
     Both kinds of cleaning (discretionary and immediate) will be cancelled,
@@ -402,8 +402,8 @@ def clean(
     if size is not None and size <= 0:
         raise click.UsageError("--size must be positive")
 
-    # Set check mode if --from-file=- was used to redirect stdin and no --force
-    check = check_if_from_stdin(from_file, check, force)
+    # Set check mode if --file-list=- was used to redirect stdin and no --force
+    check = check_if_from_stdin(file_list, check, force)
 
     # Convert days to a datetime
     if days:
@@ -429,7 +429,7 @@ def clean(
         has_file = ArchiveFileCopy.has_file == "Y"
 
     # Load file list, if any
-    listed_files = files_from_file(from_file)
+    listed_files = files_from_file(file_list)
 
     # Do a check-then-update with the `_run_query` function.
     check_then_update(

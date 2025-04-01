@@ -374,8 +374,8 @@ def test_all(clidb, cli):
     assert ArchiveFileCopyRequest.get(id=2).cancelled == 1
 
 
-def test_from_file(clidb, cli, xfs):
-    """Test sync --cancel --from_file."""
+def test_file_list(clidb, cli, xfs):
+    """Test sync --cancel --file-list."""
 
     group_to = StorageGroup.create(name="GroupTo")
     StorageNode.create(name="NodeTo", group=group_to)
@@ -398,11 +398,11 @@ def test_from_file(clidb, cli, xfs):
         file=file3, node_from=node, group_to=group_to, cancelled=0, completed=0
     )
 
-    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+    xfs.create_file("/file_list", contents="Acq/File1\n# Comment\nAcq/File3")
 
     cli(
         0,
-        ["group", "sync", "GroupTo", "--cancel", "--all", "--from-file=/from_file"],
+        ["group", "sync", "GroupTo", "--cancel", "--all", "--file-list=/file_list"],
         input="Y\n",
     )
 

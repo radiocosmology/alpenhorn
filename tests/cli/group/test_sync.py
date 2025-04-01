@@ -496,17 +496,17 @@ def test_sync_show_files(clidb, cli):
     assert "Acq2/File4" in result.output
 
 
-def test_from_file_missing(clidb, cli):
-    """Test sync --from_file with non-existent file."""
+def test_file_list_missing(clidb, cli):
+    """Test sync --file-list with non-existent file."""
 
     group = StorageGroup.create(name="Group")
     StorageNode.create(name="Node", group=group)
 
-    cli(2, ["group", "sync", "Group", "Node", "--from-file=missing"])
+    cli(2, ["group", "sync", "Group", "Node", "--file-list=missing"])
 
 
-def test_from_file_bad_file(clidb, cli, xfs):
-    """Test sync --from_file with a bad entry."""
+def test_file_list_bad_file(clidb, cli, xfs):
+    """Test sync --file-list with a bad entry."""
 
     group_from = StorageGroup.create(name="GroupFrom")
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
@@ -522,7 +522,7 @@ def test_from_file_bad_file(clidb, cli, xfs):
     file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
     ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
 
-    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+    xfs.create_file("/file_list", contents="Acq/File1\n# Comment\nAcq/File3")
 
     cli(
         1,
@@ -532,7 +532,7 @@ def test_from_file_bad_file(clidb, cli, xfs):
             "GroupTo",
             "NodeFrom",
             "--force",
-            "--from-file=/from_file",
+            "--file-list=/file_list",
         ],
     )
 
@@ -540,8 +540,8 @@ def test_from_file_bad_file(clidb, cli, xfs):
     assert ArchiveFileCopyRequest.select().count() == 0
 
 
-def test_from_file(clidb, cli, xfs):
-    """Test sync --from_file."""
+def test_file_list(clidb, cli, xfs):
+    """Test sync --file-list."""
 
     group_from = StorageGroup.create(name="GroupFrom")
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
@@ -561,7 +561,7 @@ def test_from_file(clidb, cli, xfs):
     ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
 
     # No newline at the end of this file
-    xfs.create_file("/from_file", contents="Acq/File1\n# Comment\nAcq/File3")
+    xfs.create_file("/file_list", contents="Acq/File1\n# Comment\nAcq/File3")
 
     cli(
         0,
@@ -571,7 +571,7 @@ def test_from_file(clidb, cli, xfs):
             "GroupTo",
             "NodeFrom",
             "--force",
-            "--from-file=/from_file",
+            "--file-list=/file_list",
         ],
     )
 
@@ -582,7 +582,7 @@ def test_from_file(clidb, cli, xfs):
 
 
 def test_from_stdin(clidb, cli):
-    """Test sync --from_file=-."""
+    """Test sync --file-list=-."""
 
     group_from = StorageGroup.create(name="GroupFrom")
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
@@ -608,8 +608,8 @@ def test_from_stdin(clidb, cli):
             "sync",
             "GroupTo",
             "NodeFrom",
+            "--file-list=-",
             "--force",
-            "--from-file=-",
         ],
         input="Acq/File1\n# Comment\nAcq/File3",
     )
@@ -621,7 +621,7 @@ def test_from_stdin(clidb, cli):
 
 
 def test_from_stdin_unforced(clidb, cli):
-    """Test sync --from_file=-. without --force"""
+    """Test sync --file-list=-. without --force"""
 
     group_from = StorageGroup.create(name="GroupFrom")
     node_from = StorageNode.create(name="NodeFrom", group=group_from)
@@ -647,7 +647,7 @@ def test_from_stdin_unforced(clidb, cli):
             "sync",
             "GroupTo",
             "NodeFrom",
-            "--from-file=-",
+            "--file-list=-",
         ],
         input="Acq/File1\n# Comment\nAcq/File3",
     )

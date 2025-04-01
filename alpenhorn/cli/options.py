@@ -76,11 +76,8 @@ def cli_option(option: str, **extra_kwargs):
             "help": "Make node a field node (i.e. neither an archive node "
             "nor a transport node).  Incompatible with --archive or --transport.",
         }
-    elif option == "from_":
-        args = ("from_", "--from")
-        kwargs = {"metavar": "SOURCE_NODE", "help": "Source Node for the transfer."}
-    elif option == "from_file":
-        args = ("-F", "--from-file")
+    elif option == "file_list":
+        args = ("-F", "--file-list")
         kwargs = {
             "metavar": "PATH",
             "type": click.Path(
@@ -92,6 +89,9 @@ def cli_option(option: str, **extra_kwargs):
                 "assumed if --force isn't used."
             ),
         }
+    elif option == "from_":
+        args = ("from_", "--from")
+        kwargs = {"metavar": "SOURCE_NODE", "help": "Source Node for the transfer."}
     elif option == "group":
         args = ("--group",)
         kwargs = {
@@ -719,7 +719,7 @@ def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
     Parameters
     ----------
     path:
-        the argument to --from_file
+        the argument to --file-list
     check:
         the state of the --check flag
     force:
@@ -750,7 +750,7 @@ def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
 
 
 def files_from_file(path: str) -> None:
-    """Read a file list from a file given with --from-file
+    """Read a file list from a file given with --file-list
 
     Returns a set of ArchiveFiles.  If path is None, the empty set is returned.
     """

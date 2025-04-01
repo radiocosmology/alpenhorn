@@ -492,8 +492,8 @@ def test_include_bad(clidb, cli):
     assert ArchiveFileCopy.get(node=node, file=fileX).wants_file == "N"
 
 
-def test_from_file(clidb, cli, xfs):
-    """Test clean with --from-file"""
+def test_file_list(clidb, cli, xfs):
+    """Test clean with --file-list"""
 
     group = StorageGroup.create(name="Group1")
     node = StorageNode.create(name="NODE", group=group, storage_type="F")
@@ -509,9 +509,9 @@ def test_from_file(clidb, cli, xfs):
     file4 = ArchiveFile.create(name="File4", acq=acq)
     ArchiveFileCopy.create(node=node, file=file4, has_file="Y", wants_file="Y")
 
-    xfs.create_file("/from_file", contents="Acq/File1\n\n# Comment\nAcq/File3\n")
+    xfs.create_file("/file_list", contents="Acq/File1\n\n# Comment\nAcq/File3\n")
 
-    cli(0, ["node", "clean", "NODE", "--force", "--from-file=/from_file"])
+    cli(0, ["node", "clean", "NODE", "--force", "--file-list=/file_list"])
 
     # Only File1 and File3 were cleaned
     assert ArchiveFileCopy.get(node=node, file=file1).wants_file == "M"

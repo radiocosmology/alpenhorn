@@ -34,12 +34,12 @@ from ..options import (
     "  Incompatible with --force",
     is_flag=True,
 )
+@cli_option("file_list")
 @click.option(
     "--force",
     help="Force update (skips confirmation).  Incompatible with --check",
     is_flag=True,
 )
-@cli_option("from_file")
 @click.option("--show-acqs", help="List acquisitions to be copied.", is_flag=True)
 @click.option("--show-files", help="List files to be copied.", is_flag=True)
 @cli_option(
@@ -57,7 +57,7 @@ def sync(
     cancel,
     check,
     force,
-    from_file,
+    file_list,
     show_acqs,
     show_files,
     target,
@@ -69,7 +69,7 @@ def sync(
     running on the desination.  Only files which are not already in GROUP will
     be copied.
 
-    Which files are copied may be further limited with the --acq, --from-file, and
+    Which files are copied may be further limited with the --acq, --file-list, and
     --target options.
 
     \b
@@ -80,7 +80,7 @@ def sync(
     transfers out of NODE.  With a GROUP, transfers from NODE to GROUP are cancelled,
     but you can instead of GROUP use the special flag --all to cancel all outbound
     transfers from NODE.  Cancelling can still be further limited by --acq and
-    --from-file, but not --target.
+    --file-list, but not --target.
     """
 
     # Usage checks
@@ -94,11 +94,11 @@ def sync(
     if all_ and group_name is not None:
         raise click.UsageError("Can't use --all with GROUP.")
 
-    # Set check mode if --from-file=- was used to redirect stdin and no --force
-    check = check_if_from_stdin(from_file, check, force)
+    # Set check mode if --file-list=- was used to redirect stdin and no --force
+    check = check_if_from_stdin(file_list, check, force)
 
     # Load file list, if any
-    listed_files = files_from_file(from_file)
+    listed_files = files_from_file(file_list)
 
     # We're using the "group sync" run_query function here, which is why
     # group_name and node_name are backwards
