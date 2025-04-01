@@ -923,20 +923,10 @@ class UpdateableGroup(updateable_base):
 
 def update_loop(
     queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool, once: bool
-) -> None:
+) -> int:
     """Main loop of alepnhornd.
 
     This is the main update loop for the alpenhorn daemon.
-
-    Parameters
-    ----------
-    queue : FairMultiFIFOQueue
-        the task manager
-    pool : WorkerPool
-        the pool of worker threads (may be empty)
-    once : bool
-        If True, only run the loop once, wait for the queue to empty,
-        and then exit.  If False, loop forever.
 
     If `once` is false, the daemon cycles through the update loop until it is
     terminated in one of three ways:
@@ -949,6 +939,21 @@ def update_loop(
 
     During a clean exit, alpenhornd will try to finish in-progress tasks before
     shutting down.
+
+    Parameters
+    ----------
+    queue : FairMultiFIFOQueue
+        the task manager
+    pool : WorkerPool
+        the pool of worker threads (may be empty)
+    once : bool
+        If True, only run the loop once, wait for the queue to empty,
+        and then exit.  If False, loop forever.
+
+    Return
+    ------
+    result:
+        0 if exiting after running once.  1 otherwise.
     """
 
     # Get the name of this host
@@ -1134,7 +1139,7 @@ def update_loop(
             while True:
                 if queue.qsize + queue.inprogress_size + queue.deferred_size == 0:
                     log.info("Update complete.  Exiting.")
-                    return
+                    return 0
 
                 if first_time:
                     first_time = False
@@ -1155,6 +1160,7 @@ def update_loop(
 
     # Warn on abnormal exit
     log.warning("Exiting due to global abort")
+    return 1
 
 
 def serial_io(queue: FairMultiFIFOQueue) -> None:
