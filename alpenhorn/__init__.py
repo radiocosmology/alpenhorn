@@ -1,2 +1,25 @@
-# Specify version in Semantic style (with PEP 440 pre-release specification)
-__version__ = "2.0.0a1"
+"""Alpenhorn
+
+Submodules
+==========
+
+.. autosummary::
+    :toctree: _autosummary
+
+    cli
+    common
+    daemon
+    db
+    io
+    scheduler
+"""
+
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("alpenhorn")
+except PackageNotFoundError:
+    # package is not installed
+    pass
+
+del version, PackageNotFoundError
