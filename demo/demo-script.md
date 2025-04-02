@@ -539,10 +539,18 @@ File                 Size    MD5 Hash                          Registration Time
 
 ### Auto-importing files and temporary names
 
-Another option for writing files to a node filesystem when auto-import is turned on, may be to
-write them to a path which the import detect extensions won't accept, although whether this
-is possible will depend on the particular import detect extensions being used.  For this demo,
-we can use any name which doesn't match the patterns which the `pattern_importer` will accept.
+Another option for writing files to a node filesystem when auto-import is turned on, is to
+use a temporary name for the file which will cause alpenhorn to decline to import the file.
+The import extensions which you're using may provide a namespace for such files, as is 
+the case with this demo and the `pattern_importer` which has been configured: any filename
+which does not match the patterns which were defined by the `pattern_importer.demo_init` function
+would work.
+
+Whether or not your import extensions don't have provisions for omitting files based on pathname,
+another option is to use a leading dot in the filename of a file you're creating: alpenhorn will
+never import a file whose first character is a (dot).  Note: this is only true of _file_ names:
+alpenhorn is still willing to import paths which contain _directories_ with leading dots in their
+names, assuming such names are acceptable to at least one of your import extensions.
 
 As an example, let's create a `.dat` file with a temporary name by appending, say, `.temp` to
 the name of the file we want to create:
@@ -558,6 +566,11 @@ alpen1-1  | Feb 21 23:51:59 INFO >> [Worker#1] Beginning task Import 2025/02/21/
 alpen1-1  | Feb 21 23:51:59 INFO >> [Worker#1] Not importing non-acquisition path: 2025/02/21/23/1324.dat.temp
 alpen1-1  | Feb 21 23:51:59 INFO >> [Worker#1] Finished task: Import 2025/02/21/23/1324.dat.temp on demo_storage1
 ```
+
+The message "Not importing non-acquisition path" means no import extension indicated to alpenhorn that
+the file should be imported.  If, instead, we had used a temporary filename with a leading dot, say,
+`/data/2025/02/21/23/.1324.dat`, an import task wouldn't have even been made, since alpenhorn would have
+rejected the file name earlier, before it got around to attempting to import the file.
 
 After file is fully written, it can be moved to the correct name.  On most filesystems, this is an
 atomic operation:
