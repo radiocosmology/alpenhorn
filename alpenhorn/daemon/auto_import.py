@@ -178,6 +178,12 @@ def _import_file(
 
     log.debug(f'Considering "{path}" for import to node {node.name}.')
 
+    # Skip files with a leading dot
+    if path.name[0] == ".":
+        log.info(f'Not importing "{path}": filename starts with a dot.')
+        import_request_done(req, "bad_name")
+        return
+
     # Wait for file to become ready
     while not node.io.ready_path(path):
         log.info(
@@ -346,10 +352,14 @@ class RegisterFile(FileSystemEventHandler):
         The task queue.  Import tasks will be submitted to this queue.
     """
 
-    def _is_lock_file(self, path):
-        """Returns True if event does not refer to a lock file."""
+    def _is_dotfile(self, path):
+        """Returns True if the filename in path starts with a '.'."""
         basename = pathlib.PurePath(path).name
-        return basename[0] == "." and basename[-5:] == ".lock"
+        return basename[0] == "."
+
+    def _is_lock_file(self, path):
+        """Returns True if path is a lock file."""
+        return path[-5:] == ".lock" and self._is_dotfile(path)
 
     def __init__(self, node: UpdateableNode, queue: FairMultiFIFOQueue) -> None:
         self.node = node
@@ -357,14 +367,14 @@ class RegisterFile(FileSystemEventHandler):
         super().__init__()
 
     def on_created(self, event):
-        if not event.is_directory and not self._is_lock_file(event.src_path):
+        if not event.is_directory and not self._is_dotfile(event.src_path):
             import_file(
                 self.node, self.queue, pathlib.PurePath(event.src_path), True, None
             )
         return
 
     def on_moved(self, event):
-        if not event.is_directory and not self._is_lock_file(event.dest_path):
+        if not event.is_directory and not self._is_dotfile(event.dest_path):
             import_file(
                 self.node, self.queue, pathlib.PurePath(event.dest_path), True, None
             )

@@ -138,18 +138,49 @@ def test_import_file_invalid_acqname(dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_file_locked(xfs, dbtables, unode):
-    """Test bad file in _import_file()"""
+def test_import_dotfile(xfs, dbtables, unode):
+    """Test importing a file with a leading dot.
 
-    # Create lockfile
-    xfs.create_file("/node/simplefile_acq/.simplefile.lock")
+    Such files shouldn't be imported because alpenhorn
+    should reject filenames with initial dots.
+    """
 
-    with pytest.raises(StopIteration):
-        next(
-            auto_import._import_file(
-                None, unode, pathlib.PurePath("simplefile_acq/simplefile"), True, None
+    # Create file
+    xfs.create_file("/node/acq/.file")
+
+    with patch(
+        "alpenhorn.common.extensions._id_ext",
+        [lambda path, node: ("acq", None)],
+    ):
+        with pytest.raises(StopIteration):
+            next(
+                auto_import._import_file(
+                    None, unode, pathlib.PurePath("acq/.file"), True, None
+                )
             )
-        )
+
+    # No acq has been added
+    with pytest.raises(pw.DoesNotExist):
+        ArchiveAcq.get(name="acq")
+
+
+def test_import_file_locked(xfs, dbtables, unode):
+    """Test locked file in _import_file()"""
+
+    # Create file and lock
+    xfs.create_file("/node/acq/.file.lock")
+    xfs.create_file("/node/acq/file")
+
+    with patch(
+        "alpenhorn.common.extensions._id_ext",
+        [lambda path, node: ("acq", None)],
+    ):
+        with pytest.raises(StopIteration):
+            next(
+                auto_import._import_file(
+                    None, unode, pathlib.PurePath("acq/file"), True, None
+                )
+            )
 
     # No acq has been added
     with pytest.raises(pw.DoesNotExist):
