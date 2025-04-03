@@ -38,7 +38,7 @@ def test_show_defaults(clidb, cli):
     assert "I/O Config" in result.output
 
 
-def test_show_empty_full(clidb, cli):
+def test_show_full(clidb, cli):
     """Test show most fields full."""
 
     now = utcnow()
@@ -76,6 +76,25 @@ def test_show_empty_full(clidb, cli):
     assert "3.333 GiB" in result.output
     assert "256.0 MiB" in result.output
     assert now.ctime() + " UTC" in result.output
+
+
+def test_negative_gb(clidb, cli):
+    """Test with negative sizes."""
+
+    group = StorageGroup.create(name="Group")
+    StorageNode.create(
+        name="Node",
+        group=group,
+        max_total_gb=-1,
+        min_avail_gb=-1,
+        avail_gb=-0.5,
+    )
+
+    result = cli(0, ["node", "show", "Node"])
+
+    assert "Max Total: -" in result.output
+    assert "Available: -" in result.output
+    assert "Min Available: -" in result.output
 
 
 def test_show_empty_io_config(clidb, cli):

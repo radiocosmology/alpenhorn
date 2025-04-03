@@ -61,6 +61,17 @@ def test_list(some_nodes, cli, assert_row_present):
     assert_row_present(result.output, "Node4", 1, "1.000 GiB", "5.00")
 
 
+def test_negative_total(some_nodes, cli, assert_row_present):
+    """Test listing nodes with negative max_total_gb."""
+
+    # Set Node1's total to -1
+    StorageNode.update(max_total_gb=-1).where(StorageNode.name == "Node1").execute()
+
+    result = cli(0, ["node", "stats"])
+
+    assert_row_present(result.output, "Node1", 2, "3.000 GiB", "-")
+
+
 def test_active(some_nodes, cli, assert_row_present):
     """Test limit --active."""
 

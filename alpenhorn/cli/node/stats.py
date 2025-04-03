@@ -115,7 +115,7 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
             stats[node.id]["count"] = 0
 
         if node_stats.get("size"):
-            if node.max_total_gb:
+            if node.max_total_gb and node.max_total_gb > 0:
                 percent = 100.0 * node_stats["size"] / node.max_total_gb / 2**30
                 stats[node.id]["percent"] = f"{percent:5.2f}"
             else:

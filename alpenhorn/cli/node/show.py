@@ -55,17 +55,17 @@ def show(name, actions, all_, imports, stats, transfers):
     else:
         type_name = "-"
 
-    if node.max_total_gb:
+    if node.max_total_gb and node.max_total_gb > 0:
         max_total = pretty_bytes(node.max_total_gb * 2**30)
     else:
         max_total = "-"
 
-    if node.min_avail_gb:
+    if node.min_avail_gb and node.min_avail_gb > 0:
         min_avail = pretty_bytes(node.min_avail_gb * 2**30)
     else:
         min_avail = "-"
 
-    if node.avail_gb:
+    if node.avail_gb and node.avail_gb > 0:
         avail = pretty_bytes(node.avail_gb * 2**30)
     else:
         avail = "-"
