@@ -274,13 +274,13 @@ class Metric:
     def remove(self, /, **labels: str) -> None:
         """Remove a labelset from the metric.
 
-        Returns the child metric with the labelset resulting from merging the
+        Deletes the child metric with the labelset resulting from merging the
         unbound and bound labels.
 
         Values for all unbound labels must be specified in the supplied `labels`
         dict.
 
-        If no such metric exists, this function does nothing.
+        If no such child metric exists, this function does nothing and succeeds.
 
         Paramters:
         ----------
@@ -288,7 +288,10 @@ class Metric:
             The key-value pairs of the unbound labels for the labelset.
         """
         if self._metric:
-            self._metric.remove(self.labelvalues(**labels))
+            try:
+                self._metric.remove(self.labelvalues(**labels))
+            except KeyError:
+                pass  # Child metric didn't exist
 
     def clear(self) -> None:
         """Remove all labelsets from the metric.

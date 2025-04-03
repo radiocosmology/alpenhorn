@@ -91,10 +91,12 @@ class Worker(threading.Thread):
             if global_abort.is_set():
                 log.info("Stopped due to global abort.")
                 metric_running.set(0)
+                metric_idle.remove()
                 return None
             if self._worker_stop.is_set():
                 log.info("Stopped.")
                 metric_running.set(0)
+                metric_idle.remove()
                 return None
 
             # Wait for a task:
@@ -109,6 +111,7 @@ class Worker(threading.Thread):
                     log.info("Stopped due to global abort.")
                     self._queue.task_done(key)
                     metric_running.set(0)
+                    metric_idle.remove()
                     return None
 
                 # Otherwise, execute the task.
@@ -135,6 +138,7 @@ class Worker(threading.Thread):
                             "Aborting due to uncaught exception in task cleanup"
                         )
                         metric_running.set(0)
+                        metric_idle.remove()
                         return 1
 
                     log.info(f"Finished task {task}")
@@ -145,11 +149,13 @@ class Worker(threading.Thread):
 
                     log.error(f"Exiting due to db error: {operr}")
                     metric_running.set(0)
+                    metric_idle.remove()
                     return 1  # Thread exits, will be respawned in the main loop
                 except Exception:
                     global_abort.set()
                     log.exception("Aborting due to uncaught exception in task")
                     metric_running.set(0)
+                    metric_idle.remove()
                     return 1
 
                 self._queue.task_done(key)
