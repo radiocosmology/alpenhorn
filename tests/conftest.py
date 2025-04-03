@@ -402,10 +402,17 @@ def mock_observer():
 
 
 @pytest.fixture
-def xfs(fs, mock_observer, mock_statvfs, mock_exists):
+def xfs(monkeypatch, fs, mock_observer, mock_statvfs, mock_exists):
     """An extended pyfakefs.
 
     Patches more stuff for proper behaviour with alpenhorn unittests"""
+
+    # Run tests without a pre-set ALPENHORN_CONFIG_FILE envar
+    try:
+        monkeypatch.delenv("ALPENHORN_CONFIG_FILE")
+    except KeyError:
+        pass
+
     return fs
 
 
