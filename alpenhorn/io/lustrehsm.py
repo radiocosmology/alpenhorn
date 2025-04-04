@@ -174,7 +174,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             else:
                 deltat = time.monotonic() - self._restore_start[copy.file.id]
                 log.info(
-                    f"{copy.file.path} restored on node {self.node.name}"
+                    f"{copy.file.path} restored on node {self.node.name} "
                     f"after {pretty_deltat(deltat)}"
                 )
                 del self._restore_start[copy.file.id]
