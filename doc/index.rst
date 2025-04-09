@@ -1,44 +1,34 @@
-.. Alpenhorn documentation master file, created by
-   sphinx-quickstart on Sat Feb 27 14:18:05 2016.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. Alpenhorn documentation master file
 
 Alpenhorn
 =========
 
-Alpenhorn is a set of tools for managing an archive of scientific data across
-multiple sites. It was designed for looking after the data from `CHIME
-<http://chime.phas.ubc.ca/>`_.
+Alpenhorn is system for for managing an archive of scientific data files across
+multiple, independent sites. Alpenhorn was originally designed to manage the
+data produced by `The Canadian Hydrogen Intensity Mapping Experiment
+<https://chime-experiment.ca/>`_.
 
-Alpenhorn consists of a service (`alpenhornd`) that manipulates the archive held
-at each location, a client (`alpenhorn`) which is used to control the system
-(transfers, deletions etc.), and a database which holds the current state of the
-system and is used for communication between the different components.
+Excluding the data archives themselves, the Alpenhorn system consists of three
+parts:
 
-Configuration
--------------
-
-The database holds the current state of the system, and must be manually set up
-with the initial set of ``StorageGroup`` and ``StorageNode`` entries. Hopefully there
-will be a description of how to do that here at somepoint.
-
-There are currently two configuration parameters that can be set for any running
-instance of ``alpenhornd``. They are both set by use of environment variables.
-
-``ALPENHORN_LOG_FILE``
-    The path to write out the log file to. If not set, use
-    ``/var/log/alpenhorn/alpenhornd.log``. If set to ``""`` (empty string), then
-    no log file is written.
-``ALPENHORN_IMPORT_RECORD``
-    File in which to cache the names of files already imported. Using this will
-    save significant start up time with a large archive. If not set, attempt to
-    use ``/etc/alpenhornd_import.dat``
+* **The Data Index**, a SQL database containing both information tracking the
+  data files being managed by alpenhorn, and also configuration information
+  about the alpenhorn system itself.
+* **The Alpenhorn Daemon**, an executable (`alpenhornd`) designed to be
+  long-running which is responsible for manipulating the files in the data
+  archive.  A separate instance of the daemon runs at each site containing data
+  files.
+* **The Alpenhorn CLI**, a command-line utility (`alpenhorn`) which allows
+  querying and updating the Data Index, and indirectly, through the database,
+  control operation of the daemons.
 
 
+Contents
+========
+.. toctree::
+   :maxdepth: 2
 
-Indices and tables
-==================
+   demo
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
