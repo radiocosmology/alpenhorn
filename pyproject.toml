@@ -24,7 +24,11 @@ dependencies = [
 
 [project.optional-dependencies]
 prometheus = [
-  "prometheus_client",
+  "prometheus_client"
+]
+docs = [
+  "Sphinx >= 5.0",
+  "sphinx_rtd_theme"
 ]
 test = [
   "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
