@@ -98,7 +98,7 @@ def sync(
     check = check_if_from_stdin(file_list, check, force)
 
     # Load file list, if any
-    listed_files = files_from_file(file_list)
+    listed_files = files_from_file(file_list, node_name)
 
     # We're using the "group sync" run_query function here, which is why
     # group_name and node_name are backwards
