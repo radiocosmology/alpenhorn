@@ -8,7 +8,8 @@ Alpenhorn
 
 Alpenhorn is system for for managing an archive of scientific data files across
 multiple, independent sites. Alpenhorn was originally designed to manage the
-data produced by `CHIME <http://chime.phas.ubc.ca/>`_.
+data produced by `The Canadian Hydrogen Intensity Mapping Experiment
+<https://chime-experiment.ca/>`_.
 
 Excluding the data archives themselves, the Alpenhorn system consists of three
 parts:
