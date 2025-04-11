@@ -516,7 +516,7 @@ def sync(
     check = check_if_from_stdin(file_list, check, force)
 
     # Load file list, if any
-    listed_files = files_from_file(file_list)
+    listed_files = files_from_file(file_list, node_name)
 
     # Run the check-confirm-update loop
     check_then_update(

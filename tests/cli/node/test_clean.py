@@ -496,7 +496,7 @@ def test_file_list(clidb, cli, xfs):
     """Test clean with --file-list"""
 
     group = StorageGroup.create(name="Group1")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    node = StorageNode.create(name="NODE", group=group, storage_type="F", root="/NODE")
 
     acq = ArchiveAcq.create(name="Acq")
 
@@ -509,7 +509,7 @@ def test_file_list(clidb, cli, xfs):
     file4 = ArchiveFile.create(name="File4", acq=acq)
     ArchiveFileCopy.create(node=node, file=file4, has_file="Y", wants_file="Y")
 
-    xfs.create_file("/file_list", contents="Acq/File1\n\n# Comment\nAcq/File3\n")
+    xfs.create_file("/file_list", contents="Acq/File1\n\n# Comment\n/NODE/Acq/File3\n")
 
     cli(0, ["node", "clean", "NODE", "--force", "--file-list=/file_list"])
 

@@ -429,7 +429,7 @@ def clean(
         has_file = ArchiveFileCopy.has_file == "Y"
 
     # Load file list, if any
-    listed_files = files_from_file(file_list)
+    listed_files = files_from_file(file_list, name)
 
     # Do a check-then-update with the `_run_query` function.
     check_then_update(

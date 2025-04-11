@@ -749,10 +749,19 @@ def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
     return False
 
 
-def files_from_file(path: str) -> None:
+def files_from_file(path: str | None, node: str | None = None) -> None:
     """Read a file list from a file given with --file-list
 
-    Returns a set of ArchiveFiles.  If path is None, the empty set is returned.
+    Returns a set of ArchiveFiles.
+
+    Parameters
+    ----------
+    path:
+        The path to the file to read.  If this is None, the empty set is returned.
+    node:
+        If not None, the name of the source StorageNode, whose root will be
+        removed from the files, if present.  (If `node` is None, only relative
+        paths will be accepted.)
     """
 
     files = set()
@@ -760,6 +769,15 @@ def files_from_file(path: str) -> None:
     # Not given; return empty set
     if not path:
         return files
+
+    # Fetch node.root, if necessary
+    if node:
+        try:
+            root = StorageNode.get(name=node).root
+        except pw.DoesNotExist:
+            raise click.ClickException("No such node: " + node)
+    else:
+        root = None
 
     name = "stdin" if path == "-" else path
 
@@ -777,6 +795,13 @@ def files_from_file(path: str) -> None:
             # Skip empty lines
             if not line:
                 continue
+
+            # If we were given a node, strip node root, if present
+            if root and line[0] == "/":
+                try:
+                    line = str(pathlib.Path(line).relative_to(root))
+                except ValueError:
+                    pass  # Not relative to root
 
             files.add(
                 file_from_path(

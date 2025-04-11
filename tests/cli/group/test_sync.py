@@ -654,3 +654,84 @@ def test_from_stdin_unforced(clidb, cli):
 
     # Nothing is transferred because --check was turned on
     assert ArchiveFileCopyRequest.select().count() == 0
+
+
+def test_from_file_good_root(clidb, cli, xfs):
+    """Test --file-list with node root appended."""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from, root="/NodeFrom")
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    file3 = ArchiveFile.create(name="File3", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
+
+    xfs.create_file(
+        "/file_list", contents="/NodeFrom/Acq/File1\n# Comment\n/NodeFrom/Acq/File3"
+    )
+
+    cli(
+        0,
+        [
+            "group",
+            "sync",
+            "GroupTo",
+            "NodeFrom",
+            "--file-list=/file_list",
+        ],
+        input="Y\n",
+    )
+
+    # File1 and File3 are transferred
+    assert ArchiveFileCopyRequest.select().count() == 2
+    assert ArchiveFileCopyRequest.get(id=1).file == file1
+    assert ArchiveFileCopyRequest.get(id=2).file == file3
+
+
+def test_from_file_bad_root(clidb, cli, xfs):
+    """Test --file-list with invalid node root."""
+
+    group_from = StorageGroup.create(name="GroupFrom")
+    node_from = StorageNode.create(name="NodeFrom", group=group_from, root="/NodeFrom")
+
+    group_to = StorageGroup.create(name="GroupTo")
+    StorageNode.create(name="NodeTo", group=group_to)
+
+    acq = ArchiveAcq.create(name="Acq")
+
+    file1 = ArchiveFile.create(name="File1", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file1, node=node_from, has_file="Y", wants_file="Y")
+
+    file2 = ArchiveFile.create(name="File2", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file2, node=node_from, has_file="Y", wants_file="Y")
+
+    file3 = ArchiveFile.create(name="File3", acq=acq, size_b=1234)
+    ArchiveFileCopy.create(file=file3, node=node_from, has_file="Y", wants_file="Y")
+
+    xfs.create_file(
+        "/file_list", contents="/OtherRoot/Acq/File1\n# Comment\n/OtherRoot/Acq/File3"
+    )
+
+    cli(
+        1,
+        [
+            "group",
+            "sync",
+            "GroupTo",
+            "NodeFrom",
+            "--file-list=/file_list",
+        ],
+    )
+
+    # no files are transferred
+    assert ArchiveFileCopyRequest.select().count() == 0
