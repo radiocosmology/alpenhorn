@@ -27,13 +27,18 @@ import yaml
 from click.testing import CliRunner
 
 from alpenhorn.daemon.entry import entry
-from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
-from alpenhorn.db.archive import (
+from alpenhorn.db import (
+    ArchiveAcq,
+    ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
-    ArchiveFileImportRequest,
+    DataIndexVersion,
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
+    current_version,
+    gamut,
 )
-from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
 
 # Import pattern_importer from the examples directory
 sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))
@@ -46,15 +51,15 @@ def e2e_db(xfs, clidb_noinit, hostname):
 
     db = clidb_noinit
 
+    # Remove tables duplicated by the pattern_importer
+    filtered = (
+        table for table in gamut if table != ArchiveFile and table != ArchiveAcq
+    )
+
     # Create tables
     db.create_tables(
         [
-            ArchiveFileCopy,
-            ArchiveFileCopyRequest,
-            ArchiveFileImportRequest,
-            StorageGroup,
-            StorageNode,
-            StorageTransferAction,
+            *filtered,
             pattern_importer.AcqType,
             pattern_importer.FileType,
             pattern_importer.ExtendedAcq,
@@ -64,6 +69,8 @@ def e2e_db(xfs, clidb_noinit, hostname):
 
     # Populate tables
     # ---------------
+
+    DataIndexVersion.create(component="alpenhorn", version=current_version)
 
     # A Default-IO group with one node
     dftgrp = StorageGroup.create(name="dftgroup")

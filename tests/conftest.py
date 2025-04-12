@@ -11,6 +11,7 @@ from urllib.parse import quote as urlquote
 
 import pytest
 import yaml
+from peewee import SqliteDatabase
 
 import alpenhorn.common.logger
 from alpenhorn import db
@@ -22,6 +23,7 @@ from alpenhorn.db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     ArchiveFileImportRequest,
+    DataIndexVersion,
     StorageGroup,
     StorageNode,
     StorageTransferAction,
@@ -483,18 +485,10 @@ def dbproxy(set_config):
 def dbtables(dbproxy):
     """Create all the usual tables in the database."""
 
-    dbproxy.create_tables(
-        [
-            StorageGroup,
-            StorageNode,
-            StorageTransferAction,
-            ArchiveAcq,
-            ArchiveFile,
-            ArchiveFileCopy,
-            ArchiveFileCopyRequest,
-            ArchiveFileImportRequest,
-        ]
-    )
+    dbproxy.create_tables(db.gamut)
+
+    # Set schema
+    DataIndexVersion.create(component="alpenhorn", version=db.current_version)
 
 
 @pytest.fixture
@@ -668,18 +662,10 @@ def clidb(clidb_noinit):
 
     Yields the connector."""
 
-    clidb_noinit.create_tables(
-        [
-            StorageGroup,
-            StorageNode,
-            StorageTransferAction,
-            ArchiveAcq,
-            ArchiveFile,
-            ArchiveFileCopy,
-            ArchiveFileCopyRequest,
-            ArchiveFileImportRequest,
-        ]
-    )
+    clidb_noinit.create_tables(db.gamut)
+
+    # Set schema
+    DataIndexVersion.create(component="alpenhorn", version=db.current_version)
 
     yield clidb_noinit
 
@@ -690,31 +676,18 @@ def clidb_noinit(clidb_uri):
 
     Yields the connector."""
 
-    import peewee as pw
-
-    from alpenhorn.db import EnumField, database_proxy
-
     # Open
-    db = pw.SqliteDatabase(clidb_uri, uri=True)
-    assert db is not None
-    database_proxy.initialize(db)
-    EnumField.native = False
+    connector = SqliteDatabase(clidb_uri, uri=True)
+    assert connector is not None
+    db.database_proxy.initialize(connector)
+    db.EnumField.native = False
 
-    yield db
+    yield connector
 
     # Drop all the tables after the test
-    for table in [
-        StorageGroup,
-        StorageNode,
-        StorageTransferAction,
-        ArchiveAcq,
-        ArchiveFile,
-        ArchiveFileCopy,
-        ArchiveFileCopyRequest,
-        ArchiveFileImportRequest,
-    ]:
-        db.execute_sql(f"DROP TABLE IF EXISTS {table._meta.table_name};")
-    db.close()
+    for table in db.gamut:
+        connector.execute_sql(f"DROP TABLE IF EXISTS {table._meta.table_name};")
+    connector.close()
 
 
 @pytest.fixture
@@ -926,3 +899,15 @@ def assert_row_present():
             pytest.fail("Row not found:\n   " + text_row)
 
     return _assert_row_present
+
+
+@pytest.fixture
+def cli_wrong_schema(clidb):
+    """Set the schema of the CLI data index to the wrong version.
+
+    DB must already be initialised.
+    """
+
+    DataIndexVersion.update(version=db.current_version + 1).where(
+        DataIndexVersion.component == "alpenhorn"
+    ).execute()

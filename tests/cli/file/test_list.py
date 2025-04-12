@@ -11,6 +11,12 @@ from alpenhorn.db import (
 )
 
 
+def test_schema_mismatch(clidb, cli, cli_wrong_schema):
+    """Test schema mismatch."""
+
+    cli(1, ["file", "list"])
+
+
 def test_only_from_to(clidb, cli):
     """Can't only use --from or --to"""
 

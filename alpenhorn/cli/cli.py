@@ -7,11 +7,26 @@ from typing import TYPE_CHECKING
 import click
 
 from ..common.logger import echo
-from ..db import connect as dbconnect  # noqa: F401
+from ..db import connect, schema_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 del TYPE_CHECKING
+
+
+def dbconnect(check: bool = True) -> None:
+    """Connect to the database, with schema checking.
+
+    Parameters
+    ----------
+    check:
+        If True (the default), raises ClickException if the
+        database doesn't conform to the current schema version.
+    """
+
+    connect()
+    if check:
+        schema_version(check=True)
 
 
 def check_then_update(

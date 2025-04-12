@@ -18,6 +18,12 @@ def test_no_list(clidb, cli):
     assert "Name" not in result.output
 
 
+def test_schema_mismatch(clidb, cli, cli_wrong_schema):
+    """Test schema mismatch."""
+
+    cli(1, ["acq", "list"])
+
+
 def test_list(clidb, cli, assert_row_present):
     """Test with no constraints."""
 

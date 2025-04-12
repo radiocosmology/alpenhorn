@@ -32,6 +32,12 @@ def some_nodes(clidb):
     )
 
 
+def test_schema_mismatch(clidb, cli, cli_wrong_schema):
+    """Test schema mismatch."""
+
+    cli(1, ["node", "list"])
+
+
 def test_no_list(clidb, cli):
     """Test listing no nodes."""
 

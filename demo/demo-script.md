@@ -252,10 +252,11 @@ CLI:
   alpenhorn db init
 ```
 Remember that all these alpenhorn commands need to be run inside the `alpen1` container that we
-started in the last section.  The `db init` command outputs nothing when successful:
+started in the last section.  On successful completion, the `db init` command will report the version
+of the database schema used to create the Data Index:
 ```(console)
 root@alpen1:/# alpenhorn db init
-root@alpen1:/#
+Data Index version 2 initialised.
 ```
 
 ### Create the first StorageNode
