@@ -217,6 +217,20 @@ root@alpen1:/#
 
 Once at the root prompt, we can build the data index and start populating it.
 
+### Setting up the data index
+
+Creating the data index is simple, and can be accomplished with the alpenhorn CLI command:
+```
+  alpenhorn db init
+```
+Remember that all these alpenhorn commands need to be run inside the `alpen1` container that we
+started in the last section.  On successful completion, the `db init` command will report the version
+of the database schema used to create the Data Index:
+```(console)
+root@alpen1:/# alpenhorn db init
+Data Index version 2 initialised.
+```
+
 ### Setting up the import extension
 
 Because alpenhorn is data agnostic, it doesn't have any facilities out-of-the-box to import files.
@@ -225,10 +239,11 @@ For the purposes of this demo, we'll use the simple `pattern_importer` example e
 the `/examples` directory.  This extension has already been incorporated into the alpenhorn
 container image that we're running, and alpenhorn has been set up to use it.
 
-As explained in the documentation for the `pattern_importer` example, the extension adds fields to
-two alpenhorn tables: `ArchiveAcq` and `ArchiveFile`, as well as creating some of its own tables in
-the Data Index.  Because of this, we need to run the extension initialisation before we can create
-the rest of the data index proper.
+As explained in the documentation for the `pattern_importer` example, the extension adds four new
+tables to the alpenhorn Data Index: `AcqData`, `AcqType`, `FileData`, and `FileType`.  Adding extra
+tables to the Data Index is permitted, but caution must be used to prevent name clashes with
+alpenhorn's own tables, and tables from other potential extensions.  Fortunately, for the simple
+case in this demo, we don't have to worry about that.
 
 To initialise the database for the extension, run the `demo_init` function provided by the
 extension:
@@ -242,21 +257,6 @@ You should see a success message:
 ```(console)
 root@alpen1:/# python -c 'import pattern_importer; pattern_importer.demo_init()'
 Plugin init complete complete.
-```
-
-### Setting up the data index
-
-Once the pattern importer has been set up, set up the rest of the data index using the alpenhorn
-CLI:
-```
-  alpenhorn db init
-```
-Remember that all these alpenhorn commands need to be run inside the `alpen1` container that we
-started in the last section.  On successful completion, the `db init` command will report the version
-of the database schema used to create the Data Index:
-```(console)
-root@alpen1:/# alpenhorn db init
-Data Index version 2 initialised.
 ```
 
 ### Create the first StorageNode
