@@ -51,19 +51,14 @@ def e2e_db(xfs, clidb_noinit, hostname):
 
     db = clidb_noinit
 
-    # Remove tables duplicated by the pattern_importer
-    filtered = (
-        table for table in gamut if table != ArchiveFile and table != ArchiveAcq
-    )
-
     # Create tables
     db.create_tables(
         [
-            *filtered,
+            *gamut,
             pattern_importer.AcqType,
             pattern_importer.FileType,
-            pattern_importer.ExtendedAcq,
-            pattern_importer.ExtendedFile,
+            pattern_importer.AcqData,
+            pattern_importer.FileData,
         ]
     )
 
@@ -341,9 +336,12 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync):
     # Check results
 
     # find.me has been imported
-    assert ArchiveAcq.get(name="acq2")
+    acq2 = ArchiveAcq.get(name="acq2")
+    acqdata = pattern_importer.AcqData.get(acq=acq2)
+    assert acqdata.type == pattern_importer.AcqType.get(id=1)
     findme = ArchiveFile.get(name="find.me")
-    assert findme
+    filedata = pattern_importer.FileData.get(file=findme)
+    assert filedata.type == pattern_importer.FileType.get(id=1)
 
     # ... and is scheduled for transfer to the fleet
     dftnode = StorageNode.get(name="dftnode")
