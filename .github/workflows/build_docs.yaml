@@ -20,7 +20,7 @@ jobs:
         python-version: "3.13"
 
     - name: Install pip dependencies
-      run: pip install .[docs]
+      run: pip install .[doc]
 
     - name: Build sphinx docs
       run: sphinx-build -W -b html doc/ doc/_build/html
