@@ -262,6 +262,5 @@ class UpDownLock:
         else:
             state = "locked down"
         return (
-            f"<UpDownLock object state={state} count={abs(count)} "
-            f"at {hex(id(self))}>"
+            f"<UpDownLock object state={state} count={abs(count)} at {hex(id(self))}>"
         )

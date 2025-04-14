@@ -105,23 +105,27 @@ class FairMultiFIFOQueue:
             "queue_locked", "The queue fifo is locked", unbound=["fifo"]
         )
 
-    def _inc_metrics(self, fifo: str, status: str) -> None:
+    def _inc_metrics(self, fifo: Hashable, status: str) -> None:
         """Increment the queue_count metric.
 
         Adds one to the metric with fifo=fifo and status=status.  Also adds
         one to the marginalised ..._any and ..._all metrics.
         """
 
+        fifo = str(fifo)
+
         self._qcount.inc(fifo=fifo, status=status)
         self._qcount_any.inc(fifo=fifo)
         self._qcount_all.inc(status=status)
 
-    def _dec_metrics(self, fifo: str, status: str) -> None:
+    def _dec_metrics(self, fifo: Hashable, status: str) -> None:
         """Decrement the queue_count metric.
 
         Subtracts one from the metric with fifo=fifo and status=status.  Also
         subtracts one from the marginalised ..._any and ..._all metrics.
         """
+
+        fifo = str(fifo)
 
         self._qcount.dec(fifo=fifo, status=status)
         self._qcount_any.dec(fifo=fifo)

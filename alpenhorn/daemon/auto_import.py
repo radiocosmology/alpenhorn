@@ -28,6 +28,7 @@ from ..scheduler import Task
 
 if TYPE_CHECKING:
     import os
+    from collections.abc import Generator
 
     from ..scheduler import FairMultiFIFOQueue
     from .update import UpdateableNode
@@ -151,7 +152,7 @@ def _import_file(
     path: pathlib.PurePath,
     register: bool,
     req: ArchiveFileImportRequest | None,
-) -> None:
+) -> Generator[int]:
     """Import `path` on `node` into the DB.  This is run by a worker.
 
     Parameters
@@ -289,8 +290,7 @@ def _import_file(
         if copy.wants_file == "Y":
             copy.has_file = "M"
             log.warning(
-                f'Imported missing file "{path}" on node {node.name}.'
-                "  Marking suspect."
+                f'Imported missing file "{path}" on node {node.name}.  Marking suspect.'
             )
         else:
             copy.has_file = "Y"

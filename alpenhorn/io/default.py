@@ -29,7 +29,7 @@ from .base import BaseGroupIO, BaseNodeIO, BaseNodeRemote
 from .updownlock import UpDownLock
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable
 
     from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
     from ..service.queue import FairMultiFIFOQueue
@@ -79,9 +79,9 @@ class DefaultNodeIO(BaseNodeIO):
     observer = Observer
 
     def __init__(
-        self, node: StorageNode, queue: FairMultiFIFOQueue, config: dict
+        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
     ) -> None:
-        super().__init__(node, queue, config)
+        super().__init__(node, config, queue)
 
         # The directory tree modification lock
         self.tree_lock = UpDownLock()
@@ -276,7 +276,7 @@ class DefaultNodeIO(BaseNodeIO):
         # Apparent size
         return path.stat().st_size
 
-    def file_walk(self, path) -> Iterator[pathlib.PurePath]:
+    def file_walk(self, path) -> Iterable[pathlib.PurePath]:
         """An iterator over all regular files under `node.root/path`
 
         pathlib.PurePaths returned by the iterator are absolute

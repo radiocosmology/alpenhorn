@@ -15,7 +15,7 @@ from typing import IO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Iterator
+    from collections.abc import Iterable
 
     from ..daemon.update import UpdateableNode
     from ..db import (
@@ -305,7 +305,7 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def file_walk(self, path: pathlib.Path) -> Iterator[pathlib.PurePath]:
+    def file_walk(self, path: pathlib.Path) -> Iterable[pathlib.PurePath]:
         """Iterate through directory `path`.
 
         Should successively yield a pathlib.PurePath for each file under `path`,
@@ -361,7 +361,7 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def md5(self, path: str | pathlib.Path, *segments) -> str:
+    def md5(self, path: str | pathlib.Path, *segments) -> str | None:
         """Compute the MD5 hash of the file at the specified path.
 
         Parameters
@@ -374,8 +374,9 @@ class BaseNodeIO:
 
         Returns
         -------
-        md5sum : str
-            the base64-encoded MD5 hash value
+        md5sum : str or None
+            the base64-encoded MD5 hash value, or None if the hash couldn't be
+            computed.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 

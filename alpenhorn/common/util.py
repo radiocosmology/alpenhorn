@@ -16,6 +16,7 @@ from .metrics import Metric
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from os import PathLike
 del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ def start_alpenhorn(
 
 def run_command(
     cmd: list[str], timeout: float | None = None, **kwargs
-) -> tuple(int | None, str, str):
+) -> tuple[int | None, str, str]:
     """Run a command.
 
     Parameters
@@ -244,7 +245,7 @@ def timeout_call(func: Callable, timeout: float, /, *args: Any, **kwargs: Any) -
     return asyncio.run(_async_wrapper(func, timeout, args, kwargs))
 
 
-async def _md5sum_file(filename: str) -> str | None:
+async def _md5sum_file(filename: str | PathLike) -> str | None:
     """asyncio implementation of md5sum_file().
 
     Aborts and returns None if computation is too slow.
@@ -292,7 +293,7 @@ async def _md5sum_file(filename: str) -> str | None:
     return md5.hexdigest()
 
 
-def md5sum_file(filename: str) -> str | None:
+def md5sum_file(filename: str | PathLike) -> str | None:
     """Find the md5sum of a given file.
 
     This implementation runs in an asyncio wrapper and will time out
