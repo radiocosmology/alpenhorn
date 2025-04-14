@@ -1,7 +1,8 @@
 # Alpenhorn documentation build configuration file
 
-import alpenhorn
 from packaging.version import Version
+
+import alpenhorn
 
 # Sphinx extensions
 extensions = [
@@ -13,7 +14,7 @@ extensions = [
 # templates_path = ["_templates"]
 
 # The suffix(es) of source filenames.
-source_suffix = ['.rst', '.md']
+source_suffix = [".rst", ".md"]
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
