@@ -37,6 +37,7 @@ thread, typically via the peewee table models provided by this module.
 
 # Table models
 from .acquisition import ArchiveAcq, ArchiveFile
+from .data_index import DataIndexVersion, current_version, schema_version
 from .archive import ArchiveFileCopy, ArchiveFileCopyRequest, ArchiveFileImportRequest
 from .storage import StorageGroup, StorageNode, StorageTransferAction
 
@@ -49,3 +50,16 @@ from ._base import EnumField, base_model
 # Naive-UTC stuff courtesy peewee.  These were originally in datetime
 # but were deprecated in 3.12 as too confusing.
 from peewee import utcnow, utcfromtimestamp
+
+# This contains all tables in the Data Index
+gamut = (
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    ArchiveFileImportRequest,
+    DataIndexVersion,
+    StorageGroup,
+    StorageNode,
+    StorageTransferAction,
+)

@@ -10,7 +10,8 @@ from .init import init
 def cli():
     """Manage the Data Index."""
 
-    dbconnect()
+    # Don't exit on schema mismatch
+    dbconnect(check=False)
 
 
 cli.add_command(init, "init")

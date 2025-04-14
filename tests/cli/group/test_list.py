@@ -3,6 +3,12 @@
 from alpenhorn.db import StorageGroup
 
 
+def test_schema_mismatch(clidb, cli, cli_wrong_schema):
+    """Test schema mismatch."""
+
+    cli(1, ["group", "list"])
+
+
 def test_list(clidb, cli):
     """Test listing groups."""
 

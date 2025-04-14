@@ -9,9 +9,11 @@ from alpenhorn.db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     ArchiveFileImportRequest,
+    DataIndexVersion,
     StorageGroup,
     StorageNode,
     StorageTransferAction,
+    current_version,
 )
 
 
@@ -23,6 +25,9 @@ def test_init(clidb_noinit, cli):
         StorageGroup.create(name="Test")
 
     cli(0, ["db", "init"])
+
+    # Check schema version
+    assert DataIndexVersion.get(component="alpenhorn").version == current_version
 
     # Now we should have tables
     StorageGroup.create(name="Test")
@@ -50,8 +55,8 @@ def test_init(clidb_noinit, cli):
     assert ArchiveFileImportRequest.get(path="path", node_id=1).id == 1
 
 
-def test_init_safe(clidb, cli):
-    """Test DB init doesn't overwrite tables"""
+def test_init_existing(clidb, cli):
+    """Test db init with already eixsting data index."""
 
     # Tables are already present
     StorageGroup.create(name="Test")
@@ -65,6 +70,9 @@ def test_init_safe(clidb, cli):
 
     cli(0, ["db", "init"])
 
+    # Check schema version
+    assert DataIndexVersion.get(component="alpenhorn").version == current_version
+
     # Tables weren't overwritten
     assert StorageGroup.get(name="Test").id == 1
     assert StorageNode.get(name="Test").id == 1
@@ -74,3 +82,20 @@ def test_init_safe(clidb, cli):
     assert ArchiveFileCopy.get(file_id=1, node_id=1).id == 1
     assert ArchiveFileCopyRequest.get(file_id=1, node_from_id=1, group_to_id=1).id == 1
     assert ArchiveFileImportRequest.get(path="path", node_id=1).id == 1
+
+
+def test_init_wrong_version(clidb, cli, cli_wrong_schema):
+    """Test init with version mismatch."""
+
+    # Init fails
+    cli(1, ["db", "init"])
+
+
+def test_init_version1(clidb, cli):
+    """Test init with old CHIME data index."""
+
+    # By "old CHIME data index" we mean one without a schema version
+    DataIndexVersion.delete().execute()
+
+    # Init fails
+    cli(1, ["db", "init"])
