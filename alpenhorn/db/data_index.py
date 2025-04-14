@@ -103,7 +103,7 @@ def schema_version(
     # Fetch version for component
     try:
         schema = DataIndexVersion.get_or_none(component=component)
-    except pw.OperationalError:
+    except (pw.OperationalError, pw.ProgrammingError):
         # This may be because the table doesn't exist.  Look for it.
         if DataIndexVersion._meta.table_name in database_proxy.get_tables():
             # Table exists, but be some sort of other error
