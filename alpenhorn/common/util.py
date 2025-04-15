@@ -244,7 +244,7 @@ def timeout_call(func: Callable, timeout: float, /, *args: Any, **kwargs: Any) -
     return asyncio.run(_async_wrapper(func, timeout, args, kwargs))
 
 
-async def _md5sum_file(filename: str, hr: bool = True) -> str | None:
+async def _md5sum_file(filename: str) -> str | None:
     """asyncio implementation of md5sum_file().
 
     Aborts and returns None if computation is too slow.
@@ -289,27 +289,25 @@ async def _md5sum_file(filename: str, hr: bool = True) -> str | None:
                 log.warning(f"Timeout trying to MD5 {filename}.")
                 return None
 
-    if hr:
-        return md5.hexdigest()
-    return md5.digest()
+    return md5.hexdigest()
 
 
-def md5sum_file(filename: str, hr: bool = True) -> str | None:
+def md5sum_file(filename: str) -> str | None:
     """Find the md5sum of a given file.
 
-    Output should reproduce that of UNIX md5sum command.
+    This implementation runs in an asyncio wrapper and will time out
+    if a 32MiB portion of the file can't be processed in less than ten
+    minutes.
 
     Parameters
     ----------
     filename: string
         Name of file to checksum.
-    hr: boolean, optional
-        Should output be a human readable hexstring (default is True).
 
     Returns
     -------
-    md5hash:
-        The MD5 sum of the file, or None if the operation timed out.
+    md5hash: str
+        The hexadecimal MD5 hash of the file, or None if the operation timed out.
 
     See Also
     --------
@@ -318,7 +316,7 @@ def md5sum_file(filename: str, hr: bool = True) -> str | None:
     metric = Metric("hash_running_count", "Count of in-progress MD5 hashing")
 
     metric.inc()
-    result = asyncio.run(_md5sum_file(filename, hr))
+    result = asyncio.run(_md5sum_file(filename))
     metric.dec()
 
     return result
