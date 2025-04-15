@@ -385,7 +385,7 @@ _signalpool = None
 
 
 # The signal handlers themselves
-def _handle_usr1(signum: signal.Signals, frame: FrameType) -> None:
+def _handle_usr1(signum: int, frame: FrameType | None) -> None:
     """SIGUSR1 signal handler.
 
     Sends an increment request to the worker pool.
@@ -394,7 +394,7 @@ def _handle_usr1(signum: signal.Signals, frame: FrameType) -> None:
     _signalpool.add_worker(blocking=False)
 
 
-def _handle_usr2(signum: signal.Signals, frame: FrameType) -> None:
+def _handle_usr2(signum: int, frame: FrameType | None) -> None:
     """SIGUSR2 signal handler.
 
     Sends an decrement request to the worker pool.

@@ -36,8 +36,7 @@ def autosync(ctx, group_name, node_name, remove):
         # Sanity check: can't autosync within a group
         if group == node.group and not remove:
             raise click.ClickException(
-                "can't enable autosync: "
-                f'Node "{node_name}" is in group "{group_name}"'
+                f'can\'t enable autosync: Node "{node_name}" is in group "{group_name}"'
             )
 
         # What's the current state?

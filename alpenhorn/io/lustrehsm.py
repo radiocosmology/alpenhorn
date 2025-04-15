@@ -31,6 +31,7 @@ from .lustrequota import LustreQuotaNodeIO
 
 if TYPE_CHECKING:
     import os
+    from collections.abc import Generator
 
     from ..db import ArchiveFile, ArchiveFileCopyRequest
     from ..scheduler import FairMultiFIFOQueue
@@ -390,7 +391,9 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             the file copy to auto-verify
         """
 
-        def _async(task: Task, node_io: LustreHSMNodeIO, copy: ArchiveFileCopy) -> None:
+        def _async(
+            task: Task, node_io: LustreHSMNodeIO, copy: ArchiveFileCopy
+        ) -> Generator[int]:
             """Verify a file (with restore and release, if necessary).
 
             Parameters
@@ -654,9 +657,9 @@ class LustreHSMGroupIO(DefaultGroupIO):
     # SETUP
 
     def __init__(
-        self, queue: FairMultiFIFOQueue, group: UpdateableGroup, config: dict
+        self, group: UpdateableGroup, config: dict, queue: FairMultiFIFOQueue
     ) -> None:
-        super().__init__(queue, group, config)
+        super().__init__(group, config, queue)
 
         self._threshold = self.config.get("threshold", 1000000000)  # bytes
 

@@ -16,8 +16,8 @@ def _verbosity_from_cli(verbose: int, debug: bool, quiet: int) -> int:
     Processes the --verbose, --debug and --quiet flags to determine
     the requested verbosity."""
 
-    not_both(quiet, "quiet", verbose, "verbose")
-    not_both(quiet, "quiet", debug, "debug")
+    not_both(quiet > 0, "quiet", verbose > 0, "verbose")
+    not_both(quiet > 0, "quiet", debug, "debug")
 
     # Default verbosity is 3.  --quiet decreases it.  --verbose increases it.
 

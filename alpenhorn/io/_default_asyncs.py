@@ -320,8 +320,7 @@ def delete_async(
         # If at least two _other_ copies exist, we can delete the file.
         if ncopies < copies_required:
             log.warning(
-                f"Too few archive copies ({ncopies}) "
-                f"to delete {shortname} on {name}."
+                f"Too few archive copies ({ncopies}) to delete {shortname} on {name}."
             )
             continue  # Skip this one
 

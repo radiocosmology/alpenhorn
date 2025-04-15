@@ -35,7 +35,7 @@ def _run_cancel(
     ctx,
     group: StorageGroup,
     node: StorageNode,
-    acqs: list[ArchiveAcq],
+    acqs: set[ArchiveAcq],
     listed_files: set[ArchiveFile],
     show_acqs: bool,
     show_files: bool,
@@ -112,14 +112,14 @@ def _run_cancel(
     if first_time:
         if show_acqs or show_files:
             # Need to fetch the full request in this case
-            requests = ArchiveFileCopyRequest.select().where(
+            reqs = ArchiveFileCopyRequest.select().where(
                 ArchiveFileCopyRequest.id << afcrs
             )
 
         if show_acqs:
             acq_counts = {}
             acq_files = defaultdict(list)
-            for req in requests:
+            for req in reqs:
                 acq = req.file.acq
                 acq_counts[acq] = acq_counts.get(acq, 0) + 1
                 if show_files:
@@ -131,7 +131,7 @@ def _run_cancel(
                 if show_files:
                     echo("\n".join(sorted(acq_files[acq])))
         elif show_files:
-            paths = [str(req.file.path) for req in requests]
+            paths = [str(req.file.path) for req in reqs]
             echo("\n".join(sorted(paths)))
 
     # Do update
@@ -151,7 +151,7 @@ def _run_sync(
     ctx,
     group: StorageGroup,
     node: StorageNode,
-    acqs: list[ArchiveAcq],
+    acqs: set[ArchiveAcq],
     listed_files: set[ArchiveFile],
     show_acqs: bool,
     show_files: bool,
@@ -401,7 +401,7 @@ def run_query(
         try:
             group = StorageGroup.get(name=group_name)
         except pw.DoesNotExist:
-            raise click.ClickException("No such group: " + node_name)
+            raise click.ClickException("No such group: " + group_name)
 
     # Resolve acqs
     acqs = resolve_acq(acq)

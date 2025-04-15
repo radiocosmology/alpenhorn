@@ -247,7 +247,7 @@ def import_detection() -> list[ImportDetect]:
     return _id_ext
 
 
-def io_module(name: str) -> ModuleType:
+def io_module(name: str) -> ModuleType | None:
     """Returns the module supporting I/O class named `name`.
 
     Parameters

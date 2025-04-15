@@ -34,8 +34,7 @@ def cli_option(option: str, **extra_kwargs):
         args = ("--address",)
         kwargs = {
             "metavar": "ADDR",
-            "help": "Domain name or IP address to use for remote access to the "
-            "node.",
+            "help": "Domain name or IP address to use for remote access to the node.",
         }
     elif option == "all_":
         # Has no help; must be provided when used
@@ -463,13 +462,13 @@ def files_in_nodes(
 
             # In this mode, there's no reason to continue once the set is empty
             if not node_files:
-                return []
+                break
 
     return node_files
 
 
 def files_in_groups(
-    groups: list[StorageGroup],
+    groups: set[StorageGroup],
     state_expr: pw.Expression | None = None,
     in_any: bool = False,
 ) -> set[int] | None:
@@ -481,7 +480,7 @@ def files_in_groups(
     Parameters
     ----------
     groups:
-        list of StorageGroups.
+        set of StorageGroups.
     state_expr:
         if given and not None, a peewee.Expression defining the
         state of files we're looking for.  If None, a
@@ -531,7 +530,7 @@ def files_in_groups(
 
             # In this mode, there's no reason to continue once the set is empty
             if not group_files:
-                return []
+                break
 
     return group_files
 
@@ -639,7 +638,7 @@ def set_io_config(
         # something it can't encode, but I don't think this hurts.
         try:
             json.dumps(dict([split_data]))
-        except json.JSONEncodeError:
+        except json.JSONDecodeError:
             raise click.ClickException(f'Cannot parse argument: "--io-var={var}"')
 
         # Now set
@@ -749,7 +748,7 @@ def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
     return False
 
 
-def files_from_file(path: str | None, node: str | None = None) -> None:
+def files_from_file(path: str | None, node: str | None = None) -> set[ArchiveFile]:
     """Read a file list from a file given with --file-list
 
     Returns a set of ArchiveFiles.

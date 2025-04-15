@@ -235,36 +235,36 @@ def _run_query(
         if size and results["S"]["count"]:
             files = "files" if results["S"]["count"] != 1 else "file"
             echo(
-                f'{results["S"]["count"]} {files} '
-                f'({pretty_bytes(results["S"]["size"])}) '
+                f"{results['S']['count']} {files} "
+                f"({pretty_bytes(results['S']['size'])}) "
                 "already contributing to size constraint."
             )
 
         if breakdown:
             if results["Y"]["count"]:
                 files = "files" if results["Y"]["count"] != 1 else "file"
-                size = (
+                size_str = (
                     "unknown size"
                     if results["Y"]["size"] is None
                     else pretty_bytes(results["Y"]["size"])
                 )
-                echo(f'  {results["Y"]["count"]} present {files} ({size})')
+                echo(f"  {results['Y']['count']} present {files} ({size_str})")
             if results["M"]["count"]:
                 files = "files" if results["M"]["count"] != 1 else "file"
-                size = (
+                size_str = (
                     "unknown size"
                     if results["M"]["size"] is None
                     else pretty_bytes(results["M"]["size"])
                 )
-                echo(f'  {results["M"]["count"]} marked {files} ({size})')
+                echo(f"  {results['M']['count']} marked {files} ({size_str})")
             if results["N"]["count"]:
                 files = "files" if results["N"]["count"] != 1 else "file"
-                size = (
+                size_str = (
                     "unknown size"
                     if results["N"]["size"] is None
                     else pretty_bytes(results["N"]["size"])
                 )
-                echo(f'  {results["N"]["count"]} released {files} ({size})')
+                echo(f"  {results['N']['count']} released {files} ({size_str})")
 
         # Now update, if needed
         if update:

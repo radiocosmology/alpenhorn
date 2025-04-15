@@ -193,7 +193,7 @@ def test_isolation(enable: bool = True) -> None:
     _test_isolation = enable
 
 
-def load_config(cli_conf: os.PathLike, cli: bool) -> None:
+def load_config(cli_conf: str | os.PathLike | None, cli: bool) -> None:
     """Find and load the configuration from a file."""
 
     global config, _test_isolation
@@ -216,7 +216,7 @@ def load_config(cli_conf: os.PathLike, cli: bool) -> None:
         config_files.append(enviro_conf)
 
     if cli_conf:
-        config_files.append(cli_conf)
+        config_files.append(str(cli_conf))
 
     no_config = True
 
