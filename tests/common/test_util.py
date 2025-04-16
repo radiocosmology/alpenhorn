@@ -67,9 +67,6 @@ def test_gethostname_default():
 
 def test_pretty_bytes():
     """Test util.pretty_bytes."""
-    with pytest.raises(ValueError):
-        util.pretty_bytes(-1)
-
     with pytest.raises(TypeError):
         util.pretty_bytes({})
 
@@ -108,6 +105,12 @@ def test_pretty_bytes():
     assert util.pretty_bytes(12) == "12 B"
     assert util.pretty_bytes(1) == "1 B"
     assert util.pretty_bytes(0) == "0 B"
+
+    # Also negative sizes are permitted
+    assert util.pretty_bytes(-123456789012) == "-115.0 GiB"
+    assert util.pretty_bytes(-12345678) == "-11.77 MiB"
+    assert util.pretty_bytes(-1234) == "-1.205 kiB"
+    assert util.pretty_bytes(-1) == "-1 B"
 
 
 def test_pretty_deltat():

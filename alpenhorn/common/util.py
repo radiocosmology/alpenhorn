@@ -361,28 +361,30 @@ def pretty_bytes(num: int | None) -> str:
         return "-"
 
     # Reject weird stuff
+    sign = ""
     try:
         num = int(num)
         if num < 0:
-            raise ValueError("negative size")
+            sign = "-"
+            num = -num
     except TypeError:
         raise TypeError("non-numeric size")
 
     if num < 2**10:
-        return f"{num} B"
+        return f"{sign}{num} B"
 
     for x, p in enumerate("kMGTPE"):
         if num < 2 ** ((2 + x) * 10):
             num /= 2 ** ((1 + x) * 10)
             if num >= 100:
-                return f"{num:.1f} {p}iB"
+                return f"{sign}{num:.1f} {p}iB"
             if num >= 10:
-                return f"{num:.2f} {p}iB"
-            return f"{num:.3f} {p}iB"
+                return f"{sign}{num:.2f} {p}iB"
+            return f"{sign}{num:.3f} {p}iB"
 
     # overflow or something: in this case lets just go
     # with what we were given and get on with our day.
-    return f"{num} B"
+    return f"{sign}{num} B"
 
 
 def pretty_deltat(seconds: float) -> str:
