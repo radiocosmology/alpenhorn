@@ -69,10 +69,12 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     """LustreHSM node I/O.
 
     Required io_config keys:
-        * quota_group : string
-            the user group to query quota for
         * headroom: float
             the amount of space in kiB to keep empty on the disk.
+        * quota_id: the id (username, uid, group name, gid, or project id) to query
+            quota for.
+        * quota_type: One of "user", "group" or "project" indicating how to
+            interpret the value of quota_id.
 
     Optional io_config keys:
         * lfs : string
@@ -82,6 +84,8 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             seconds if not given.
         * fixed_quota : integer
             the quota, in kiB, on the Lustre disk backing the HSM system
+        * quota_type: One of "user", "group" or "project" indicating how to
+            interpret the value of quota_id.  If omitted, "group" is assumed.
         * release_check_count : integer
             The number of files to check at a time when doing idle HSM status
             update (see idle_update()).  Default is 100.

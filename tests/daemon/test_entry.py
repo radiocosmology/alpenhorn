@@ -116,7 +116,10 @@ def e2e_db(xfs, clidb_noinit, hostname):
         host=hostname,
         active=True,
         avail_gb=2000.0 / 2**30,
-        io_config='{"quota_group": "qgroup", "headroom": 10, "restore_wait": 1}',
+        io_config=(
+            '{"quota_id": "qid", "quota_type": "project", '
+            '"headroom": 10, "restore_wait": 1}'
+        ),
     )
     sf1 = StorageNode.create(
         name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True
@@ -133,7 +136,10 @@ def e2e_db(xfs, clidb_noinit, hostname):
         root="/nl2",
         host=hostname,
         active=True,
-        io_config='{"quota_group": "qgroup", "headroom": 1, "release_check_count": 1}',
+        io_config=(
+            '{"quota_id": "qid", "quota_type": "project", '
+            '"headroom": 1, "release_check_count": 1}'
+        ),
         avail_gb=2000.0 / 2**30,
     )
     StorageNode.create(name="sf2", group=nlgrp, root="/sf2", host=hostname, active=True)
@@ -328,7 +334,7 @@ def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync):
     assert result.exit_code == 0
 
     # Check HSM
-    lfs = mock_lfs(quota_group="qgroup")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state("/nl2/acq1/correct.me") == lfs.HSM_RESTORED
     assert lfs.hsm_state("/nl1/acq1/restore.me") == lfs.HSM_RESTORED
     assert lfs.hsm_state("/nl1/acq1/release.me") == lfs.HSM_RELEASED

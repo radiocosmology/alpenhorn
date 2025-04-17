@@ -22,7 +22,8 @@ def node(
     simplenode.io_class = "LustreHSM"
 
     simplenode.io_config = (
-        '{"quota_group": "qgroup", "headroom": 10250, "release_check_count": 7}'
+        '{"quota_id": "qid", "quota_type": "group", '
+        '"headroom": 10250, "release_check_count": 7}'
     )
 
     # Some files
@@ -52,7 +53,7 @@ def test_init_no_headroom(have_lfs, simplenode):
     """No headroom is an error"""
 
     simplenode.io_class = "LustreHSM"
-    simplenode.io_config = '{"quota_group": "qgroup"}'
+    simplenode.io_config = '{"quota_id": "qid", "quota_type": "group"}'
 
     with pytest.raises(KeyError):
         UpdateableNode(None, simplenode)
@@ -63,7 +64,8 @@ def test_init_bad_release_count(simplenode, have_lfs):
 
     simplenode.io_class = "LustreHSM"
     simplenode.io_config = (
-        '{"quota_group": "qgroup", "headroom": 300000, "release_check_count": -1}'
+        '{"quota_id": "qgroup", "quota_type": "group", '
+        '"headroom": 300000, "release_check_count": -1}'
     )
 
     with pytest.raises(ValueError):
@@ -75,7 +77,8 @@ def test_init_bad_restore_wait(simplenode, have_lfs):
 
     simplenode.io_class = "LustreHSM"
     simplenode.io_config = (
-        '{"quota_group": "qgroup", "headroom": 300000, "restore_wait": -1}'
+        '{"quota_id": "qgroup", "quota_type": "group", '
+        '"headroom": 300000, "restore_wait": -1}'
     )
 
     with pytest.raises(ValueError):
@@ -153,7 +156,7 @@ def test_release_files(queue, mock_lfs, node):
     assert ArchiveFileCopy.get(id=7).last_update == 5
 
     # Check hsm_relase was actually called
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state("/node/simpleacq/file1") == lfs.HSM_RELEASED
     assert lfs.hsm_state("/node/simpleacq/file2") == lfs.HSM_RELEASED
     assert lfs.hsm_state("/node/simpleacq/file3") == lfs.HSM_RELEASED
@@ -288,7 +291,7 @@ def test_check_ready_restored(xfs, queue, node, mock_lfs):
 
     # File is still restored
     assert ArchiveFileCopy.get(id=1).ready
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
 
 
@@ -332,7 +335,7 @@ def test_check_released(xfs, queue, mock_lfs, node):
     async_mock.assert_called_once()
 
     # File has been re-released
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RELEASED
 
 
@@ -372,7 +375,7 @@ def test_check_ready_released(xfs, queue, mock_lfs, node):
     async_mock.assert_called_once()
 
     # File has been restored
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
 
 
@@ -396,7 +399,7 @@ def test_ready_path(mock_lfs, node):
     assert not node.io.ready_path("/node/simpleacq/file5")
 
     # But now released file is recalled.
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state("/node/simpleacq/file1") == lfs.HSM_RESTORED
     assert lfs.hsm_state("/node/simpleacq/file2") == lfs.HSM_RESTORING
     assert lfs.hsm_state("/node/simpleacq/file3") == lfs.HSM_UNARCHIVED
@@ -436,7 +439,7 @@ def test_ready_pull_restored(mock_lfs, node, queue, archivefilecopyrequest):
     assert ArchiveFileCopy.get(id=1).last_update >= before
 
     # File is restored
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORED
 
 
@@ -469,7 +472,7 @@ def test_ready_pull_restoring(mock_lfs, node, queue, archivefilecopyrequest):
     assert not ArchiveFileCopy.get(id=1).ready
 
     # File is still being restored
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORING
 
 
@@ -508,7 +511,7 @@ def test_ready_pull_released(mock_lfs, node, queue, archivefilecopyrequest):
     task()
 
     # File is being restored
-    lfs = mock_lfs("")
+    lfs = mock_lfs("", "group")
     assert lfs.hsm_state(copy.path) == lfs.HSM_RESTORING
 
 

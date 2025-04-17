@@ -181,8 +181,8 @@ def test_ioload(storagegroup, storagenode, mock_lfs):
     for ioclass, ioconfig in [
         ("Default", None),
         ("Polling", None),
-        ("LustreQuota", '{"quota_group": "qgroup"}'),
-        ("LustreHSM", '{"quota_group": "qgroup", "headroom": 100000}'),
+        ("LustreQuota", '{"quota_id": "qid", "quota_type": "project"}'),
+        ("LustreHSM", '{"quota_id": "qid", "quota_type": "group", "headroom": 100000}'),
         (None, None),
     ]:
         storagenode(
