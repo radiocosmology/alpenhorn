@@ -92,14 +92,16 @@ class LFS:
 
     Parameters:
     -----------
-    quota_group : str
-        The name of the group to use when running quota queries
+    quota_id : str
+        The username, uid, group name, gid, or project id to query quota for.
+        The interpretation of this parameter is set by the value of quota_type.
+    quota_type : str
+        One of "user", "group", "project", indicating the type of quota to fetch.
     fixed_quota : integer, optional
-        If not None, a quota size in kiB which will override the
-        maximum quota reported by "lfs quota".
+        If not None, a quota size in kiB which will override the maximum quota
+        reported by "lfs quota".
     lfs : string, optional
-        The name of the lfs(1) command; may include a path.
-        Defaults to "lfs".
+        The name of the lfs(1) command; may include a path.  Defaults to "lfs".
     path : string, optional
         If not None, the search path to use to look for the lfs(1)
         commnad.  If None, the "PATH" environmental variable is used.
@@ -117,14 +119,25 @@ class LFS:
 
     def __init__(
         self,
-        quota_group: str,
+        quota_id: str,
+        quota_type: str,
         fixed_quota: int | None = None,
         lfs: str = "lfs",
         path: str | None = None,
         timeout: int | None = None,
     ) -> None:
-        self._quota_group = quota_group
+        self._quota_id = quota_id
         self._fixed_quota = fixed_quota
+
+        # Set flag based on quota type
+        if quota_type == "group":
+            self._quota_type = "-g"
+        elif quota_type == "project":
+            self._quota_type = "-p"
+        elif quota_type == "user":
+            self._quota_type = "-u"
+        else:
+            raise ValueError(f"invalid quota_type: {quota_type}")
 
         if timeout is None:
             self._timeout = 60
@@ -218,9 +231,9 @@ class LFS:
             but no fixed_quota was specified.
         """
 
-        # If possible, "lfs quota -q -g <group> <path>" will output quota
+        # If possible, "lfs quota -q <type> <id> <path>" will output quota
         # information on the first line.  But, if the path is too long
-        # (more than 15 characters), the path will be printed by itelf
+        # (more than 15 characters), the path will be printed by itself
         # on the first line and then the quota information will end up on
         # the second line.
         #
@@ -243,7 +256,9 @@ class LFS:
         # Stringify path
         path = str(path)
 
-        stdout = self.run_lfs("quota", "-q", "-g", self._quota_group, path)["output"]
+        stdout = self.run_lfs("quota", "-q", self._quota_type, self._quota_id, path)[
+            "output"
+        ]
         if stdout is None:
             return None  # Command returned error
 

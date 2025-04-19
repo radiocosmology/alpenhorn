@@ -67,7 +67,9 @@ def test_import_file_not_ready(dbtables, xfs, queue, simplenode, mock_lfs):
 
     # Set up node for LustreHSMIO
     simplenode.io_class = "LustreHSM"
-    simplenode.io_config = '{"quota_group": "qgroup", "headroom": 300000}'
+    simplenode.io_config = (
+        '{"quota_id": "qid", "quota_type": "group", "headroom": 300000}'
+    )
     unode = UpdateableNode(queue, simplenode)
 
     xfs.create_file("/node/acq/file")
@@ -83,7 +85,7 @@ def test_import_file_not_ready(dbtables, xfs, queue, simplenode, mock_lfs):
     )
 
     # File is being restored
-    assert mock_lfs("").hsm_state("/node/acq/file") == HSMState.RESTORING
+    assert mock_lfs("", "group").hsm_state("/node/acq/file") == HSMState.RESTORING
 
 
 def test_import_file_no_ext(dbtables, unode):

@@ -22,7 +22,7 @@ def group(xfs, mock_lfs, hostname, queue, storagegroup, storagenode):
             storage_type="A",
             root="/hsm",
             host=hostname,
-            io_config='{"quota_group": "qgroup", "headroom": 10250}',
+            io_config='{"quota_id": "qid", "quota_type": "group", "headroom": 10250}',
         ),
     )
     smallfile = UpdateableNode(
@@ -75,7 +75,7 @@ def test_init(storagegroup, storagenode, queue, mock_lfs):
             name="hsm",
             group=stgroup,
             io_class="LustreHSM",
-            io_config='{"quota_group": "qgroup", "headroom": 10250}',
+            io_config='{"quota_id": "qid", "quota_type": "group", "headroom": 10250}',
         ),
     )
     smallfile = UpdateableNode(

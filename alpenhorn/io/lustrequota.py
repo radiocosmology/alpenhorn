@@ -32,7 +32,10 @@ class LustreQuotaNodeIO(DefaultNodeIO):
     free space, rather than stat.
 
     Required io_config keys:
-        * quota_group: the user group to query quota for
+        * quota_id: the id (username, uid, group name, gid, or project id) to query
+            quota for.
+        * quota_type: One of "user", "group" or "project" indicating how to
+            interpret the value of quota_id.
 
     Optional io_config keys:
         * fixed_quota: a fixed number of kiB to use to override the max quota
@@ -44,10 +47,10 @@ class LustreQuotaNodeIO(DefaultNodeIO):
 
     Notes
     -----
-    If the provided `quota_group` is using the default block quota on the
-    filesystem, then block quota max cannot be determined from the lfs(1)
-    output.  In this case, `fixed_quota` _must_ be used to specify the default
-    quota for any meaninful free space value to be returned.
+    If the provided `quota_id` is using the default block quota on the filesystem,
+    then block quota max cannot be determined from the lfs(1) output.  In this case,
+    `fixed_quota` _must_ be used to specify the default quota for any meaningful free
+    space value to be returned.
     """
 
     def __init__(
@@ -55,15 +58,35 @@ class LustreQuotaNodeIO(DefaultNodeIO):
     ) -> None:
         super().__init__(node, config, queue)
 
-        # Make alpenhornd crash if the io_config is incomplete.
-        if "quota_group" not in config:
-            raise KeyError(
-                f'"quota_group" missing from StorageNode {node.name} io_config'
-            )
+        quota_id = config.get("quota_id", None)
+        quota_type = config.get("quota_type", None)
+
+        # Make alpenhornd crash if the io_config is incomplete, but allow
+        # "quota_group" legacy support
+        if quota_id is None or quota_type is None:
+            try:
+                quota_id = config["quota_group"]
+                quota_type = "group"
+                log.warning(
+                    "Using deprecated 'quota_group' in "
+                    f"StorageNode {node.name} io_config"
+                )
+            except KeyError:
+                pass
+
+            if quota_id is None:
+                raise KeyError(
+                    f'"quota_id" missing from StorageNode {node.name} io_config'
+                )
+            if quota_type is None:
+                raise KeyError(
+                    f'"quota_type" missing from StorageNode {node.name} io_config'
+                )
 
         # Initialise the lfs(1) wrapper
         self._lfs = LFS(
-            quota_group=config["quota_group"],
+            quota_id=quota_id,
+            quota_type=quota_type,
             fixed_quota=config.get("fixed_quota", None),
             lfs=config.get("lfs", "lfs"),
             timeout=config.get("lfs_timeout", None),

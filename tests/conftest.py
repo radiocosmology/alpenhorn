@@ -588,9 +588,11 @@ def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
     mockio.group.set_nodes = lambda nodes: nodes
 
     node = UpdateableNode(queue, stnode)
-    yield mockio, UpdateableGroup(
-        queue=queue, group=stgroup, nodes=[node], idle=True
-    ), node
+    yield (
+        mockio,
+        UpdateableGroup(queue=queue, group=stgroup, nodes=[node], idle=True),
+        node,
+    )
 
 
 @pytest.fixture
