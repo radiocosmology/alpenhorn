@@ -15,7 +15,7 @@ from typing import IO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Iterable
+    from collections.abc import Hashable, Iterable
 
     from ..daemon.update import UpdateableNode
     from ..db import (
@@ -123,11 +123,13 @@ class BaseNodeIO:
     ----------
     node : StorageNode
         the node
-    queue : FairMultiFIFOQueue
-        the task queue
     config : dict
         the parsed `node.io_config`. If `node.io_config` is None,
         this is an empty `dict`.
+    queue : FairMultiFIFOQueue
+        the task queue
+    fifo : Hashable
+        the queue fifo key to use when submitting tasks.
     """
 
     # SETUP
@@ -144,12 +146,12 @@ class BaseNodeIO:
     observer = None
 
     def __init__(
-        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
+        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue, fifo: Hashable
     ) -> None:
         self.node = node
         self._queue = queue
         self.config = config
-        self.fifo = "n:" + node.name
+        self.fifo = fifo
 
     def set_storage(self, node: StorageNode) -> None:
         """Update the cached StorageNode instance.
@@ -459,22 +461,28 @@ class BaseGroupIO:
     ----------
     group : StorageGroup
         The group
-    queue : FairMultiFIFOQueue
-        the task queue
     config : dict
         The parsed `group.io_config`. If `group.io_config` is None,
         this is an empty `dict`.
+    queue : FairMultiFIFOQueue
+        the task queue
+    fifo : Hashable
+        the queue fifo key to use when submitting tasks.
     """
 
     # SETUP
 
     def __init__(
-        self, group: StorageGroup, config: dict, queue: FairMultiFIFOQueue
+        self,
+        group: StorageGroup,
+        config: dict,
+        queue: FairMultiFIFOQueue,
+        fifo: Hashable,
     ) -> None:
         self.group = group
         self._queue = queue
         self.config = config
-        self.fifo = "g:" + group.name
+        self.fifo = fifo
 
     def set_storage(self, group: StorageGroup) -> None:
         """Update the cached StorageGroup instance.

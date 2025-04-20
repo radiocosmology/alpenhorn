@@ -178,8 +178,13 @@ class updateable_base:
             # Parse I/O config if present
             config = self._parse_io_config(storage.io_config)
 
+            # Generate a new fifo key and label it
+            fifo = (self.is_group, storage.name, time.monotonic())
+            label = f"Group {storage.name}" if self.is_group else f"Node {storage.name}"
+            self._queue.label_fifo(fifo, label=label)
+
             # Initialise I/O object
-            self.io = self.io_class(storage, config, self._queue)
+            self.io = self.io_class(storage, config, self._queue, fifo)
 
             return True
 

@@ -20,6 +20,8 @@ from .default import DefaultNodeIO
 from .lfs import LFS
 
 if TYPE_CHECKING:
+    from collections.abc import Hashable
+
     from ..queue import FairMultiFIFOQueue
     from ..storage import StorageNode
 del TYPE_CHECKING
@@ -54,9 +56,9 @@ class LustreQuotaNodeIO(DefaultNodeIO):
     """
 
     def __init__(
-        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
+        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue, fifo: Hashable
     ) -> None:
-        super().__init__(node, config, queue)
+        super().__init__(node, config, queue, fifo)
 
         quota_id = config.get("quota_id", None)
         quota_type = config.get("quota_type", None)

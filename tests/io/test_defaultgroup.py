@@ -30,8 +30,8 @@ def test_too_many_nodes(storagegroup, storagenode, queue):
     """Test DefaultGroupIO rejecting more than one node."""
 
     stgroup = storagegroup(name="group")
-    node1 = UpdateableNode(None, storagenode(name="node1", group=stgroup, active=True))
-    node2 = UpdateableNode(None, storagenode(name="node2", group=stgroup, active=True))
+    node1 = UpdateableNode(queue, storagenode(name="node1", group=stgroup, active=True))
+    node2 = UpdateableNode(queue, storagenode(name="node2", group=stgroup, active=True))
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=[node1, node2], idle=True)
     assert group._nodes is None
@@ -41,7 +41,7 @@ def test_just_enough_nodes(storagegroup, storagenode, queue):
     """Test DefaultGroupIO accepting one node."""
 
     stgroup = storagegroup(name="group")
-    node = UpdateableNode(None, storagenode(name="node1", group=stgroup, active=True))
+    node = UpdateableNode(queue, storagenode(name="node1", group=stgroup, active=True))
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=[node], idle=True)
     assert group._nodes == [node]

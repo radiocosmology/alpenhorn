@@ -49,17 +49,17 @@ def node(
     return UpdateableNode(queue, simplenode)
 
 
-def test_init_no_headroom(have_lfs, simplenode):
+def test_init_no_headroom(have_lfs, queue, simplenode):
     """No headroom is an error"""
 
     simplenode.io_class = "LustreHSM"
     simplenode.io_config = '{"quota_id": "qid", "quota_type": "group"}'
 
     with pytest.raises(KeyError):
-        UpdateableNode(None, simplenode)
+        UpdateableNode(queue, simplenode)
 
 
-def test_init_bad_release_count(simplenode, have_lfs):
+def test_init_bad_release_count(simplenode, queue, have_lfs):
     """Check for bad release_check_count."""
 
     simplenode.io_class = "LustreHSM"
@@ -69,10 +69,10 @@ def test_init_bad_release_count(simplenode, have_lfs):
     )
 
     with pytest.raises(ValueError):
-        UpdateableNode(None, simplenode)
+        UpdateableNode(queue, simplenode)
 
 
-def test_init_bad_restore_wait(simplenode, have_lfs):
+def test_init_bad_restore_wait(simplenode, queue, have_lfs):
     """Check for bad restore_wait."""
 
     simplenode.io_class = "LustreHSM"
@@ -82,7 +82,7 @@ def test_init_bad_restore_wait(simplenode, have_lfs):
     )
 
     with pytest.raises(ValueError):
-        UpdateableNode(None, simplenode)
+        UpdateableNode(queue, simplenode)
 
 
 def test_release_files_okay(queue, node):

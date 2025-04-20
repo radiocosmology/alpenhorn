@@ -23,6 +23,7 @@ def mock_post_add():
 
 @pytest.fixture
 def db_setup(
+    queue,
     mock_filesize,
     mock_post_add,
     storagegroup,
@@ -40,7 +41,7 @@ def db_setup(
     )
 
     return (
-        UpdateableNode(None, node_to).io,
+        UpdateableNode(queue, node_to).io,
         archivefilecopy(file=simplefile, node=node_from, has_file="Y"),
         archivefilecopyrequest(file=simplefile, node_from=node_from, group_to=group_to),
         time.time() - 2,  # start_time

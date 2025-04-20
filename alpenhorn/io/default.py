@@ -29,7 +29,7 @@ from .base import BaseGroupIO, BaseNodeIO, BaseNodeRemote
 from .updownlock import UpDownLock
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Hashable, Iterable
 
     from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
     from ..service.queue import FairMultiFIFOQueue
@@ -79,9 +79,9 @@ class DefaultNodeIO(BaseNodeIO):
     observer = Observer
 
     def __init__(
-        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue
+        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue, fifo: Hashable
     ) -> None:
-        super().__init__(node, config, queue)
+        super().__init__(node, config, queue, fifo)
 
         # The directory tree modification lock
         self.tree_lock = UpDownLock()

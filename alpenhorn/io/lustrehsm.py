@@ -31,7 +31,7 @@ from .lustrequota import LustreQuotaNodeIO
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Generator
+    from collections.abc import Generator, Hashable
 
     from ..db import ArchiveFile, ArchiveFileCopyRequest
     from ..scheduler import FairMultiFIFOQueue
@@ -97,9 +97,13 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     remote_class = LustreHSMNodeRemote
 
     def __init__(
-        self, node: UpdateableNode, config: dict, queue: FairMultiFIFOQueue
+        self,
+        node: UpdateableNode,
+        config: dict,
+        queue: FairMultiFIFOQueue,
+        fifo: Hashable,
     ) -> None:
-        super().__init__(node, config, queue)
+        super().__init__(node, config, queue, fifo)
 
         self._headroom = config["headroom"] * 2**10  # convert from kiB
 
@@ -661,9 +665,13 @@ class LustreHSMGroupIO(DefaultGroupIO):
     # SETUP
 
     def __init__(
-        self, group: UpdateableGroup, config: dict, queue: FairMultiFIFOQueue
+        self,
+        group: UpdateableGroup,
+        config: dict,
+        queue: FairMultiFIFOQueue,
+        fifo: Hashable,
     ) -> None:
-        super().__init__(group, config, queue)
+        super().__init__(group, config, queue, fifo)
 
         self._threshold = self.config.get("threshold", 1000000000)  # bytes
 
