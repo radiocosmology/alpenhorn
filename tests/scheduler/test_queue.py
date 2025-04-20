@@ -2,6 +2,7 @@
 
 import threading
 from time import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -193,3 +194,26 @@ def test_exclusive(clean_queue):
     # Everything's taken care of
     assert clean_queue.qsize == 0
     assert clean_queue.inprogress_size == 0
+
+
+def test_label(clean_queue):
+    """Test label_fifo()"""
+
+    clean_queue.label_fifo(key="fifo", label="label")
+
+    # Check that the label is used
+    mock = MagicMock()
+    with patch("alpenhorn.common.metrics.Metric.add", mock):
+        clean_queue.put(None, "fifo")
+        clean_queue.get()
+        clean_queue.task_done("fifo")
+
+        # Also try an unlabelled fifo
+        clean_queue.put(None, "fifo2")
+        clean_queue.get()
+        clean_queue.task_done("fifo2")
+
+    mock.assert_any_call(1, fifo="label", status="queued")
+    mock.assert_any_call(-1, fifo="label", status="queued")
+    mock.assert_any_call(1, fifo="fifo2", status="queued")
+    mock.assert_any_call(-1, fifo="fifo2", status="queued")
