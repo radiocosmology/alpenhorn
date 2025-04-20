@@ -30,6 +30,7 @@ class FairMultiFIFOQueue:
         "_all_tasks_done",
         "_deferrals",
         "_dlock",
+        "_fifo_labels",
         "_fifo_locks",
         "_fifos",
         "_inprogress_counts",
@@ -77,7 +78,11 @@ class FairMultiFIFOQueue:
         # of the primary _lock.
         self._dlock = threading.Lock()
 
-        # Metrics
+        # METRICS
+        # =======
+
+        # FIFO labels.  A dict mapping FIFO keys to labels
+        self._fifo_labels = {}
 
         # Count of tasks
         self._qcount = Metric(
@@ -85,25 +90,33 @@ class FairMultiFIFOQueue:
         )
 
         # Marginalised over status
-        self._qcount_any = Metric(
-            "queue_count",
-            "Count of queued tasks",
-            unbound=["fifo"],
-            bound={"status": "any"},
-        )
+        self._qcount_any = self._qcount.bind(status="any")
 
         # Marignalised over fifo
-        self._qcount_all = Metric(
-            "queue_count",
-            "Count of queued tasks",
-            unbound=["status"],
-            bound={"fifo": "_ALL_"},
-        )
+        self._qcount_all = self._qcount.bind(fifo="_ALL")
 
         # Track locked fifos
         self._qlock = Metric(
             "queue_locked", "The queue fifo is locked", unbound=["fifo"]
         )
+
+    def _adj_metrics(self, value: int, fifo: Hashable, status: str) -> None:
+        """Adjust the queue_count metric by value.
+
+        Adds `value` (which may be negative) to the metric with fifo=fifo and
+        status=status.  Also adds one to the marginalised ..._any and ..._all
+        metrics.
+        """
+
+        try:
+            fifo_label = self._fifo_labels[fifo]
+        except KeyError:
+            fifo_label = str(fifo)
+            self._fifo_labels[fifo] = fifo_label
+
+        self._qcount.add(value, fifo=fifo_label, status=status)
+        self._qcount_any.add(value, fifo=fifo_label)
+        self._qcount_all.add(value, status=status)
 
     def _inc_metrics(self, fifo: Hashable, status: str) -> None:
         """Increment the queue_count metric.
@@ -111,12 +124,7 @@ class FairMultiFIFOQueue:
         Adds one to the metric with fifo=fifo and status=status.  Also adds
         one to the marginalised ..._any and ..._all metrics.
         """
-
-        fifo = str(fifo)
-
-        self._qcount.inc(fifo=fifo, status=status)
-        self._qcount_any.inc(fifo=fifo)
-        self._qcount_all.inc(status=status)
+        self._adj_metrics(1, fifo, status)
 
     def _dec_metrics(self, fifo: Hashable, status: str) -> None:
         """Decrement the queue_count metric.
@@ -124,12 +132,30 @@ class FairMultiFIFOQueue:
         Subtracts one from the metric with fifo=fifo and status=status.  Also
         subtracts one from the marginalised ..._any and ..._all metrics.
         """
+        self._adj_metrics(-1, fifo, status)
 
-        fifo = str(fifo)
+    def label_fifo(self, key: Hashable, label: str) -> None:
+        """Set the metric label for `key` to `label`.
 
-        self._qcount.dec(fifo=fifo, status=status)
-        self._qcount_any.dec(fifo=fifo)
-        self._qcount_all.dec(status=status)
+        This sets the value of the "fifo" label used in queue metrics
+        for the FIFO named `key`.
+
+        Parameters
+        ----------
+        key : Hashable
+            The FIFO to label.  The FIFO does not need to exist in the queue.
+        label : string
+            The label to use for the FIFO.
+
+        Notes
+        -----
+        Labels do not need to be unique.  If two FIFOs have the same label,
+        their metrics will be combined.
+
+        For unlablled FIFOs, the result of calling `str()` on the FIFO's
+        `key` is used in place of a label.
+        """
+        self._fifo_labels[key] = label
 
     def task_done(self, key: Hashable) -> None:
         """Report that a task from the FIFO named `key` is done.
