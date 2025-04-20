@@ -170,7 +170,7 @@ def test_serial_io(fastqueue, set_config):
     assert task_count == 3
 
 
-def test_ioload(storagegroup, storagenode, mock_lfs):
+def test_ioload(storagegroup, storagenode, queue, mock_lfs):
     """Test instantiation of the I/O classes"""
 
     for ioclass in ["Default", "Transport", "LustreHSM", None]:
@@ -193,11 +193,11 @@ def test_ioload(storagegroup, storagenode, mock_lfs):
         )
 
     for node in StorageNode.select().execute():
-        unode = update.UpdateableNode(None, node)
+        unode = update.UpdateableNode(queue, node)
         assert isinstance(unode.io, BaseNodeIO)
 
     for group in StorageGroup.select().execute():
-        ugroup = update.UpdateableGroup(queue=None, group=group, nodes=[], idle=True)
+        ugroup = update.UpdateableGroup(queue=queue, group=group, nodes=[], idle=True)
         assert isinstance(ugroup.io, BaseGroupIO)
 
 

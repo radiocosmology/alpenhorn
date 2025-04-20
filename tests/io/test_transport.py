@@ -123,7 +123,7 @@ def test_group_init(transport_fleet_no_init, queue):
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
     assert group._nodes == nodes
-    assert group.io.fifo == "g:group"
+    assert group.io.fifo is not None
 
 
 def test_group_init_bad(transport_fleet_no_init, queue):

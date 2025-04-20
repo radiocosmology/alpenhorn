@@ -70,7 +70,7 @@ def test_init(storagegroup, storagenode, queue, mock_lfs):
     stgroup = storagegroup(name="group", io_class="LustreHSM")
 
     hsm = UpdateableNode(
-        None,
+        queue,
         storagenode(
             name="hsm",
             group=stgroup,
@@ -79,7 +79,7 @@ def test_init(storagegroup, storagenode, queue, mock_lfs):
         ),
     )
     smallfile = UpdateableNode(
-        None, storagenode(name="smallfile", group=stgroup, io_class="Default")
+        queue, storagenode(name="smallfile", group=stgroup, io_class="Default")
     )
 
     # These should work

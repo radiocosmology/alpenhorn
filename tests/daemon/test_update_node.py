@@ -12,11 +12,11 @@ from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
 from alpenhorn.db.storage import StorageNode
 
 
-def test_bad_ioclass(simplenode):
+def test_bad_ioclass(simplenode, queue):
     """A missing I/O class is a problem."""
 
     simplenode.io_class = "Missing"
-    unode = UpdateableNode(None, simplenode)
+    unode = UpdateableNode(queue, simplenode)
     assert unode.io_class is None
     assert unode.io is None
 
@@ -85,16 +85,16 @@ def test_reinit(storagenode, simplegroup, queue):
     assert stnode is node.db
 
 
-def test_bad_ioconfig(simplenode):
+def test_bad_ioconfig(simplenode, queue):
     """io_config not resolving to a dict is an error."""
     simplenode.io_config = "true"
 
     with pytest.raises(ValueError):
-        UpdateableNode(None, simplenode)
+        UpdateableNode(queue, simplenode)
 
     # But this is fine
     simplenode.io_config = "{}"
-    UpdateableNode(None, simplenode)
+    UpdateableNode(queue, simplenode)
 
 
 def test_idle(unode, queue):
