@@ -100,7 +100,11 @@ class Task:
         self._generator = None
 
         # Enqueue ourself
-        queue.put(self, key, exclusive)
+        try:
+            queue.put(self, key, exclusive)
+        except KeyError:
+            # Key no longer accepted
+            log.info(f"Ignoring task {self._name}: FIFO closed")
 
     def __call__(self) -> bool:
         """This method is invoked by the worker thread to run the task.
@@ -135,7 +139,11 @@ class Task:
                 f"Requeueing yielded task {self._name} in FIFO {self._key} "
                 f"with delay {result} seconds"
             )
-            self._queue.put(self, self._key, wait=result)
+            try:
+                self._queue.put(self, self._key, wait=result)
+            except KeyError:
+                # Key no longer accepted
+                log.info(f"Ignoring task {self._name}: FIFO closed")
             return False
         except StopIteration:
             # Function exited without yielding (i.e. we're done)
