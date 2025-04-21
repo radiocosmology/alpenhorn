@@ -422,7 +422,10 @@ def update_observer(
         # If this node isn't being auto-imported or we're force-stopping
         # it, delete a watcher if one was previously scheduled
         if node.name in _watchers:
-            _observers[node.io_class].unschedule(_watchers[node.name])
+            try:
+                _observers[node.io_class].unschedule(_watchers[node.name])
+            except KeyError:
+                pass  # wasn't being watched
             del _watchers[node.name]
     else:
         # If there's already a watcher for this node, do nothing

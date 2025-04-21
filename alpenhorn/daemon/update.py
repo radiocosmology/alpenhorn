@@ -46,6 +46,10 @@ class updateable_base:
     def __init__(self) -> None:
         raise NotImplementedError("updateable_base cannot be instantiated directly.")
 
+    def __del__(self) -> None:
+        # Stop updating
+        self.stop()
+
     @property
     def name(self) -> str:
         """The name of this instance."""
@@ -150,6 +154,28 @@ class updateable_base:
         # return the class
         return class_
 
+    def stop(self) -> None:
+        """Stop updating.
+
+        Called when the instance is deleted, and when reinit
+        occurs.  Clears the associated queue FIFO.
+        """
+
+        if self._fifo is not None:
+            pending_count, deferred_count = self._queue.clear_fifo(
+                self._fifo, keep_clear=True
+            )
+            total = pending_count + deferred_count
+            if total:
+                name = (
+                    f'Group "{self.name}"' if self.is_group else f'Node "{self.name}"'
+                )
+                tasks = "task" if total == 1 else "tasks"
+                log.info(
+                    f"Discarded {total} {tasks} ({pending_count} pending; "
+                    f"{deferred_count} deferred) while stopping Storage{name}."
+                )
+
     def reinit(self, storage: StorageNode | StorageGroup) -> bool:
         """Re-initialise the instance with a new database object.
 
@@ -167,6 +193,19 @@ class updateable_base:
         """
         # Does I/O instance need to be re-instantiated?
         if self._check_io_reinit(storage):
+            # The check here ensures the message is only printed if self was previously
+            # fully initialised
+            if self.db and self.io:
+                log.info(
+                    "I/O config change detected for Storage"
+                    + ("Group" if self.is_group else "Node")
+                    + f' "{self.name}": attempting re-init.'
+                )
+
+            # This will do nothing, when reinit is called from __init__, because
+            # self._fifo is None
+            self.stop()
+
             self.db = storage
             self.io_class = self._get_io_class()
 
@@ -179,12 +218,12 @@ class updateable_base:
             config = self._parse_io_config(storage.io_config)
 
             # Generate a new fifo key and label it
-            fifo = (self.is_group, storage.name, time.monotonic())
+            self._fifo = (self.is_group, storage.name, time.monotonic())
             label = f"Group {storage.name}" if self.is_group else f"Node {storage.name}"
-            self._queue.label_fifo(fifo, label=label)
+            self._queue.label_fifo(self._fifo, label=label)
 
             # Initialise I/O object
-            self.io = self.io_class(storage, config, self._queue, fifo)
+            self.io = self.io_class(storage, config, self._queue, self._fifo)
 
             return True
 
@@ -214,6 +253,9 @@ class RemoteNode(updateable_base):
         config = self._parse_io_config(node.io_config)
         self.io = self.io_class.remote_class(node, config)
 
+        # This ensures updatable_base.stop() does nothing.
+        self._fifo = None
+
 
 class UpdateableNode(updateable_base):
     """Updateable storage node
@@ -234,6 +276,7 @@ class UpdateableNode(updateable_base):
 
     def __init__(self, queue: FairMultiFIFOQueue, node: StorageNode) -> None:
         self._queue = queue
+        self._fifo = None
         self._updated = False
 
         # Set to True whenever I/O tasks are started.
@@ -262,6 +305,17 @@ class UpdateableNode(updateable_base):
             #   we never set the metric to anything)
             #   cf. https://github.com/prometheus/client_python/pull/1077
             pass
+
+        super().__del__()
+
+    def stop(self) -> None:
+        """Stop updating.
+
+        Stops auto-import, if running, and clears all pending tasks.
+        """
+        if self._fifo is not None:
+            auto_import.update_observer(self, self._queue, force_stop=True)
+        super().stop()
 
     def reinit(self, node: StorageNode) -> bool:
         """Re-initialise the instance with a new database object.
@@ -704,6 +758,7 @@ class UpdateableGroup(updateable_base):
         self._do_idle_updates = False
 
         self._queue = queue
+        self._fifo = None
 
         self.reinit(group=group, nodes=nodes, idle=idle)
 
@@ -721,6 +776,8 @@ class UpdateableGroup(updateable_base):
             # KeyError will be raised if the prom metric was never created (because
             #   we never set the metric to anything)
             pass
+
+        super().__del__()
 
     def reinit(
         self, *, group: StorageGroup, nodes: list[UpdateableNode], idle: bool
@@ -1015,10 +1072,9 @@ def update_loop(
         vetted_nodes = {}
         for name, node in nodes.items():
             if name not in new_nodes:
-                # Stop auto-import, if running
-                auto_import.update_observer(node, queue, force_stop=True)
-
                 log.info(f'Node "{name}" no longer available.')
+                # Stop updating
+                node.stop()
                 node_avail_metric.set(0, name=name)
             else:
                 vetted_nodes[name] = node
@@ -1073,6 +1129,8 @@ def update_loop(
         for name, group in groups.items():
             if name not in new_groups:
                 log.info(f'Group "{name}" no longer available.')
+                # Stop updating
+                group.stop()
                 group_avail_metric.set(0, name=name)
             else:
                 vetted_groups[name] = group

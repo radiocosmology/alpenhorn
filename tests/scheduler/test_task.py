@@ -241,43 +241,15 @@ def test_requeue_closed(queue):
     assert queue.qsize == 0
 
 
-def test_requeue_closed(queue):
-    """Test requeueing on a closed FIFO"""
-
-    def _task(task):
-        task.requeue()
-
-    # Queue the task
-    Task(_task, queue, "fifo", requeue=True)
-    assert queue.qsize == 1
-
-    # Get the task
-    task, key = queue.get()
-
-    # Clear and close the fifo
-    assert queue.clear_fifo("fifo", keep_clear=True) == (0, 0)
-
-    # Queue is empty
-    assert queue.qsize == 0
-
-    # Run the task, to requeue it
-    task()
-    queue.task_done(key)
-
-    # Queue is empty because requeue didn't happen
-    assert queue.qsize == 0
-
-
 def test_deferred_closed(queue):
     """Test deferring a task on a closed fifo."""
-    task_finished = False
 
     def _task(task, queue):
         # Close the fifo here
         queue.clear_fifo("fifo", keep_clear=True)
 
         # Defer
-        yield 1e-5
+        yield 1
 
     Task(_task, queue, "fifo", args=(queue,))
     assert queue.qsize == 1

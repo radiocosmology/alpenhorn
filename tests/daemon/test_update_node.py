@@ -85,6 +85,31 @@ def test_reinit(storagenode, simplegroup, queue):
     assert stnode is node.db
 
 
+def test_reinit_clear_fifo(storagenode, simplegroup, queue):
+    """Test that reinit clears pending tasks from the queue."""
+
+    # Create a node
+    stnode = storagenode(name="node", group=simplegroup)
+    node = UpdateableNode(queue, stnode)
+
+    # Queue something with the node's FIFO key
+    queue.put(None, node._fifo)
+
+    # Check queue
+    assert queue.qsize == 1
+
+    # Change io_config to force re-init
+    stnode = StorageNode.get(id=node.db.id)
+    stnode.io_config = "{}"
+    stnode.save()
+
+    # Check that reinit occurs
+    assert node.reinit(stnode)
+
+    # Now the queue is empty
+    assert queue.qsize == 0
+
+
 def test_bad_ioconfig(simplenode, queue):
     """io_config not resolving to a dict is an error."""
     simplenode.io_config = "true"
