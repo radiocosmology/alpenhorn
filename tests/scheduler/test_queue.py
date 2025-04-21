@@ -12,12 +12,18 @@ def clean_queue(queue):
     """A clean queue init and teardown"""
     yield queue
 
-    # Clean the dirty queue
+    # Check that the queue is clean by pulling everything out
+    count = 0
+    while queue.qsize > 0:
+        item, key = queue.get()
+        queue.task_done(key)
+        count += 1
+
     queue.join()
 
     # Check for clean shutdown
-    assert queue.qsize == 0
-    assert queue.inprogress_size == 0
+    assert count == 0, "Queue not clean during teardown!"
+    assert queue.inprogress_size == 0, "Task(s) left in-progress during teardown!"
 
 
 def test_emptyget(clean_queue):
@@ -217,3 +223,110 @@ def test_label(clean_queue):
     mock.assert_any_call(-1, fifo="label", status="queued")
     mock.assert_any_call(1, fifo="fifo2", status="queued")
     mock.assert_any_call(-1, fifo="fifo2", status="queued")
+
+
+def test_clear_missing(clean_queue):
+    """Clearing a non-existent FIFO should work."""
+
+    assert clean_queue.clear_fifo("MISSING") == (0, 0)
+
+
+def test_clear_nokeep(clean_queue):
+    """Test put after clearing a FIFO without keep_clear."""
+
+    assert clean_queue.clear_fifo("fifo") == (0, 0)
+
+    clean_queue.put(None, "fifo")
+    assert clean_queue.qsize == 1
+
+    # Clean up
+    item, key = clean_queue.get()
+    clean_queue.task_done(key)
+
+
+def test_clear_keep(clean_queue):
+    """Test keeping a FIFO clear."""
+
+    assert clean_queue.clear_fifo("fifo", keep_clear=True) == (0, 0)
+
+    with pytest.raises(KeyError):
+        clean_queue.put(None, "fifo")
+
+    # Queue empty
+    assert clean_queue.qsize == 0
+
+    # Try a deferred put
+    with pytest.raises(KeyError):
+        clean_queue.put(None, "fifo", wait=1)
+
+    # Queue still empty
+    assert clean_queue.qsize == 0
+
+
+def test_clear_pending(clean_queue):
+    """Test clearing pending tasks from a FIFO."""
+
+    # Queue some stuff, in several FIFOs
+    clean_queue.put(1, "fifo")
+    clean_queue.put(2, "fifo")
+    clean_queue.put(3, "fifo")
+    clean_queue.put(4, "fifo2")
+    clean_queue.put(5, "fifo2")
+    clean_queue.put(6, "fifo2")
+    assert clean_queue.qsize == 6
+    assert clean_queue.fifo_size("fifo") == 3
+
+    assert clean_queue.clear_fifo("fifo") == (3, 0)
+
+    assert clean_queue.qsize == 3
+    assert clean_queue.fifo_size("fifo") == 0
+
+    # Remove the rest
+    item, key = clean_queue.get()
+    clean_queue.task_done(key)
+    item, key = clean_queue.get()
+    clean_queue.task_done(key)
+    item, key = clean_queue.get()
+    clean_queue.task_done(key)
+
+
+def test_clear_inprogress(clean_queue):
+    """Test clearing a FIFO with something in-progress."""
+
+    # Queue some stuff, in several FIFOs
+    clean_queue.put(1, "fifo")
+    clean_queue.put(2, "fifo")
+    assert clean_queue.qsize == 2
+    assert clean_queue.inprogress_size == 0
+
+    # Retrieve the first thing
+    clean_queue.get()
+    assert clean_queue.qsize == 1
+    assert clean_queue.inprogress_size == 1
+
+    assert clean_queue.clear_fifo("fifo") == (1, 0)
+
+    assert clean_queue.qsize == 0
+    assert clean_queue.inprogress_size == 1
+
+    # Complete the task
+    clean_queue.task_done("fifo")
+
+    assert clean_queue.qsize == 0
+    assert clean_queue.inprogress_size == 0
+
+
+def test_clear_deferred(clean_queue):
+    """Test clearing deferred tasks from a FIFO."""
+
+    # Queue some stuff, in several FIFOs
+    clean_queue.put(1, "fifo", wait=1)
+    clean_queue.put(2, "fifo", wait=2)
+    clean_queue.put(3, "fifo", wait=3)
+    assert clean_queue.qsize == 0
+    assert clean_queue.deferred_size == 3
+
+    assert clean_queue.clear_fifo("fifo") == (0, 3)
+
+    assert clean_queue.qsize == 0
+    assert clean_queue.deferred_size == 0

@@ -28,6 +28,7 @@ class FairMultiFIFOQueue:
 
     __slots__ = [
         "_all_tasks_done",
+        "_cleared_fifos",
         "_deferrals",
         "_dlock",
         "_fifo_labels",
@@ -63,6 +64,8 @@ class FairMultiFIFOQueue:
         self._keys_by_inprogress = [set()]
         # The set of locked FIFOs
         self._fifo_locks = set()
+        # The set of retired FIFOs
+        self._cleared_fifos = set()
 
         # The thread lock (mutex) and the conditionals (see queue.py for
         # details, which this implementation broadly follows)
@@ -99,6 +102,9 @@ class FairMultiFIFOQueue:
         self._qlock = Metric(
             "queue_locked", "The queue fifo is locked", unbound=["fifo"]
         )
+
+    # METRIC HANDLING
+    # ===============
 
     def _adj_metrics(self, value: int, fifo: Hashable, status: str) -> None:
         """Adjust the queue_count metric by value.
@@ -157,79 +163,8 @@ class FairMultiFIFOQueue:
         """
         self._fifo_labels[key] = label
 
-    def task_done(self, key: Hashable) -> None:
-        """Report that a task from the FIFO named `key` is done.
-
-        After a consumer has finished processing a task provided to it
-        by a get(), the key provided by that get() must be passed back
-        into this function to report the completion of that task.
-
-        Parameters
-        ----------
-        key : hashable
-            The name of the FIFO that the completed task came from.  The
-            value passed in should previously have been returned from a
-            `get()` call.
-
-        Raises
-        ------
-        ValueError
-            The FIFO named `key` has no in-progress tasks.
-        """
-
-        with self._all_tasks_done:
-            # The number of currently in-progress tasks (including the one
-            # that's finishing now)
-            count = self._inprogress_counts.get(key, 0)
-
-            # If the specified FIFO has no in-progress tasks, raise value error
-            if count <= 0:
-                raise ValueError(f"no unfinished tasks for FIFO {key}")
-
-            # Remove the FIFO from the ordered list
-            self._keys_by_inprogress[count].remove(key)
-
-            # Unlock this FIFO if it was locked.  If the caller has been working on
-            # an exclusive item from the FIFO, then this call must be completing it,
-            # because there can't be anything else in-progress from this FIFO.  So,
-            # it's always reasonable to try to unlock a FIFO here.
-            self._fifo_locks.discard(key)
-            self._qlock.set(0, fifo=key)
-
-            # Decrement counts
-            count -= 1
-            self._inprogress_counts[key] = count
-            self._total_inprogress -= 1
-            self._dec_metrics(fifo=key, status="in-progress")
-
-            # Put the fifo back in the ordered list.
-            #
-            # XXX Could just delete a FIFO which is now empty here.
-            #
-            # In general, there's no reason to expect an empty FIFO to be reused,
-            # by the caller, and numerous empty FIFOs will slow down get() over time,
-            # so triming could decreate get() execution time.
-            #
-            # However, in our particular case (alpenhornd), the maximum number
-            # of FIFOs is total number of nodes ever active on this host, which is
-            # generally small and static enough not to have to worry about it.
-            self._keys_by_inprogress[count].add(key)
-
-            # XXX Could trim _keys_by_inprogress here.
-            #
-            # In general, it's potentially useful: it's possible for a bunch
-            # of unnecessary empty sets to accumulate at the tail of this list,
-            # so trimming can save memory in cases where large excursions of
-            # in-progress counts happen occasionally.
-            #
-            # However, in our particular case (alpenhornd), at most, the list
-            # will have as many elements as the maximum number of worker threads
-            # that have ever existed at one time, so it's probably not worth the
-            # trouble.
-
-            # Notify waiters when there are no pending tasks
-            if self._total_queued == 0 and self._total_inprogress == 0:
-                self._all_tasks_done.notify_all()  # wakes up all waiting threads
+    # QUEUE MAINTENANCE
+    # =================
 
     def join(self) -> None:
         """Blocks until there's nothing left in the queue.
@@ -252,6 +187,81 @@ class FairMultiFIFOQueue:
 
         # Clear the metric.  This clears the marginalised versions, too
         self._qcount.clear()
+
+    def clear_fifo(self, key: Hashable, keep_clear: bool = False) -> tuple[int, int]:
+        """Remove all items from a fifo.
+
+        Removes all pending and deferred tasks from the FIFO named `key`.
+        In-progress tasks are not removed.
+
+        If the FIFO is not present in the queue, this function successfully
+        does nothing.
+
+        Parameters
+        ----------
+        key : hashable
+            The name of the FIFO to clear
+        keep_clear : bool
+            If True, don't accept any further puts on this FIFO.  If this is
+            False (the default), the caller should not assume that the specified
+            FIFO is empty when this function returns.
+
+        Returns
+        -------
+        Returns a two-tuple of integers:
+          * pending_removed: number of pending tasks removed
+          * deferred_removed: number of deferred tasks removed
+        """
+
+        # If we're keeping it clear, add the fifo to the list first, so that
+        # no concurrent put tries to add something while we're removing stuff
+        if keep_clear:
+            self._cleared_fifos.add(key)
+
+        # Clear deferred puts
+        deferred_removed = 0
+        new_deferrals = []
+        with self._dlock:
+            # Remove everything from the heapq, creating a new one to replace it
+            for index in range(len(self._deferrals)):
+                # Pop out of old heapq and add to new if not being removed
+                item = heapq.heappop(self._deferrals)
+
+                # Here item is a 4-tuple:
+                #  0: deferral time
+                #  1: item to put
+                #  2: FIFO key
+                #  3: exclusive flag
+                if item[2] == key:
+                    deferred_removed += 1
+                else:
+                    heapq.heappush(new_deferrals, item)
+            self._deferrals = new_deferrals
+
+        # Clear queued items
+        pending_removed = 0
+        with self._not_empty:
+            # Is there anything to clear?
+            try:
+                pending_removed = len(self._fifos[key])
+                self._total_queued -= pending_removed
+
+                # Reset the FIFO to an empty deque().  We do this even if we're
+                # going to keep the FIFO clear from now on because we need to
+                # still track in-progress items
+                self._fifos[key] = deque()
+            except KeyError:
+                pass  # FIFO doesn't exist, so nothing to remove
+
+        # If the queue is now empty, notify
+        with self._all_tasks_done:
+            if self._total_queued == 0 and self._total_inprogress == 0:
+                self._all_tasks_done.notify_all()  # wakes up all waiting threads
+
+        return (pending_removed, deferred_removed)
+
+    # METADATA
+    # ========
 
     @property
     def qsize(self) -> int:
@@ -301,6 +311,9 @@ class FairMultiFIFOQueue:
         """Total number of deferred puts not yet processed."""
         with self._dlock:
             return len(self._deferrals)
+
+    # QUEUE PRODUCERS
+    # ===============
 
     def _put(self, item: Any, key: Hashable, exclusive: bool) -> None:
         """Put `item` into the FIFO named `key` without locking.
@@ -376,7 +389,17 @@ class FairMultiFIFOQueue:
         result : bool
             False if `wait` > 0 and another thread is `join()`-ing the
             queue.  True otherwise.
+
+        Raises
+        ------
+        KeyError:
+            The FIFO named `key` is not accempting items because the queue
+            has been asked to keep it clear (see `clear_fifo()`).
         """
+
+        # Check if the fifo is being kept clear
+        if key in self._cleared_fifos:
+            raise KeyError("FIFO not accepting items")
 
         if wait > 0:
             # Deferred put
@@ -396,6 +419,83 @@ class FairMultiFIFOQueue:
                 self._not_empty.notify()  # wakes up a single waiting thread
 
         return True
+
+    # QUEUE CONSUMERS
+    # ===============
+
+    def task_done(self, key: Hashable) -> None:
+        """Report that a task from the FIFO named `key` is done.
+
+        After a consumer has finished processing a task provided to it
+        by a get(), the key provided by that get() must be passed back
+        into this function to report the completion of that task.
+
+        Parameters
+        ----------
+        key : hashable
+            The name of the FIFO that the completed task came from.  The
+            value passed in should previously have been returned from a
+            `get()` call.
+
+        Raises
+        ------
+        ValueError
+            The FIFO named `key` has no in-progress tasks.
+        """
+
+        with self._all_tasks_done:
+            # The number of currently in-progress tasks (including the one
+            # that's finishing now)
+            count = self._inprogress_counts.get(key, 0)
+
+            # If the specified FIFO has no in-progress tasks, raise value error
+            if count <= 0:
+                raise ValueError(f"no unfinished tasks for FIFO {key}")
+
+            # Remove the FIFO from the ordered list
+            self._keys_by_inprogress[count].remove(key)
+
+            # Unlock this FIFO if it was locked.  If the caller has been working on
+            # an exclusive item from the FIFO, then this call must be completing it,
+            # because there can't be anything else in-progress from this FIFO.  So,
+            # it's always reasonable to try to unlock a FIFO here.
+            self._fifo_locks.discard(key)
+            self._qlock.set(0, fifo=key)
+
+            # Decrement counts
+            count -= 1
+            self._inprogress_counts[key] = count
+            self._total_inprogress -= 1
+            self._dec_metrics(fifo=key, status="in-progress")
+
+            # Put the fifo back in the ordered list.
+            #
+            # XXX Could just delete a FIFO which is now empty here.
+            #
+            # In general, there's no reason to expect an empty FIFO to be reused,
+            # by the caller, and numerous empty FIFOs will slow down get() over time,
+            # so triming could decreate get() execution time.
+            #
+            # However, in our particular case (alpenhornd), the maximum number
+            # of FIFOs is total number of nodes ever active on this host, which is
+            # generally small and static enough not to have to worry about it.
+            self._keys_by_inprogress[count].add(key)
+
+            # XXX Could trim _keys_by_inprogress here.
+            #
+            # In general, it's potentially useful: it's possible for a bunch
+            # of unnecessary empty sets to accumulate at the tail of this list,
+            # so trimming can save memory in cases where large excursions of
+            # in-progress counts happen occasionally.
+            #
+            # However, in our particular case (alpenhornd), at most, the list
+            # will have as many elements as the maximum number of worker threads
+            # that have ever existed at one time, so it's probably not worth the
+            # trouble.
+
+            # Notify waiters when there are no pending tasks
+            if self._total_queued == 0 and self._total_inprogress == 0:
+                self._all_tasks_done.notify_all()  # wakes up all waiting threads
 
     def _get(self, t: float) -> tuple[Any, Hashable] | None:
         """Iterate the `get()` loop once for at most `t` seconds.
@@ -420,7 +520,7 @@ class FairMultiFIFOQueue:
             The name of the FIFO from which `item` was popped
         """
         # Set to true later if we had to skip something due to an
-        # because its queue wasn't empty
+        # exclusive flag because its queue wasn't empty
         skipped_exclusive = False
 
         timeout_at = monotonic() + t
