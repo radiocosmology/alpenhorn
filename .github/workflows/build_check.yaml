@@ -1,0 +1,48 @@
+---
+name: Build checks
+on:
+  pull_request:
+    branches:
+    - master
+  push:
+    branches:
+    - master
+
+jobs:
+  doc-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install pip dependencies
+      run: pip install .[doc]
+
+    - name: Build sphinx docs
+      run: sphinx-build -W -b html doc/ doc/_build/html
+
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install pip dependencies
+      run: pip install .[dist]
+
+    - name: Build source package
+      run: python3 -m build --sdist
+
+    - name: Build wheel
+      run: python3 -m build --wheel
+
+    - name: Check dist
+      run: twine check dist/*
