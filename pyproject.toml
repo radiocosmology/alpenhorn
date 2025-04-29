@@ -10,10 +10,25 @@ authors = [
   {name = "D. V. Wiebe", email = "dvw@phas.ubc.ca"}
 ]
 description = "Data archive management software"
-requires-python = ">=3.11"
+maintainers = [
+  {name = "D. V. Wiebe", email = "dvw@phas.ubc.ca"}
+]
 dynamic = ["readme", "version"]
 license = "MIT"
 license-files = ["LICENSE"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable ",
+  "Environment :: Console",
+  "Environment :: No Input/Output (Daemon)",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX",
+  "Programming Language :: Python",
+  "Topic :: Database :: Front-Ends",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Topic :: System :: Archiving"
+]
+requires-python = ">=3.11"
 dependencies = [
   "Click >= 6.0",
   "concurrent-log-handler",
@@ -45,6 +60,13 @@ test = [
 [project.scripts]
 alpenhorn = "alpenhorn.cli:entry"
 alpenhornd = "alpenhorn.daemon:entry"
+
+[project.urls]
+documentation = "https://alpenhorn.readthedocs.io/"
+download = "https://pypi.org/project/alpenhorn/"
+issues = "https://github.com/radiocosmology/alpenhorn/issues"
+releasenotes = "https://github.com/radiocosmology/alpenhorn/releases"
+source = "https://github.com/radiocosmology/alpenhorn/"
 
 [tool.ruff]
 lint.select = ["E", "F", "I", "UP", "NPY", "RUF", "BLE", "C4", "RET"]
