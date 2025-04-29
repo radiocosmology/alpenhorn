@@ -4,6 +4,9 @@
 .. image:: https://github.com/radiocosmology/alpenhorn/workflows/Test%20Suite/badge.svg
     :target: https://github.com/radiocosmology/alpenhorn/actions/workflows/tests.yaml
 
+.. image:: https://github.com/radiocosmology/alpenhorn/workflows/Build%20checks/badge.svg
+    :target: https://github.com/radiocosmology/alpenhorn/actions/workflows/tests.yaml
+
 Alpenhorn
 =========
 
