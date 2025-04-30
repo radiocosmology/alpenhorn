@@ -63,7 +63,7 @@ class TypeBase(base_model):
     patterns = pw.TextField()
     notes = pw.TextField(null=True)
 
-    def check_match(self, name: str) -> bool:
+    def check_match(self, name: str) -> str | None:
         """Check if `path` matches a pattern.
 
         Loops through `self.patterns` and tries each against
