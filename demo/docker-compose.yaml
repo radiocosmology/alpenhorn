@@ -5,39 +5,43 @@ volumes:
   node3_vol:
   transport_vol:
 services:
-  alpdb:
+  alpendb:
     image: mysql:latest
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 1
       MYSQL_DATABASE: alpenhorn_db
+    hostname: alpendb
     volumes:
       - db_vol:/var/lib/mysql
-  alpen1:
+  alpenshell:
     build:
       context: ..
       dockerfile: demo/Dockerfile.alpenhorn
     image: alpenhorn
-    command: sh -c "service ssh start && alpenhornd"
+    command: /bin/bash -l
     depends_on:
-      - alpdb
-    hostname: alpen1
+      - alpendb
+    hostname: alpenshell
+  alpenhost1:
+    image: alpenhorn
+    depends_on:
+      - alpendb
+    hostname: alpenhost1
     volumes:
       - node1_vol:/data
       - transport_vol:/mnt/transport
-  alpen2:
+  alpenhost2:
     image: alpenhorn
-    command: sh -c "service ssh start && alpenhornd"
     depends_on:
-      - alpdb
-    hostname: alpen2
+      - alpendb
+    hostname: alpenhost2
     volumes:
       - node2_vol:/data
-  alpen3:
+  alpenhost3:
     image: alpenhorn
-    command: sh -c "service ssh start && alpenhornd"
     depends_on:
-      - alpdb
-    hostname: alpen3
+      - alpendb
+    hostname: alpenhost3
     volumes:
       - node3_vol:/data
       - transport_vol:/mnt/transport
