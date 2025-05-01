@@ -83,8 +83,8 @@ and see the version of the plugin you just installed:
 If that's all working, you should be able to proceed with the alpenhorn
 demo itself!
 
-Starting the demo database
---------------------------
+Starting the demo
+-----------------
 
 There are five docker containers that comprise this demo:
 
@@ -144,9 +144,8 @@ subdirectory:
 
 .. hint::
    If you get a ``no configuration file provided: not found`` error, you're
-   not in the right directory. (The directory also should have the
-   ``Dockerfile.alpenhorn`` file and the ``docker-compose.yaml`` file, both
-   of which came with this demo.)
+   not in the right directory. (The ``/demo/`` directory within the alpenhorn
+   repository.)
 
 Doing this the first time will probably cause docker to download the
 latest MySQL image, create the virtual demo network and the ``demo_db_vol``
@@ -226,7 +225,7 @@ the storage node data:
    you create over the course of this demo.
 
 Finally, to remove the alpenhorn container image, which gets built the
-first time the containers is run:
+first time the image is nedded, run:
 
 .. code:: console
    :class: demohost
@@ -240,6 +239,70 @@ by the demo, or if you've made changes to the demo's
 .. tip::
    You can also remove the ``mysql:latest`` image if you want to run a newer
    version of the database container.
+
+Conventions used in this demo
+-----------------------------
+
+To follow along with this demo, you will be executing commands in three different
+places:
+
+* the docker host (the real machine on which you've cloned the alpenhorn repository)
+* the ``alpenshell`` container, where you'll be issuing ``alpenhorn`` commands
+* the ``alpenhost1`` container, where you'll be interacting with data files
+
+To aide in distinguishing these three places, we've tried to indicate them by
+using different highlights.
+
+Commands you should execute on the docker host will look like this:
+
+.. code:: console
+   :class: demohost
+
+   echo "This is a command on the demo host."
+
+and command output will look like this:
+
+.. code:: console
+   :class: demohost
+
+   $ echo "This is a command on the demo host."
+   This is a command on the demo host
+
+Commands meant to be run in the ``alpenshell`` container will look like this:
+
+.. code:: console
+   :class: demoshell
+
+   echo "This is a command in the alpenshell container."
+
+and command output will look like this:
+
+.. code:: console
+   :class: demoshell
+
+   root@alpenshell:/# echo "This is a command in the alpenshell container."
+   This is a command in the alpenshell container.
+
+Finally, commands that need to be run in the ``alpenhost1`` container will look
+like this:
+
+.. code:: console
+   :class: demonode1
+
+   echo "This is a command in the alpenhost1 container."
+
+and command output will look like this:
+
+.. code:: console
+   :class: demonode1
+
+   root@alpenhost1:/# echo "This is a command in the alpenhost1 container."
+   This is a command in the alpenhost1 container.
+
+.. hint::
+   How to access a shell in these containers is explained later on, when access
+   to them is first needed.
+
 
 Initialising the database
 -------------------------
@@ -268,7 +331,7 @@ To build the container and start a bash session in it, run:
    always add ``--remove-orphans`` to the command to remove the old containers.
 
 Running this the first time will cause docker compose to build the
-``alpenhorn`` docker image. This may take some time. Eventually you
+``alpenhorn`` container image. This may take some time. Eventually you
 should be presented with a bash prompt as root inside the ``alpenshell``
 container:
 
@@ -473,9 +536,9 @@ That's enough to get us started.
 Start the first daemon
 ----------------------
 
-Now it's time to start the first daemon. The alpenhorn container is
-set-up to run the alpenhorn daemon automatically. Start it by running
-the ``docker compose up`` command:
+Now it's time to start the first daemon. The alpenhorn container image is
+designed to run the alpenhorn daemon automatically. Start the first host container
+by running the ``docker compose up`` command:
 
 .. code:: console
    :class: demohost
@@ -533,10 +596,8 @@ seconds, which is the update interval time set in the ``alpenhornd.conf`` file.
    alpenhost1-1  | Feb 21 00:38:42 INFO >> [MainThread] Main loop execution was 0.0s.
    alpenhost1-1  | Feb 21 00:38:42 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 0 in-progress on 2 workers
 
-We can fix this by activating the node we created.
-
-In the ``alpenshell`` container, at the root prompt, we can now activate the
-node:
+We can fix this by activating the node we created.  To do this, in
+the ``alpenshell`` container, we can use the ``node activate`` command:
 
 .. code:: console
    :class: demoshell
@@ -778,11 +839,11 @@ the ``demo_storage1`` node:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             1          51 B         -
+   demo_storage1             1          52 B         -
    root@alpenshell:/# alpenhorn file list --node=demo_storage1 --details
    File                 Size    MD5 Hash                          Registration Time             State    Size on Node
    -------------------  ------  --------------------------------  ----------------------------  -------  --------------
-   2025/02/21/meta.txt  51 B    c2607e3dbaf6a1e2467b82c6a79f6b46  Fri Feb 21 23:07:08 2025 UTC  Healthy  4.000 kiB
+   2025/02/21/meta.txt  52 B    4f2a66c1ff5eb90a5013522d53ea2e91  Fri Feb 21 23:07:08 2025 UTC  Healthy  4.000 kiB
 
 Auto-importing files and temporary names
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -869,12 +930,12 @@ Now there are two files on the node:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             2          63 B         -
+   demo_storage1             2          64 B         -
    root@alpenshell:/# alpenhorn file list --node=demo_storage1 --details
    File                    Size    MD5 Hash                          Registration Time             State    Size on Node
    ----------------------  ------  --------------------------------  ----------------------------  -------  --------------
    2025/02/21/23/1324.dat  12 B    4c79018e00ddef11af0b9cfc14dd3261  Fri Feb 21 23:52:21 2025 UTC  Healthy  4.000 kiB
-   2025/02/21/meta.txt     51 B    c2607e3dbaf6a1e2467b82c6a79f6b46  Fri Feb 21 23:07:08 2025 UTC  Healthy  4.000 kiB
+   2025/02/21/meta.txt     52 B    4f2a66c1ff5eb90a5013522d53ea2e91  Fri Feb 21 23:07:08 2025 UTC  Healthy  4.000 kiB
 
 Manually importing files
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -942,7 +1003,7 @@ still only two files on the node.
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             2          63 B         -
+   demo_storage1             2          64 B         -
 
 But, now that we've finished writing these files, we can tell alpenhorn
 to import them. This can be done for an individual file:
@@ -971,7 +1032,7 @@ The CLI will create an import request for this file:
 The import request should be shortly handled by the daemon:
 
 .. code:: console
-   :class: demoshell
+   :class: demohost
 
    alpenhost1-1  | Feb 22 00:09:36 INFO >> [Worker#1] Beginning task Import 2025/02/21/23/1330.dat on demo_storage1
    alpenhost1-1  | Feb 22 00:09:36 INFO >> [Worker#1] File "2025/02/21/23/1330.dat" added to DB.
@@ -1024,7 +1085,7 @@ Now there are five files on the storage node:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             5         101 B         -
+   demo_storage1             5         102 B         -
 
 Syncing files between nodes
 ---------------------------
@@ -1137,7 +1198,7 @@ This node is initially empty:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             5         101 B         -
+   demo_storage1             5         102 B         -
    demo_storage2             0             -         -
 
 Before starting transfers we have to record log-in details for the hosts
@@ -1262,7 +1323,7 @@ file, so then a file transfer will be started:
    alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Beginning task AFCR#1: demo_storage1 -> demo_storage2
    alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Creating directory "/data/2025/02/21".
    alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Pulling remote file 2025/02/21/meta.txt using rsync
-   alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Pull of 2025/02/21/meta.txt complete. Transferred 51 B in 0.4s [139 B/s]
+   alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Pull of 2025/02/21/meta.txt complete. Transferred 52 B in 0.4s [139 B/s]
    alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#1] Finished task: AFCR#1: demo_storage1 -> demo_storage2
 
 .. note::
@@ -1279,16 +1340,16 @@ Now there is one file on ``demo_storage2``:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             5         101 B         -
-   demo_storage2             1          51 B         -
+   demo_storage1             5         102 B         -
+   demo_storage2             1          52 B         -
 
 You can check the filesystem on ``alpenhost2`` (by, say, running a ``find`` command)
 to see that this file now exists on that node:
 
 .. code:: console
-   :class: demonode1
+   :class: demohost
 
-   root@alpenhost1# find /data
+   $ docker container run alpenhost2 find /data
    /data
    /data/ALPENHORN_NODE
    /data/2025
@@ -1377,8 +1438,8 @@ And eventually all files will be transferred to ``alpenhost2``:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             5         101 B         -
-   demo_storage2             5         101 B         -
+   demo_storage1             5         102 B         -
+   demo_storage2             5         102 B         -
 
 .. hint::
    If you were to try the identical sync request a second time, after
@@ -1472,8 +1533,8 @@ However, alpenhorn hasn't noticed this:
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
    -------------  ------------  ------------  --------  ---------------  ---------------  ---------------
-   demo_storage1             5         101 B         -                -                -                -
-   demo_storage2             5         101 B         -                -                -                -
+   demo_storage1             5         102 B         -                -                -                -
+   demo_storage2             5         102 B         -                -                -                -
 
 It still lists no corrupt files on ``demo_storage1``. This is because
 alpenhorn doesn't normally automatically detect corruption to files it
@@ -1501,11 +1562,11 @@ You will have to confirm this request:
    :class: demoshell
 
    root@alpenshell:/# alpenhorn node verify --all --acq=2025/02/21 demo_storage1
-   Would request verification of 5 files (101 B).
+   Would request verification of 5 files (102 B).
 
    Continue? [y/N]: y
 
-   Requesting verification of 5 files (101 B).
+   Requesting verification of 5 files (102 B).
    Updated 5 files.
 
 The daemon on ``alpenhost1`` will respond to this command by re-verifying
@@ -1553,8 +1614,8 @@ node.
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
    -------------  ------------  ------------  --------  ---------------  ---------------  ---------------
-   demo_storage1             4          89 B         -                1                -                -
-   demo_storage2             5         101 B         -                -                -                -
+   demo_storage1             4          90 B         -                1                -                -
+   demo_storage2             5         102 B         -                -                -                -
    root@alpenshell:/# alpenhorn file state 2025/02/21/23/1324.dat demo_storage1
    Corrupt Ready
 
@@ -1609,8 +1670,8 @@ healthy again:
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
    -------------  ------------  ------------  --------  ---------------  ---------------  ---------------
-   demo_storage1             5         101 B         -                -                -                -
-   demo_storage2             5         101 B         -                -                -                -
+   demo_storage1             5         102 B         -                -                -                -
+   demo_storage2             5         102 B         -                -                -                -
 
 Deleting files
 --------------
@@ -1770,8 +1831,8 @@ Now there are only four files on ``demo_storage1``:
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
    -------------  ------------  ------------  --------  ---------------  ---------------  ---------------
    demo_storage1             4          50 B         -                -                -                -
-   demo_storage2             5         101 B         -                -                -                -
-   demo_storage3             5         101 B         -                -                -                -
+   demo_storage2             5         102 B         -                -                -                -
+   demo_storage3             5         102 B         -                -                -                -
 
 As with sync requests, rather than cleaning individual files, we can do bulk
 operations. To tell alpenhorn to delete everything from ``demo_storage1`` that
@@ -1824,15 +1885,15 @@ Now ``demo_storage1`` is empty:
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
    -------------  ------------  ------------  --------  ---------------  ---------------  ---------------
    demo_storage1             0             -         -                -                -                -
-   demo_storage2             5         101 B         -                -                -                -
-   demo_storage3             5         101 B         -                -                -                -
+   demo_storage2             5         102 B         -                -                -                -
+   demo_storage3             5         102 B         -                -                -                -
 
 You can also inspect the filesystem on ``alpenhost`` to see that it is now empty:
 
 .. code:: console
    :class: demonode1
 
-   root@alpenhost1# find /data
+   root@alpenhost1:/# find /data
    /data
    /data/ALPENHORN_NODE
 
@@ -1920,12 +1981,15 @@ into the transport group. Logic defined by the Transport I/O class then
 determines which of the available transport nodes the transferred files
 will be written to.
 
-Briefly, the Transport logic works like this: \* only local transfers
-are allowed into the group (i.e. transferring into the transport group
-will only ever copy data onto transport nodes at the same location as
-the source node). \* the transport group will try to fill up one
-transport node before copying data to another \* all other things being
-equal, all transport nodes have the same priority for accepting data
+Briefly, the Transport logic works like this:
+
+* only local transfers are allowed into the group (i.e. syncing into
+  the transport group will only ever copy data onto transport nodes at
+  the same location as the source node).
+* the transport group will try to fill up one transport node before
+  putting data onto another
+* all other things being equal, all transport nodes have the same
+  priority for accepting data
 
 In our case we only have a single transport node, so it's easy to figure
 out which node the data will end up on.
@@ -1949,20 +2013,20 @@ This should sync all five files we have:
    :class: demoshell
 
    root@alpenshell:/# alpenhorn node sync demo_storage3 transport_group --target=demo_storage1
-   Would sync 5 files (101 B) from Node "demo_storage3" to Group "transport_group".
+   Would sync 5 files (102 B) from Node "demo_storage3" to Group "transport_group".
 
    Continue? [y/N]: y
 
-   Syncing 5 files (101 B) from Node "demo_storage3" to Group "transport_group".
+   Syncing 5 files (102 B) from Node "demo_storage3" to Group "transport_group".
 
    Added 5 new copy requests.
 
 It may also be good to point out here that even though both
 ``demo_storage3`` and the transport node are on ``alpenhost3``, and all the
-resulting transfers are local, we can run this command on ``alpenhost1``.
-Running commands with the CLI never need to occur where the storage
-nodes referenced are. Anywhere that can access the alpenhorn database can
-be used to run any alpenhorn command.
+resulting transfers are local, we'll still run this command in the
+``alpenshell`` container.  Running commands with the CLI never need to occur
+where the storage nodes referenced are. Anywhere that can access the alpenhorn
+database can be used to run any alpenhorn command.
 
 After waiting for the daemon to process these requests, a look at the
 transport group should show us that they've all ended up on the
@@ -1984,7 +2048,7 @@ transport node:
 
    Name          File Count  Total Size    % Full
    ----------  ------------  ------------  --------
-   transport1             5  101 B         -
+   transport1             5  102 B         -
 
 Transporting the transport node
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2040,10 +2104,10 @@ transport device after it's been moved:
 
 - its ``host``, to let alpenhorn know which daemon should now be able to access
   the disk
-- its ``username`` and ``address`` to set the log-in details for remote access
+- its ``username`` and ``address``, to set the log-in details for remote access
   to the device. If remote access to the transport node isn't needed, this
   may not be necessary to do.
-- its ``root`` to tell alpenhorn where we have mounted the transport device's
+- its ``root``, to tell alpenhorn where we have mounted the transport device's
   filesystem.
 
 We can do this all using the ``node activate`` command, which has been
@@ -2055,7 +2119,7 @@ designed with this use case in mind:
    alpenhorn node activate transport1 --host=alpenhost1 --username=root \
                            --address=alpenhost1 --root=/mnt/transport
 
-The node will now appear to the daemon on ``alpenhost1``:
+The node (and also the group) will now appear to the daemon on ``alpenhost1``:
 
 .. code:: console
    :class: demohost
@@ -2080,10 +2144,10 @@ transport media:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             5         101 B         -
-   demo_storage2             5         101 B         -
-   demo_storage3             5         101 B         -
-   transport1                5         101 B         -
+   demo_storage1             5         102 B         -
+   demo_storage2             5         102 B         -
+   demo_storage3             5         102 B         -
+   transport1                5         102 B         -
 
 Once we're happy with the transfer off of the transport device, we'll
 want to clear it out so we can ship it back to ``alpenhost3`` to be used to
