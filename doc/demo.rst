@@ -339,9 +339,9 @@ Creating the data index is simple, and can be accomplished by running the follow
 command with the ``alpenhorn`` CLI utility:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
-     alpenhorn db init
+   alpenhorn db init
 
 .. hint::
    Remember that all these ``alpenhorn`` commands need to be run inside the
@@ -351,7 +351,7 @@ On successful completion, the ``db init`` command will report the version of the
 database schema used to create the Data Index:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn db init
    Data Index version 2 initialised.
@@ -392,9 +392,9 @@ To initialise the database for the extension, run the ``demo_init``
 function provided by the extension:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
-     python -c 'import pattern_importer; pattern_importer.demo_init()'
+   python -c 'import pattern_importer; pattern_importer.demo_init()'
 
 If you get a ``ModuleNotFoundError: No module named 'pattern_importer'``
 error, you're probably not executing this command in the root-shell in
@@ -403,10 +403,10 @@ the ``alpenshell`` container.
 You should see a success message:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# python -c 'import pattern_importer; pattern_importer.demo_init()'
-   Plugin init complete complete.
+   Plugin init complete.
 
 Create the first StorageNode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -422,14 +422,14 @@ that we'll create later).
 To create the group, which we'll call ``demo_storage1``, run:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
-     alpenhorn group create demo_storage1
+   alpenhorn group create demo_storage1
 
 This should create the group:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn group create demo_storage1
    Created storage group "demo_storage1".
@@ -446,9 +446,9 @@ StorageGroup contains only one StorageNode, the node and group have the
 same name, though that's not required.)
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
-     alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import --root=/data --host=alpenhost1
+   alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import --root=/data --host=alpenhost1
 
 This command will create a new StorageNode called ``demo_storage1`` and
 put it in the identically-named group. Auto-import (automatic monitoring for
@@ -456,7 +456,7 @@ new files) will be turned on; the mount point in the filesystem will be set
 to ``/data`` and we declare it to be available on host ``alpenhost1``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import
                  --root=/data --host=alpenhost1
@@ -539,14 +539,14 @@ In the ``alpenshell`` container, at the root prompt, we can now activate the
 node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node activate demo_storage1
 
 Alpenhorn will acknowledge the command:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node activate demo_storage1
    Storage node "demo_storage1" activated.
@@ -568,7 +568,7 @@ file that it can't find. But, generally, it's easier to get alpenhorn
 to initialise the node for us:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node init demo_storage1
 
@@ -576,7 +576,7 @@ The initialisation is not performed by the alpenhorn CLI.  Instead the
 CLI will create a request in the database to initialise the node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node init demo_storage1
    Requested initialisation of Node "demo_storage1".
@@ -709,7 +709,7 @@ start a shell in the running container using ``docker exec``:
 Once in this root shell on ``alpenhost1``, we can create the first of our files:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    cd /data
    mkdir -p 2025/02/21
@@ -744,7 +744,7 @@ Once the file has been created, the lock file can be deleted, to trigger
 import of the file:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    rm -f 2025/02/21/.meta.txt.lock
 
@@ -773,7 +773,7 @@ You can use the alpenhorn CLI to see that this file is now present on
 the ``demo_storage1`` node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -808,7 +808,7 @@ appending, say, ``.temp`` to the name of the file we want to create.
 In the ``alpenhost1`` container:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    cd /data
    mkdir 2025/02/21/23
@@ -835,7 +835,7 @@ After file is fully written, it can be moved to the correct name. On
 most filesystems, this is an atomic operation:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    mv 2025/02/21/23/1324.dat.temp 2025/02/21/23/1324.dat
 
@@ -864,7 +864,7 @@ created in the database, because the ``ArchiveAcq`` record already exists:
 Now there are two files on the node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -887,7 +887,7 @@ files.
 First, turn off auto-import on the node by modifying its properties:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node modify demo_storage1 --no-auto-import
 
@@ -895,7 +895,7 @@ If you want, you can verify that auto-import has been turned off for the
 node by checking its metadata after the ``modify`` command:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node modify demo_storage1 --no-auto-import
    Node updated.
@@ -925,7 +925,7 @@ node by checking its metadata after the ``modify`` command:
 With that done, let's create some more data files:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    cd /data
    echo "0 1 2 3 4 5" > 2025/02/21/23/1330.dat
@@ -937,7 +937,7 @@ alpenhorn CLI to see this: as far as alpenhorn is concerned, there are
 still only two files on the node.
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -948,7 +948,7 @@ But, now that we've finished writing these files, we can tell alpenhorn
 to import them. This can be done for an individual file:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn file import --register-new 2025/02/21/23/1330.dat demo_storage1
 
@@ -963,7 +963,7 @@ to import them. This can be done for an individual file:
 The CLI will create an import request for this file:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn file import --register-new 2025/02/21/23/1330.dat demo_storage1
    Added new import request.
@@ -971,7 +971,7 @@ The CLI will create an import request for this file:
 The import request should be shortly handled by the daemon:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhost1-1  | Feb 22 00:09:36 INFO >> [Worker#1] Beginning task Import 2025/02/21/23/1330.dat on demo_storage1
    alpenhost1-1  | Feb 22 00:09:36 INFO >> [Worker#1] File "2025/02/21/23/1330.dat" added to DB.
@@ -983,14 +983,14 @@ It's also possible to tell alpenhorn to scan an entire directory for new
 files:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node scan demo_storage1 --register-new 2025/02/21
 
 Which will add another import request:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node scan demo_storage1 --register-new 2025/02/21
    Added request for scan of "2025/02/21" on Node "demo_storage1".
@@ -1019,7 +1019,7 @@ we just created:
 Now there are five files on the storage node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -1040,7 +1040,7 @@ transfer them to. We'll start by creating the second storage node on the
 second host:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node create demo_storage2 --create-group --root=/data --host=alpenhost2
 
@@ -1052,7 +1052,7 @@ second host:
 This will create the second node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node create demo_storage2 --create-group --root=/data --host=alpenhost2
    Created storage group "demo_storage2".
@@ -1063,7 +1063,7 @@ happen immediately, since we haven't activated the Storage Node, nor are
 we running the second daemon yet.
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node init demo_storage2
 
@@ -1078,7 +1078,7 @@ You can see pending requests, including this init request, using the
 alpenhorn CLI:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node show demo_storage2 --all
       Storage Node: demo_storage2
@@ -1132,7 +1132,7 @@ alpenhorn CLI:
 This node is initially empty:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -1147,7 +1147,7 @@ address for the node. For ``demo_storage1``, which is already active we
 can do this by modifying the node record:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node modify demo_storage1 --username root --address alpenhost1
 
@@ -1155,7 +1155,7 @@ For the second node, we can do it when we activate it. We could have
 also specified these values when we created the node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node activate demo_storage2 --username root --address alpenhost2
 
@@ -1229,14 +1229,14 @@ We can transfer any existing file explicitly by issuing a transfer
 request for it:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn file sync --from demo_storage1 --to demo_storage2 2025/02/21/meta.txt
 
 This will submit a new transfer request:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn file sync --from demo_storage1 --to demo_storage2 2025/02/21/meta.txt
    Request submitted.
@@ -1274,7 +1274,7 @@ file, so then a file transfer will be started:
 Now there is one file on ``demo_storage2``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -1286,9 +1286,9 @@ You can check the filesystem on ``alpenhost2`` (by, say, running a ``find`` comm
 to see that this file now exists on that node:
 
 .. code:: console
-   :class: demohost
+   :class: demonode1
 
-   $ docker compose exec alpenhost2 find /data
+   root@alpenhost1# find /data
    /data
    /data/ALPENHORN_NODE
    /data/2025
@@ -1304,7 +1304,7 @@ transferred, it is more typical to request *all* files present on a source
 node and absent from a destination group be transferred:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node sync demo_storage1 demo_storage2 --show-files
 
@@ -1315,7 +1315,7 @@ files which are present on ``demo_storage1`` but not present on
 This command will require confirmation:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node sync demo_storage1 demo_storage2 --show-files
    Would sync 4 files (50 B) from Node "demo_storage1" to Group "demo_storage2":
@@ -1372,7 +1372,7 @@ The daemon on alpenhost2 will churn through these requests:
 And eventually all files will be transferred to ``alpenhost2``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -1392,14 +1392,14 @@ the same task.
 The command
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node sync demo_storage1 demo_storage2 --show-files
 
 is equivalent to
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn group sync demo_storage2 demo_storage1 --show-files
 
@@ -1427,7 +1427,7 @@ registering the file.
 You can see the stored hash value for a file using the alpenhorn CLI:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn file show 2025/02/21/23/1324.dat
           Name: 23/1324.dat
@@ -1442,7 +1442,7 @@ If we were to manually compute the MD5 digest for this file (in, say, the
 ``alpenhost1`` container) we would get the same result:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    root@alpenhost1:/data# md5sum 2025/02/21/23/1324.dat
    4c79018e00ddef11af0b9cfc14dd3261  2025/02/21/23/1324.dat
@@ -1450,7 +1450,7 @@ If we were to manually compute the MD5 digest for this file (in, say, the
 Let's corrupt a file by changing its contents on ``alpenhost1``:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    cd /data
    echo "bad data" > 2025/02/21/23/1324.dat
@@ -1459,7 +1459,7 @@ Now if we manually compute the MD5 hash, we can see that's it's
 different than what alpenhorn has recorded:
 
 .. code:: console
-   :class: democontainer
+   :class: demonode1
 
    root@alpenhost1:/data# md5sum 2025/02/21/23/1324.dat
    3412f7b66a30b90ae3d3085c96615f00  2025/02/21/23/1324.dat
@@ -1467,7 +1467,7 @@ different than what alpenhorn has recorded:
 However, alpenhorn hasn't noticed this:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
@@ -1491,14 +1491,14 @@ To request verification of all files in the acquisition on the node
 ``demo_storage1``, run:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node verify --all --acq=2025/02/21 demo_storage1
 
 You will have to confirm this request:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node verify --all --acq=2025/02/21 demo_storage1
    Would request verification of 5 files (101 B).
@@ -1548,7 +1548,7 @@ Now if we check the node stats, we can see one corrupt file on this
 node.
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
@@ -1570,7 +1570,7 @@ known-good copy of the file over top of the corrupt version. We can do
 this by syncing the file back from ``alpenhost2``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node sync demo_storage2 demo_storage1
 
@@ -1578,7 +1578,7 @@ It will tell you there is only one file to transfer (the corrupt file)
 and ask for confirmation:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node sync demo_storage2 demo_storage1
    Would sync 1 file (12 B) from Node "demo_storage2" to Group "demo_storage1".
@@ -1604,7 +1604,7 @@ After transferring the file back, now alpenhorn now considers the file
 healthy again:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
@@ -1623,14 +1623,14 @@ Since we've copied some files from ``alpenhost1`` to ``alpenhost2``, let's try
 deleting one of the files from ``alpenhost1``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn file clean --now --node=demo_storage1 2025/02/21/meta.txt
 
 The CLI should release the file immediately:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn file clean --now --node=demo_storage1 2025/02/21/meta.txt
    Released "2025/02/21/meta.txt" for immediate removal on Node "demo_storage1".
@@ -1668,7 +1668,7 @@ Let's change ``demo_storage2`` into an archive node. We do that by
 modifying it's metadata:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node modify --archive demo_storage2
 
@@ -1676,7 +1676,7 @@ After running this command, you can look at the node metadata to see
 that it now has the "archive" storage type:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node modify --archive demo_storage2
    Node updated.
@@ -1720,7 +1720,7 @@ First let's create the storage node in the database. We'll make this one
 an archive node when we create it:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node create demo_storage3 --create-group --archive --root=/data --host=alpenhost3 \
                                        --username root --address alpenhost3 --init --activate
@@ -1740,7 +1740,7 @@ Now let's start the third docker container and take a look at its logs:
 Sync everything on ``demo_storage2`` to ``demo_storage3``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node sync --force demo_storage2 demo_storage3
 
@@ -1764,7 +1764,7 @@ As soon as the file is transferred to ``demo_storage3``, the daemon on
 Now there are only four files on ``demo_storage1``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
@@ -1778,14 +1778,14 @@ operations. To tell alpenhorn to delete everything from ``demo_storage1`` that
 already exists on ``demo_storage3``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node clean demo_storage1 --now --target demo_storage3
 
 It will find four files to clean, which you'll have to confirm:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node clean demo_storage1 --now --target demo_storage3
    Would release 4 files (50 B).
@@ -1818,7 +1818,7 @@ tidy.
 Now ``demo_storage1`` is empty:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
@@ -1830,9 +1830,9 @@ Now ``demo_storage1`` is empty:
 You can also inspect the filesystem on ``alpenhost`` to see that it is now empty:
 
 .. code:: console
-   :class: demohost
+   :class: demonode1
 
-   $ docker compose exec alpenhost1 find /data
+   root@alpenhost1# find /data
    /data
    /data/ALPENHORN_NODE
 
@@ -1864,7 +1864,7 @@ has the "Transport" I/O class.
 Our first job, then, is to create a transport group:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn group create --class=Transport transport_group
 
@@ -1887,7 +1887,7 @@ When we create the new node, we'll tell alpenhorn that it's initially
 available on ``alpenhost3``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node create transport1 --transport --group transport_group --host=alpenhost3 \
                                     --root=/mnt/transport --init --activate
@@ -1934,7 +1934,7 @@ Let's transfer data out of ``demo_storage3`` into the transport group
 with the intent of transferring data, ultimately, to ``demo_storage1``:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node sync demo_storage3 transport_group --target=demo_storage1
 
@@ -1946,7 +1946,7 @@ our case, that's nothing).
 This should sync all five files we have:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node sync demo_storage3 transport_group --target=demo_storage1
    Would sync 5 files (101 B) from Node "demo_storage3" to Group "transport_group".
@@ -1969,7 +1969,7 @@ transport group should show us that they've all ended up on the
 transport node:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn group show --node-stats transport_group
    Storage Group: transport_group
@@ -1998,7 +1998,7 @@ The first step is to deactivate the alpenhorn node to tell alpenhorn to
 stop managing it:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node deactivate transport1
 
@@ -2050,7 +2050,7 @@ We can do this all using the ``node activate`` command, which has been
 designed with this use case in mind:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node activate transport1 --host=alpenhost1 --username=root \
                            --address=alpenhost1 --root=/mnt/transport
@@ -2067,7 +2067,7 @@ Now let's now copy all the data off the transport media onto the
 ``demo_storage1`` node to complete our long-distance transfer:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node sync transport1 demo_storage1
 
@@ -2075,7 +2075,7 @@ Once the transfers are complete, we've now got data back on ``demo_storage1`` vi
 transport media:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
@@ -2090,7 +2090,7 @@ want to clear it out so we can ship it back to ``alpenhost3`` to be used to
 transfer more data in the future:
 
 .. code:: console
-   :class: democontainer
+   :class: demoshell
 
    alpenhorn node clean --now --force transport1 --target=demo_storage1
 

@@ -1,3 +1,6 @@
-.democontainer > .highlight {
-  background: #ddccff;
+.demoshell > .highlight {
+  background: #fce;
+}
+.demonode1 > .highlight {
+  background: #cef;
 }
