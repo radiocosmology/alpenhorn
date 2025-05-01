@@ -59,12 +59,12 @@ installation by running the ``hello-world`` container:
    If you get a permission error: "permission denied while trying to connect
    to the Docker daemon socket", this means you lack the proper permissions to
    run docker.  The best solution in this case is to have your sysadmin add you
-   to the ``docker`` group.  See `the Docker documenation on running docker as
+   to the ``docker`` group.  See `the Docker documentation on running docker as
    a non-root user
    <https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user>`__.
 
 Once docker itself is running, you'll also need to `install the docker
-compose plugin <https://docs.docker.com/compose/install/linux/>`__. Afer
+compose plugin <https://docs.docker.com/compose/install/linux/>`__. After
 installing docker compose, you should be able to run
 
 .. code:: console
@@ -86,10 +86,15 @@ demo itself!
 Starting the demo database
 --------------------------
 
-There are four docker containers that comprise this demo: \* a database
-container, which runs the MySQL server containing the alpenhorn Data
-Index \* three containers implementing the separate alpenhorn hosts,
-each containing a StorageNodes
+There are five docker containers that comprise this demo:
+
+* a database container (``alpendb``), which runs the MySQL server containing
+  the alpenhorn Data Index
+* a container providing a root shell (``alpenshell``) used to interact
+  with the alpenhorn CLI
+* three containers (``alpenhost1`` through ``alpenhost3``) implementing the
+  separate alpenhorn hosts, each containing a StorageNode and running an
+  instance of the alpenhorn daemon.
 
 These containers will be automatically built when we first start the
 demo.
@@ -485,7 +490,7 @@ should already be running:
 
    $ docker compose up --detach alpenhost1
    [+] Running 2/2
-    ✔ Container demo-alpdb-1   Running                                                           0.0s
+    ✔ Container demo-alpendb-1   Running                                                         0.0s
     ✔ Container demo-alpenhost1-1  Started                                                       0.4s
 
 (If the database container is not running, docker compose will start it
@@ -515,7 +520,7 @@ Two worker threads are started because that's what's specified in the
 extension, since that's also specified in the config file.
 
 Almost immediately, the daemon will notice that there are no *active*
-ndoes on ``alpenhost1``. It will perform this check roughly every ten
+nodes on ``alpenhost1``. It will perform this check roughly every ten
 seconds, which is the update interval time set in the ``alpenhornd.conf`` file.
 
 .. code:: console
@@ -709,7 +714,7 @@ Once in this root shell on ``alpenhost1``, we can create the first of our files:
    cd /data
    mkdir -p 2025/02/21
    touch 2025/02/21/.meta.txt.lock
-   echo "This is the first acquistion in the alpenhorn demo" > 2025/02/21/meta.txt
+   echo "This is the first acquisition in the alpenhorn demo" > 2025/02/21/meta.txt
 
 
 .. hint::
@@ -760,7 +765,7 @@ database:
 
 - an ``ArchiveAcq`` record for the new acquisition, with name ``2025/02/21``
 - an ``ArchiveFile`` record for the new file, with name ``21/meta.txt``
-  in the new acqusition
+  in the new acquisition
 - an ``ArchiveFileCopy`` record recording that a copy of the newly-created
   ``ArchiveFile`` exists on ``demo_storage1``
 
@@ -851,7 +856,7 @@ This will trigger import of the file:
    alpenhost1-1  | Feb 21 23:52:20 INFO >> [Worker#2] Finished task: Import 2025/02/21/23/1324.dat on demo_storage1
 
 Unlike when we imported the first file, now only two new records are
-created in the database, because the ``ArchiveAcq`` record already existsed:
+created in the database, because the ``ArchiveAcq`` record already exists:
 
 - an ``ArchiveFile`` for the new file
 - an ``ArchiveFileCopy`` for the copy of the new file on ``demo_storage1``
@@ -952,7 +957,7 @@ to import them. This can be done for an individual file:
    a new ``ArchiveFile`` (and, were it necessary, an ``ArchiveAcq`` record,
    too) for newly discovered files. Without this flag, alpenhorn will only
    import files which are already represented by an existing
-   ``ArchvieFile``. This second mode is more appropriate in cases where a
+   ``ArchiveFile``. This second mode is more appropriate in cases where a
    node should not be receiving new files.
 
 The CLI will create an import request for this file:
@@ -1364,7 +1369,7 @@ The daemon on alpenhost2 will churn through these requests:
    alpenhost2-1  | Feb 26 23:34:32 INFO >> [Worker#1] Finished task: AFCR#5: demo_storage1 -> demo_storage2
    alpenhost2-1  | Feb 26 23:34:32 INFO >> [Worker#2] Finished task: AFCR#4: demo_storage1 -> demo_storage2
 
-And eventually all files will be transfered to ``alpenhost2``:
+And eventually all files will be transferred to ``alpenhost2``:
 
 .. code:: console
    :class: democontainer
@@ -1381,7 +1386,7 @@ And eventually all files will be transfered to ``alpenhost2``:
    nothing needs transferring and respond with "No files to sync".
 
 One last note on the ``node sync`` command: if you prefer thinking about
-the destination side of transfers, you can use ``group sync`` to peform
+the destination side of transfers, you can use ``group sync`` to perform
 the same task.
 
 The command
@@ -1476,13 +1481,13 @@ is managing. You can turn on "auto-verify" on a node, but that won't
 result in instantaneous detection of corruption either, and can be I/O
 expensive, (and, so, should be used with caution).
 
-In some cases, file corruption will be detected by alenhorn when copying
+In some cases, file corruption will be detected by alpenhorn when copying
 an unexpectedly corrupt file from one node to another. For now, we can
 manually request a verification of the file. We'll do this by requesting
-verifciation for the entire acqusition, even though we've only corrupted
+verification for the entire acquisition, even though we've only corrupted
 one of the files.
 
-To request verifcation of all files in the acqusition on the node
+To request verification of all files in the acquisition on the node
 ``demo_storage1``, run:
 
 .. code:: console
@@ -1504,7 +1509,7 @@ You will have to confirm this request:
    Updated 5 files.
 
 The daemon on ``alpenhost1`` will respond to this command by re-verifying
-all files in that acqusition:
+all files in that acquisition:
 
 .. code:: console
    :class: demohost
@@ -1599,7 +1604,7 @@ After transferring the file back, now alpenhorn now considers the file
 healthy again:
 
 .. code:: console
-   :class: democontianer
+   :class: democontainer
 
    root@alpenshell:/# alpenhorn node stats --extra-stats
    Name             File Count    Total Size    % Full    Corrupt Files    Suspect Files    Missing Files
@@ -1610,7 +1615,7 @@ healthy again:
 Deleting files
 --------------
 
-Typically you'll want to delete files off your acqusition nodes once
+Typically you'll want to delete files off your acquisition nodes once
 they've been transferred off-site. File deletion can be accomplished
 with the ``clean`` command.
 
@@ -1618,14 +1623,14 @@ Since we've copied some files from ``alpenhost1`` to ``alpenhost2``, let's try
 deleting one of the files from ``alpenhost1``:
 
 .. code:: console
-   :class: democontianer
+   :class: democontainer
 
    alpenhorn file clean --now --node=demo_storage1 2025/02/21/meta.txt
 
 The CLI should release the file immediately:
 
 .. code:: console
-   :class: democontianer
+   :class: democontainer
 
    root@alpenshell:/# alpenhorn file clean --now --node=demo_storage1 2025/02/21/meta.txt
    Released "2025/02/21/meta.txt" for immediate removal on Node "demo_storage1".
@@ -1663,7 +1668,7 @@ Let's change ``demo_storage2`` into an archive node. We do that by
 modifying it's metadata:
 
 .. code:: console
-   :class: democontianer
+   :class: democontainer
 
    alpenhorn node modify --archive demo_storage2
 
@@ -1671,7 +1676,7 @@ After running this command, you can look at the node metadata to see
 that it now has the "archive" storage type:
 
 .. code:: console
-   :class: democontianer
+   :class: democontainer
 
    root@alpenshell:/# alpenhorn node modify --archive demo_storage2
    Node updated.
@@ -1874,11 +1879,11 @@ single daemon.
 
 Now that we have the transport group, we can create storage nodes to put
 in it. As mentioned above, each node is a single physical device (disk,
-tape, etc.) which is transferred through the Snearkernet. Multiple nodes
+tape, etc.) which is transferred through the Sneakernet. Multiple nodes
 in the group can be available at a particular site, but we'll just
 create a single node for the purpose of this demo.
 
-When we create the new node, we'll tell alpenhorn that it's initally
+When we create the new node, we'll tell alpenhorn that it's initially
 available on ``alpenhost3``:
 
 .. code:: console
@@ -1956,11 +1961,11 @@ It may also be good to point out here that even though both
 ``demo_storage3`` and the transport node are on ``alpenhost3``, and all the
 resulting transfers are local, we can run this command on ``alpenhost1``.
 Running commands with the CLI never need to occur where the storage
-nodes referenced are. Anywhere that can access the alpenhorn databse can
+nodes referenced are. Anywhere that can access the alpenhorn database can
 be used to run any alpenhorn command.
 
 After waiting for the daemon to process these requests, a look at the
-trasnport group should show us that they've all ended up on the
+transport group should show us that they've all ended up on the
 transport node:
 
 .. code:: console
@@ -1985,8 +1990,8 @@ Transporting the transport node
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now let's simulate what would happen if we wanted to move this transport
-node from ``alpenhost3`` to ``alpenhost1`` over the Snearkernet. (Normally, to
-increase throughput of the Snearkernet, we would wait for the node to
+node from ``alpenhost3`` to ``alpenhost1`` over the Sneakernet. (Normally, to
+increase throughput of the Sneakernet, we would wait for the node to
 fill up, but we're not going to wait for that in this demo.)
 
 The first step is to deactivate the alpenhorn node to tell alpenhorn to
@@ -2018,7 +2023,7 @@ If this were a real transport device, the next steps would be to:
 - eject the media
 - remove the physical storage device from the machine
 
-After this, the trasnport device would need to travel (via Sneakernet) from
+After this, the transport device would need to travel (via Sneakernet) from
 the site containing ``alpenhost3`` to the site containing ``alpenhost1`` where
 we would do the reverse procedure, installing the device in the
 ``alpenhost1`` machine and mounting the device's filesystem.
@@ -2030,7 +2035,7 @@ proceed with the last step of the transport process, which is to update
 the alpenhorn data index to record the movement of the transport device.
 
 In addition to activating the node to tell alpenhorn to start managing
-it again, there are, generally, four fields we may need to upate for a
+it again, there are, generally, four fields we may need to update for a
 transport device after it's been moved:
 
 - its ``host``, to let alpenhorn know which daemon should now be able to access
@@ -2098,4 +2103,4 @@ Next steps
 
 This is the end of the curated part of the alpenhorn demo, but you can
 use this demo system to experiment with running alpenhorn. Remember: you
-can always reset this demo to its inital state.
+can always reset this demo to its initial state.
