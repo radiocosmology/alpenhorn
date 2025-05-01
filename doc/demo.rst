@@ -7,7 +7,7 @@ Introduction
 This is a short demonstration of using alpenhorn intended to show off
 most of the major features of the system.
 
-Demo Set-up
+Demo set-up
 -----------
 
 Because alpenhorn is designed to run as a distributed system, with both
@@ -250,7 +250,7 @@ places:
 * the ``alpenshell`` container, where you'll be issuing ``alpenhorn`` commands
 * the ``alpenhost1`` container, where you'll be interacting with data files
 
-To aide in distinguishing these three places, we've tried to indicate them by
+To aid in distinguishing these three places, we've tried to indicate them by
 using different highlights.
 
 Commands you should execute on the docker host will look like this:
@@ -1624,7 +1624,7 @@ known corrupt file is not considered "present" on a node, since it doesn't
 provide the expected data.
 
 Recovering corrupt files
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The standard way to recover a corrupt file copy is to re-transfer a
 known-good copy of the file over top of the corrupt version. We can do
