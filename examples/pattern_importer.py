@@ -320,7 +320,7 @@ def demo_init() -> None:
     )
 
     # Indicate success
-    print("Plugin init complete complete.")
+    print("Plugin init complete.")
 
 
 def register_extension() -> dict:
