@@ -2,6 +2,7 @@
 
 import peewee as pw
 import pytest
+import yaml
 
 from alpenhorn.db import (
     ArchiveAcq,
@@ -96,6 +97,17 @@ def test_init_version1(clidb, cli):
 
     # By "old CHIME data index" we mean one without a schema version
     DataIndexVersion.delete().execute()
+
+    # Init fails
+    cli(1, ["db", "init"])
+
+
+def test_init_nodb(cli, xfs):
+
+    # Mess up the config file
+    with open("/etc/alpenhorn/alpenhorn.conf", "w") as f:
+        config = {"database": {"url": "sqlite:////MISSING/MISSING.db"}}
+        f.write(yaml.dump(config))
 
     # Init fails
     cli(1, ["db", "init"])

@@ -98,7 +98,7 @@ def connect() -> None:
     # On connection error, raise click.ClickException
     try:
         db = func(config=database_config)
-    except pw.OperationalError as e:
+    except (pw.OperationalError, pw.ProgrammingError, pw.ImproperlyConfigured) as e:
         raise click.ClickException(
             f"Unable to connect to the database: {e}.\n"
             "See --help-config for more details."
