@@ -91,7 +91,8 @@ def schema_version(
     Raises
     ------
     click.ClickException:
-        A check was requested and the check failed.
+        A check was requested and the check failed, or there was an error
+        trying to read from the database.
     """
     # Special case for check
     if check:
@@ -103,11 +104,23 @@ def schema_version(
     # Fetch version for component
     try:
         schema = DataIndexVersion.get_or_none(component=component)
-    except (pw.OperationalError, pw.ProgrammingError):
+    except (pw.OperationalError, pw.ProgrammingError, pw.ImproperlyConfigured) as e1:
         # This may be because the table doesn't exist.  Look for it.
-        if DataIndexVersion._meta.table_name in database_proxy.get_tables():
-            # Table exists, but be some sort of other error
-            raise
+        try:
+            tables = database_proxy.get_tables()
+        except (
+            pw.OperationalError,
+            pw.ProgrammingError,
+            pw.ImproperlyConfigured,
+        ) as e2:
+            # Database read error
+            raise click.ClickException(f"Database read error: {e2}") from e2
+
+        if DataIndexVersion._meta.table_name in tables:
+            # Table exists, must be some sort of other error
+            raise click.ClickException(
+                f"Unable to determine schema version: {e1}"
+            ) from e1
 
         # Otherwise, no table
         schema = None
