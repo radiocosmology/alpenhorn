@@ -61,33 +61,33 @@ def test_label_change(cleanup):
 def test_labelnames(cleanup):
     """Test Metric.labelnames"""
     metric = metrics.Metric("unbound", "desc", unbound={"h", "b", "c", "d", "f"})
-    assert metric.labelnames == ["b", "c", "d", "f", "h"]
+    assert metric.labelnames == ["b", "c", "d", "daemon", "f", "h"]
 
     metric = metrics.Metric(
         "mixed", "desc", unbound={"a", "b", "c"}, bound={"d": "e", "f": "g"}
     )
-    assert metric.labelnames == ["a", "b", "c", "d", "f"]
+    assert metric.labelnames == ["a", "b", "c", "d", "daemon", "f"]
 
     metric = metrics.Metric(
         "bound", "desc", bound={"i": "a", "b": "b", "c": "c", "d": "e", "f": "g"}
     )
-    assert metric.labelnames == ["b", "c", "d", "f", "i"]
+    assert metric.labelnames == ["b", "c", "d", "daemon", "f", "i"]
 
 
-def test_labelvalues(cleanup):
+def test_labelvalues(cleanup, hostname):
     """Test Metric.labelvalues"""
     metric = metrics.Metric("unbound", "desc", unbound={"h", "b", "c", "d", "f"})
-    assert metric.labelvalues(h=1, b=2, c=3, d=4, f=5) == [2, 3, 4, 5, 1]
+    assert metric.labelvalues(h=1, b=2, c=3, d=4, f=5) == [2, 3, 4, hostname, 5, 1]
 
     metric = metrics.Metric(
         "mixed", "desc", unbound={"a", "b", "c"}, bound={"d": "e", "f": "g"}
     )
-    assert metric.labelvalues(a=6, b=7, c=8) == [6, 7, 8, "e", "g"]
+    assert metric.labelvalues(a=6, b=7, c=8) == [6, 7, 8, "e", hostname, "g"]
 
     metric = metrics.Metric(
         "bound", "desc", bound={"i": "a", "b": "b", "c": "c", "d": "e", "f": "g"}
     )
-    assert metric.labelvalues() == ["b", "c", "e", "g", "a"]
+    assert metric.labelvalues() == ["b", "c", "e", hostname, "g", "a"]
 
 
 def test_labelvalues_bad(cleanup):
@@ -109,12 +109,12 @@ def test_labelvalues_bad(cleanup):
         metric.labelvalues(a=1, b=2, c=3, d=4)
 
 
-def test_bind(cleanup):
+def test_bind(cleanup, hostname):
     """Test Metric.bind"""
     base = metrics.Metric("name", "desc", unbound=["a", "b", "c"])
 
-    # All labels are unbound
-    assert base.labelvalues(a=1, b=2, c=3) == [1, 2, 3]
+    # All labels are unbound (except "daemon")
+    assert base.labelvalues(a=1, b=2, c=3) == [1, 2, 3, hostname]
 
     # Can't bind non-existent labels
     with pytest.raises(TypeError):
@@ -124,7 +124,7 @@ def test_bind(cleanup):
     copy = base.bind()
 
     # All labels are still unbound
-    assert copy.labelvalues(a=1, b=2, c=3) == [1, 2, 3]
+    assert copy.labelvalues(a=1, b=2, c=3) == [1, 2, 3, hostname]
 
     # Not the same instance as base
     assert copy is not base
@@ -133,20 +133,20 @@ def test_bind(cleanup):
     copy = base.bind(a=4)
 
     # Only two unbound labels, now
-    assert copy.labelvalues(b=2, c=3) == [4, 2, 3]
+    assert copy.labelvalues(b=2, c=3) == [4, 2, 3, hostname]
 
     # Fails because a is now bound
     with pytest.raises(TypeError):
-        assert copy.labelvalues(a=1, b=2, c=3) == [1, 2, 3]
+        copy.labelvalues(a=1, b=2, c=3)
 
     # But the base hasn't changed
-    assert base.labelvalues(a=1, b=2, c=3) == [1, 2, 3]
+    assert base.labelvalues(a=1, b=2, c=3) == [1, 2, 3, hostname]
 
     # Bind the remaining labels
     copy2 = copy.bind(b=5, c=6)
 
     # Now no unbound labels
-    assert copy2.labelvalues() == [4, 5, 6]
+    assert copy2.labelvalues() == [4, 5, 6, hostname]
 
 
 def test_labelled_metric(cleanup):
@@ -169,20 +169,7 @@ def test_labelled_metric(cleanup):
     assert isinstance(submetric, Counter)
 
 
-def test_unlabelled_metric(cleanup):
-    """Test using an unlabelled metric."""
-
-    # In this case, Metric._labelled_metric _can't_ call the
-    # prom client metric's .label().  So, it just returns the parent
-    # metric, which is then used for the .set call
-
-    metric = metrics.Metric("name", "desc")
-
-    # _labelled_metric just returns _metric now
-    assert metric._labelled_metric(labels={}) is metric._metric
-
-
-def test_add(cleanup):
+def test_add(cleanup, hostname):
     """Test Metric.add"""
 
     gauge = metrics.Metric(
@@ -198,7 +185,7 @@ def test_add(cleanup):
 
     gauge.add(1, a=1, b=2, c=3)
 
-    mock.labels.assert_called_with(a=1, b=2, c=3, d="e", f="g")
+    mock.labels.assert_called_with(a=1, b=2, c=3, d="e", daemon=hostname, f="g")
     # .add is implemented via .inc on the prom metric
     childmock.inc.assert_called_with(1)
 
@@ -208,11 +195,11 @@ def test_add(cleanup):
 
     gauge.add(-3, a=4, b=5, c=6)
 
-    mock.labels.assert_called_with(a=4, b=5, c=6, d="e", f="g")
+    mock.labels.assert_called_with(a=4, b=5, c=6, d="e", daemon=hostname, f="g")
     childmock.inc.assert_called_with(-3)
 
 
-def test_inc(cleanup):
+def test_inc(cleanup, hostname):
     """Test Metric.inc"""
 
     metric = metrics.Metric(
@@ -228,7 +215,7 @@ def test_inc(cleanup):
 
     metric.inc(a=1, b=2, c=3)
 
-    mock.labels.assert_called_with(a=1, b=2, c=3, d="e", f="g")
+    mock.labels.assert_called_with(a=1, b=2, c=3, d="e", daemon=hostname, f="g")
     # The passed .inc value is always explicit
     childmock.inc.assert_called_with(1)
 
@@ -237,7 +224,7 @@ def test_inc(cleanup):
         metric.inc(b=5, c=6)
 
 
-def test_dec(cleanup):
+def test_dec(cleanup, hostname):
     """Test Metric.dec"""
 
     metric = metrics.Metric(
@@ -253,7 +240,7 @@ def test_dec(cleanup):
 
     metric.dec(a=1, b=2, c=3)
 
-    mock.labels.assert_called_with(a=1, b=2, c=3, d="e", f="g")
+    mock.labels.assert_called_with(a=1, b=2, c=3, d="e", daemon=hostname, f="g")
     childmock.inc.assert_called_with(-1)
 
     # Not fully bound is an error
@@ -261,7 +248,7 @@ def test_dec(cleanup):
         metric.dec(b=5, c=6)
 
 
-def test_set_gauge(cleanup):
+def test_set_gauge(cleanup, hostname):
     """Test Metric.set on a gauge"""
 
     gauge = metrics.Metric(
@@ -282,11 +269,11 @@ def test_set_gauge(cleanup):
     gauge.set(-2, a=4, b=5, c=6)
 
     # We always use the keyword calling convention with .labels
-    mock.labels.assert_called_with(a=4, b=5, c=6, d="e", f="g")
+    mock.labels.assert_called_with(a=4, b=5, c=6, d="e", daemon=hostname, f="g")
     childmock.set.assert_called_with(-2)
 
 
-def test_set_counter(cleanup):
+def test_set_counter(cleanup, hostname):
     """Test Metric.set on a counter"""
 
     counter = metrics.Metric(
@@ -315,12 +302,12 @@ def test_set_counter(cleanup):
     # This resets the counter
     counter.set(0, a=4, b=5, c=6)
 
-    mock.labels.assert_called_with(a=4, b=5, c=6, d="e", f="g")
+    mock.labels.assert_called_with(a=4, b=5, c=6, d="e", daemon=hostname, f="g")
     childmock.reset.assert_called()
     childmock.set.assert_not_called()
 
 
-def test_remove(cleanup):
+def test_remove(cleanup, hostname):
     """Test Metric.remove"""
 
     metric = metrics.Metric(
@@ -338,7 +325,7 @@ def test_remove(cleanup):
     metric.remove(a=4, b=5, c=6)
 
     # No keywords allowed here; must pass the ordered labelvalue list
-    mock.remove.assert_called_with([4, 5, 6, "e", "g"])
+    mock.remove.assert_called_with(4, 5, 6, "e", hostname, "g")
 
 
 def test_by_name(cleanup):

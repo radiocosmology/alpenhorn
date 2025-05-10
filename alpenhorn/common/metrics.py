@@ -18,7 +18,7 @@ does nothing.
 
 from __future__ import annotations
 
-from ..common import config
+from . import config, util
 
 try:
     import prometheus_client as prom
@@ -55,9 +55,13 @@ class Metric:
         value for `counter`).  All instances with the same `name` control the same
         underlying metric.
 
-        Newly-created metrics are implicitly set to zero, but, unless they have
-        no labels at all, they won't actually be reported until their value is
-        explicitly set/updated.
+        All metric instances will automatically bind the label "daemon" to the
+        current hostname (the value returned by `util.get_hostname()`) unless the
+        `bound` dict already binds that label to something else.  (As a result,
+        "daemon" can never appear in the `unbound` set.)
+
+        Newly-created metrics are implicitly set to zero, but they won't actually
+        be reported until their value is explicitly set/updated.
 
         Parameters
         ----------
@@ -85,15 +89,19 @@ class Metric:
         """
         global _metrics
 
+        # Bind the "daemon" label if not already bound
+        self._bound_labels = dict(bound)
+        if "daemon" not in self._bound_labels:
+            self._bound_labels["daemon"] = util.get_hostname()
+
         # keys in "bound" can't also appear in "unbound"
-        for key in bound.keys():
+        for key in self._bound_labels.keys():
             if key in unbound:
                 raise KeyError(f'label "{key}" is both bound and unbound')
 
         self._name = name
         self._desc = description
         self._unbound_labels = set(unbound)
-        self._bound_labels = bound
         self._counter = counter
 
         # We don't save any metrics, if we have no prometheus_client
@@ -289,7 +297,7 @@ class Metric:
         """
         if self._metric:
             try:
-                self._metric.remove(self.labelvalues(**labels))
+                self._metric.remove(*self.labelvalues(**labels))
             except KeyError:
                 pass  # Child metric didn't exist
 
