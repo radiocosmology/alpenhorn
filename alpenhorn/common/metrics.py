@@ -90,18 +90,18 @@ class Metric:
         global _metrics
 
         # Bind the "daemon" label if not already bound
-        if "daemon" not in bound:
-            bound["daemon"] = util.get_hostname()
+        self._bound_labels = dict(bound)
+        if "daemon" not in self._bound_labels:
+            self._bound_labels["daemon"] = util.get_hostname()
 
         # keys in "bound" can't also appear in "unbound"
-        for key in bound.keys():
+        for key in self._bound_labels.keys():
             if key in unbound:
                 raise KeyError(f'label "{key}" is both bound and unbound')
 
         self._name = name
         self._desc = description
         self._unbound_labels = set(unbound)
-        self._bound_labels = bound
         self._counter = counter
 
         # We don't save any metrics, if we have no prometheus_client
