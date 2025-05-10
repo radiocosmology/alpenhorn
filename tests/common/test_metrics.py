@@ -137,7 +137,7 @@ def test_bind(cleanup, hostname):
 
     # Fails because a is now bound
     with pytest.raises(TypeError):
-        assert copy.labelvalues(a=1, b=2, c=3) == [1, 2, 3, hostname]
+        copy.labelvalues(a=1, b=2, c=3)
 
     # But the base hasn't changed
     assert base.labelvalues(a=1, b=2, c=3) == [1, 2, 3, hostname]
