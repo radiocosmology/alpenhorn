@@ -213,90 +213,41 @@ def init_logging(cli: bool, verbosity: int | None = None) -> None:
         root_logger.info("Alpenhorn start.")
 
 
-def _max_bytes_from_config(max_bytes: str | float | int) -> int:
-    """Convert logging.file.max_bytes to bytes.
-
-    Parameters
-    ----------
-    max_bytes
-        The value of logging.file.max_bytes.
-
-    Returns
-    -------
-    max_bytes
-        The max size converted to bytes
-
-    Raises
-    ------
-    ValueError
-        max_bytes was invalid
-    """
-
-    exponent = 0
-
-    # Look for a suffix
-    if isinstance(max_bytes, str):
-        if max_bytes.endswith("k"):
-            max_bytes = max_bytes[:-1]
-            exponent = 1
-        elif max_bytes.endswith("M"):
-            max_bytes = max_bytes[:-1]
-            exponent = 2
-        elif max_bytes.endswith("G"):
-            max_bytes = max_bytes[:-1]
-            exponent = 3
-
-    try:
-        result = int(float(max_bytes) * (1024**exponent))
-    except ValueError:
-        raise ValueError("bad size for logging.file.max_bytes")
-
-    if result <= 0:
-        raise ValueError("bad size for logging.file.max_bytes")
-
-    return result
-
-
-def configure_sys_logging(syslog_config: dict) -> logging.handlers.SysLogHandler | None:
+def configure_sys_logging() -> logging.handlers.SysLogHandler | None:
     """Configure a syslog logging handler based on the config.
-
-    Parameters
-    ----------
-    syslog_config
-        The contents of the `logging.syslog` section of the
-        alpenhorn config.
 
     Returns
     -------
     syslog_handler
         The configured syslog handler
+
+    Raises
+    ------
+    click.ClickException
+        a bad value was encountered in the logging config
     """
 
-    enable = syslog_config.get("enable", True)
-    if enable is not True and enable is not False:
-        raise ValueError("logging.syslog.enable in config must be boolean")
-
-    if not enable:
+    if not config.get("logging.syslog.enable", default=True, as_type=bool):
         return None  # Explicitly disabled
 
     # Configuration parameters
-    address = syslog_config.get("address", "localhost")
-    port = int(syslog_config.get("port", 514))
+    address = config.get("logging.syslog.address", default="localhost", as_type=str)
+    port = config.get_int("logging.syslog.port", default=514, min=0, max=65535)
 
     # If port is zero, then address is a local socket.
     if port:
         address = (address, port)
 
-    use_tcp = syslog_config.get("use_tcp", False)
-    if use_tcp is not True and use_tcp is not False:
-        raise ValueError("logging.syslog.use_tcp in config must be boolean")
+    use_tcp = config.get("logging.syslog.use_tcp", default=False, as_type=bool)
 
     # Get facility
-    facname = syslog_config.get("facility", "user").lower()
+    facname = config.get("logging.syslog.facility", default="user", as_type=str).lower()
     try:
         facility = logging.handlers.SysLogHandler.facility_names[facname]
     except KeyError:
-        raise ValueError("unknown facility in logging.syslog.facility")
+        raise click.ClickException(
+            f"unknown facility {facname} in logging.syslog.facility"
+        )
 
     handler = logging.handlers.SysLogHandler(
         address=address,
@@ -325,14 +276,8 @@ def configure_sys_logging(syslog_config: dict) -> logging.handlers.SysLogHandler
     return handler
 
 
-def configure_file_logging(file_config: dict) -> logging.Handler:
+def configure_file_logging() -> logging.Handler:
     """Configure a file logging handler based on the config.
-
-    Paramters
-    ---------
-    file_config
-        The contents of the `logging.file` section of the
-        alpenhorn config.
 
     Returns
     -------
@@ -341,42 +286,25 @@ def configure_file_logging(file_config: dict) -> logging.Handler:
 
     Raises
     ------
-    KeyError
-        no `logging.file.name` was specified in the config
-    ValueError
+    click.ClickException
         a bad value was encountered in the logging config
     """
 
-    if "name" not in file_config:
-        raise KeyError("No logging.file.name in config")
+    name = pathlib.Path(config.get("logging.file.name", as_type=str)).expanduser()
 
-    name = pathlib.Path(file_config["name"]).expanduser()
-
-    watch = file_config.get("watch", False)
-    if watch is not True and watch is not False:
-        raise ValueError("logging.file.watch in config must be boolean")
-
-    rotate = file_config.get("rotate", False)
-    if rotate is not True and rotate is not False:
-        raise ValueError("logging.file.rotate in config must be boolean")
+    watch = config.get("logging.file.watch", default=False, as_type=bool)
+    rotate = config.get("logging.file.rotate", default=False, as_type=bool)
 
     # Choose handler
     if rotate and watch:
-        raise ValueError(
+        raise click.ClickException(
             "logging.file.rotate and logging.file.watch both true in config"
         )
 
     if rotate:
         # Alpenhorn is rotating the log
-        try:
-            backup_count = int(file_config.get("backup_count", 100))
-        except ValueError:
-            raise ValueError("Bad value for logging.file.backup_count")
-
-        if backup_count <= 0:
-            raise ValueError("Bad value for logging.file.backup_count")
-
-        max_bytes = _max_bytes_from_config(file_config.get("max_bytes", "4G"))
+        backup_count = config.get_int("logging.file.backup_count", default=10, min=1)
+        max_bytes = config.get_bytes("logging.file.max_bytes", default="4M")
         handler = RotatingFileHandler(
             name, maxBytes=max_bytes, backupCount=backup_count
         )
@@ -418,37 +346,31 @@ def configure_logging() -> None:
         An invalid value was found in the logging config.
     """
 
-    def _check_level(level, source):
-        if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-            raise ValueError(f"Log level {level} defined by {source} is not valid")
-
-    logger_config = config.config.get("logging", {})
+    def _get_level(path: str, default: str = "INFO") -> str:
+        level = config.get(path, default=default, as_type=str).upper()
+        if level and level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+            raise ValueError(f"Log level {level} defined by {path} is not valid")
+        return level
 
     # Set the overall level
-    level = logger_config["level"].upper()
-    _check_level(level, "logging.level")
-
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    root_logger.setLevel(_get_level("logging.level"))
 
     # Apply any module specific logging levels
-    if "module_levels" in logger_config:
-        for name, level in logger_config["module_levels"].items():
-            logger = logging.getLogger(name)
-            level = level.upper()
-
-            _check_level(level, f"logging.module_levels.{name}")
-            logger.setLevel(level)
+    module_levels = config.get("logging.module_levels", default={}, as_type=dict)
+    for name in module_levels:
+        logger = logging.getLogger(name)
+        logger.setLevel(_get_level(f"logging.module_levels.{name}"))
 
     # Configure syslog logging, maybe
-    if "syslog" in logger_config:
-        syslog_handler = configure_sys_logging(logger_config["syslog"])
+    if config.get("logging.syslog", default=None, as_type=dict):
+        syslog_handler = configure_sys_logging()
     else:
         syslog_handler = None
 
     # Configure file logging, maybe
-    if "file" in logger_config:
-        file_handler = configure_file_logging(logger_config["file"])
+    if config.get("logging.file", default=None, as_type=dict):
+        file_handler = configure_file_logging()
     else:
         file_handler = None
 

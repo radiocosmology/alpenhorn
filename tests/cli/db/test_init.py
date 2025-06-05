@@ -103,7 +103,6 @@ def test_init_version1(clidb, cli):
 
 
 def test_init_nodb(cli, xfs):
-
     # Mess up the config file
     with open("/etc/alpenhorn/alpenhorn.conf", "w") as f:
         config = {"database": {"url": "sqlite:////MISSING/MISSING.db"}}

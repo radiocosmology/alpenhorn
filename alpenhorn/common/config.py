@@ -98,11 +98,11 @@ Example config:
             # Maximum number of rotated files to keep.  Must be at least one
             # Rotated files append an integer to the name specified (e.g.
             # "file.log.1", "file.log.2" etc.).
-            backup_count: 100
+            backup_count: 10
 
             # Size, in bytes, at which log file rotation occurs.  May include a suffix:
             # k, M, or G.
-            max_bytes: 4G
+            max_bytes: 4M
 
 
     # Configure the operation of the local daemon
@@ -155,19 +155,8 @@ from click import ClickException
 
 log = logging.getLogger(__name__)
 
-config = None
-
-_default_config = {
-    "logging": {"level": "info"},
-    "daemon": {
-        "auto_import_interval": 30,
-        "auto_verify_min_days": 7,
-        "num_workers": 0,
-        "prom_client_port": 0,
-        "serial_io_timeout": 900,
-        "update_interval": 60,
-    },
-}
+# This is where the config is stored
+_config = None
 
 _test_isolation = False
 
@@ -196,10 +185,10 @@ def test_isolation(enable: bool = True) -> None:
 def load_config(cli_conf: str | os.PathLike | None, cli: bool) -> None:
     """Find and load the configuration from a file."""
 
-    global config, _test_isolation
+    global _config, _test_isolation
 
-    # Initialise with the default configuration
-    config = _default_config.copy()
+    # Initialise an empty config
+    _config = {}
 
     # Construct the configuration file path
     if _test_isolation:
@@ -242,7 +231,7 @@ def load_config(cli_conf: str | os.PathLike | None, cli: bool) -> None:
             conf = yaml.safe_load(fh)
 
         if conf is not None:
-            config = merge_dict_tree(config, conf)
+            _config = merge_dict_tree(_config, conf)
 
     if no_config:
         raise ClickException(
@@ -303,3 +292,231 @@ def merge_dict_tree(a: Any, b: Any) -> Any:
 
     # All other cases (scalars etc) we should favour b
     return b
+
+
+# This is used to mark no default (since the caller may want to use `None`
+# as the default).
+_SENTINAL = object()
+
+
+def get(path: str, default: Any = _SENTINAL, as_type: type | None = None) -> Any:
+    """Return the config value specified by `path`.
+
+    Parameters:
+    -----------
+    path: str
+        The dotted path to the config parameter, e.g. "logging.file.watch"
+    default: Any, optional
+        If given, the value to return if the config parameter is not found.
+        If this is not given, a missing config parameter results in an
+        exception.
+    as_type: type, optional
+        If this is specified and the config parameter exists, an attempt
+        will be made to co-erce the value to this type.  The only supported
+        types are: bool, dict, float, int, list, str.
+
+    Notes
+    -----
+    If `as_type` is given, co-ercion is only attempted if the parameter exists.
+    Co-ercion will never be attempted on the value specified by `default`: if
+    it's used, it will be returned verbatim, even if it doesn't conform to the
+    type given by `as_type`.
+
+    Raises
+    ------
+    click.ClickException:
+        The parameter didn't exist, and no default was given, or the value
+        couldn't be co-erced to the requested type.
+    ValueError:
+        The value of `as_type` was not one of the allowed types listed above.
+    """
+    # Split the path
+    paths = path.split(".")
+
+    # Drill down to the requested parameter
+    value = _config
+    for elem in paths:
+        if isinstance(value, dict) and elem in value:
+            value = value[elem]
+        else:
+            if default is not _SENTINAL:
+                return default
+            raise ClickException(f"missing config value: {path}")
+
+    # Now check type, if requested
+    if as_type is dict:
+        if not isinstance(value, dict):
+            raise ClickException(f"invalid config value for {path}: mapping expected")
+    elif as_type is list:
+        if not isinstance(value, list):
+            raise ClickException(f"invalid config value for {path}: sequence expected")
+    elif as_type is not None:
+        # Scalar co-ercion requested.  Reject non-scalars
+        if isinstance(value, dict | list):
+            raise ClickException(f"invalid config value for {path}: scalar expected")
+        if as_type is bool:
+            if value is not True and value is not False:
+                raise ClickException(
+                    f"invalid config value for {path}: boolean expected"
+                )
+        elif as_type in {float, int, str}:
+            try:
+                return as_type(value)
+            except (ValueError, TypeError):
+                raise ClickException(
+                    f"invalid config value for {path}: {as_type} expected"
+                )
+        else:
+            raise ValueError(f"unsupported as_type: {as_type}")
+
+    # No coercion:
+    return value
+
+
+def _get_bounded(
+    path: str,
+    default: Any,
+    as_type: type,
+    min: int | float | None,
+    max: int | float | None,
+) -> int | float:
+    """Return a config value with bounds checking.
+
+    This is used to implement `get_int` and `get_float` (q.v.).
+    """
+
+    # Fetch
+    value = get(path, default=default, as_type=as_type)
+    if value is default:
+        return default
+
+    if min is not None and value < min:
+        raise ClickException(f'config parameter "{path}" too small: {value} < {min}')
+    if max is not None and value > max:
+        raise ClickException(f'config parameter "{path}" too large: {value} > {max}')
+    return value
+
+
+def get_int(
+    path: str, default: Any = _SENTINAL, min: int | None = None, max: int | None = None
+) -> int:
+    """Return a config value as an int.
+
+    Includes optional bounds checking.
+
+    Parameters:
+    -----------
+    path: str
+        The dotted path to the config parameter, e.g. "logging.file.watch"
+    default: Any, optional
+        If given, the value to return if the config parameter is not found.
+        If this is not given, a missing config parameter results in an
+        exception.
+    min, max: int, optional
+        Bounds (inclusive).  If given, a config value below `min` or above `max`
+        results in an exception.
+
+    Notes
+    -----
+    Bounds checking is not done on the `default` value, if used.
+
+    Raises
+    ------
+    click.ClickException:
+        The parameter didn't exist, and no default was given, or the value
+        couldn't be co-erced to an int, or the value was out of bounds
+    """
+    return _get_bounded(path, default, int, min, max)
+
+
+def get_float(
+    path: str,
+    default: Any = _SENTINAL,
+    min: float | None = None,
+    max: float | None = None,
+) -> float:
+    """Return a config value as a float.
+
+    Includes optional bounds checking.
+
+    Parameters:
+    -----------
+    path: str
+        The dotted path to the config parameter, e.g. "logging.file.watch"
+    default: Any, optional
+        If given, the value to return if the config parameter is not found.
+        If this is not given, a missing config parameter results in an
+        exception.
+    min, max: float, optional
+        Bounds (inclusive).  If given, a config value below `min` or above `max`
+        results in an exception.
+
+    Notes
+    -----
+    Bounds checking is not done on the `default` value, if used.
+
+    Raises
+    ------
+    click.ClickException:
+        The parameter didn't exist, and no default was given, or the value
+        couldn't be co-erced to a float, or the value was out of bounds
+    """
+    return _get_bounded(path, default, float, min, max)
+
+
+def get_bytes(path, default: str | None = None) -> int:
+    """Return a config value as a byte size.
+
+    Really, this is just an alternate int format which allows a
+    "k", "M", "G" suffix for large integers.  Only positive
+    values are allowed.
+
+    Parameters
+    ----------
+    path: str
+        The dotted path to the config parameter, e.g. "logging.file.max_bytes"
+    default: str, optional
+        The default value if the config parameter is not found.
+
+    Notes
+    -----
+    Unlike most of the `config.get...` routines, this one _does_ interpret
+    the default value, meaning defaults like "4M" can be used.  Also, although
+    this function returns an int, float values are permitted in the config (so,
+    e.g., "1.5k" is permitted)
+
+    Returns
+    -------
+    bytes
+        The config value or default, converted to an int
+
+    Raises
+    ------
+    click.ClickException
+        The requested parameter was not found or not valid, or non-positive.
+    """
+    # Get the config value
+    value = get(path, default=_SENTINAL if default is None else default, as_type=str)
+
+    exponent = 0
+
+    # Look for a suffix
+    if value.endswith("k"):
+        value = value[:-1]
+        exponent = 1
+    elif value.endswith("M"):
+        value = value[:-1]
+        exponent = 2
+    elif value.endswith("G"):
+        value = value[:-1]
+        exponent = 3
+
+    try:
+        result = int(float(value) * (1024**exponent))
+    except ValueError:
+        raise ClickException(f'invalid value for "{path}"')
+
+    if result <= 0:
+        raise ClickException(f'invalid value for "{path}"')
+
+    return result

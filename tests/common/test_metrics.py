@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 
 from alpenhorn.common import metrics
@@ -338,13 +339,24 @@ def test_by_name(cleanup):
         metrics.by_name("no_such_metric")
 
 
-@pytest.mark.alpenhorn_config({"daemon": {"prom_client_port": "0"}})
 def test_start_promclient_off(set_config):
     """Test start_promclient with no port."""
 
     mock = MagicMock()
     with patch("prometheus_client.start_http_server", mock):
         metrics.start_promclient()
+
+    mock.assert_not_called()
+
+
+@pytest.mark.alpenhorn_config({"daemon": {"prom_client_port": "0"}})
+def test_start_promclient_zero(set_config):
+    """Test start_promclient with port zero."""
+
+    mock = MagicMock()
+    with patch("prometheus_client.start_http_server", mock):
+        with pytest.raises(click.ClickException):
+            metrics.start_promclient()
 
     mock.assert_not_called()
 

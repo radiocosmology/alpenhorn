@@ -85,10 +85,7 @@ def connect() -> None:
         _db_ext = {}
 
     # If fetch the database config, if present
-    if "database" in config.config:
-        database_config = config.config["database"]
-    else:
-        database_config = {}
+    database_config = config.get("database", default={}, as_type=dict)
 
     # Call the connect function from the database extension (or fallback)
     func = _capability("connect")

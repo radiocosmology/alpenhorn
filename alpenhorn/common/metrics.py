@@ -356,11 +356,8 @@ def start_promclient() -> None:
     """
 
     # Get the port number.  If not found, we just return here.
-    try:
-        port = int(config.config["daemon"]["prom_client_port"])
-        if port <= 0:
-            return
-    except KeyError:
+    port = config.get_int("daemon.prom_client_port", default=None, min=1, max=65535)
+    if port is None:
         return
 
     # Okay, we're good to start the http server, if we can

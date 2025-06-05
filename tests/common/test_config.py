@@ -37,26 +37,26 @@ def test_isolation(fs, monkeypatch):
 
     # Not isolated
     config.load_config(None, False)
-    assert "canary" in config.config
-    assert "env_data" in config.config
+    assert config.get("canary", default=None) is True
+    assert config.get("env_data", default=None) is True
 
     # Reset
-    config.config = None
+    config._config = None
 
     # Isolated
     config.test_isolation()
     config.load_config(None, False)
-    assert "canary" not in config.config
-    assert "env_data" in config.config
+    assert config.get("canary", default=None) is None
+    assert config.get("env_data", default=None) is True
 
     # Reset
-    config.config = None
+    config._config = None
 
     # Not isolated again
     config.test_isolation(False)
     config.load_config(None, False)
-    assert "canary" in config.config
-    assert "env_data" in config.config
+    assert config.get("canary", default=None) is True
+    assert config.get("env_data", default=None) is True
 
 
 def test_config_env(fs, monkeypatch):
@@ -65,7 +65,7 @@ def test_config_env(fs, monkeypatch):
 
     monkeypatch.setenv("ALPENHORN_CONFIG_FILE", "/test/from/env/test.yaml")
     config.load_config(None, False)
-    assert config.config == merge_dict(config._default_config, {"hello": "test"})
+    assert config.get("hello") == "test"
 
 
 def test_precendence(fs, monkeypatch):
@@ -73,27 +73,25 @@ def test_precendence(fs, monkeypatch):
 
     fs.create_file("/etc/alpenhorn/alpenhorn.conf", contents="hello: test\n")
     config.load_config(None, False)
-    assert config.config == merge_dict(config._default_config, {"hello": "test"})
+    assert config.get("hello") == "test"
 
     fs.create_file("/etc/xdg/alpenhorn/alpenhorn.conf", contents="hello: test2\n")
     config.load_config(None, False)
-    assert config.config == merge_dict(config._default_config, {"hello": "test2"})
+    assert config.get("hello") == "test2"
 
     fs.create_file(
         os.path.expanduser("~/.config/alpenhorn/alpenhorn.conf"),
         contents="hello: test3\nmeh: embiggens",
     )
     config.load_config(None, False)
-    assert config.config == merge_dict(
-        config._default_config, {"hello": "test3", "meh": "embiggens"}
-    )
+    assert config.get("hello") == "test3"
+    assert config.get("meh") == "embiggens"
 
     fs.create_file("/test/from/env/test.yaml", contents="hello: test4\n")
     monkeypatch.setenv("ALPENHORN_CONFIG_FILE", "/test/from/env/test.yaml")
     config.load_config(None, False)
-    assert config.config == merge_dict(
-        config._default_config, {"hello": "test4", "meh": "embiggens"}
-    )
+    assert config.get("hello") == "test4"
+    assert config.get("meh") == "embiggens"
 
 
 def test_merge():
@@ -130,3 +128,26 @@ def test_merge():
     }
 
     assert conf_c == test_c
+
+
+def test_get_bytes():
+    """Test throwing things at get_bytes"""
+
+    for value, result in [
+        ("1", 1),
+        (12, 12),
+        ("1k", 1024),
+        ("1M", 1024 * 1024),
+        ("1G", 1024 * 1024 * 1024),
+        ("3.3", 3),
+        (3.3, 3),
+        ("3.3k", int(3.3 * 1024)),
+        ("3.3M", int(3.3 * 1024 * 1024)),
+    ]:
+        config._config = {"test": value}
+        assert config.get_bytes("test") == result
+
+    for string in ["", 0, -1, "3.3T", "words"]:
+        config._config = {"test": string}
+        with pytest.raises(ClickException):
+            config.get_bytes("test")
