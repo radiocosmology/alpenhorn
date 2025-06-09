@@ -105,26 +105,26 @@ def logger():
 
 @pytest.fixture
 def set_config(request, logger):
-    """Set alpenhorn.common.config.config for testing.
+    """Set alpenhorn.common.config._config for testing.
 
     Any value given in the alpenhorn_config mark is merged into the
     default config.
 
-    Yields alpenhorn.common.config.config.
+    Yields alpenhorn.common.config._config.
 
-    After the test completes, alpenhorn.common.config.config is set to None.
+    After the test completes, alpenhorn.common.config._config is set to None.
     """
-    # Initialise with the default
-    config.config = config._default_config.copy()
+    # Initialise
+    config._config = {}
 
     marker = request.node.get_closest_marker("alpenhorn_config")
     if marker is not None:
-        config.config = config.merge_dict_tree(config.config, marker.args[0])
+        config._config = config.merge_dict_tree(config._config, marker.args[0])
 
-    yield config.config
+    yield config._config
 
     # Reset globals
-    config.config = None
+    config._config = None
     extensions._db_ext = None
     extensions._id_ext = None
     extensions._io_ext = {}
@@ -424,8 +424,8 @@ def hostname(set_config):
 
     Returns the hostname."""
 
-    config.config = config.merge_dict_tree(
-        config.config, {"base": {"hostname": "alpenhost"}}
+    config._config = config.merge_dict_tree(
+        config._config, {"base": {"hostname": "alpenhost"}}
     )
 
     return "alpenhost"
@@ -454,8 +454,8 @@ def use_chimedb(set_config):
     cdb = pytest.importorskip("chimedb.core")
     cdb.test_enable()
 
-    config.config = config.merge_dict_tree(
-        config.config, {"extensions": ["chimedb.core.alpenhorn"]}
+    config._config = config.merge_dict_tree(
+        config._config, {"extensions": ["chimedb.core.alpenhorn"]}
     )
 
 
@@ -469,8 +469,8 @@ def dbproxy(set_config):
     extensions.load_extensions()
 
     # Set database.url if not already present
-    config.config = config.merge_dict_tree(
-        {"database": {"url": "sqlite:///:memory:"}}, config.config
+    config._config = config.merge_dict_tree(
+        {"database": {"url": "sqlite:///:memory:"}}, config._config
     )
 
     # DB start

@@ -455,7 +455,9 @@ class UpdateableNode(updateable_base):
 
         for copy in copies:
             copy_age_days = (time.time() - copy.last_update.timestamp()) / 86400.0
-            if copy_age_days <= config.config["daemon"]["auto_verify_min_days"]:
+            if copy_age_days <= config.get_int(
+                "daemon.auto_verify_min_days", default=7, min=0
+            ):
                 continue  # Too new to re-verify
 
             log.info(
@@ -1195,6 +1197,7 @@ def update_loop(
             f"{queue.inprogress_size} in-progress on {len(pool)} workers"
         )
 
+        update_interval = config.get_int("daemon.update_interval", default=60, min=0)
         if once:
             # If we're in Exit-after-update mode, wait for updates to complete
             # and then return
@@ -1209,14 +1212,14 @@ def update_loop(
                     log.info("Waiting for updates to complete.")
 
                 # Wait a bit
-                global_abort.wait(config.config["daemon"]["update_interval"])
+                global_abort.wait(update_interval)
                 log.info(
                     f"Tasks: {queue.qsize} queued, {queue.deferred_size} deferred, "
                     f"{queue.inprogress_size} in-progress on {len(pool)} workers"
                 )
         else:
             # Not in EAU mode.  Avoid looping too fast.
-            remaining = config.config["daemon"]["update_interval"] - loop_time
+            remaining = update_interval - loop_time
             if remaining > 0:
                 # Stops waiting if a global abort is triggered
                 global_abort.wait(remaining)
@@ -1232,14 +1235,16 @@ def serial_io(queue: FairMultiFIFOQueue) -> None:
     This function is only called when alpenhorn has no worker threads.  It runs
     I/O tasks in the main loop for a limited period of time.
     """
-    start_time = time.time()
-
     task_metric = Metric(
         "serialio_tasks", "Count of tasks run via Serial I/O", counter=True
     )
 
-    # Handle tasks for, say, 15 minutes at most
-    while time.time() - start_time < config.config["daemon"]["serial_io_timeout"]:
+    # Handle tasks for a finite amount of time (15 minute by default)
+    end_time = time.monotonic() + config.get_int(
+        "daemon.serial_io_timeout", default=900, min=0
+    )
+
+    while time.monotonic() < end_time:
         # Get a task
         item = queue.get(timeout=1)
 

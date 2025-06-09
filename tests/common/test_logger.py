@@ -5,29 +5,8 @@ import pathlib
 import socket
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
-
-import alpenhorn.common.logger
-
-
-def test_max_bytes_from_config():
-    """Test throwing things at _max_bytes_from_config"""
-
-    assert alpenhorn.common.logger._max_bytes_from_config("1") == 1
-    assert alpenhorn.common.logger._max_bytes_from_config(12) == 12
-    assert alpenhorn.common.logger._max_bytes_from_config("1k") == 1024
-    assert alpenhorn.common.logger._max_bytes_from_config("1M") == 1024 * 1024
-    assert alpenhorn.common.logger._max_bytes_from_config("1G") == 1024 * 1024 * 1024
-    assert alpenhorn.common.logger._max_bytes_from_config("3.3") == 3
-    assert alpenhorn.common.logger._max_bytes_from_config(3.3) == 3
-    assert alpenhorn.common.logger._max_bytes_from_config("3.3k") == int(3.3 * 1024)
-    assert alpenhorn.common.logger._max_bytes_from_config("3.3M") == int(
-        3.3 * 1024 * 1024
-    )
-
-    for string in ["", 0, -1, "3.3T", "words"]:
-        with pytest.raises(ValueError):
-            alpenhorn.common.logger._max_bytes_from_config(string)
 
 
 def test_log_buffer_gone(set_config, logger):
@@ -46,14 +25,14 @@ def test_config_sys_logging(set_config, logger):
     with patch("alpenhorn.common.logger.configure_sys_logging") as mock:
         logger.configure_logging()
 
-    mock.assert_called_once_with({"test": True})
+    mock.assert_called_once()
 
 
 @pytest.mark.alpenhorn_config({"logging": {"syslog": {"enable": 1}}})
 def test_syslog_bad_enable(set_config, logger):
     """Test non-bool syslog.enable."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -61,7 +40,7 @@ def test_syslog_bad_enable(set_config, logger):
 def test_syslog_bad_facility(set_config, logger):
     """Test invalid syslog.facility."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -133,7 +112,7 @@ def test_syslog_domain_socket(set_config, logger):
 def test_syslog_bad_use_tcp(set_config, logger):
     """Test non-bool syslog.use_tcp."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -145,14 +124,14 @@ def test_config_file_logging(set_config, logger):
     with patch("alpenhorn.common.logger.configure_file_logging") as mock:
         logger.configure_logging()
 
-    mock.assert_called_once_with({"test": True})
+    mock.assert_called_once()
 
 
 @pytest.mark.alpenhorn_config({"logging": {"file": {"watch": True}}})
 def test_file_no_name(set_config, logger):
     """Can't have logger.file without logger.file.name."""
 
-    with pytest.raises(KeyError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -160,7 +139,7 @@ def test_file_no_name(set_config, logger):
 def test_file_bad_watch(set_config, logger):
     """Test non-bool file.watch."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -170,7 +149,7 @@ def test_file_bad_watch(set_config, logger):
 def test_file_bad_rotate(set_config, logger):
     """Test non-bool file.rotate."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -180,7 +159,7 @@ def test_file_bad_rotate(set_config, logger):
 def test_file_watch_rotate(set_config, logger):
     """Can't set both file.watch and file.rotate to True."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -221,7 +200,7 @@ def test_watchfile_logging(set_config, logger, xfs):
 def test_rotate_bad_count(set_config, logger, xfs):
     """Test a bad backup_count while rotating."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 
@@ -231,7 +210,7 @@ def test_rotate_bad_count(set_config, logger, xfs):
 def test_rotate_bad_size(set_config, logger, xfs):
     """Test a bad max_bytes while rotating."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(click.ClickException):
         logger.configure_logging()
 
 

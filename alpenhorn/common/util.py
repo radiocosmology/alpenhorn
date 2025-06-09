@@ -328,10 +328,9 @@ def get_hostname() -> str:
 
     If there is a host name specified in the config, that is returned
     otherwise the local hostname up to the first '.' is returned"""
-    if config.config is not None and "hostname" in config.config.get("base", {}):
-        return config.config["base"]["hostname"]
 
-    return socket.gethostname().split(".")[0]
+    hostname = config.get("base.hostname", default=None, as_type=str)
+    return hostname if hostname else socket.gethostname().split(".")[0]
 
 
 def pretty_bytes(num: int | None) -> str:

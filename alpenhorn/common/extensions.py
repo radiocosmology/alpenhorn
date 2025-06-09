@@ -127,11 +127,7 @@ def load_extensions() -> None:
 
     _id_ext = []
 
-    if "extensions" not in config.config:
-        log.debug("No extensions to load.")
-        return
-
-    for name in config.config["extensions"]:
+    for name in config.get("extensions", default=[], as_type=list):
         log.info(f"Loading extension {name}")
 
         try:

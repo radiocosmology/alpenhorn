@@ -85,7 +85,8 @@ def entry(ctx, conf, once, test_isolation):
     # If we can be multithreaded, start the worker pool
     if db.threadsafe():
         wpool = pool.WorkerPool(
-            num_workers=config.config["daemon"]["num_workers"], queue=queue
+            num_workers=config.get_int("daemon.num_workers", default=0, min=0),
+            queue=queue,
         )
     else:
         log.warning("Database is not threadsafe: forcing serial I/O.")
