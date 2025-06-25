@@ -39,10 +39,10 @@ class FairMultiFIFOQueue:
         "_keys_by_inprogress",
         "_lock",
         "_not_empty",
-        "_qcount",
-        "_qcount_all",
-        "_qcount_any",
         "_qlock",
+        "_qsize",
+        "_qsize_all",
+        "_qsize_any",
         "_total_inprogress",
         "_total_queued",
     ]
@@ -88,15 +88,15 @@ class FairMultiFIFOQueue:
         self._fifo_labels = {}
 
         # Count of tasks
-        self._qcount = Metric(
-            "queue_count", "Count of queued tasks", unbound=["fifo", "status"]
+        self._qsize = Metric(
+            "queue_size", "Number of queued tasks", unbound=["fifo", "status"]
         )
 
         # Marginalised over status
-        self._qcount_any = self._qcount.bind(status="any")
+        self._qsize_any = self._qsize.bind(status="any")
 
         # Marignalised over fifo
-        self._qcount_all = self._qcount.bind(fifo="_ALL")
+        self._qsize_all = self._qsize.bind(fifo="_ALL")
 
         # Track locked fifos
         self._qlock = Metric(
@@ -107,7 +107,7 @@ class FairMultiFIFOQueue:
     # ===============
 
     def _adj_metrics(self, value: int, fifo: Hashable, status: str) -> None:
-        """Adjust the queue_count metric by value.
+        """Adjust the queue_size metric by value.
 
         Adds `value` (which may be negative) to the metric with fifo=fifo and
         status=status.  Also adds one to the marginalised ..._any and ..._all
@@ -120,12 +120,12 @@ class FairMultiFIFOQueue:
             fifo_label = str(fifo)
             self._fifo_labels[fifo] = fifo_label
 
-        self._qcount.add(value, fifo=fifo_label, status=status)
-        self._qcount_any.add(value, fifo=fifo_label)
-        self._qcount_all.add(value, status=status)
+        self._qsize.add(value, fifo=fifo_label, status=status)
+        self._qsize_any.add(value, fifo=fifo_label)
+        self._qsize_all.add(value, status=status)
 
     def _inc_metrics(self, fifo: Hashable, status: str) -> None:
-        """Increment the queue_count metric.
+        """Increment the queue_size metric.
 
         Adds one to the metric with fifo=fifo and status=status.  Also adds
         one to the marginalised ..._any and ..._all metrics.
@@ -133,7 +133,7 @@ class FairMultiFIFOQueue:
         self._adj_metrics(1, fifo, status)
 
     def _dec_metrics(self, fifo: Hashable, status: str) -> None:
-        """Decrement the queue_count metric.
+        """Decrement the queue_size metric.
 
         Subtracts one from the metric with fifo=fifo and status=status.  Also
         subtracts one from the marginalised ..._any and ..._all metrics.
@@ -186,7 +186,7 @@ class FairMultiFIFOQueue:
             self._joining = False
 
         # Clear the metric.  This clears the marginalised versions, too
-        self._qcount.clear()
+        self._qsize.clear()
 
     def clear_fifo(self, key: Hashable, keep_clear: bool = False) -> tuple[int, int]:
         """Remove all items from a fifo.
