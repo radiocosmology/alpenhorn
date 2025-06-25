@@ -7,7 +7,7 @@ Introduction
 This is a short demonstration of using alpenhorn intended to show off
 most of the major features of the system.
 
-Demo Set-up
+Demo set-up
 -----------
 
 Because alpenhorn is designed to run as a distributed system, with both
@@ -225,7 +225,7 @@ the storage node data:
    you create over the course of this demo.
 
 Finally, to remove the alpenhorn container image, which gets built the
-first time the image is nedded, run:
+first time the image is needed, run:
 
 .. code:: console
    :class: demohost
@@ -250,7 +250,7 @@ places:
 * the ``alpenshell`` container, where you'll be issuing ``alpenhorn`` commands
 * the ``alpenhost1`` container, where you'll be interacting with data files
 
-To aide in distinguishing these three places, we've tried to indicate them by
+To aid in distinguishing these three places, we've tried to indicate them by
 using different highlights.
 
 Commands you should execute on the docker host will look like this:
@@ -488,6 +488,14 @@ To create the group, which we'll call ``demo_storage1``, run:
    :class: demoshell
 
    alpenhorn group create demo_storage1
+
+.. tip::
+   You're encouraged to explore the commands you're running in this demo.
+   Every command (or partial command) accepts the ``--help`` flag, which
+   will show you all the possible options for the command, and provide
+   information on usage, with important caveats.  If you're curious, try
+   all of these and see what they tell you: ``alpenhorn --help``,
+   ``alpenhorn group --help``, and ``alpenhorn group create --help``.
 
 This should create the group:
 
@@ -1624,7 +1632,7 @@ known corrupt file is not considered "present" on a node, since it doesn't
 provide the expected data.
 
 Recovering corrupt files
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The standard way to recover a corrupt file copy is to re-transfer a
 known-good copy of the file over top of the corrupt version. We can do
@@ -1897,6 +1905,353 @@ You can also inspect the filesystem on ``alpenhost`` to see that it is now empty
    /data
    /data/ALPENHORN_NODE
 
+Auto-actions
+------------
+
+Up till now, we've been moving files around manually, however you can configure alpenhorn
+to automate the movement of your files through the Storage graph using `auto-actions`.
+
+There are two auto-actions which always connect a StorageGroup with another StorageNode not
+in that group:
+
+* **Auto-sync**: triggers when a file is added to a StorageNode (via either import or sync)
+  and tells alpenhorn to create a new copy request to a downstream StorageGroup from this node,
+  if it is not already in that group.
+* **Auto-clean**: triggers when a file is added to a StorageGroup (via either import or sync)
+  and tells alpenhorn to delete the file from an upstream StorageNode, if it exists on that node.
+
+The first auto-sync
+~~~~~~~~~~~~~~~~~~~
+
+Let's set up auto-actions to automatically transfer data from ``demo_storage1`` to the archives
+in ``demo_storage2`` and ``demo_storage3``.  We'll start with an auto-sync action which tells alpenhorn
+to create transfer requests for new files which appear on ``demo_storage1`` to have them transferred
+to the ``demo_storage2`` group.  Note: auto-sync actions are managed using the downstream target group:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn group autosync demo_storage2 demo_storage1
+
+After adding the action, you can see it in the group details:
+
+.. code:: console
+   :class: demoshell
+
+   root@alpenshell:/# alpenhorn group autosync demo_storage2 demo_storage1
+   Auto-sync from "demo_storage1" started
+   root@alpenshell:/# alpenhorn group show demo_storage2 --actions
+   Storage Group: demo_storage2
+   Notes:
+   I/O Class: Default
+
+   I/O Config:
+
+     none
+
+   Nodes:
+
+     demo_storage2
+
+   Auto-actions:
+
+   Node           Action     Trigger
+   -------------  ---------  -----------------------
+   demo_storage1  Auto-sync  File added to that node
+
+Let's create a second acquisition now on ``alpenhost1`` and see if it will get automatically transferred:
+
+.. code:: console
+   :class: demonode1
+
+   mkdir -p /data/2025/02/26
+   echo "This is the second acquisition in the alpenhorn demo" > /data/2025/02/26/meta.txt
+
+After creating this new file, request a scan of ``demo_storage1``
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn node scan demo_storage1 --register-new
+
+After the scan completes on ``demo_storage1`` you should almost immediately see the transfer happen
+on ``demo_storage2``:
+
+.. code:: console
+   :class: demohost
+
+   alpenhost1-1  | May 07 20:37:45 INFO >> [MainThread] Node demo_storage1: 43.09 GiB available.
+   alpenhost1-1  | May 07 20:37:45 INFO >> [MainThread] Updating node "demo_storage1".
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#2] Beginning task Scan "." on demo_storage1
+   alpenhost1-1  | May 07 20:37:45 INFO >> [MainThread] Updating group "demo_storage1".
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#2] Scanning "." on "demo_storage1" for new files.
+   alpenhost1-1  | May 07 20:37:45 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost1-1  | May 07 20:37:45 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 1 in-progress on 2 workers
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#2] Scanning ".".
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#2] Scanning "2025/02/26".
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#1] Beginning task Import 2025/02/26/meta.txt on demo_storage1
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#2] Completed import request #5.
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#2] Finished task: Scan "." on demo_storage1
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#1] Acquisition "2025/02/26" added to DB.
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#1] File "2025/02/26/meta.txt" added to DB.
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#1] Imported file copy "2025/02/26/meta.txt" on node "demo_storage1".
+   alpenhost1-1  | May 07 20:37:45 INFO >> [Worker#1] Finished task: Import 2025/02/26/meta.txt on demo_storage1
+
+   alpenhost2-1  | May 07 20:37:55 INFO >> [MainThread] Node demo_storage2: 43.09 GiB available.
+   alpenhost2-1  | May 07 20:37:55 INFO >> [MainThread] Updating node "demo_storage2".
+   alpenhost2-1  | May 07 20:37:55 INFO >> [MainThread] Updating group "demo_storage2".
+   alpenhost2-1  | May 07 20:37:55 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#2] Beginning task Pre-pull search for 2025/02/26/meta.txt in demo_storage2
+   alpenhost2-1  | May 07 20:37:55 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 1 in-progress on 2 workers
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#2] Finished task: Pre-pull search for 2025/02/26/meta.txt in demo_storage2
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#1] Beginning task AFCR#11: demo_storage1 -> demo_storage2
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#1] Creating directory "/data/2025/02/26".
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#1] Pulling remote file 2025/02/26/meta.txt using rsync
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#1] Pull of 2025/02/26/meta.txt complete. Transferred 52 B in 0.4s [142 B/s]
+   alpenhost2-1  | May 07 20:37:55 INFO >> [Worker#1] Finished task: AFCR#11: demo_storage1 -> demo_storage2
+
+The second auto-sync
+~~~~~~~~~~~~~~~~~~~~
+
+Let's set up the second part of our transfer by requesting files be automatically
+moved to ``demo_storage3`` from ``demo_storage2``:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn group autosync demo_storage3 demo_storage2
+
+Now let's create another file to check that it will travel all the way to ``demo_storage3``:
+
+.. code:: console
+   :class: demonode1
+
+   mkdir /data/2025/02/26/01
+   echo "14 15 16 17 18" > /data/2025/02/26/01/0529.dat
+
+And scan the node again to import the file:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn node scan demo_storage1 --register-new
+
+.. hint::
+   If you don't want to run all the ``node scan`` commands in this section, you can
+   always turn auto-sync back on for ``demo_storage1``.  Use the ``node modify`` command
+   to do that.  (We'll keep doing it manually here, though, since that allows you to
+   control when the auto-actions fire.)
+
+After a few update loops, the new file should be successfully synced all the way to
+``demo_storage3``, but there's a subtlety we shouldn't forget about.  If you compare
+``demo_storage2`` and ``demo_storage3`` you'll notice that one file is missing from the
+latter node:
+
+.. code:: console
+   :class: demoshell
+
+   root@alpenshell:/# alpenhorn node stats
+   Name             File Count    Total Size    % Full
+   -------------  ------------  ------------  --------
+   demo_storage1             2          67 B         -
+   demo_storage2             7         169 B         -
+   demo_storage3             6         117 B         -
+
+This is the ``/data/2025/02/26/meta.txt``, which was copied onto ``demo_storage2`` before
+we created the second auto-sync action.  Because auto-actions only trigger on new files
+being added to a node or group, auto-actions never apply retroactively.  To fix this,
+we'll need to perform a manual sync:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn node sync demo_storage2 demo_storage3
+
+Once that completes, then the file counts should be consistent:
+
+.. code:: console
+   :class: demoshell
+
+   root@alpenshell:/# alpenhorn node stats
+   Name             File Count    Total Size    % Full
+   -------------  ------------  ------------  --------
+   demo_storage1             2          67 B         -
+   demo_storage2             7         169 B         -
+   demo_storage3             7         169 B         -
+
+.. tip::
+   When automating movement of data through a storage graph, auto-actions are
+   not a replacement for periodic (e.g. ``cron``-based) invocation of ``sync``
+   and other alpenhorn commands.  A robust transfer system will combine
+   auto-actions with alpenhorn commands.
+
+   The primary benefit of auto-actions is lower latency of transfers
+   over automated, scheduled ``sync`` commands.
+
+The auto-clean action
+~~~~~~~~~~~~~~~~~~~~~
+
+The final piece of our automated transfer mechanism is to delete files once
+they're on ``demo_storage3``.  As with the second auto-sync we created, when
+we create the auto-clean action, it won't retroactively trigger on files which
+already exist, so when creating the action, we'll also clean up ``demo_storage1``,
+for consistency:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn node clean --now demo_storage1 --target=demo_storage3
+   alpenhorn node autoclean demo_storage1 demo_storage3
+
+Auto-clean actions can be seen in the metadata for the node or group:
+
+.. code:: console
+   :class: demoshell
+
+   root@alpenshell:/# alpenhorn node clean --now demo_storage1 --target=demo_storage3
+   Would release 2 files (67 B).
+
+   Continue? [y/N]: y
+
+   Releasing 2 files (67 B).
+   Updated 2 files.
+   root@alpenshell:/# alpenhorn node autoclean demo_storage1 demo_storage3
+   Auto-clean trigger: Group "demo_storage3" added
+   root@alpenshell:/# alpenhorn node show demo_storage1 --actions
+      Storage Node: demo_storage1
+     Storage Group: demo_storage1
+            Active: Yes
+              Type: -
+             Notes:
+         I/O Class: Default
+
+       Daemon Host: alpenhost1
+    Log-in Address: alpenhost1
+   Log-in Username: root
+
+       Auto-Import: Off
+       Auto-Verify: Off
+         Max Total: -
+         Available: 43.09 GiB
+     Min Available: -
+      Last Checked: Wed May  7 21:00:55 2025 UTC
+
+   I/O Config:
+
+     none
+
+   Auto-actions:
+
+   Group          Action      Trigger
+   -------------  ----------  ------------------------
+   demo_storage2  Auto-sync   File added to this node
+   demo_storage3  Auto-clean  File added to that group
+
+Let's create yet another file to test this:
+
+.. code:: console
+   :class: demonode1
+
+   mkdir -p /data/2025/02/26/02
+   echo "14 15 16 17 18" > /data/2025/02/26/02/0011.dat
+
+And scan again:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn node scan demo_storage1 --register-new
+
+You should see the whole transfer.  The scan:
+
+.. code:: console
+   :class: demohost
+
+   alpenhost1-1  | May 07 21:13:15 INFO >> [MainThread] Node demo_storage1: 43.09 GiB available.
+   alpenhost1-1  | May 07 21:13:15 INFO >> [MainThread] Updating node "demo_storage1".
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#2] Beginning task Scan "." on demo_storage1
+   alpenhost1-1  | May 07 21:13:15 INFO >> [MainThread] Updating group "demo_storage1".
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#2] Scanning "." on "demo_storage1" for new files.
+   alpenhost1-1  | May 07 21:13:15 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#2] Scanning ".".
+   alpenhost1-1  | May 07 21:13:15 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 1 in-progress on 2 workers
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#2] Scanning "2025/02/26/02".
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#1] Beginning task Import 2025/02/26/02/0011.dat on demo_storage1
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#2] Completed import request #7.
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#2] Finished task: Scan "." on demo_storage1
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#1] File "2025/02/26/02/0011.dat" added to DB.
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#1] Imported file copy "2025/02/26/02/0011.dat" on node "demo_storage1".
+   alpenhost1-1  | May 07 21:13:15 INFO >> [Worker#1] Finished task: Import 2025/02/26/02/0011.dat on demo_storage1
+
+The first auto-sync:
+
+.. code:: console
+   :class: demohost
+
+   alpenhost2-1  | May 07 21:13:25 INFO >> [MainThread] Node demo_storage2: 43.09 GiB available.
+   alpenhost2-1  | May 07 21:13:25 INFO >> [MainThread] Updating node "demo_storage2".
+   alpenhost2-1  | May 07 21:13:25 INFO >> [MainThread] Updating group "demo_storage2".
+   alpenhost2-1  | May 07 21:13:25 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#2] Beginning task Pre-pull search for 2025/02/26/02/0011.dat in demo_storage2
+   alpenhost2-1  | May 07 21:13:25 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 1 in-progress on 2 workers
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#2] Finished task: Pre-pull search for 2025/02/26/02/0011.dat in demo_storage2
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#1] Beginning task AFCR#15: demo_storage1 -> demo_storage2
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#1] Creating directory "/data/2025/02/26/02".
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#1] Pulling remote file 2025/02/26/02/0011.dat using rsync
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#1] Pull of 2025/02/26/02/0011.dat complete. Transferred 15 B in 0.4s [40 B/s]
+   alpenhost2-1  | May 07 21:13:25 INFO >> [Worker#1] Finished task: AFCR#15: demo_storage1 -> demo_storage2
+   alpenhost2-1  | May 07 21:13:35 INFO >> [MainThread] Node demo_storage2: 43.09 GiB available.
+   alpenhost2-1  | May 07 21:13:35 INFO >> [MainThread] Updating node "demo_storage2".
+   alpenhost2-1  | May 07 21:13:35 INFO >> [MainThread] Updating group "demo_storage2".
+   alpenhost2-1  | May 07 21:13:35 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost2-1  | May 07 21:13:35 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 0 in-progress on 2 workers
+
+The second auto-sync:
+
+.. code:: console
+   :class: demohost
+
+   alpenhost3-1  | May 07 21:13:35 INFO >> [MainThread] Updating group "demo_storage3".
+   alpenhost3-1  | May 07 21:13:35 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost3-1  | May 07 21:13:35 INFO >> [MainThread] Tasks: 1 queued, 0 deferred, 0 in-progress on 2 workers
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#1] Beginning task Pre-pull search for 2025/02/26/02/0011.dat in demo_storage3
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#1] Finished task: Pre-pull search for 2025/02/26/02/0011.dat in demo_storage3
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#2] Beginning task AFCR#16: demo_storage2 -> demo_storage3
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#2] Creating directory "/data/2025/02/26/02".
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#2] Pulling remote file 2025/02/26/02/0011.dat using rsync
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#2] Pull of 2025/02/26/02/0011.dat complete. Transferred 15 B in 0.4s [41 B/s]
+   alpenhost3-1  | May 07 21:13:35 INFO >> [Worker#2] Finished task: AFCR#16: demo_storage2 -> demo_storage3
+
+The auto-clean:
+
+.. code:: console
+   :class: demohost
+
+   alpenhost1-1  | May 07 21:13:45 INFO >> [MainThread] Node demo_storage1: 43.09 GiB available.
+   alpenhost1-1  | May 07 21:13:45 INFO >> [MainThread] Updating node "demo_storage1".
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Beginning task Delete copies [22] from demo_storage1
+   alpenhost1-1  | May 07 21:13:45 INFO >> [MainThread] Updating group "demo_storage1".
+   alpenhost1-1  | May 07 21:13:45 INFO >> [MainThread] Main loop execution was 0.0s.
+   alpenhost1-1  | May 07 21:13:45 INFO >> [MainThread] Tasks: 0 queued, 0 deferred, 1 in-progress on 2 workers
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Removed file copy 2025/02/26/02/0011.dat on demo_storage1
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Removed directory /data/2025/02/26/02 on demo_storage1
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Removed directory /data/2025/02/26 on demo_storage1
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Removed directory /data/2025/02 on demo_storage1
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Removed directory /data/2025 on demo_storage1
+   alpenhost1-1  | May 07 21:13:45 INFO >> [Worker#2] Finished task: Delete copies [22] from demo_storage1
+
+After that, everything should be on the two archive nodes, and cleaned off of ``demo_storage1``:
+
+.. code:: console
+   :class: demoshell
+
+   root@alpenshell:/# alpenhorn node stats
+   Name             File Count    Total Size    % Full
+   -------------  ------------  ------------  --------
+   demo_storage1             0             -         -
+   demo_storage2             8         184 B         -
+   demo_storage3             8         184 B         -
+
 Transport disks and the Sneakernet
 ----------------------------------
 
@@ -2007,19 +2362,19 @@ for the data we're syncing to transport. This prevents alpenhorn from
 trying to transfer data already present on ``demo_storage1`` (though in
 our case, that's nothing).
 
-This should sync all five files we have:
+This should sync all eight files we have:
 
 .. code:: console
    :class: demoshell
 
    root@alpenshell:/# alpenhorn node sync demo_storage3 transport_group --target=demo_storage1
-   Would sync 5 files (102 B) from Node "demo_storage3" to Group "transport_group".
+   Would sync 8 files (184 B) from Node "demo_storage3" to Group "transport_group".
 
    Continue? [y/N]: y
 
-   Syncing 5 files (102 B) from Node "demo_storage3" to Group "transport_group".
+   Syncing 8 files (184 B) from Node "demo_storage3" to Group "transport_group".
 
-   Added 5 new copy requests.
+   Added 8 new copy requests.
 
 It may also be good to point out here that even though both
 ``demo_storage3`` and the transport node are on ``alpenhost3``, and all the
@@ -2048,7 +2403,7 @@ transport node:
 
    Name          File Count  Total Size    % Full
    ----------  ------------  ------------  --------
-   transport1             5  102 B         -
+   transport1             8  184 B         -
 
 Transporting the transport node
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2144,10 +2499,10 @@ transport media:
    root@alpenshell:/# alpenhorn node stats
    Name             File Count    Total Size    % Full
    -------------  ------------  ------------  --------
-   demo_storage1             5         102 B         -
-   demo_storage2             5         102 B         -
-   demo_storage3             5         102 B         -
-   transport1                5         102 B         -
+   demo_storage1             8         184 B         -
+   demo_storage2             8         184 B         -
+   demo_storage3             8         184 B         -
+   transport1                8         184 B         -
 
 Once we're happy with the transfer off of the transport device, we'll
 want to clear it out so we can ship it back to ``alpenhost3`` to be used to
