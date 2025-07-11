@@ -156,6 +156,27 @@ def test_modify_ioconfig(clidb, cli):
     assert json.loads(node.io_config) == {"a": 4, "b": 8, "d": 7}
 
 
+def test_modify_ioconfig_none(clidb, cli):
+    """Test --io-var with no exising io_config."""
+
+    group = StorageGroup.create(name="GROUP")
+    StorageNode.create(name="TEST", group=group, io_config=None)
+
+    cli(
+        0,
+        [
+            "node",
+            "modify",
+            "TEST",
+            "--io-var",
+            "b=8",
+        ],
+    )
+
+    node = StorageNode.get(name="TEST")
+    assert json.loads(node.io_config) == {"b": 8}
+
+
 def test_modify_iovar_bad_json(clidb, cli):
     """--io-var can't be used if the existing I/O config is invalid."""
 

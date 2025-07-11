@@ -83,6 +83,13 @@ def test_sic_str_default():
     assert io_config == {"a": 25, "b": 27}
 
 
+def test_sic_none_default():
+    """Test None as default to set_io_config"""
+
+    io_config = set_io_config(None, ("a=25",), None)
+    assert io_config == {"a": 25}
+
+
 def test_sic_default_decode():
     """Test a decode error in default to set_io_config"""
 
