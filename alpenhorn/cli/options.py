@@ -604,8 +604,10 @@ def set_io_config(
                 "Argument to --io-config must be a JSON object literal."
             )
     else:
-        # Decoding of default is only done if necessary
-        if isinstance(default, str):
+        if default is None:
+            default = {}
+        elif isinstance(default, str):
+            # Decoding of default is only done if necessary
             try:
                 default = json.loads(default)
             except json.JSONDecodeError:

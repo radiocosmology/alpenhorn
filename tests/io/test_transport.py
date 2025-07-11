@@ -84,7 +84,9 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
         # mock bytes_avail to simply return avail_gb to avoid having to mess about
         # with pyfakefs
         node.io.bytes_avail = MagicMock(
-            return_value=None if node.db.avail_gb is None else node.db.avail_gb * 2**30
+            return_value=(
+                None if node.db.avail_gb is None else node.db.avail_gb * 2**30
+            )
         )
         xfs.create_dir(node.db.root)
 
