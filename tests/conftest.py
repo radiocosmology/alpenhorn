@@ -362,7 +362,7 @@ def mock_statvfs(fs):
 def mock_exists(fs):
     """Mocks pathlib.PosixPath.exists to work with pyfakefs."""
 
-    def _mocked_exists(path):
+    def _mocked_exists(path, follow_symlinks=True):
         """Mock of pathlib.PosixPath.exists to work better with pyfakefs.
 
         The problem here is if there's an unreadable file in a readable

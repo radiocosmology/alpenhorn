@@ -1,11 +1,12 @@
 """Test TransportGroupIO."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
-from alpenhorn.db.archive import ArchiveFileCopyRequest
+from alpenhorn.db import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.io._default_asyncs import group_search_async
 
 
 @pytest.fixture
@@ -189,10 +190,10 @@ def test_exists(xfs, transport_fleet):
 
 
 def test_pull_remote_skip(remote_req, transport_fleet):
-    """Test TransportGroupIO.pull_force() skips non-local requests."""
+    """Test TransportGroupIO.pull() skips non-local requests."""
     group, nodes = transport_fleet
 
-    group.io.pull_force(remote_req)
+    group.io.pull(remote_req, True)
 
     # Request is not resolved
     afcr = ArchiveFileCopyRequest.get(id=remote_req.id)
@@ -205,20 +206,20 @@ def test_pull_remote_skip(remote_req, transport_fleet):
 
 
 def test_pull_local(req, transport_fleet):
-    """Test TransportGroupIO.pull_force() hands off local requests."""
+    """Test TransportGroupIO.pull() hands off local requests."""
     group, nodes = transport_fleet
 
-    group.io.pull_force(req)
+    group.io.pull(req, True)
 
     # Since the copy has no size, it will be put onto the first (smallest) node
-    nodes[0].io.pull.assert_called_once_with(req)
+    nodes[0].io.pull.assert_called_once_with(req, True)
     nodes[1].io.pull.assert_not_called()
     nodes[2].io.pull.assert_not_called()
     nodes[3].io.pull.assert_not_called()
 
 
 def test_pull_size(req, transport_fleet):
-    """Test TransportGroupIO.pull_force() finds the correct disk to fit the request."""
+    """Test TransportGroupIO.pull() finds the correct disk to fit the request."""
     group, nodes = transport_fleet
 
     # Set file size.  The node sizes in the transport fleet are (in GiB):
@@ -226,16 +227,16 @@ def test_pull_size(req, transport_fleet):
     # nodes[1] due to the fudge factor of two in DefaultIO's reserve_bytes()
     req.file.size_b = 6 * 2**30
 
-    group.io.pull_force(req)
+    group.io.pull(req, True)
 
     nodes[0].io.pull.assert_not_called()
-    nodes[1].io.pull.assert_called_once_with(req)
+    nodes[1].io.pull.assert_called_once_with(req, True)
     nodes[2].io.pull.assert_not_called()
     nodes[3].io.pull.assert_not_called()
 
 
 def test_pull_minmax(req, archivefilecopy, transport_fleet):
-    """Test TransportGroupIO.pull_force()
+    """Test TransportGroupIO.pull()
     correctly rejecting under-min and over-max nodes."""
     group, nodes = transport_fleet
 
@@ -248,17 +249,17 @@ def test_pull_minmax(req, archivefilecopy, transport_fleet):
     nodes[1].db.max_total_gb = 1e-3
 
     # Check
-    group.io.pull_force(req)
+    group.io.pull(req, True)
 
     # Node 2 is the first node that can take the file
     nodes[0].io.pull.assert_not_called()
     nodes[1].io.pull.assert_not_called()
-    nodes[2].io.pull.assert_called_once_with(req)
+    nodes[2].io.pull.assert_called_once_with(req, True)
     nodes[3].io.pull.assert_not_called()
 
 
 def test_pull_nonode(req, archivefilecopy, transport_fleet):
-    """Test TransportGroupIO.pull_force() being okay with no node available."""
+    """Test TransportGroupIO.pull() being okay with no node available."""
     group, nodes = transport_fleet
 
     # Give node[3] a size
@@ -268,9 +269,142 @@ def test_pull_nonode(req, archivefilecopy, transport_fleet):
         node.db.min_avail_gb = node.db.avail_gb * 2
 
     # Check
-    group.io.pull_force(req)
+    group.io.pull(req, True)
 
     nodes[0].io.pull.assert_not_called()
     nodes[1].io.pull.assert_not_called()
     nodes[2].io.pull.assert_not_called()
     nodes[3].io.pull.assert_not_called()
+
+
+def test_pull_search(transport_fleet, simplecopyrequest, queue):
+    """Test task submission in TransportGroupIO.pull_search()."""
+
+    group, nodes = transport_fleet
+
+    # The patch is done in io.default, where the pull_search method
+    # is actually defined.
+    with patch("alpenhorn.io.default.group_search_async") as mock:
+        group.io.pull_search(simplecopyrequest)
+
+        # Task is queued
+        assert queue.qsize == 1
+
+        # Dequeue
+        task, key = queue.get()
+
+        # Run the "task"
+        task()
+
+        # Clean up queue
+        queue.task_done(key)
+
+        assert key == group.io.fifo
+        mock.assert_called_once()
+
+
+def test_group_search_dispatch(transport_fleet, dbtables, simplecopyrequest, queue):
+    """Test group_search_async dispatch to pull_force"""
+
+    group, nodes = transport_fleet
+
+    mock = MagicMock()
+    group.io.pull = mock
+
+    # Run the async.  First argument is Task
+    group_search_async(None, group.io, simplecopyrequest)
+
+    # Check dispatch
+    mock.assert_called_once_with(simplecopyrequest, did_search=True)
+
+
+def test_group_search_in_db(
+    transport_fleet, simplefile, archivefilecopy, archivefilecopyrequest, queue, xfs
+):
+    """Test group_search_async with record already in db."""
+
+    group, nodes = transport_fleet
+    node = nodes[0]
+
+    mock = MagicMock()
+    group.io.pull_force = mock
+
+    # Create a file on the dest
+    xfs.create_file(f"{node.db.root}/{simplefile.path}")
+
+    # Create a file copy record
+    archivefilecopy(file=simplefile, node=node.db, has_file="Y")
+
+    # Create a copy request for the file.
+    # Source here doesn't matter
+    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
+
+    # Run the async.  First argument is Task
+    group_search_async(None, group.io, afcr)
+
+    # Check dispatch
+    mock.assert_not_called()
+
+    # Verify that the request has been cancelled
+    assert ArchiveFileCopyRequest.get(id=afcr.id).cancelled == 1
+
+
+def test_group_search_existing(
+    transport_fleet, dbtables, simplefile, archivefilecopyrequest, queue, xfs
+):
+    """Test group_search_async with existing file."""
+
+    group, nodes = transport_fleet
+    node = nodes[0]
+
+    mock = MagicMock()
+    group.io.pull_force = mock
+
+    # Create a file on the dest
+    xfs.create_file(f"{node.db.root}/{simplefile.path}")
+
+    # Create a copy request for the file.
+    # Source here doesn't matter
+    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
+
+    # Run the async.  First argument is Task
+    group_search_async(None, group.io, afcr)
+
+    # Check dispatch
+    mock.assert_not_called()
+
+    # Check for an archivefilecopy record requesting a check
+    afc = ArchiveFileCopy.get(file=afcr.file, node=node.db)
+    assert afc.has_file == "M"
+
+
+def test_group_search_hasN(
+    transport_fleet, simplefile, archivefilecopyrequest, archivefilecopy, queue, xfs
+):
+    """Test group_search_async with existing file and has_file=N."""
+
+    group, nodes = transport_fleet
+    node = nodes[0]
+
+    mock = MagicMock()
+    group.io.pull_force = mock
+
+    # Create a file on the dest
+    xfs.create_file(f"{node.db.root}/{simplefile.path}")
+
+    # Create the copy record
+    archivefilecopy(file=simplefile, node=node.db, has_file="N", wants_file="N")
+
+    # Create a copy request for the file.
+    # Source here doesn't matter
+    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
+
+    # Run the async.  First argument is Task
+    group_search_async(None, group.io, afcr)
+
+    # Check dispatch
+    mock.assert_not_called()
+
+    # Check for an archivefilecopy record requesting a check
+    afc = ArchiveFileCopy.get(file=afcr.file, node=node.db)
+    assert afc.has_file == "M"

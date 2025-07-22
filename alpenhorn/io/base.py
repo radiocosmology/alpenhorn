@@ -400,7 +400,7 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
+    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
         """Pull file specified by copy request `req` onto `self.node`.
 
         In this case, `node` is the destination.
@@ -408,8 +408,11 @@ class BaseNodeIO:
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the copy request to fulfill.  We are the destination node (i.e.
-            `req.group_to == self.node.group`).
+            the copy request to fulfill.  We are in the destination group
+            (i.e. `req.group_to == self.node.group`).
+        did_search : boolean
+            True if a group-level pre-pull search for an existing file was
+            performed.  False otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -471,6 +474,11 @@ class BaseGroupIO:
     """
 
     # SETUP
+
+    # If True, a "Pre-pull search" job should be run on the group before
+    # delegating a pull to a node.  If False, no such job is run, and the
+    # pulling node should probably do one instead.
+    do_pull_search = True
 
     def __init__(
         self,
@@ -613,23 +621,34 @@ class BaseGroupIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
-        """Handle ArchiveFileCopyRequest `req`, overwritng an existing file.
+    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
+        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
 
         Parameters
         ----------
         req : ArchiveFileCopyRequest
             the request to fulfill.  We are the destination group (i.e.
             `req.group_to == self.group`).
+        did_search : boolean
+            True if a group-level pre-pull search for an existing file was
+            performed.  False otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
-        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+    def pull_search(self, req: ArchiveFileCopyRequest) -> None:
+        """Search for an existing copy of a file in a group.
 
-        Unlike `pull_force`, an implementation of `pull` may decide to cancel
-        a request if an existing file (which will be unknown to the database)
-        is found in the group.
+        This method is only called if `do_pull_search` is True.  This provides the
+        group an opportunity to search the group for an exising unregistered copy
+        of a file which needs to be pulled into this group.
+
+        If a search is performed and a file is found, this method should cancel
+        the request, and instead request import of the existing file copy (by
+        creating/updating a corresponding ArchiveFileCopy record).
+
+        If a search is performed and no file is found, or this method decides
+        to skip the search, this method should end with a call to the `pull`
+        method to actually perform the pull (setting `did_search` appropriately).
 
         Parameters
         ----------

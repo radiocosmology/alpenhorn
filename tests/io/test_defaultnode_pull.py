@@ -93,12 +93,23 @@ def test_req(
 
 
 @pytest.fixture
-def pull_async(dbtables, test_req):
-    """Put a pull_async Task on the queue.
+def pull_async_false(dbtables, test_req):
+    """Put a pull_async Task on the queue with did_search=False.
 
     Returns a two-element tuple: (node_to, copy_request)"""
     node, req = test_req
-    node.io.pull(req)
+    node.io.pull(req, False)
+
+    return test_req
+
+
+@pytest.fixture
+def pull_async_true(dbtables, test_req):
+    """Put a pull_async Task on the queue with did_search=True.
+
+    Returns a two-element tuple: (node_to, copy_request)"""
+    node, req = test_req
+    node.io.pull(req, True)
 
     return test_req
 
@@ -111,7 +122,7 @@ def test_pull_sync_undermin(queue, test_req):
     # set up node to fail under_min check
     node.db.avail_gb = 1.0
     node.db.min_avail_gb = 2.0
-    node.io.pull(req)
+    node.io.pull(req, True)
 
     # No job should be queued and req isn't resolved.
     assert queue.qsize == 0
@@ -130,7 +141,7 @@ def test_pull_sync_overmax(queue, test_req, archivefile, archivefilecopy):
     file = archivefile(name="file2", acq=req.file.acq, size_b=100000)
     archivefilecopy(file=file, node=node.db, has_file="Y")
     node.db.max_total_gb = file.size_b / 2**31  # i.e. half of file.size_b
-    node.io.pull(req)
+    node.io.pull(req, True)
 
     # No job should be queued and req isn't resolved.
     assert queue.qsize == 0
@@ -147,7 +158,7 @@ def test_pull_sync_fit(xfs, queue, test_req):
     # set up node to fail reserve_bytes check
     xfs.set_disk_usage(10000)
     node.io.reserve_bytes(4000)
-    node.io.pull(req)
+    node.io.pull(req, True)
 
     # No job should be queued and req isn't resolved.
     assert queue.qsize == 0
@@ -156,10 +167,10 @@ def test_pull_sync_fit(xfs, queue, test_req):
     assert afcr.cancelled is False
 
 
-def test_pull_async_noroute(queue, pull_async):
+def test_pull_async_noroute(queue, pull_async_true):
     """Test no route for remote pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -179,10 +190,10 @@ def test_pull_async_noroute(queue, pull_async):
 
 
 @pytest.mark.run_command_result(1, "", "bbcp_stderr")
-def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async):
+def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true):
     """Test an unsuccessful bbcp remote pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -205,10 +216,10 @@ def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async):
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
-def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async):
+def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async_true):
     """Test a successful bbcp remote pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -235,10 +246,10 @@ def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async):
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
-def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async):
+def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async_true):
     """Test an unsuccessful rsync remote pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -261,10 +272,12 @@ def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async):
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
-def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_async):
+def test_pull_async_remote_rsync_succeed(
+    queue, have_rsync, mock_filesize, pull_async_true
+):
     """Test a successful rsync remote pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -290,10 +303,10 @@ def test_pull_async_remote_rsync_succeed(queue, have_rsync, mock_filesize, pull_
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
-def test_pull_async_remote_nomethod(queue, pull_async):
+def test_pull_async_remote_nomethod(queue, pull_async_true):
     """Test remote pull with no command available."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -312,10 +325,10 @@ def test_pull_async_remote_nomethod(queue, pull_async):
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
-def test_pull_async_link(queue, pull_async):
+def test_pull_async_link(queue, pull_async_true):
     """Test creating hardlink."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Call the async
     task, key = queue.get()
@@ -335,10 +348,10 @@ def test_pull_async_link(queue, pull_async):
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
-def test_pull_async_link_arccontam(queue, pull_async):
+def test_pull_async_link_arccontam(queue, pull_async_true):
     """Test not creating hardlinks between archive nodes."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make one node non-archival
     node.db.storage_type = "F"
@@ -358,10 +371,12 @@ def test_pull_async_link_arccontam(queue, pull_async):
 
 
 @pytest.mark.run_command_result(0, "", "stderr")
-def test_pull_async_local_rsync_succeed(queue, have_rsync, mock_filesize, pull_async):
+def test_pull_async_local_rsync_succeed(
+    queue, have_rsync, mock_filesize, pull_async_true
+):
     """Test a successful rsync remote pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make one node non-archival to avoid hardlinking
     node.db.storage_type = "F"
@@ -388,10 +403,10 @@ def test_pull_async_local_rsync_succeed(queue, have_rsync, mock_filesize, pull_a
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
-def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
+def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async_true):
     """Test an unsuccessful rsync local pull."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Make one node non-archival to avoid hardlinking
     node.db.storage_type = "F"
@@ -414,10 +429,10 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async):
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
-def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async):
+def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async_true):
     """Test failure deleting the destination."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Destination path
     path = pathlib.Path(node.db.root, req.file.path)
@@ -445,10 +460,10 @@ def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async):
     assert not path.exists()
 
 
-def test_pull_already_done(xfs, queue, pull_async, archivefilecopy):
+def test_pull_already_done(xfs, queue, pull_async_true, archivefilecopy):
     """Test pulling a file that's already on the node."""
 
-    node, req = pull_async
+    node, req = pull_async_true
 
     # Create the archivefilecopy record
     archivefilecopy(file=req.file, node=node.db, has_file="Y", wants_file="Y")
@@ -462,3 +477,30 @@ def test_pull_already_done(xfs, queue, pull_async, archivefilecopy):
     afcr = ArchiveFileCopyRequest.get(id=req.id)
     assert afcr.completed is False
     assert afcr.cancelled is True
+
+
+def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy):
+    """Test pulling a file that's unknowingly on the node."""
+
+    node, req = pull_async_false
+
+    # Destination path
+    path = pathlib.Path(node.db.root, req.file.path)
+
+    # Create destination file
+    xfs.create_file(path)
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Pull unresolved
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is False
+    assert afcr.cancelled is False
+
+    # Check requested for existing file
+    filecopy = ArchiveFileCopy.get(node=node.db, file=req.file)
+    assert filecopy.has_file == "M"
+    assert filecopy.wants_file == "Y"
