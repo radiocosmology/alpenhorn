@@ -166,7 +166,7 @@ def pull_async(
                 log.warning(
                     "Skipping pull request for "
                     f"{req.file.acq.name}/{req.file.name}: "
-                    f"file already on disk on node {req.node_from.name}."
+                    f"file already on disk on node {io.node.name}."
                 )
 
                 _force_check_filecopy(req.file, io.node, io)
