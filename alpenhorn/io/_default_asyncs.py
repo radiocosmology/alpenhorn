@@ -162,7 +162,7 @@ def pull_async(
     # Check for existing file, if not done already
     if not did_search:
         try:
-            if to_file.exists(follow_symlinks=False):
+            if io.exists(req.file.path):
                 log.warning(
                     "Skipping pull request for "
                     f"{req.file.acq.name}/{req.file.name}: "
