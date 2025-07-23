@@ -522,7 +522,7 @@ class DefaultNodeIO(BaseNodeIO):
         """
         size *= self.reserve_factor
         with _mutex:
-            bavail = self.bytes_avail()
+            bavail = self.bytes_avail(fast=True)
             if bavail is not None and bavail - _reserved_bytes[self.node.name] < size:
                 return False  # Insufficient space
 
