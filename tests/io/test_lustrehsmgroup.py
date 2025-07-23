@@ -162,7 +162,7 @@ def test_pull_small(req, group):
     group.io.pull(req, did_search=True)
 
     # Sent to smallfile
-    smallfile.io.pull.assert_called_once_with(req)
+    smallfile.io.pull.assert_called_once_with(req, True)
     hsm.io.pull.assert_not_called()
 
 
@@ -173,5 +173,5 @@ def test_pull_big(req, group):
     req.file.size_b = 1e10
     group.io.pull(req, did_search=True)
 
-    hsm.io.pull.assert_called_once_with(req)
+    hsm.io.pull.assert_called_once_with(req, True)
     smallfile.io.pull.assert_not_called()
