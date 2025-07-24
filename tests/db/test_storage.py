@@ -224,6 +224,11 @@ def test_totalgb(simplegroup, storagenode, simplefile, archivefilecopy):
     archivefilecopy(file=simplefile, node=node, has_file="Y")
     assert node.get_total_gb() == 1.0
 
+    # Node with suspect copy
+    node = storagenode(name="suspect", group=simplegroup)
+    archivefilecopy(file=simplefile, node=node, has_file="M")
+    assert node.get_total_gb() == 1.0
+
     # Node with bad copy
     node = storagenode(name="bad", group=simplegroup)
     archivefilecopy(file=simplefile, node=node, has_file="X")

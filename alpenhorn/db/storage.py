@@ -302,7 +302,7 @@ class StorageNode(base_model):
         size = (
             ArchiveFile.select(fn.Sum(ArchiveFile.size_b))
             .join(ArchiveFileCopy)
-            .where(ArchiveFileCopy.node == self, ArchiveFileCopy.has_file == "Y")
+            .where(ArchiveFileCopy.node == self, ArchiveFileCopy.has_file << ["Y", "M"])
         ).scalar(as_tuple=True)[0]
 
         return 0.0 if size is None else float(size) / 2**30
