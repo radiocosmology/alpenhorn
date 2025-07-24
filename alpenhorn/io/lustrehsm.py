@@ -749,7 +749,7 @@ class LustreHSMGroupIO(DefaultGroupIO):
             return self._hsm
         return None
 
-    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
+    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
         """Handle ArchiveFileCopyRequest `req` by pulling to this group.
 
         This takes care of directing pulls to the correct node
@@ -760,8 +760,11 @@ class LustreHSMGroupIO(DefaultGroupIO):
         req : ArchiveFileCopyRequest
             the request to fulfill.  We are the destination group (i.e.
             `req.group_to == self.group`).
+        did_search : boolean
+            True if a group-level pre-pull search for an existing file was
+            performed.  False otherwise.
         """
         if req.file.size_b <= self._threshold:
-            self._smallfile.io.pull(req)
+            self._smallfile.io.pull(req, did_search)
         else:
-            self._hsm.io.pull(req)
+            self._hsm.io.pull(req, did_search)

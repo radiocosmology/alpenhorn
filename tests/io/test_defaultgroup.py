@@ -1,12 +1,10 @@
 """Test DefaultGroupIO."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
-from alpenhorn.db import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.io._default_asyncs import group_search_async
 
 
 @pytest.fixture
@@ -61,142 +59,14 @@ def test_exists(xfs, groupnode):
     assert group.io.exists("no-acq/no-file") is None
 
 
-def test_pull_force_handoff(groupnode, simplecopyrequest):
-    """Test DefaultGroupIO.pull_force()."""
+def test_pull_handoff(groupnode, simplecopyrequest):
+    """Test DefaultGroupIO.pull()."""
 
     group, node = groupnode
     node.io.pull = MagicMock(return_value=None)
 
-    # Call pull_force
-    group.io.pull_force(simplecopyrequest)
+    # Call pull
+    group.io.pull(simplecopyrequest, did_search=True)
 
     # Check for hand-off to the node
-    node.io.pull.assert_called_with(simplecopyrequest)
-
-
-def test_pull(groupnode, simplecopyrequest, queue):
-    """Test task submission in DefaultGroupIO.pull()."""
-
-    group, node = groupnode
-
-    with patch("alpenhorn.io.default.group_search_async") as mock:
-        group.io.pull(simplecopyrequest)
-
-        # Task is queued
-        assert queue.qsize == 1
-
-        # Dequeue
-        task, key = queue.get()
-
-        # Run the "task"
-        task()
-
-        # Clean up queue
-        queue.task_done(key)
-
-        assert key == group.io.fifo
-        mock.assert_called_once()
-
-
-def test_group_search_dispatch(groupnode, simplecopyrequest, queue):
-    """Test group_search_async dispatch to pull_force"""
-
-    group, node = groupnode
-
-    mock = MagicMock()
-    group.io.pull_force = mock
-
-    # Run the async.  First argument is Task
-    group_search_async(None, group.io, simplecopyrequest)
-
-    # Check dispatch
-    mock.assert_called_once_with(simplecopyrequest)
-
-
-def test_group_search_in_db(
-    groupnode, simplefile, archivefilecopy, archivefilecopyrequest, queue, xfs
-):
-    """Test group_search_async with record already in db."""
-
-    group, node = groupnode
-
-    mock = MagicMock()
-    group.io.pull_force = mock
-
-    # Create a file on the dest
-    xfs.create_file(f"{node.db.root}/{simplefile.path}")
-
-    # Create a file copy record
-    archivefilecopy(file=simplefile, node=node.db, has_file="Y")
-
-    # Create a copy request for the file.
-    # Source here doesn't matter
-    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
-
-    # Run the async.  First argument is Task
-    group_search_async(None, group.io, afcr)
-
-    # Check dispatch
-    mock.assert_not_called()
-
-    # Verify that the request has been cancelled
-    assert ArchiveFileCopyRequest.get(id=afcr.id).cancelled == 1
-
-
-def test_group_search_existing(
-    groupnode, simplefile, archivefilecopyrequest, queue, xfs
-):
-    """Test group_search_async with existing file."""
-
-    group, node = groupnode
-
-    mock = MagicMock()
-    group.io.pull_force = mock
-
-    # Create a file on the dest
-    xfs.create_file(f"{node.db.root}/{simplefile.path}")
-
-    # Create a copy request for the file.
-    # Source here doesn't matter
-    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
-
-    # Run the async.  First argument is Task
-    group_search_async(None, group.io, afcr)
-
-    # Check dispatch
-    mock.assert_not_called()
-
-    # Check for an archivefilecopy record requesting a check
-    afc = ArchiveFileCopy.get(file=afcr.file, node=node.db)
-    assert afc.has_file == "M"
-
-
-def test_group_search_hasN(
-    groupnode, simplefile, archivefilecopyrequest, archivefilecopy, queue, xfs
-):
-    """Test group_search_async with existing file and has_file=N."""
-
-    group, node = groupnode
-
-    mock = MagicMock()
-    group.io.pull_force = mock
-
-    # Create a file on the dest
-    xfs.create_file(f"{node.db.root}/{simplefile.path}")
-
-    # Create the copy record
-    archivefilecopy(file=simplefile, node=node.db, has_file="N", wants_file="N")
-
-    # Create a copy request for the file.
-    # Source here doesn't matter
-    afcr = archivefilecopyrequest(file=simplefile, node_from=node.db, group_to=group.db)
-
-    # Run the async.  First argument is Task
-    group_search_async(None, group.io, afcr)
-
-    # Check dispatch
-    mock.assert_not_called()
-
-    # Check for an archivefilecopy record requesting a check
-    afc = ArchiveFileCopy.get(file=afcr.file, node=node.db)
-    assert afc.has_file == "M"
+    node.io.pull.assert_called_with(simplecopyrequest, True)

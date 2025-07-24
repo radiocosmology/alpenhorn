@@ -15,7 +15,13 @@ from ..common import metrics
 from ..common.metrics import Metric
 from ..common.util import timeout_call
 from ..daemon.update import RemoteNode
-from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
+from ..db import (
+    ArchiveFile,
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    StorageNode,
+    utcnow,
+)
 from . import ioutil
 
 if TYPE_CHECKING:
@@ -27,8 +33,57 @@ del TYPE_CHECKING
 log = logging.getLogger(__name__)
 
 
+def _force_check_filecopy(file_: ArchiveFile, node: StorageNode, node_io: BaseNodeIO):
+    """Force a check of an unregistered file.
+
+    Upserts an ArchiveFileCopy record to force a check of an
+    unregistered file copy on a node.
+
+    Parameters
+    ----------
+    file_ : ArchiveFile
+        The file to check
+    node : StorageNode
+        The node to run the check on
+    node_io : BaseNodeIO
+        The node I/O instance.  Used if we need to calculate
+        the file size.
+    """
+    log.info(
+        "Requesting check of " f"{file_.acq.name}/{file_.name} on node {node.name}."
+    )
+
+    # ready == False is the safe option here: copy will be readied
+    # during the subsequent check if needed.
+    try:
+        # Try to create a new copy
+        ArchiveFileCopy.create(
+            file=file_,
+            node=node,
+            has_file="M",
+            wants_file="Y",
+            ready=False,
+            size_b=node_io.filesize(file_.path, actual=True),
+        )
+    except pw.IntegrityError:
+        # Copy already exists, just update the existing
+        ArchiveFileCopy.update(
+            has_file="M",
+            wants_file="Y",
+            ready=False,
+            last_update=utcnow(),
+        ).where(
+            ArchiveFileCopy.file == file_,
+            ArchiveFileCopy.node == node,
+        ).execute()
+
+
 def pull_async(
-    task: Task, io: BaseNodeIO, tree_lock: UpDownLock, req: ArchiveFileCopyRequest
+    task: Task,
+    io: BaseNodeIO,
+    tree_lock: UpDownLock,
+    req: ArchiveFileCopyRequest,
+    did_search: bool,
 ) -> None:
     """Fulfill `req` by pulling a file onto the local node.
 
@@ -48,6 +103,9 @@ def pull_async(
         The directory tree modificiation lock.
     req : ArchiveFileCopyRequest
         The request we're fulfilling.
+    did_search : bool
+        True if a search for an existing unregistered copy was
+        already performed.
     """
 
     comp_metric = metrics.by_name("requests_completed").bind(
@@ -100,6 +158,24 @@ def pull_async(
 
     to_file = pathlib.Path(io.node.root, req.file.path)
     to_dir = to_file.parent
+
+    # Check for existing file, if not done already
+    if not did_search:
+        try:
+            if io.exists(req.file.path):
+                log.warning(
+                    "Skipping pull request for "
+                    f"{req.file.acq.name}/{req.file.name}: "
+                    f"file already on disk on node {io.node.name}."
+                )
+
+                _force_check_filecopy(req.file, io.node, io)
+                # request not resolved.  Should be sorted out after
+                # the file check happens.
+                return
+        except OSError:
+            # On error, try to do the pull
+            pass
 
     # Placeholder file
     placeholder = pathlib.Path(to_dir, f".{to_file.name}.placeholder")
@@ -368,7 +444,7 @@ def group_search_async(
 
     If the file is found, a request is made to check the
     existing file, and the pull is skipped.  If the file
-    is not found, `req` is passed to `groupio.pull_force`, which
+    is not found, `req` is passed to `groupio.pull`, which
     dispatch the ArchvieFileCopyRequest to a node in the
     group to perform the pull request.
 
@@ -407,38 +483,10 @@ def group_search_async(
             f"{req.file.acq.name}/{req.file.name}: "
             f"file already on disk in group {groupio.group.name}."
         )
-        log.info(
-            "Requesting check of "
-            f"{req.file.acq.name}/{req.file.name} on node "
-            f"{node.name}."
-        )
 
         # Update/create ArchiveFileCopy to force a check.
-
-        # ready == False is the safe option here: copy will be readied
-        # during the subsequent check if needed.
-        try:
-            # Try to create a new copy
-            ArchiveFileCopy.create(
-                file=req.file,
-                node=node.db,
-                has_file="M",
-                wants_file="Y",
-                ready=False,
-                size_b=node.io.filesize(req.file.path, actual=True),
-            )
-        except pw.IntegrityError:
-            # Copy already exists, just update the existing
-            ArchiveFileCopy.update(
-                has_file="M",
-                wants_file="Y",
-                ready=False,
-                last_update=utcnow(),
-            ).where(
-                ArchiveFileCopy.file == req.file,
-                ArchiveFileCopy.node == node.db,
-            ).execute()
+        _force_check_filecopy(req.file, node.db, node.io)
         return
 
-    # Otherwise, escallate to groupio.pull_force to actually perform the pull
-    groupio.pull_force(req)
+    # Otherwise, escalate to groupio.pull to actually perform the pull
+    groupio.pull(req, did_search=True)

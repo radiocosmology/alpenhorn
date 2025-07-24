@@ -36,6 +36,9 @@ class TransportGroupIO(DefaultGroupIO):
             to the fullest node that it thinks it will fit on.
     """
 
+    # Enable the group-level pre-pull search
+    do_pull_search = True
+
     def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
         """Check that nodes in group are transit nodes.
 
@@ -99,7 +102,7 @@ class TransportGroupIO(DefaultGroupIO):
 
         return None
 
-    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
+    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
         """Handle a pull request.
 
         Only local pulls are only fulfilled.  Remote pulls are ignored.
@@ -112,6 +115,9 @@ class TransportGroupIO(DefaultGroupIO):
         req : ArchiveFileCopyRequest
             the request to fulfill.  We are the destination group (i.e.
             `req.group_to == self.group`).
+        did_search : boolean
+            True if a group-level pre-pull search for an existing file was
+            performed.  False otherwise.
         """
 
         # If this is a non-local transfer, skip it.
@@ -160,7 +166,7 @@ class TransportGroupIO(DefaultGroupIO):
 
             # If we got here, I guess we're going to use this disk
             # Hand the pull request off to the node
-            node.io.pull(req)
+            node.io.pull(req, did_search)
             return
 
         # If we got here, we couldn't find a disk

@@ -153,25 +153,25 @@ def test_exists(xfs, group):
 
 
 def test_pull_small(req, group):
-    """Test TransportGroupIO.pull_force()
+    """Test TransportGroupIO.pull()
 
     hands off a small file to the smallfile node."""
     group, hsm, smallfile = group
 
     req.file.size_b = 1  # A very small file
-    group.io.pull_force(req)
+    group.io.pull(req, did_search=True)
 
     # Sent to smallfile
-    smallfile.io.pull.assert_called_once_with(req)
+    smallfile.io.pull.assert_called_once_with(req, True)
     hsm.io.pull.assert_not_called()
 
 
 def test_pull_big(req, group):
-    """Test TransportGroupIO.pull_force() hands off a large file to the hsm node."""
+    """Test TransportGroupIO.pull() hands off a large file to the hsm node."""
     group, hsm, smallfile = group
 
     req.file.size_b = 1e10
-    group.io.pull_force(req)
+    group.io.pull(req, did_search=True)
 
-    hsm.io.pull.assert_called_once_with(req)
+    hsm.io.pull.assert_called_once_with(req, True)
     smallfile.io.pull.assert_not_called()

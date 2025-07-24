@@ -433,7 +433,7 @@ class DefaultNodeIO(BaseNodeIO):
             raise ValueError("path must be relative to node.root")
         return open(pathlib.Path(self.node.root, path), mode="rb" if binary else "rt")
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
+    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
         """Pull file specified by copy request `req` onto `self.node`.
 
         Most of the work happens in an asynchronous I/O task.
@@ -443,6 +443,9 @@ class DefaultNodeIO(BaseNodeIO):
         req : ArchiveFileCopyRequest
             the copy request to fulfill.  We are the destination node (i.e.
             `req.group_to == self.node.group`).
+        did_search : boolean
+            True if a group-level pre-pull search for an existing file was
+            performed.  False otherwise.
         """
 
         if self.node.under_min:
@@ -473,7 +476,7 @@ class DefaultNodeIO(BaseNodeIO):
             func=pull_async,
             queue=self._queue,
             key=self.fifo,
-            args=(self, self.tree_lock, req),
+            args=(self, self.tree_lock, req, did_search),
             name=f"AFCR#{req.id}: {req.node_from.name} -> {self.node.name}",
         )
 
@@ -562,6 +565,14 @@ class DefaultGroupIO(BaseGroupIO):
     one to be active on a given host at any time.
     """
 
+    # Because Default groups allow only a single node, they don't need to do
+    # group-level pull searches.  So we set this to False.
+    #
+    # Note, however, that the DefaultGroupIO still fully implements a "normal"
+    # pre-pull search to make it easier for subclasses that use this as a parent
+    # to enable the group search by simply setting this back to True.
+    do_pull_search = False
+
     # SETUP
 
     def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
@@ -615,8 +626,8 @@ class DefaultGroupIO(BaseGroupIO):
 
         return None
 
-    def pull_force(self, req: ArchiveFileCopyRequest) -> None:
-        """Handle ArchiveFileCopyRequest `req`, with overwriting.
+    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
+        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
 
         Simply passes the `req` on to the node in the group.
 
@@ -625,24 +636,35 @@ class DefaultGroupIO(BaseGroupIO):
         req : ArchiveFileCopyRequest
             the request to fulfill.  We are the destination group (i.e.
             `req.group_to == self.group`).
+        did_search : boolean
+            True if a group-level pre-pull search for an existing file was
+            performed.  False otherwise.
         """
-        self.node.io.pull(req)
+        self.node.io.pull(req, did_search)
 
-    def pull(self, req: ArchiveFileCopyRequest) -> None:
-        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+    def pull_search(self, req: ArchiveFileCopyRequest) -> None:
+        """Search for an existing copy of a file in a group.
 
         Before the pull is dispached to the group, we first check
         whether an existing unregistered file exists in the group.
 
         If there is, the file is schedule for check and the request
-        is skipped.  Otherwise, `pull_force` will be called to actually
-        pull the file
+        is skipped.  Otherwise, `pull` will be called to actually
+        pull the file.
 
         Parameters
         ----------
         req : ArchiveFileCopyRequest
             the request to fulfill.  We are the destination group (i.e.
             `req.group_to == self.group`).
+
+        Notes
+        -----
+        The DefaultGroupIO class itself sets `do_pull_search` to False
+        because it's not needed by the DefaultIO, but this method is
+        implemented to dispatch the search task anyways so that other
+        I/O classes which derive from DefaultIO can set `do_pull_search`
+        back to True and not have to re-implement this method themselves.
         """
 
         # The existing file search needs to happen in a Task.

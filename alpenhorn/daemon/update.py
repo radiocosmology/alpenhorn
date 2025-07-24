@@ -925,9 +925,11 @@ class UpdateableGroup(updateable_base):
 
         # Early checks passed: dispatch this request to the Group I/O layer
         if copy_state == "X":
-            self.io.pull_force(req)
+            self.io.pull(req, did_search=True)
+        elif self.io.do_pull_search:
+            self.io.pull_search(req)
         else:
-            self.io.pull(req)
+            self.io.pull(req, did_search=False)
 
     def update(self) -> None:
         """Perform I/O updates on the group"""

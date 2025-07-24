@@ -62,6 +62,8 @@ def pull(
     mockio, group, node = mockgroupandnode
 
     mockio.group.before_update.return_value = True
+    # DefaultIO behaviour
+    mockio.group.do_pull_search = False
     # File doesn't exist on dest
     mockio.group.exists.return_value = None
 
@@ -186,6 +188,13 @@ def test_update_group_copy_state(
     # Files don't exist on dest
     mockio.group.exists.return_value = None
 
+    # Dest is a transport group
+    node.db.storage_type = "T"
+    node.db.save()
+
+    group.db.io_class = "Transport"
+    group.db.save()
+
     # Source is active
     simplenode.active = True
     simplenode.save()
@@ -204,22 +213,22 @@ def test_update_group_copy_state(
     # afcrY is cancelled
     assert not ArchiveFileCopyRequest.get(file=fileY).completed
     assert ArchiveFileCopyRequest.get(file=fileY).cancelled
-    assert call.pull(afcrY) not in mockio.group.mock_calls
+    assert call.pull_serarch(afcrY) not in mockio.group.mock_calls
 
     # afcrM is ongoing, but not handled
     assert not ArchiveFileCopyRequest.get(file=fileM).completed
     assert not ArchiveFileCopyRequest.get(file=fileM).cancelled
-    assert call.pull(afcrM) not in mockio.group.mock_calls
+    assert call.pull_search(afcrM) not in mockio.group.mock_calls
 
-    # afcrX called pull_force
+    # afcrX called pull directly
     assert not ArchiveFileCopyRequest.get(file=fileX).completed
     assert not ArchiveFileCopyRequest.get(file=fileX).cancelled
-    assert call.pull_force(afcrX) in mockio.group.mock_calls
+    assert call.pull(afcrX, did_search=True) in mockio.group.mock_calls
 
-    # afcrN called pull
+    # afcrN called pull_search
     assert not ArchiveFileCopyRequest.get(file=fileN).completed
     assert not ArchiveFileCopyRequest.get(file=fileN).cancelled
-    assert call.pull(afcrN) in mockio.group.mock_calls
+    assert call.pull_search(afcrN) in mockio.group.mock_calls
 
 
 def test_group_idle_group(queue, mockgroupandnode):
