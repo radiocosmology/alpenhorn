@@ -488,5 +488,5 @@ def group_search_async(
         _force_check_filecopy(req.file, node.db, node.io)
         return
 
-    # Otherwise, escallate to groupio.pull to actually perform the pull
+    # Otherwise, escalate to groupio.pull to actually perform the pull
     groupio.pull(req, did_search=True)
