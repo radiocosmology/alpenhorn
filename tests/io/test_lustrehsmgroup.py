@@ -86,26 +86,26 @@ def test_init(storagegroup, storagenode, queue, mock_lfs):
     group = UpdateableGroup(
         queue=queue, group=stgroup, nodes=[hsm, smallfile], idle=True
     )
-    assert group._nodes is not None
+    assert group.io.nodes == [smallfile, hsm]
     assert group.io._hsm is hsm
     assert group.io._smallfile is smallfile
 
     group = UpdateableGroup(
         queue=queue, group=stgroup, nodes=[smallfile, hsm], idle=True
     )
-    assert group._nodes is not None
+    assert group.io.nodes == [smallfile, hsm]
     assert group.io._hsm is hsm
     assert group.io._smallfile is smallfile
 
     # But not these
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=[smallfile], idle=True)
-    assert group._nodes is None
+    assert group.io.nodes == []
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=[hsm], idle=True)
-    assert group._nodes is None
+    assert group.io.nodes == []
     group = UpdateableGroup(
         queue=queue, group=stgroup, nodes=[smallfile, smallfile], idle=True
     )
-    assert group._nodes is None
+    assert group.io.nodes == []
 
 
 def test_idle(queue, group):

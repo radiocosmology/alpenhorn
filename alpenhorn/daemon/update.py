@@ -804,11 +804,10 @@ class UpdateableGroup(updateable_base):
         super().reinit(group)
 
         try:
-            self._nodes = self.io.set_nodes(nodes)
+            self.io.nodes = nodes
         except ValueError as e:
             # I/O layer didn't like the nodes we gave it
             log.warning(str(e))
-            self._nodes = None
 
     @property
     def idle(self) -> bool:
@@ -821,11 +820,11 @@ class UpdateableGroup(updateable_base):
             return False
 
         # A group with no nodes is not idle.
-        if self._nodes is None:
+        if not self.io.nodes:
             return False
 
         # If any node is not idle, the group is not idle.
-        for node in self._nodes:
+        for node in self.io.nodes:
             if not node.idle:
                 return False
 
@@ -924,9 +923,7 @@ class UpdateableGroup(updateable_base):
             return
 
         # Early checks passed: dispatch this request to the Group I/O layer
-        if copy_state == "X":
-            self.io.pull(req, did_search=True)
-        elif self.io.do_pull_search:
+        if self.io.do_pull_search:
             self.io.pull_search(req)
         else:
             self.io.pull(req, did_search=False)
@@ -937,7 +934,7 @@ class UpdateableGroup(updateable_base):
         self._do_idle_updates = False
 
         # If the available nodes weren't acceptable to the I/O layer, do nothing
-        if self._nodes is None:
+        if not self.io.nodes:
             return
 
         # Call the before update hook

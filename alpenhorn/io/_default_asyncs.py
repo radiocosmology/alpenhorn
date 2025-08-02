@@ -473,19 +473,26 @@ def group_search_async(
         return
 
     # Check whether an actual file exists on the target
-    log.debug(f"req={req}")
-    node = groupio.exists(req.file.path)
-    if node is not None:
-        # file on disk: create/update the ArchiveFileCopy
-        # to force a check next pass
+    found_missing = False
+    for node in groupio.nodes:
+        if node.io.exists(req.file.path):
+            # file on disk: is it known?
+            #
+            # Acreate/update the ArchiveFileCopy to force a check next pass
+            copy_state = node.db.filecopy_state(req.file)
+
+            if copy_state == "N":
+                # Update/create ArchiveFileCopy to force a check.
+                _force_check_filecopy(req.file, node.db, node.io)
+                found_missing = True
+
+    # If we found something, warn and stop
+    if found_missing:
         log.warning(
             "Skipping pull request for "
             f"{req.file.acq.name}/{req.file.name}: "
             f"file already on disk in group {groupio.group.name}."
         )
-
-        # Update/create ArchiveFileCopy to force a check.
-        _force_check_filecopy(req.file, node.db, node.io)
         return
 
     # Otherwise, escalate to groupio.pull to actually perform the pull

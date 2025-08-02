@@ -673,11 +673,27 @@ class LustreHSMGroupIO(DefaultGroupIO):
     ) -> None:
         super().__init__(group, config, queue, fifo)
 
+        # Sentinal for no nodes defined
+        self._hsm = None
+
         self._threshold = self.config.get("threshold", 1000000000)  # bytes
 
     # HOOKS
 
-    def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
+    @property
+    def nodes(self) -> list[UpdateableNode]:
+        """List of nodes in this group.
+
+        If non-empty, the this will always be a two-element list.
+        The first element is the smallfile node, the second is the HSM
+        node."""
+
+        if self._hsm:
+            return [self._smallfile, self._hsm]
+        return []
+
+    @nodes.setter
+    def nodes(self, nodes: list[UpdateableNode]) -> None:
         """Set nodes used during update.
 
         Identify primary and secondary nodes.  If that can't be accomplished,
@@ -688,14 +704,6 @@ class LustreHSMGroupIO(DefaultGroupIO):
         nodes : list of UpdateableNodes
                 The local active nodes in this group.  Will never be
                 empty.
-        idle : boolean
-                True if all the `nodes` were idle when the current
-                update loop started.
-
-        Returns
-        -------
-        nodes : list of UpdateableNodes
-                This is always just the `nodes` list passed-in.
 
         Raises
         ------
@@ -723,8 +731,6 @@ class LustreHSMGroupIO(DefaultGroupIO):
             self._smallfile = nodes[0]
         else:
             raise ValueError(f"no LustreHSM node in StorageGroup {self.group.name}")
-
-        return nodes
 
     # I/O METHODS
 

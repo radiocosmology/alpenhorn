@@ -125,7 +125,7 @@ def test_group_init(transport_fleet_no_init, queue):
     stgroup, nodes = transport_fleet_no_init
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
-    assert group._nodes == nodes
+    assert group.io.nodes == nodes
     assert group.io.fifo is not None
 
 
@@ -138,7 +138,7 @@ def test_group_init_bad(transport_fleet_no_init, queue):
         node.db.storage_type = "F"
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
-    assert group._nodes is None
+    assert group.io.nodes == []
 
 
 def test_group_init_mixed(transport_fleet_no_init, queue):
@@ -150,7 +150,7 @@ def test_group_init_mixed(transport_fleet_no_init, queue):
     nodes[3].db.storage_type = "F"
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
-    assert group._nodes == nodes[1:3]
+    assert group.io.nodes == nodes[1:3]
 
 
 def test_idle(queue, transport_fleet):
@@ -304,7 +304,7 @@ def test_pull_search(transport_fleet, simplecopyrequest, queue):
 
 
 def test_group_search_dispatch(transport_fleet, dbtables, simplecopyrequest, queue):
-    """Test group_search_async dispatch to pull_force"""
+    """Test group_search_async dispatch to pull"""
 
     group, nodes = transport_fleet
 
@@ -327,7 +327,7 @@ def test_group_search_in_db(
     node = nodes[0]
 
     mock = MagicMock()
-    group.io.pull_force = mock
+    group.io.pull = mock
 
     # Create a file on the dest
     xfs.create_file(f"{node.db.root}/{simplefile.path}")
@@ -358,7 +358,7 @@ def test_group_search_existing(
     node = nodes[0]
 
     mock = MagicMock()
-    group.io.pull_force = mock
+    group.io.pull = mock
 
     # Create a file on the dest
     xfs.create_file(f"{node.db.root}/{simplefile.path}")
@@ -387,7 +387,7 @@ def test_group_search_hasN(
     node = nodes[0]
 
     mock = MagicMock()
-    group.io.pull_force = mock
+    group.io.pull = mock
 
     # Create a file on the dest
     xfs.create_file(f"{node.db.root}/{simplefile.path}")
@@ -408,3 +408,44 @@ def test_group_search_hasN(
     # Check for an archivefilecopy record requesting a check
     afc = ArchiveFileCopy.get(file=afcr.file, node=node.db)
     assert afc.has_file == "M"
+
+
+def test_group_search_corrupt(
+    transport_fleet, simplefile, archivefilecopyrequest, archivefilecopy, queue, xfs
+):
+    """Test group_search_async with corrupt file.
+
+    The corrupt file shouldn't mask another, surprise file
+    on another node.
+    """
+
+    group, nodes = transport_fleet
+
+    mock = MagicMock()
+    group.io.pull = mock
+
+    # Create a files on the first three nodes
+    xfs.create_file(f"{nodes[0].db.root}/{simplefile.path}")
+    xfs.create_file(f"{nodes[1].db.root}/{simplefile.path}")
+    xfs.create_file(f"{nodes[2].db.root}/{simplefile.path}")
+
+    # Mark the copy on the second node as corrupt.
+    archivefilecopy(file=simplefile, node=nodes[1].db, has_file="X", wants_file="Y")
+
+    # Create a copy request for the file.
+    # Source here doesn't matter
+    afcr = archivefilecopyrequest(
+        file=simplefile, node_from=nodes[0].db, group_to=group.db
+    )
+
+    # Run the async.  First argument is Task
+    group_search_async(None, group.io, afcr)
+
+    # Check dispatch
+    mock.assert_not_called()
+
+    # State of the file on nodes[1] hasn't changed, but files have been
+    # found on both nodes[0] and nodes[2]
+    assert ArchiveFileCopy.get(file=afcr.file, node=nodes[0].db).has_file == "M"
+    assert ArchiveFileCopy.get(file=afcr.file, node=nodes[1].db).has_file == "X"
+    assert ArchiveFileCopy.get(file=afcr.file, node=nodes[2].db).has_file == "M"
