@@ -369,6 +369,53 @@ class StorageNode(base_model):
             )
         }
 
+    def check_pull_dest(
+        self, message: str | None = None, log_level: int = logging.INFO
+    ) -> bool:
+        """Check whether an inbound pull request should proceed.
+
+        This checks whether this node is able to accept new files.
+
+        Parameters
+        ----------
+        message : str, optional
+            The message to write to the log when a check fails.  The message will
+            be followed by a colon and the reason the check failed.  If no
+            message is specified, the default message is used: "Skipping pull for
+            StorageNode <name>".
+        log_level : int, optional
+            The log level to use when logging a failure message.  Should be one
+            of the `logging` level names.  The default is ``logging.INFO``.
+
+        Returns
+        -------
+        result : bool
+            True if the request should continue, or False if the request
+            should be skipped (and attempted again later).
+        """
+
+        if not message:
+            message = f"Skipping pull for StorageNode {self.name}"
+
+        if self.under_min:
+            log.log(
+                log_level,
+                f"{message}: hit minimum free space: "
+                f"({self.avail_gb:.2f} GiB < {self.min_avail_gb:.2f} GiB)",
+            )
+            return False
+
+        if self.check_over_max():
+            log.log(
+                log_level,
+                f"{message}: node full.  ({self.get_total_gb():.2f} GiB "
+                f">= {self.max_total_gb:.2f} GiB)",
+            )
+            return False
+
+        # All checks passed.  Proceed with request.
+        return True
+
     def update_avail_gb(self, new_avail: int | None) -> None:
         """Update `avail_gb` and record the update time.
 

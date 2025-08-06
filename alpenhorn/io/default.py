@@ -448,20 +448,8 @@ class DefaultNodeIO(BaseNodeIO):
             performed.  False otherwise.
         """
 
-        if self.node.under_min:
-            log.info(
-                f"Skipping pull for StorageNode {self.node.name}: "
-                "hit minimum free space: "
-                f"({self.node.avail_gb:.2f} GiB < {self.node.min_avail_gb:.2f} GiB)"
-            )
-            return
-
-        if self.node.check_over_max():
-            log.info(
-                f"Skipping pull for StorageNode {self.node.name}: node full. "
-                f"({self.node.get_total_gb():.2f} GiB "
-                f">= {self.node.max_total_gb:.2f} GiB)"
-            )
+        # Run early DB checks.  The group has already run checks on the source node.
+        if not self.node.check_pull_dest():
             return
 
         # Check that there is enough space available (and reserve what we need)
