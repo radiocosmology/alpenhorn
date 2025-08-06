@@ -11,6 +11,24 @@ from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
 
 
 @pytest.fixture
+def skip_db_checks():
+    """Skip re-checking the database during a pull.
+
+    Forces ArchiveFileCopyRequest.check to return True.
+    But checks that it was called.
+    """
+
+    mock = MagicMock()
+    mock.return_value = True
+
+    with patch("alpenhorn.db.archive.ArchiveFileCopyRequest.check", mock):
+        yield
+
+    # Mock was called
+    mock.assert_called()
+
+
+@pytest.fixture
 def have_bbcp(mock_run_command):
     """Pretend to have bbcp
 
@@ -190,7 +208,7 @@ def test_pull_async_noroute(queue, pull_async_true):
 
 
 @pytest.mark.run_command_result(1, "", "bbcp_stderr")
-def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true):
+def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true, skip_db_checks):
     """Test an unsuccessful bbcp remote pull."""
 
     node, req = pull_async_true
@@ -216,7 +234,9 @@ def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true):
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
-def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async_true):
+def test_pull_async_bbcp_succeed(
+    queue, have_bbcp, mock_filesize, pull_async_true, skip_db_checks
+):
     """Test a successful bbcp remote pull."""
 
     node, req = pull_async_true
@@ -246,7 +266,9 @@ def test_pull_async_bbcp_succeed(queue, have_bbcp, mock_filesize, pull_async_tru
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
-def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async_true):
+def test_pull_async_remote_rsync_fail(
+    queue, have_rsync, pull_async_true, skip_db_checks
+):
     """Test an unsuccessful rsync remote pull."""
 
     node, req = pull_async_true
@@ -273,7 +295,7 @@ def test_pull_async_remote_rsync_fail(queue, have_rsync, pull_async_true):
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
 def test_pull_async_remote_rsync_succeed(
-    queue, have_rsync, mock_filesize, pull_async_true
+    queue, have_rsync, mock_filesize, pull_async_true, skip_db_checks
 ):
     """Test a successful rsync remote pull."""
 
@@ -325,7 +347,7 @@ def test_pull_async_remote_nomethod(queue, pull_async_true):
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
-def test_pull_async_link(queue, pull_async_true):
+def test_pull_async_link(queue, pull_async_true, skip_db_checks):
     """Test creating hardlink."""
 
     node, req = pull_async_true
@@ -348,7 +370,7 @@ def test_pull_async_link(queue, pull_async_true):
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
-def test_pull_async_link_arccontam(queue, pull_async_true):
+def test_pull_async_link_arccontam(queue, pull_async_true, skip_db_checks):
     """Test not creating hardlinks between archive nodes."""
 
     node, req = pull_async_true
@@ -372,7 +394,7 @@ def test_pull_async_link_arccontam(queue, pull_async_true):
 
 @pytest.mark.run_command_result(0, "", "stderr")
 def test_pull_async_local_rsync_succeed(
-    queue, have_rsync, mock_filesize, pull_async_true
+    queue, have_rsync, mock_filesize, pull_async_true, skip_db_checks
 ):
     """Test a successful rsync remote pull."""
 
@@ -403,7 +425,9 @@ def test_pull_async_local_rsync_succeed(
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
-def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async_true):
+def test_pull_async_local_rsync_fail(
+    queue, have_rsync, pull_async_true, skip_db_checks
+):
     """Test an unsuccessful rsync local pull."""
 
     node, req = pull_async_true
@@ -429,7 +453,7 @@ def test_pull_async_local_rsync_fail(queue, have_rsync, pull_async_true):
 
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
-def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async_true):
+def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async_true, skip_db_checks):
     """Test failure deleting the destination."""
 
     node, req = pull_async_true
@@ -479,7 +503,7 @@ def test_pull_already_done(xfs, queue, pull_async_true, archivefilecopy):
     assert afcr.cancelled is True
 
 
-def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy):
+def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy, skip_db_checks):
     """Test pulling a file that's unknowingly on the node."""
 
     node, req = pull_async_false

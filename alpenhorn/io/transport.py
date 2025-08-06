@@ -153,14 +153,10 @@ class TransportGroupIO(DefaultGroupIO):
         # Note: the node list returned by self.nodes has been sorted to
         #       put the most-desired node first
         for node in self.nodes:
-            # Skip node out of space
-            if node.db.under_min:
-                log.debug(f"Ignoring transport node {node.name}: hit min_avail_gb")
-                continue
-
-            # Skip full node
-            if node.db.check_over_max():
-                log.debug(f"Ignoring transport node {node.name}: hit max_total_gb")
+            # Skip this node if normal pull-dest checks fail
+            if not node.db.check_pull_dest(
+                message=f"Ignoring transport node {node.name}", log_level=logging.DEBUG
+            ):
                 continue
 
             # Skip this node if the file won't fit

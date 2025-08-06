@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from ..common import metrics
 from ..common.metrics import Metric
 from ..common.util import timeout_call
 from ..daemon.update import RemoteNode
@@ -49,9 +48,7 @@ def _force_check_filecopy(file_: ArchiveFile, node: StorageNode, node_io: BaseNo
         The node I/O instance.  Used if we need to calculate
         the file size.
     """
-    log.info(
-        "Requesting check of " f"{file_.acq.name}/{file_.name} on node {node.name}."
-    )
+    log.info(f"Requesting check of {file_.acq.name}/{file_.name} on node {node.name}.")
 
     # ready == False is the safe option here: copy will be readied
     # during the subsequent check if needed.
@@ -108,11 +105,10 @@ def pull_async(
         already performed.
     """
 
-    comp_metric = metrics.by_name("requests_completed").bind(
-        type="copy",
-        node=req.node_from.name,
-        group=req.group_to.name,
-    )
+    # Before we were queued, NodeIO reserved space for this file.
+    # Automatically release bytes on task completion
+    task.on_cleanup(io.release_bytes, args=(req.file.size_b,))
+
     pullrun_metric = Metric(
         "pull_running_count",
         "Count of in-progress pulls",
@@ -120,22 +116,9 @@ def pull_async(
         bound={"node": io.node.name},
     )
 
-    # Recheck the database to see if a file hasn't shown
-    # up somehow
-    if io.node.filecopy_state(req.file) == "Y":
-        log.info(
-            f"Cancelling pull request for {req.file.path} "
-            f"to {io.node.name}: already present."
-        )
-        ArchiveFileCopyRequest.update(cancelled=1).where(
-            ArchiveFileCopyRequest.id == req.id
-        ).execute()
-        comp_metric.inc(result="duplicate")
+    # Rerun the database checks, because we don't know how long we've been in the queue
+    if not req.check(node_to=io.node):
         return
-
-    # Before we were queued, NodeIO reserved space for this file.
-    # Automatically release bytes on task completion
-    task.on_cleanup(io.release_bytes, args=(req.file.size_b,))
 
     # We know dest is local, so if source is too, this is a local transfer
     local = req.node_from.local

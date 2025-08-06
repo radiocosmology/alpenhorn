@@ -1,10 +1,14 @@
+import logging
 import pathlib
 
 import peewee as pw
 
+from ..common import metrics
 from ._base import EnumField, base_model
 from .acquisition import ArchiveFile
 from .storage import StorageGroup, StorageNode
+
+log = logging.getLogger(__name__)
 
 
 class ArchiveFileCopy(base_model):
@@ -124,6 +128,119 @@ class ArchiveFileCopyRequest(base_model):
 
     class Meta:
         indexes = ((("file", "group_to", "node_from"), False),)  # non-unique index
+
+    def check(self, node_to: StorageNode | None = None) -> bool:
+        """Check whether this pull request should proceed.
+
+        The return value indicates to the caller whether processing
+        the request should continue or stop.
+
+        Various DB checks are performed on the request.  Some of
+        these checks may cancel the request (if it's no longer valid).
+        Other checks may fail, but leave the request pending (so that
+        it can be re-attempted later).
+
+        Parameters
+        ----------
+        node_to : StorageNode, optional
+            If provided, this should be the destination StorageNode (i.e.
+            the node in `group_to` which will perform the pull).  If given,
+            additional checks may be performed on the node.
+
+        Returns
+        -------
+        result : bool
+            True if processing the request should continue.  False if
+            the request has been cancelled, or should be skipped.
+        """
+        from ..daemon.update import RemoteNode
+
+        # The only label left unbound here is "result"
+        comp_metric = metrics.by_name("requests_completed").bind(
+            type="copy",
+            node=self.node_from.name,
+            group=self.group_to.name,
+        )
+
+        # What's the current situation on the destination?
+        copy_state = self.group_to.state_on_node(self.file)[0]
+        if copy_state == "Y":
+            # We mark the AFCR cancelled rather than complete becase
+            # _this_ AFCR clearly hasn't been responsible for creating
+            # the file copy.
+            log.info(
+                f"Cancelling pull request for "
+                f"{self.file.acq.name}/{self.file.name}: "
+                f"already present in group {self.group_to.name}."
+            )
+            self.cancelled = True
+            self.save(only=[ArchiveFileCopyRequest.cancelled])
+            comp_metric.inc(result="duplicate")
+        if copy_state == "M":
+            log.warning(
+                f"Skipping pull request for "
+                f"{self.file.acq.name}/{self.file.name}: "
+                f"existing copy in group {self.group_to.name} needs check."
+            )
+            return False
+        if copy_state == "X":
+            # If the file is corrupt, we continue with the
+            # pull to overwrite the corrupt file
+            pass
+        elif copy_state == "N":
+            # This is the expected state
+            pass
+        else:
+            # Shouldn't get here
+            log.error(
+                f"Unexpected copy state: '{copy_state}' "
+                f"for file ID={self.file.id} in group {self.group_to.name}."
+            )
+            return False
+
+        # Skip request unless the source node is active
+        if not self.node_from.active:
+            log.warning(
+                f"Skipping request for {self.file.acq.name}/{self.file.name}:"
+                f" source node {self.node_from.name} is not active."
+            )
+            return False
+
+        # If the source file doesn't exist, cancel the request.  If the
+        # source is suspect, skip the request.
+        state = self.node_from.filecopy_state(self.file)
+        if state == "N" or state == "X":
+            log.warning(
+                f"Cancelling request for {self.file.acq.name}/{self.file.name}:"
+                f" not available on node {self.node_from.name}."
+                f" [file_id={self.file.id}]"
+            )
+            self.cancelled = True
+            self.save(only=[ArchiveFileCopyRequest.cancelled])
+            comp_metric.inc(result="missing")
+        if state == "M":
+            log.info(
+                f"Skipping request for {self.file.acq.name}/{self.file.name}:"
+                f" source needs check on node {self.node_from.name}."
+            )
+            return False
+
+        # If the source file is not ready, skip the request.
+        remote_note = RemoteNode(self.node_from)
+        if not remote_note.io.pull_ready(self.file):
+            log.debug(
+                f"Skipping request for {self.file.acq.name}/{self.file.name}:"
+                f" not ready on node {self.node_from.name}."
+            )
+            return False
+
+        # group_to and node_from checks all pass; do node_to checks, if given
+        # these checks never cancel the request.
+        if node_to:
+            return node_to.check_pull_dest()
+
+        # Otherwise, request can continue
+        return True
 
 
 class ArchiveFileImportRequest(base_model):

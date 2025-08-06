@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from ..common import config, metrics, util
+from ..common import config, util
 from ..common.extensions import io_module
 from ..common.metrics import Metric
 from ..db import (
@@ -839,87 +839,8 @@ class UpdateableGroup(updateable_base):
             The pull request to process.
         """
 
-        # The only label left unbound here is "result"
-        comp_metric = metrics.by_name("requests_completed").bind(
-            type="copy",
-            node=req.node_from.name,
-            group=req.group_to.name,
-        )
-
-        # What's the current situation on the destination?
-        copy_state = self.db.state_on_node(req.file)[0]
-        if copy_state == "Y":
-            # We mark the AFCR cancelled rather than complete becase
-            # _this_ AFCR clearly hasn't been responsible for creating
-            # the file copy.
-            log.info(
-                f"Cancelling pull request for "
-                f"{req.file.acq.name}/{req.file.name}: "
-                f"already present in group {self.name}."
-            )
-            ArchiveFileCopyRequest.update(cancelled=True).where(
-                ArchiveFileCopyRequest.id == req.id
-            ).execute()
-            comp_metric.inc(result="duplicate")
-            return
-        if copy_state == "M":
-            log.warning(
-                f"Skipping pull request for "
-                f"{req.file.acq.name}/{req.file.name}: "
-                f"existing copy in group {self.name} needs check."
-            )
-            return
-        if copy_state == "X":
-            # If the file is corrupt, we continue with the
-            # pull to overwrite the corrupt file
-            pass
-        elif copy_state == "N":
-            # This is the expected state
-            pass
-        else:
-            # Shouldn't get here
-            log.error(
-                f"Unexpected copy state: '{copy_state}' "
-                f"for file ID={req.file.id} in group {self.name}."
-            )
-            return
-
-        # Skip request unless the source node is active
-        if not req.node_from.active:
-            log.warning(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
-                f" source node {req.node_from.name} is not active."
-            )
-            return
-
-        # If the source file doesn't exist, cancel the request.  If the
-        # source is suspect, skip the request.
-        state = req.node_from.filecopy_state(req.file)
-        if state == "N" or state == "X":
-            log.warning(
-                f"Cancelling request for {req.file.acq.name}/{req.file.name}:"
-                f" not available on node {req.node_from.name}. "
-                f"[file_id={req.file.id}]"
-            )
-            ArchiveFileCopyRequest.update(cancelled=True).where(
-                ArchiveFileCopyRequest.id == req.id
-            ).execute()
-            comp_metric.inc(result="missing")
-            return
-        if state == "M":
-            log.info(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
-                f" source needs check on node {req.node_from.name}."
-            )
-            return
-
-        # If the source file is not ready, skip the request.
-        node_from = RemoteNode(req.node_from)
-        if not node_from.io.pull_ready(req.file):
-            log.debug(
-                f"Skipping request for {req.file.acq.name}/{req.file.name}:"
-                f" not ready on node {req.node_from.name}."
-            )
+        # Run early checks on the request
+        if not req.check():
             return
 
         # Early checks passed: dispatch this request to the Group I/O layer
