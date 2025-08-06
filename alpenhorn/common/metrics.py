@@ -18,7 +18,7 @@ does nothing.
 
 from __future__ import annotations
 
-from . import config, util
+from . import config
 
 try:
     import prometheus_client as prom
@@ -92,7 +92,9 @@ class Metric:
         # Bind the "daemon" label if not already bound
         self._bound_labels = dict(bound)
         if "daemon" not in self._bound_labels:
-            self._bound_labels["daemon"] = util.get_hostname()
+            from .util import get_hostname
+
+            self._bound_labels["daemon"] = get_hostname()
 
         # keys in "bound" can't also appear in "unbound"
         for key in self._bound_labels.keys():
