@@ -80,12 +80,11 @@ exclude = [
     '\._.*$',   # don't check docstrings for private methods
 ]
 exclude_files = [
-    'entry.py', # dont' check the Click entry-points for the daemon and CLI
+    'entry.py', # don't check the Click entry-points for the daemon and CLI
 ]
 override_SS05 = [  # override SS05 to allow docstrings starting with these words
     '^Process ',
 ]
-
 
 
 [tool.ruff]
