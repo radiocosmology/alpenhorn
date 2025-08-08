@@ -29,6 +29,7 @@ Contents
    :maxdepth: 2
 
    demo
+   coderef/index
 
 * :ref:`genindex`
 * :ref:`search`
