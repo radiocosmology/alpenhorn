@@ -1,51 +1,56 @@
-r"""For configuring alpenhorn from the config file.
+r"""``alpenhorn.common.config``: The alpenhorn config system
 
-Configuration file search order:
+This module takes care of loading the alpenhorn configuration
+from the alpenhorn config file(s) and provides standard access
+methods to the loaded config for use by the rest of alpenhorn.
 
-- `/etc/alpenhorn/alpenhorn.conf`
-- `/etc/xdg/alpenhorn/alpenhorn.conf`
-- `~/.config/alpenhorn/alpenhorn.conf`
-- `ALPENHORN_CONFIG_FILE` environment variable
-- the path passed via `-c` or `--conf` on the command line
+Alpenhorn attempts to load configuration from *all* of the following
+files, skipping ones that don't exist:
+
+- ``/etc/alpenhorn/alpenhorn.conf``
+- ``/etc/xdg/alpenhorn/alpenhorn.conf``
+- ``~/.config/alpenhorn/alpenhorn.conf``
+- a path given by the ``ALPENHORN_CONFIG_FILE`` environment variable
+- a path passed via ``-c`` or ``--conf`` on the command line
 
 This is in order of increasing precedence, with options in later files
-overriding those in earlier entries. Configuration is merged recursively by
-`merge_dict_tree`.
+overriding those in earlier entries. Configuration is merged recursively
+by `merge_dict_tree`.
 
 Example config:
 
-.. codeblock:: yaml
+.. code:: yaml
 
     # Base configuration
     base:
         hostname: alpenhost
-
+    #
     # Configure the database connection with a peewee db_url.  If using a database
     # extension, that may require different data in this section.
     database:
         url: peewee_url
-
+    #
     # Specify extensions as a list of fully qualified references to python packages or
     # modules
     extensions:
         - alpenhorn.generic
         - alpenhorn_chime
         - chimedb.core.alpenhorn
-
+    #
     # Logging configuration.  By default, alpenhorn sends all log message to
     # standard error.
     logging:
         # Set the overall logging level
         level: debug
-
+        #
         # Allow overriding the level on a module by module basis
         module_levels:
             alpenhorn.db: info
-
+        #
         # Alpenhorn can be configured to send log output to syslog and/or
-        # a file.  This is _in addition_ to the log sent to standard error,
+        # a file.  This is *in addition* to the log sent to standard error,
         # which is always enabled.
-
+        #
         # Syslog logging.
         syslog:
             # If true, enable logging to syslog.  Note: if the "syslog" section
@@ -54,7 +59,7 @@ Example config:
             # none of the other syslog configuration parameters are provided
             # in the config.
             enable: true
-
+            #
             # The network address to send syslog message to.
             #
             # May also be a Unix domain socket (like "/dev/log").  In that case,
@@ -62,69 +67,68 @@ Example config:
             #
             # Defaults to "localhost".
             address: localhost
-
+            #
             # The network port to send syslog messages to.  If this is zero,
             # then the port is ignored and `address` is taken to be a Unix domain
             # socket.  Defaults to 514, the standard syslog port.
             port: 514
-
+            #
             # The syslog facility to use.  If given, should be the name of one of
             # the syslog facilities, disregarding case ("user", "local0", ...)
             # Defaults to "user".
             facility: user
-
+            #
             # Set to True to use TCP, instead of UDP, to send messages to the
             # syslog server.  Ignored if using a Unix domain socket (i.e. `port`
             # is zero).  Default is False.
             use_tcp: false
-
+        #
         # File logging.
         file:
             name: /path/to/file.log
-
+            #
             # If a third-party (like logrotate) is rotating the alpenhorn log
             # file, set this to "true" to tell alpenhorn to watch for log-file
             # rotation.
             watch: false
-
+            #
             # Alternately, alpenhorn can manage log file rotation itself.  Set
             # "rotate" to true to enable.  At most one of "watch" and "rotate"
             # may be true.
             rotate: true
-
+            #
             # The following two settings affect alpenhorn-managed log rotation
             # and are ignored if "rotate" is not true.
-
+            #
             # Maximum number of rotated files to keep.  Must be at least one
             # Rotated files append an integer to the name specified (e.g.
             # "file.log.1", "file.log.2" etc.).
             backup_count: 10
-
+            #
             # Size, in bytes, at which log file rotation occurs.  May include a suffix:
             # k, M, or G.
             max_bytes: 4M
-
-
+    #
     # Configure the operation of the local daemon
     daemon:
         # Default number of worker threads
         num_workers: 4
-
+        #
         # Minimum time length (in seconds) between updates
         update_interval: 60
-
+        #
         # Timescale on which to poll the filesystem for new data to import
         auto_import_interval: 30
-
+        #
         # Minimum number of days to wait from the last update of a file copy
         # record before auto-verifying the file
         auto_verify_min_days: 7
-
+        #
         # Maximum time (in seconds) to run serial I/O per update loop (these
         # are I/O run tasks in the main thread, in cases when there are no
         # worker threads
         serial_io_timeout: 900
-
+        #
         # These two optional parameters control how long a pull job is
         # allowed to run before being forceably killed.  The timeout (in
         # seconds) for a pull of a file of size "size_b" bytes is:
@@ -135,7 +139,7 @@ Example config:
         # job will rum forever if it doesn't exit; not recommended).
         pull_timeout_base: 300
         pull_bytes_per_second: 20000000
-
+        #
         # Prometheus client port.  Setting this to a positive value will
         # cause the daemon to start the prometheus client HTTP server to
         # serve GET requests on that port (but only when not running in
@@ -172,8 +176,8 @@ def test_isolation(enable: bool = True) -> None:
     the first `load_config` call.  Ideally, put it in an early
     test fixture in your test suite.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     enable : bool
         Whether to enable (the default) or disable test
         isolation.
@@ -183,7 +187,20 @@ def test_isolation(enable: bool = True) -> None:
 
 
 def load_config(cli_conf: str | os.PathLike | None, cli: bool) -> None:
-    """Find and load the configuration from a file."""
+    """Find and load the configuration from a file.
+
+    Parameters
+    ----------
+    cli_conf : str or path-like or None
+        If not ``None``, this is a file path given on the command-line.
+    cli : bool
+        ``False`` if this is the alpenhorn daemon.  ``True`` otherwise.
+
+    Raises
+    ------
+    click.ClickException
+        None of the potential config files yielded useable config data.
+    """
 
     global _config, _test_isolation
 
@@ -240,9 +257,9 @@ def load_config(cli_conf: str | os.PathLike | None, cli: bool) -> None:
 
 
 def merge_dict_tree(a: Any, b: Any) -> Any:
-    """Merge two dictionaries recursively.
+    """Merge two configs recursively.
 
-    The following rules applied:
+    The following rules are applied:
 
       - Dictionaries at each level are merged, with `b` updating `a`.
       - Lists at the same level are combined, with that in `b` appended to `a`.
@@ -250,14 +267,15 @@ def merge_dict_tree(a: Any, b: Any) -> Any:
 
     Parameters
     ----------
-    a, b : dict
-        Two dictionaries to merge recursively. Where there are conflicts `b`
-        takes preference over `a`.
+    a, b : Any
+        Two objects to merge recursively. Where there are conflicts, `b`
+        takes preference over `a`.  **NB:** despite the name of this function,
+        these do *not* have to be dicts.
 
     Returns
     -------
-    c : dict
-        Merged dictionary.
+    Any
+        The merged config.  This will be of the same type as the parameter `b`.
     """
 
     # Different types should return b
@@ -296,38 +314,43 @@ def merge_dict_tree(a: Any, b: Any) -> Any:
 
 # This is used to mark no default (since the caller may want to use `None`
 # as the default).
-_SENTINAL = object()
+_SENTINAL = "<SENTINAL>"
 
 
 def get(path: str, default: Any = _SENTINAL, as_type: type | None = None) -> Any:
     """Return the config value specified by `path`.
 
-    Parameters:
-    -----------
-    path: str
-        The dotted path to the config parameter, e.g. "logging.file.watch"
-    default: Any, optional
+    Parameters
+    ----------
+    path : str
+        The dotted path to the config parameter, e.g. "logging.file.watch".
+    default : Any, optional
         If given, the value to return if the config parameter is not found.
         If this is not given, a missing config parameter results in an
         exception.
-    as_type: type, optional
+    as_type : type, optional
         If this is specified and the config parameter exists, an attempt
         will be made to co-erce the value to this type.  The only supported
         types are: bool, dict, float, int, list, str.
 
-    Notes
-    -----
-    If `as_type` is given, co-ercion is only attempted if the parameter exists.
-    Co-ercion will never be attempted on the value specified by `default`: if
-    it's used, it will be returned verbatim, even if it doesn't conform to the
-    type given by `as_type`.
+        .. note::
+            If `as_type` is given, co-ercion is only attempted if the parameter exists.
+            Co-ercion will never be attempted on the value specified by `default`: if
+            it's used, it will be returned verbatim, even if it doesn't conform to the
+            type given by `as_type`.
+
+    Returns
+    -------
+    Any
+        The value of the requested config parameter, perhaps co-erced into the type
+        given by `as_type`.
 
     Raises
     ------
-    click.ClickException:
+    click.ClickException
         The parameter didn't exist, and no default was given, or the value
         couldn't be co-erced to the requested type.
-    ValueError:
+    ValueError
         The value of `as_type` was not one of the allowed types listed above.
     """
     # Split the path
@@ -402,27 +425,29 @@ def get_int(
 ) -> int:
     """Return a config value as an int.
 
-    Includes optional bounds checking.
+    Includes optional bounds checking.  (**NB:** Bounds checking is not done on
+    the `default` value, if used.)
 
-    Parameters:
-    -----------
-    path: str
-        The dotted path to the config parameter, e.g. "logging.file.watch"
-    default: Any, optional
+    Parameters
+    ----------
+    path : str
+        The dotted path to the config parameter, e.g. "logging.file.watch".
+    default : Any, optional
         If given, the value to return if the config parameter is not found.
         If this is not given, a missing config parameter results in an
         exception.
-    min, max: int, optional
+    min, max : int, optional
         Bounds (inclusive).  If given, a config value below `min` or above `max`
         results in an exception.
 
-    Notes
-    -----
-    Bounds checking is not done on the `default` value, if used.
+    Returns
+    -------
+    int
+        The value of the requested config parameter.
 
     Raises
     ------
-    click.ClickException:
+    click.ClickException
         The parameter didn't exist, and no default was given, or the value
         couldn't be co-erced to an int, or the value was out of bounds
     """
@@ -437,27 +462,29 @@ def get_float(
 ) -> float:
     """Return a config value as a float.
 
-    Includes optional bounds checking.
+    Includes optional bounds checking.  (**NB:** Bounds checking is not done on
+    the `default` value, if used.)
 
-    Parameters:
-    -----------
-    path: str
-        The dotted path to the config parameter, e.g. "logging.file.watch"
-    default: Any, optional
+    Parameters
+    ----------
+    path : str
+        The dotted path to the config parameter, e.g. "logging.file.watch".
+    default : Any, optional
         If given, the value to return if the config parameter is not found.
         If this is not given, a missing config parameter results in an
         exception.
-    min, max: float, optional
+    min, max : float, optional
         Bounds (inclusive).  If given, a config value below `min` or above `max`
         results in an exception.
 
-    Notes
-    -----
-    Bounds checking is not done on the `default` value, if used.
+    Returns
+    -------
+    float
+        The value of the requested config parameter.
 
     Raises
     ------
-    click.ClickException:
+    click.ClickException
         The parameter didn't exist, and no default was given, or the value
         couldn't be co-erced to a float, or the value was out of bounds
     """
@@ -473,22 +500,21 @@ def get_bytes(path, default: str | None = None) -> int:
 
     Parameters
     ----------
-    path: str
-        The dotted path to the config parameter, e.g. "logging.file.max_bytes"
-    default: str, optional
+    path : str
+        The dotted path to the config parameter, e.g. "logging.file.max_bytes".
+    default : str, optional
         The default value if the config parameter is not found.
 
-    Notes
-    -----
-    Unlike most of the `config.get...` routines, this one _does_ interpret
-    the default value, meaning defaults like "4M" can be used.  Also, although
-    this function returns an int, float values are permitted in the config (so,
-    e.g., "1.5k" is permitted)
+        .. note::
+            Unlike most of the ``config.get...`` routines, this one *does* interpret
+            the `default` value, meaning defaults like "4M" can be used.  Also, although
+            this function returns an int, float values are permitted in the config (so,
+            e.g., "1.5k" is permitted)
 
     Returns
     -------
-    bytes
-        The config value or default, converted to an int
+    int
+        The value of the requested config parameter, or the default, converted to an int.
 
     Raises
     ------

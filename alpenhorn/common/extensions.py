@@ -1,26 +1,31 @@
-"""Extension loading and registation.
+"""``alpenhorn.common.extensions``: Alpenhorn extension framework.
 
 Extensions are simply python packages or modules providing extra functionality
 to alpenhorn. They should be specified in the `'extension'` section of the
-alpenhorn configuration as fully qualified python name. They must have a
-`'register_extension'` function that returns a `dict` specifying the extra
-functionality they provide. There are currently three supported keys:
+alpenhorn config via their full import path. Every valid extension
+must have a ``register_extension`` function that returns a `dict` specifying
+the extra functionality they provide.  A single extension may provide several
+different kinds of functionality.
+
+Keys in the ``register_extension`` dict indication the functionality provided.
+The following keys, with their allowed values, are recognised:
 
 `database`
-    A dict providing capabilities of a database extension.  See the db module
+    A dict providing capabilities of a database extension.  See `alpenhorn.db`
     for details.  At most one database extension is permitted.
 `import-detect`
     A callable object providing a detection routine which will be called
     when importing new files to determine if the file being considered is
-    a valid data file.  It will be passed a two positional parameters:
+    a valid data file.  It will be passed two positional parameters:
 
       * `path`: a `pathlib.PurePath` giving the path relative to the node
         root to the file being imported.
-      * `node`: a `UpdateableNode` instance of the node on which we're
+      * `node`: an `UpdateableNode` instance of the node on which we're
         importing the file.
 
     The funciton should return a two-tuple.  If the detection fails, this
-    should be a pair of `None`s.  Otherwise, if detection succeeds:
+    should be a pair of ``None``s.  Otherwise, if detection succeeds, the
+    elements should be:
 
       * `acq_name`: The name of the acquisition, which does not already need
         to exist.  This should be a string or `pathlib.Path` and be one of
@@ -40,7 +45,7 @@ functionality they provide. There are currently three supported keys:
         it (equivalent to `filecopy.file.acq`).  If a new `ArchiveAcq` was
         not created, this is None.
 
-    The value returned from the call is ignored.
+    The value returned from the callback is ignored.
 
     If multiple `import-detect` extensions are provided, they will be called in the
     order given in the config file until one of them indicates a successful match.
@@ -49,15 +54,15 @@ functionality they provide. There are currently three supported keys:
     `alpenhorn.io`.  Each I/O module should have a node I/O or group I/O class
     (or both).  I/O class names and dict keys must adhere to the following naming
     conventions:
-      * For a StorageNode with `io_class` equal to "IOClassName", the node I/O class
-        implementing this I/O class must be called `IOClassNameNodeIO`.
-      * Similarly, a StorageGroup with `io_class == "IOClassName" must be named
-        `IOClassNameGroupIO`.
+      * For a `StorageNode` with `io_class` equal to "IOClassName", the node I/O class
+        implementing this I/O class must be called ``IOClassNameNodeIO``.
+      * Similarly, a `StorageGroup` with ``io_class == "IOClassName"`` must be named
+        ``IOClassNameGroupIO``.
       * In the `io-modules` dict, the key whose value is a module containing either
         (or both) of the above classes must be "ioclassname" (i.e. equivalent to the
-        `io_class` of the group and/or node after conversion to lower case).  So,
-        the above example classes would both be in a module associated with the dict
-        key `ioclassname`.
+        ``io_class`` of the group and/or node after conversion to lower case).  So,
+        the above example, both classes would both be in a module associated with the
+        dict key `ioclassname`.
 
     Multiple `io-modules` extensions may be provided; no two extensions may provide
     the same dict keys, nor may any extension provide a key which is the name of an
@@ -98,9 +103,7 @@ _io_ext = {}
 def load_extensions() -> None:
     """Load any extension modules specified in the configuration.
 
-    Inspects the `'extensions'` section in the configuration for full resolved
-    Python module names, and then registers any extension types and database
-    connections.
+    All extensions specified in the alpenhorn config are loaded.
 
     Raises
     ------
@@ -109,9 +112,9 @@ def load_extensions() -> None:
     ModuleNotFoundError
         A extension module could not be found
     RuntimeError
-        An extension module was missing the register_extension function.
+        An extension module was missing the `register_extension` function.
     TypeError
-        `register_extension` provided data of the wrong type.
+        A module's `register_extension` function provided data of the wrong type.
     ValueError
         The data returned by register_extension was not usable.
     """
@@ -207,8 +210,8 @@ def database_extension() -> dict:
 
     Returns
     -------
-    capabilities : dict or None
-        A dict providing the capabilites of the database module, or None,
+    dict or None
+        A dict providing the capabilites of the database module, or ``None``,
         if there was no database extension specified in the config.
     """
     if _db_ext is None:
@@ -219,11 +222,11 @@ def database_extension() -> dict:
 
 
 def import_detection() -> list[ImportDetect]:
-    """Returns the list of registered import-detect callables.
+    """Return the list of registered import-detect callables.
 
     Returns
     -------
-    import_detectors
+    list
         The list of import detection functions.  May be empty, if no
         import-detect extensions have been loaded.
     """
@@ -238,7 +241,7 @@ def import_detection() -> list[ImportDetect]:
 
 
 def io_module(name: str) -> ModuleType | None:
-    """Returns the module supporting I/O class named `name`.
+    """Return the module supporting I/O class named `name`.
 
     Parameters
     ----------
@@ -249,7 +252,7 @@ def io_module(name: str) -> ModuleType | None:
 
     Returns
     -------
-    iomod : module or None
+    module or None
         The Python module providing the implementation of the named I/O class.
         It is either a submodule of `alpenhorn.io` or else a module
         provided by one of the io-module extensions.

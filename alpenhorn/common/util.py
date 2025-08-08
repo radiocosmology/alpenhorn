@@ -1,4 +1,8 @@
-"""Utility functions."""
+"""``alpenhorn.common.util``: Utility functions.
+
+This module provides various general-purpose utility function used within
+alpenhorn.
+"""
 
 from __future__ import annotations
 
@@ -19,8 +23,19 @@ from .metrics import Metric
 log = logging.getLogger(__name__)
 
 
-def help_config_option(func):
-    """Click --help-config option"""
+def help_config_option(func: Callable) -> Callable:
+    """Click ``--help-config`` option.
+
+    Parameters
+    ----------
+    func : Callable
+        The function being decorated.
+
+    Returns
+    -------
+    Callable
+        The decorated `func`.
+    """
 
     # This is the callback
     def _help_config(ctx, param, value):
@@ -76,7 +91,18 @@ Consult the alpenhorn documentation for more information.
 
 
 def version_option(func):
-    """Click --version option"""
+    """Click ``--version`` option.
+
+    Parameters
+    ----------
+    func : Callable
+        The function being decorated.
+
+    Returns
+    -------
+    Callable
+        The decorated `func`.
+    """
     return click.option(
         "--version",
         is_flag=True,
@@ -88,7 +114,13 @@ def version_option(func):
 
 
 def print_version(ctx, param, value):
-    """Click callback for the --version eager option."""
+    """Click callback for the ``--version`` eager option.
+
+    Parameters
+    ----------
+    ctx, param, value : Any
+        Per click documentation.
+    """
 
     import sys
 
@@ -125,14 +157,14 @@ SOFTWARE.
 def start_alpenhorn(
     cli_conf: str | None, cli: bool, verbosity: int | None = None
 ) -> None:
-    """Initialise alpenhorn
+    """Initialise alpenhorn.
 
     Parameters
     ----------
     cli_conf : str or None
         The config file given on the command line, if any.
     cli : bool
-        Is the alpenhorn cli being initialised?
+        ``False`` if being called from the alpenhorn daemon.  ``True`` otherwise.
     verbosity : int, optional
         For the cli, the initial verbosity level.  Ignored for daemons.
     """
@@ -164,8 +196,8 @@ def run_command(
     timeout : float or None
         Number of seconds to wait before forceably killing the process,
         or None to wait forever.
-
-    Other keyword args are passed directly on to subprocess.Popen
+    **kwargs : dict
+        Other keyword args passed directly on to `subprocess.Popen`.
 
     Returns
     -------
@@ -173,9 +205,9 @@ def run_command(
         Return code, or None if the process was killed after timing out.
         Integer zero indicates success.
     stdout : string
-        Value of stdout.
+        The contents of standard output produced by the command.
     stderr : string
-        Value of stderr.
+        The contents of standard error produced by the command.
     """
 
     log.debug(f"Running command [timeout={timeout}]: " + " ".join(cmd))
@@ -199,7 +231,9 @@ def run_command(
     )
 
 
-def timeout_call(func: Callable, timeout: float, /, *args: Any, **kwargs: Any) -> Any:
+def timeout_call(
+    func: Callable, timeout: float, /, *args: tuple, **kwargs: dict
+) -> Any:
     """Call a (non-awaitable) function with a timeout.
 
     Uses asyncio.to_thread to call a function in a thread that
@@ -208,20 +242,22 @@ def timeout_call(func: Callable, timeout: float, /, *args: Any, **kwargs: Any) -
     Parameters
     ----------
     func : Callable
-        the function to call
+        The function to call.
     timeout : float
-        timeout, in seconds
-    args, kwargs:
-        passed to `func`
+        Timeout, in seconds.
+    *args : tuple
+        Positional arguments to `func`.
+    **kwargs : dict
+        Keyword arguments to `func`.
 
     Returns
     -------
-    result:
-        The return value of func
+    Any
+        The value returned by calling `func`.
 
     Raises
     ------
-    TimeoutError:
+    TimeoutError
         The call exceeded the timeout
     """
 
@@ -301,17 +337,13 @@ def md5sum_file(filename: str | os.PathLike) -> str | None:
 
     Parameters
     ----------
-    filename: string
+    filename : str or pathlike
         Name of file to checksum.
 
     Returns
     -------
-    md5hash: str
+    str
         The hexadecimal MD5 hash of the file, or None if the operation timed out.
-
-    See Also
-    --------
-    http://stackoverflow.com/questions/1131220/get-md5-hash-of-big-files-in-python
     """
     metric = Metric("hash_running_count", "Count of in-progress MD5 hashing")
 
@@ -323,26 +355,30 @@ def md5sum_file(filename: str | os.PathLike) -> str | None:
 
 
 def get_hostname() -> str:
-    """Returns the hostname for the machine we're running on.
+    """The hostname for the machine we're running on.
 
-    If there is a host name specified in the config, that is returned
-    otherwise the local hostname up to the first '.' is returned"""
+    Returns
+    -------
+    str
+        If there is a host name specified in the config, that is returned
+        otherwise the local hostname up to the first '.' is returned.
+    """
 
     hostname = config.get("base.hostname", default=None, as_type=str)
     return hostname if hostname else socket.gethostname().split(".")[0]
 
 
 def pretty_bytes(num: int | None) -> str:
-    """Return a nicely formatted string describing a size in bytes.
+    """Nicely format a size in bytes.
 
     Parameters
     ----------
     num : int or None
-        Number of bytes
+        Number of bytes.
 
     Returns
     -------
-    pretty_bytes : str
+    str
         If `num` was None, this will be "-".  Otherwise, it's a
         formatted string using power-of-two prefixes, e.g. "103.4 GiB".
 
@@ -386,16 +422,16 @@ def pretty_bytes(num: int | None) -> str:
 
 
 def pretty_deltat(seconds: float) -> str:
-    """Return a nicely formatted time delta.
+    """Nicely format a time delta.
 
     Parameters
     ----------
     seconds : float
-        The time delta, in seconds
+        The time delta, in seconds.
 
     Returns
     -------
-    pretty_deltat : str
+    str
         A human-readable indication of the time delta.
 
     Raises
@@ -429,16 +465,21 @@ def pretty_deltat(seconds: float) -> str:
 
 
 def invalid_import_path(name: str) -> str | None:
-    """Is `name` invalid as an import path?
+    """Check whether `name` is a valid import path.
 
     i.e., can `name` be used as an ArchiveAcq or
     ArchiveFile name (or both, combined).
 
+    Parameters
+    ----------
+    name : str
+        The path to check.
+
     Returns
     -------
-    rejection_reason: str or None
-        A string describing why `name` was rejected,
-        or None, if the name was valid.
+    str or None
+        A string describing why `name` was rejected, or ``None``, if the name was
+        valid.
     """
 
     # Can't be the null string

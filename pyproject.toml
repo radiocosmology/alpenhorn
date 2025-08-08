@@ -68,6 +68,19 @@ issues = "https://github.com/radiocosmology/alpenhorn/issues"
 releasenotes = "https://github.com/radiocosmology/alpenhorn/releases"
 source = "https://github.com/radiocosmology/alpenhorn/"
 
+[tool.numpydoc_validation]
+checks = [
+    "all",   # report on all checks, except the below
+    "ES01",  # "No Extended Summary section"
+    "GL01",  # No text after opening """
+    "EX01",  # "No Examples section"
+    "SA01",  # "No See Also section"
+    ]
+exclude = [
+    '\._.*$',  # don't check docstrings for private methods
+]
+
+
 [tool.ruff]
 lint.select = ["E", "F", "I", "UP", "NPY", "RUF", "BLE", "C4", "RET"]
 

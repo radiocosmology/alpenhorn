@@ -1,4 +1,4 @@
-"""Set up logging for alpenhorn.
+"""``alpenhorn.common.logger``: The Alpenhorn logging system.
 
 Basic Configruation
 -------------------
@@ -6,7 +6,6 @@ Basic Configruation
 Both the CLI and daemon should call the `init_logging()` function as soon as
 possible after program start to turn on logging to standard error.  Any log
 messages produced before this call are discarded.
-
 
 Daemon Logging
 --------------
@@ -25,7 +24,6 @@ which always happens.)
 Note also that between the two calls, the log level of the root logger is
 set to DEBUG.
 
-
 CLI Logging
 -----------
 
@@ -40,7 +38,7 @@ The CLI does not support file or syslog logging, so should _not_ call
 
 The initial verbosity can be specified in the `init_logging` call.  The
 default verbosity is 3.   May be changed at runtime by calling `set_verbosity`.
-"""
+"""  # numpydoc ignore=GL06,GL07
 
 import logging
 import logging.handlers
@@ -76,16 +74,24 @@ _cli_echo = True
 
 
 class StartupHandler(logging.handlers.BufferingHandler):
-    """Start-up logging handler for alpenhorn.
+    """Daemon start-up logging handler for alpenhorn.
 
     A logging hander similar to logging.handlers.MemoryHandler, except:
+
     * it can flush to potentially multiple target handlers
     * it never automatically flushes.
     * once the buffer is full, further messages are silently discarded
 
+    This handler is used by the daemon to cache log messages between
+    the start of alpenhorn and the finialising of the logger set-up so
+    that early log messages make it into the configured logger.
+
+    Once the logger is fully configured, the log messages cached here
+    are flushed to the logger and this handler is shut down.
+
     Parameters
     ----------
-    capacity
+    capacity : int
         The maximum number of log messages to buffer.
     """
 
@@ -94,15 +100,40 @@ class StartupHandler(logging.handlers.BufferingHandler):
         self.targets = []
 
     def addTarget(self, handler: logging.Handler) -> None:
-        """Add `handler` to the list of targets."""
+        """Add a handler to the list of targets.
+
+        Parameters
+        ----------
+        handler : logging.Handler
+            The handler to add.
+        """
         self.targets.append(handler)
 
     def shouldFlush(self, record) -> bool:
-        """Returns false to disable autoflushing."""
+        """Return False to disable autoflushing.
+
+        Parameters
+        ----------
+        record : Any
+            Unsued.
+
+        Returns
+        -------
+        bool
+            ``False``.
+        """
         return False
 
     def emit(self, record) -> None:
-        """Buffer `record` if not full."""
+        """Buffer `record` if not full.
+
+        If we are full, `record` is discarded.
+
+        Parameters
+        ----------
+        record : Any
+            The record to buffer.
+        """
         self.acquire()
         try:
             if len(self.buffer) < self.capacity:
@@ -138,16 +169,28 @@ def echo(*args, **kwargs) -> None:
     """CLI wrapper for click.echo.
 
     Suppresses output when verbosity is less than three.
+
+    Parameters
+    ----------
+    *args : tuple
+        Positional arguments to `click.echo`.
+    **kwargs : dict
+        Keyword arguments to `click.echo`.
     """
     if _cli_echo:
         click.echo(*args, **kwargs)
 
 
 def set_verbosity(verbosity: int) -> None:
-    """Set cli verbosity.
+    """Set CLI verbosity.
 
     Sets the log level of the root logger based on the
     requested verbosity level.
+
+    Parameters
+    ----------
+    verbosity : int
+        The new verbosity level.
     """
 
     # Levels 2 and 3 are the same.
@@ -180,7 +223,7 @@ def init_logging(cli: bool, verbosity: int | None = None) -> None:
     Parameters
     ----------
     cli : bool
-        Is the alpenhorn CLI being initialised?
+        ``False`` if being called by the alpenhorn daemon; ``True`` otherwise.
     verbosity : int
         For the CLI, the verbosity level to use.  Ignored for daemons.
     """
@@ -218,8 +261,9 @@ def configure_sys_logging() -> logging.handlers.SysLogHandler | None:
 
     Returns
     -------
-    syslog_handler
-        The configured syslog handler
+    logging.handlers.SysLogHandler or None
+        The configured syslog handler, if enabled, or ``None`` if
+        not enabled.
 
     Raises
     ------
@@ -281,8 +325,8 @@ def configure_file_logging() -> logging.Handler:
 
     Returns
     -------
-    file_handler
-        The configured file handler
+    logging.Handler
+        The configured file handler.
 
     Raises
     ------

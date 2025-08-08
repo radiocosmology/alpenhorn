@@ -1,7 +1,6 @@
-"""Alpenhorn interface to prometheus_client
+"""``alpenhorn.common.metrics``: Alpenhorn metric exporter.
 
-This module provides an interface between alpenhorn
-and the prometheus client.
+This module provides an interface between alpenhorn and the Prometheus client.
 
 Metrics should be created and accessed through the `Metric` class, which
 is a light-weight wrapper around the prometheus_client's Counter and
@@ -33,7 +32,51 @@ _metrics = {}
 
 
 class Metric:
-    """A wrapper for prometheus_client metrics."""
+    """A wrapper for prometheus_client metrics.
+
+    Labels in the metric may be *bound* (set to a fixed value) or *unbound*
+    (with no fixed value).  Names of unbound labels are listed in `unbound`.
+    Bound labels with their values are set by the `bound` dict.
+
+    All instances of a metric of a given `name` must have the same set of
+    label names (but different instances may change which of those are bound
+    and which are unbound), They must also have the same type (i.e. the same
+    value for `counter`).  All instances with the same `name` control the same
+    underlying prometheus metric.
+
+    All metric instances will automatically bind the label "daemon" to the
+    current hostname (the value returned by `util.get_hostname()`) unless the
+    `bound` dict already binds that label to something else.  (As a result,
+    "daemon" can never appear in the `unbound` set.)
+
+    Newly-created metrics are implicitly set to zero, but they won't actually
+    be reported until their value is explicitly set/updated.
+
+    Parameters
+    ----------
+    name : str
+        Name of the metric, excluding the initial `alpenhorn_`.
+    description : str
+        A human-readable description of the data in the metric.
+    counter : bool
+        If ``True``, create a `Counter` metric.  Otherwise a `Gauge` metric is
+        created.
+    unbound : set or list or tuple
+        A set (or list or tuple) of names of unbound labels.
+    bound : dict
+        A dict of label key-value pairs for bound labels.
+
+    Raises
+    ------
+    KeyError:
+        The same label name was specified in both `unbound` and `bound`.
+    TypeError:
+        An attempt was made to access an existing metric using the wrong
+        value for `counter`.
+    ValueError:
+        An attempt was made to access an existing metric using the wrong
+        set of label names.
+    """
 
     def __init__(
         self,
@@ -43,50 +86,6 @@ class Metric:
         unbound: list | tuple | set = (),
         bound: dict = {},
     ) -> None:
-        """Create a new metric.
-
-        Labels in the metric can be bound (set to a fixed value) or unbound
-        (with no fixed value).  Names of unbound labels are listed in `unbound`.
-        Bound labels with their values are set by the `bound` dict.
-
-        All instances of a metric of a given `name` must have the same set of
-        label names (but different instances may change which of those are bound
-        and which are unbound), They must also have the same type (i.e. the same
-        value for `counter`).  All instances with the same `name` control the same
-        underlying metric.
-
-        All metric instances will automatically bind the label "daemon" to the
-        current hostname (the value returned by `util.get_hostname()`) unless the
-        `bound` dict already binds that label to something else.  (As a result,
-        "daemon" can never appear in the `unbound` set.)
-
-        Newly-created metrics are implicitly set to zero, but they won't actually
-        be reported until their value is explicitly set/updated.
-
-        Parameters
-        ----------
-        name:
-            Name of the metric, excluding the initial `alpenhorn_`.
-        description:
-            A human-readable description of the data in the metric.
-        counter:
-            If True, create a Counter metric.  Otherwise a Gauge metric is created.
-        unbound:
-            A set (or list or tuple) of names of unbound labels.
-        bound:
-            A dict of label key-value pairs for bound labels.
-
-        Raises
-        ------
-        KeyError:
-            The same label name was specified in both `unbound` and `bound`.
-        TypeError:
-            An attempt was made to access an existing metric using the wrong
-            value for `counter`.
-        ValueError:
-            An attempt was made to access an existing metric using the wrong
-            set of label names.
-        """
         global _metrics
 
         # Bind the "daemon" label if not already bound
@@ -135,12 +134,22 @@ class Metric:
     def bind(self, **labels: str) -> Metric:
         """Bind values to labels.
 
-        This method returns a _copy_ of the Metric with the currently unbound
+        This method returns a *copy* of the Metric with the currently unbound
         labels newly bound to the values specified by the keywords.  Not all
         unbound labels need be specified.  Unbound labels not specified remain
         unbound in the returned copy.
 
-        The original Metric is left unchanged.
+        The original `Metric` is left unchanged.
+
+        Parameters
+        ----------
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
+
+        Returns
+        -------
+        Metric
+            The new Metric copy with labels bound as specified.
 
         Raises
         ------
@@ -172,6 +181,11 @@ class Metric:
         Checks that `labels` provides a value for all unbound labels
         (and nothing more).
 
+        Parameters
+        ----------
+        labels : dict
+            Values to bind to unbound labels.
+
         Raises
         ------
         TypeError:
@@ -192,7 +206,13 @@ class Metric:
 
     @property
     def labelnames(self) -> list[str]:
-        """An ordered list of label names."""
+        """An ordered list of label names.
+
+        Returns
+        -------
+        list
+            An ordered list of label names.
+        """
 
         return sorted(self._unbound_labels | set(self._bound_labels.keys()))
 
@@ -201,8 +221,16 @@ class Metric:
 
         Values for all unbound labels must be specified by keyword.
 
-        The returned list is guaranteed to be in the same order as the list
-        of label names given by `labelnames`.
+        Parameters
+        ----------
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
+
+        Returns
+        -------
+        list of str
+            The list of label values.  Guaranteed to be in the same order as
+            the list of label names given by `labelnames`.
         """
         self._check_unbound_covered(labels)
 
@@ -215,11 +243,19 @@ class Metric:
     def _labelled_metric(self, labels: dict) -> prom.metrics.MetricWrapperBase:
         """Returns the labelled metric.
 
-        Returns a `prometheus_client` child metric for the labelset resulting
-        from merging the unbound and bound labels.
-
         Values for all unbound labels must be specified in the supplied `labels`
         dict.
+
+        Parameters
+        ----------
+        labels : dict
+            Values to bind to unbound labels.
+
+        Returns
+        -------
+        prom.metrics.MetricWrapperBase
+            A `prometheus_client` child metric for the labelset resulting
+            from merging the unbound and bound labels.
         """
         # Unlabelled metrics have no children, so we must return the parent
         if not self._unbound_labels and not self._bound_labels:
@@ -234,10 +270,14 @@ class Metric:
     def add(self, value: float, /, **labels: str) -> None:
         """Add `value` to the metric.
 
-        For Counter metrics, `value` must be positive.
+        Values for all unbound labels must be specified by keyword.
 
-        Values for all unbound labels must be specified in the supplied `labels`
-        dict.
+        Parameters
+        ----------
+        value : float
+            The value to add.  For Counter metrics, `value` must be positive.
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
         """
         if self._metric:
             self._labelled_metric(labels).inc(value)
@@ -245,18 +285,26 @@ class Metric:
     def inc(self, /, **labels: str) -> None:
         """Increment the metric by one.
 
-        Values for all unbound labels must be specified in the supplied `labels`
-        dict.
+        Values for all unbound labels must be specified by keyword.
+
+        Parameters
+        ----------
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
         """
         self.add(1, **labels)
 
     def dec(self, /, **labels: str) -> None:
         """Decrement the metric by one.
 
+        Values for all unbound labels must be specified by keyword.
+
         Calling this metric on a counter will result in an error.
 
-        Values for all unbound labels must be specified in the supplied `labels`
-        dict.
+        Parameters
+        ----------
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
         """
         # We'll let prometheus_client throw the exception for counters.
         self.add(-1, **labels)
@@ -264,10 +312,20 @@ class Metric:
     def set(self, value: float, /, **labels: str) -> None:
         """Set the metric to `value`.
 
-        For counter metrics, the only allowed value is zero.
+        Values for all unbound labels must be specified by keyword.
 
-        Values for all unbound labels must be specified in the supplied `labels`
-        dict.
+        Parameters
+        ----------
+        value : float
+            The value to set the metric to.  For Counter metrics, the only
+            allowed value is zero.
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
+
+        Raises
+        ------
+        ValueError
+            An attempt was made to set a Counter to a non-zero value.
         """
         if self._metric is None:
             return
@@ -287,15 +345,14 @@ class Metric:
         Deletes the child metric with the labelset resulting from merging the
         unbound and bound labels.
 
-        Values for all unbound labels must be specified in the supplied `labels`
-        dict.
+        Values for all unbound labels must be specified by keyword.
 
         If no such child metric exists, this function does nothing and succeeds.
 
-        Paramters:
+        Parameters
         ----------
-        labels:
-            The key-value pairs of the unbound labels for the labelset.
+        **labels : dict of str
+            Values specified by keyword to bind to unbound labels.
         """
         if self._metric:
             try:
@@ -323,8 +380,13 @@ def by_name(name: str) -> Metric:
 
     Parameters
     ----------
-    name:
-        The name of the Metric to return
+    name : str
+        The name of the Metric to return.
+
+    Returns
+    -------
+    Metric
+        The requested metric.
 
     Raises
     ------
@@ -351,7 +413,7 @@ def by_name(name: str) -> Metric:
 
 
 def start_promclient() -> None:
-    """Start the prometheus client
+    """Start the prometheus client.
 
     The client is only started if `daemon.prom_client_port`
     is set to a positive value in the alpenhorn config.
