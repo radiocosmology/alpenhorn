@@ -1,4 +1,8 @@
-"""Alpenhorn Database Base Implementation."""
+"""``alpenhorn.db._base``: Alpenhorn Database Base Implementation.
+
+Do not access symbols from this module directly.  Access them
+via `alpenhorn.db`.
+"""
 
 from __future__ import annotations
 
@@ -63,7 +67,13 @@ def _capability(key: str) -> Any:
 
 
 def threadsafe() -> bool:
-    """Returns bool indicating whether the database is threadsafe."""
+    """Report whether the database is threadsafe.
+
+    Returns
+    -------
+    bool
+        ``True`` if the database is threadsafe.  ``False`` otherwise.
+    """
     return _capability("reentrant")
 
 
@@ -155,7 +165,7 @@ def close() -> None:
 
 
 class RetryOperationalError:
-    """Updated rewrite of the former `peewee.shortcuts.RetryOperationalError` mixin
+    """DB mixin to retry failed queries.
 
     See: https://github.com/coleifer/peewee/issues/1472
     """
@@ -166,6 +176,16 @@ class RetryOperationalError:
         Retries once on pw.OperationalError, but only if not
         in a transaction, and only if the database is set to
         autoreconnect.
+
+        Parameters
+        ----------
+        sql, params, commit : Any
+            Parameters per `peewee`.
+
+        Returns
+        -------
+        peewee.cursor
+            The `peewee.cursor`.
         """
         try:
             cursor = super().execute_sql(sql, params, commit)
@@ -203,6 +223,10 @@ class EnumField(pw.Field):
     ----------
     enum_list : list
         A list of the string values for the ENUM.
+    *args : tuple
+        Passed to `peewee.Field`.
+    **kwargs : dict
+        Passed to `peewee.Field`.
 
     Attributes
     ----------
@@ -215,7 +239,7 @@ class EnumField(pw.Field):
     native = True
 
     @property
-    def field_type(self):
+    def field_type(self):  # numpydoc ignore=GL08
         if self.native:
             return "enum"
 
@@ -232,11 +256,11 @@ class EnumField(pw.Field):
 
         super().__init__(*args, **kwargs)
 
-    def clone_base(self, **kwargs):
+    def clone_base(self, **kwargs):  # numpydoc ignore=GL08
         # Add the extra parameter so the field is cloned properly
         return super().clone_base(enum_list=self.enum_list, **kwargs)
 
-    def get_modifiers(self):
+    def get_modifiers(self) -> list | None:  # numpydoc ignore=GL08
         # This routine seems to be for setting the arguments for creating the
         # column.
         if self.native:
@@ -244,8 +268,24 @@ class EnumField(pw.Field):
 
         return [self.maxlen]
 
-    def db_value(self, val):
-        """Verify supplied value before handing off to DB."""
+    def db_value(self, val: str | None) -> str | None:
+        """Verify supplied value before handing off to DB.
+
+        Parameters
+        ----------
+        val : str or None
+            The value to verify.
+
+        Returns
+        -------
+        str or None
+            `val`.
+
+        Raises
+        ------
+        ValueError
+            Validation failed.
+        """
 
         # If we're using a native Enum field, just let the DBMS decide what to do
         # Otherwise, allow values in the enum_list and the null value (which may
@@ -259,7 +299,7 @@ class EnumField(pw.Field):
 class base_model(pw.Model):
     """Base class for all models."""
 
-    class Meta:
+    class Meta:  # numpydoc ignore=GL08
         database = database_proxy
 
         # TODO: consider whether to use only_save_dirty = True here

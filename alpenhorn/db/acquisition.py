@@ -1,3 +1,9 @@
+"""``alpenhorn.db.acquisition``: Data Index acquisition tracking.
+
+This module defines data index tables tracking acquisitions and
+their files.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +17,10 @@ log = logging.getLogger(__name__)
 
 
 class ArchiveAcq(base_model):
-    """Describe the acquisition.
+    """An acquisition.
+
+    What is an acqusition other than a bucket to put files in?
+    Nothing, really: that's basically it.
 
     Attributes
     ----------
@@ -30,7 +39,7 @@ class ArchiveFile(base_model):
 
     Attributes
     ----------
-    acq : foreign key to ArchiveAcq
+    acq : ArchiveAcq
         The acqusition containing this file.
     name : string
         Name of the file.
@@ -50,12 +59,12 @@ class ArchiveFile(base_model):
     #       Will be evaulated by peewee at row-creation time.
     registered = pw.DateTimeField(default=pw.utcnow)
 
-    class Meta:
+    class Meta:  # numpydoc ignore=GL08
         # (acq,name) is unique
         indexes = ((("acq", "name"), True),)
 
     @property
-    def path(self) -> pathlib.PurePath:
+    def path(self) -> pathlib.PurePath:  # numpydoc ignore=RT01
         """The relative path to the file copy.
 
         Simply the path concatenation of `acq.name` and `name`.
@@ -65,8 +74,8 @@ class ArchiveFile(base_model):
         return pathlib.PurePath(self.acq.name, self.name)
 
     @property
-    def archive_count(self) -> int:
-        """The total number of archived copies of this file"""
+    def archive_count(self) -> int:  # numpydoc ignore=RT01
+        """The total number of archived copies of this file."""
         from .archive import ArchiveFileCopy
         from .storage import StorageNode
 

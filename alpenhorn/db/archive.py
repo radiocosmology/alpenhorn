@@ -1,3 +1,9 @@
+"""``alpenhorn.db.archive``: Data Index archive tables.
+
+This module defines tables relating the the file archive
+tracked by the Data Index.
+"""
+
 import logging
 import pathlib
 
@@ -16,29 +22,32 @@ class ArchiveFileCopy(base_model):
 
     Attributes
     ----------
-    file : foreign key
-        Reference to the file of which this is a copy.
-    node : foreign key
+    file : ArchiveFile
+        The file of which this is a copy.
+    node : StorageNode
         The node on which this copy lives (or should live).
     has_file : enum
         Is the file on the node?
-        - 'Y': yes, the node has a copy of the file.
-        - 'N': no, the node does not have the file.
-        - 'M': maybe: the file copy needs to be re-checked.
-        - 'X': the file is there, but has been verified to be corrupted.
+
+        - ``'Y'``: yes, the node has a copy of the file.
+        - ``'N'``: no, the node does not have the file.
+        - ``'M'``: maybe: the file copy needs to be re-checked.
+        - ``'X'``: the file is there, but has been verified to be corrupted.
     wants_file : enum
         Does the node want the file?
-        - 'Y': yes, keep the file around
-        - 'M': maybe, can delete if we need space
-        - 'N': no, should be deleted
+
+        - ``'Y'``: yes, keep the file around
+        - ``'M'``: maybe, can delete if we need space
+        - ``'N'``: no, should be deleted
+
         In all cases we try to keep at least two copies of the file around.
     ready : bool
-        _Some_ StorageNode I/O classes use this to tell other hosts that
-        files are ready for access.  Other I/O classes do _not_ use this
+        *Some* `StorageNode` I/O classes use this to tell other hosts that
+        files are ready for access.  Other I/O classes do *not* use this
         field and assess readiness in some other way, so never check this
         directly; outside of the I/O-class code itself, use
-        StorageNode.io.ready_path() or StorageNode.remote.pull_ready()
-        to determine whether a remote file is ready for I/O.
+        `NodeIO.ready_path()` or `RemoteNode.pull_ready()` to determine
+        whether a remote file is ready for I/O.
     size_b : integer
         Allocated size of file in bytes (i.e. actual size on the Storage
         medium.)
@@ -55,16 +64,16 @@ class ArchiveFileCopy(base_model):
     last_update = pw.DateTimeField(default=pw.utcnow)
 
     @property
-    def path(self) -> pathlib.Path:
+    def path(self) -> pathlib.Path:  # numpydoc ignore=RT01
         """The absolute path to the file copy.
 
-        For a relative path (one omitting node.root), use copy.file.path
+        For a relative path (one omitting node.root), use `copy.file.path`.
         """
 
         return pathlib.Path(self.node.root, self.file.path)
 
     @property
-    def state(self) -> str:
+    def state(self) -> str:  # numpydoc ignore=RT01
         """A human-readable description of the copy state."""
 
         # key is '{has_file}{wants_file}'
@@ -90,7 +99,7 @@ class ArchiveFileCopy(base_model):
         key = self.has_file + self.wants_file
         return states.get(key, "Corrupt")
 
-    class Meta:
+    class Meta:  # numpydoc ignore=GL08
         indexes = ((("file", "node"), True),)  # (file, node) is unique
 
 
@@ -99,11 +108,11 @@ class ArchiveFileCopyRequest(base_model):
 
     Attributes
     ----------
-    file : foreign key
-        Reference to the file to be copied.
-    group_to : foreign key
+    file : ArchvieFile
+        The file to be copied.
+    group_to : StorageGroup
         The storage group to which the file should be copied.
-    node_from : foreign key
+    node_from : StorageNode
         The node from which the file should be copied.
     completed : bool
         Set to true when the copy has succeeded.
@@ -126,7 +135,7 @@ class ArchiveFileCopyRequest(base_model):
     transfer_started = pw.DateTimeField(null=True)
     transfer_completed = pw.DateTimeField(null=True)
 
-    class Meta:
+    class Meta:  # numpydoc ignore=GL08
         indexes = ((("file", "group_to", "node_from"), False),)  # non-unique index
 
     def check(self, node_to: StorageNode | None = None) -> bool:
@@ -143,14 +152,14 @@ class ArchiveFileCopyRequest(base_model):
         Parameters
         ----------
         node_to : StorageNode, optional
-            If provided, this should be the destination StorageNode (i.e.
+            If provided, this should be the destination `StorageNode` (i.e.
             the node in `group_to` which will perform the pull).  If given,
             additional checks may be performed on the node.
 
         Returns
         -------
-        result : bool
-            True if processing the request should continue.  False if
+        bool
+            ``True`` if processing the request should continue.  ``False`` if
             the request has been cancelled, or should be skipped.
         """
         from ..daemon import RemoteNode
@@ -248,10 +257,20 @@ class ArchiveFileCopyRequest(base_model):
 class ArchiveFileImportRequest(base_model):
     """Requests for the import of new files into a node.
 
+    If `path` is the special value "ALPENHORN_NODE", then the request is
+    a node initialisation request, instead of a normal import request.
+    This only happens on active nodes which aren't already initialised:
+    an initialisation request on an already initialised node is ignored.
+
+    .. hint::
+        How node initialisation works is dependent on the I/O class of
+        the node.  There is no requirement for initialisation to create an
+        ALPENHORN_NODE node file.
+
     Attributes
     ----------
-    node : foreign key
-        The StorageNode on which the import should happen
+    node : StorageNode
+        The node on which the import should happen.
     path : string
         The path to import.  If this is a directory and recurse is True,
         it will be recursively scanned.
@@ -264,15 +283,6 @@ class ArchiveFileImportRequest(base_model):
         Set to true when the import request has completed.
     timestamp : datetime
         The UTC time when the request was made.
-
-    If `path` is the special value "ALPENHORN_NODE", then the request is
-    a node initialisation request, instead of a normal import request.
-    This only happens on active nodes which aren't already initialised:
-    an initialisation request on an already initialised node is ignored.
-
-    Note: How node initialisation works is dependent on the I/O class of
-    the node.  There is no requirement for initialisation to create an
-    ALPENHORN_NODE node file.
     """
 
     node = pw.ForeignKeyField(StorageNode, backref="import_requests")

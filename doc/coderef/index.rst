@@ -42,7 +42,9 @@ Module Reference
 ----------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
+   cli
    common
    daemon
+   db

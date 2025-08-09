@@ -1,4 +1,8 @@
-"""Alpenhorn command-line interface."""
+"""``alpenhorn.cli.cli``: Alpenhorn CLI core.
+
+This module is a library of core functionality
+used to implement the Alpenhorn CLI.
+"""
 
 from __future__ import annotations
 
@@ -15,8 +19,8 @@ def dbconnect(check: bool = True) -> None:
 
     Parameters
     ----------
-    check:
-        If True (the default), raises ClickException if the
+    check : bool
+        If ``True`` (the default), raises `ClickException` if the
         database doesn't conform to the current schema version.
     """
 
@@ -26,7 +30,7 @@ def dbconnect(check: bool = True) -> None:
 
 
 def check_then_update(
-    do_check: bool, do_update: bool, func: Callable, ctx, *, args: list = []
+    do_check: bool, do_update: bool, func: Callable, ctx, *, args: tuple | list = ()
 ) -> None:
     """Boilerplate for the check-confirm-update pattern.
 
@@ -43,27 +47,31 @@ def check_then_update(
 
     When calling `func` the following arguments are passed, in order:
 
-    1. `update`: a bool which is False in "check" mode (step 2) and True in
-        "update" mode (step 6)
-    2. `ctx`: the click context object
+    1. update : bool
+        ``False`` in "check" mode (step 2) and ``True`` in "update" mode (step 6)
+    2. ctx: The click context object
     3. any positional parameters given in in `args`
-    4. `first_time`: a bool keyword argument which is True the first time
-        `func` is called, and False the second time (if called twice).
+    4. `first_time` : bool, a keyword-only argument
+        ``True`` the first time `func` is called, and ``False`` the second time
+        (if called twice).
 
     Anything returned by `func` is ignored.
 
     Parameters
     ----------
-    do_check
-        True if we should run the check phase
-    do_update
-        True if we should run the update phase
-    func:
-        The function to call
-    ctx:
-        The click context
-    args:
-        A list of positional arguments to pass `func`
+    do_check : bool
+        ``True`` if we should run the check phase.
+    do_update : bool
+        ``True`` if we should run the update phase.
+        .. note::
+        If both `do_check` and `do_update` are ``False``, this function will
+        successfully do nothing.
+    func : Callable
+        The function to call.
+    ctx : click Context
+        The `click` context.
+    args : tuple or list
+        Positional arguments to pass `func`.
     """
 
     if do_check:
@@ -94,24 +102,24 @@ def update_or_remove(field: str, new: str | None, old: str | None) -> dict:
     Only works on string fields.  (Numeric fields need some other
     mechanism to let the user specify None/null when necessary.)
 
-    Parameters:
-    -----------
-    field:
-        Name of the field to update
-    new:
+    Parameters
+    ----------
+    field : str
+        Name of the field (i.e. table column) to update.
+    new : str or None
         The new value of the field, maybe.  From the user.  If this
-        is None, there is no update.  If this is the empty string,
-        the field should be set to None/null if not that already.
-    old:
-        The current value of the field, which might be None/null.
+        is ``None``, there is no update.  If this is the empty string,
+        the field should be set to ``None`` (i.e. null) if not that already.
+    old : str or None
+        The current value of the field, which might be ``None`` (i.e. null).
         From the database.
 
     Returns
     -------
-    result :  dict
-        Has at most one key, `field`, which is present only
-        if this function determines an update is required.  It should
-        be merged with the dict of updates by the caller.
+    dict
+        A dict containing the fields to update.  Has at most one key, `field`,
+        which is present only if this function determines an update is required.
+        It should be merged with the dict of updates by the caller.
     """
 
     # This implies the user didn't specify anything for this field
@@ -132,8 +140,22 @@ def update_or_remove(field: str, new: str | None, old: str | None) -> dict:
     return {}
 
 
-def pretty_time(time):
-    """Print a human-readable time."""
+def pretty_time(time: datetime | None) -> str:
+    """Print a human-readable time.
+
+    Parameters
+    ----------
+    time : naive datetime or None
+        The time to format.  Assumed to be in UTC (which is true
+        for any time read from the data index), or ``None``,
+        indicating no value.
+
+    Returns
+    -------
+    str
+        The time formatted as a string.  If `time` was ``None``,
+        this will be simply "-".
+    """
 
     if time:
         return time.ctime() + " UTC"

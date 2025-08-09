@@ -16,8 +16,22 @@ from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, Storage
 def cli_option(option: str, **extra_kwargs):
     """Provide common CLI options.
 
-    Returns a click.option decorator for the common CLI option called
-    `option`.  Other keyword arguments are passed on to click.option.
+    This function provides decorators implementing the CLI common option
+    named `option`.
+
+    Parameters
+    ----------
+    option : str
+        The CLI option to return a decorator for.
+    **extra_kwargs : dict
+        Extra keyword arguments passed to the `click.option` decorator.
+        These may override the corresponding default keywords provided
+        by this function.
+
+    Returns
+    -------
+    Callable
+        The `click.option` decorator for the specified CLI option.
     """
 
     # Set args for the click.option decorator
@@ -221,9 +235,26 @@ def cli_option(option: str, **extra_kwargs):
 
 
 def not_both(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> None:
-    """Check whether two incompatible options were used.
+    """Option processing: two incompatible options.
 
-    If they were, raise click.UsageError."""
+    This is the NAND of opt1 and opt2.
+
+    Parameters
+    ----------
+    opt1_set : bool
+        ``True`` if opt1 is set.
+    opt1_name : str
+        The name of opt1.
+    opt2_set : bool
+        ``True`` if opt2 is set.
+    opt2_name : str
+        The name of opt2.
+
+    Raises
+    ------
+    click.UsageError:
+        Whenever `opt1_set` and `opt2_set` are both ``True``.
+    """
 
     if opt1_set and opt2_set:
         raise click.UsageError(f"cannot use both --{opt1_name} and --{opt2_name}")
@@ -232,11 +263,27 @@ def not_both(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> 
 def both_or_neither(
     opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str
 ) -> None:
-    """Check whether two options which must be used together were.
+    """Option processing: both or neither option was used.
 
-    If they weren't, raise click.UsageError."""
+    This is the exclusive NOR of opt1 and opt2.
 
-    # xor
+    Parameters
+    ----------
+    opt1_set : bool
+        ``True`` if opt1 is set.
+    opt1_name : str
+        The name of opt1.
+    opt2_set : bool
+        ``True`` if opt2 is set.
+    opt2_name : str
+        The name of opt2.
+
+    Raises
+    ------
+    click.UsageError:
+        Whenever `opt1_set` is different than `opt2_set`.
+    """
+
     if bool(opt1_set) is not bool(opt2_set):
         raise click.UsageError(f"--{opt1_name} and --{opt2_name} must be used together")
 
@@ -244,18 +291,52 @@ def both_or_neither(
 def at_least_one(
     opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str
 ) -> None:
-    """Check that at least one of two options were used.
+    """Option processing: at least one of two options were used.
 
-    If not, raise click.UsageError."""
+    This is the inclusive OR of opt1 and opt2.
+
+    Parameters
+    ----------
+    opt1_set : bool
+        ``True`` if opt1 is set.
+    opt1_name : str
+        The name of opt1.
+    opt2_set : bool
+        ``True`` if opt2 is set.
+    opt2_name : str
+        The name of opt2.
+
+    Raises
+    ------
+    click.UsageError:
+        Whenever `opt1_set` OR `opt2_set` is false.
+    """
 
     if not (opt1_set or opt2_set):
         raise click.UsageError(f"missing --{opt1_name} or --{opt2_name}")
 
 
 def exactly_one(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) -> None:
-    """Check that exactly one of two incompatible options were used.
+    """Option processing: one of two incompatible options is required.
 
-    If not, raise click.UsageError."""
+    This is the exclusive OR of opt1 and opt2.
+
+    Parameters
+    ----------
+    opt1_set : bool
+        ``True`` if opt1 is set.
+    opt1_name : str
+        The name of opt1.
+    opt2_set : bool
+        ``True`` if opt2 is set.
+    opt2_name : str
+        The name of opt2.
+
+    Raises
+    ------
+    click.UsageError:
+        Whenever `opt1_set` XOR `opt2_set` is false.
+    """
 
     not_both(opt1_set, opt1_name, opt2_set, opt2_name)
     at_least_one(opt1_set, opt1_name, opt2_set, opt2_name)
@@ -264,9 +345,26 @@ def exactly_one(opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str) 
 def requires_other(
     opt1_set: bool, opt1_name: str, opt2_set: bool, opt2_name: str
 ) -> None:
-    """If opt1 is set, check that opt2 was also set.
+    """Option processing: `opt1` requires `opt2`.
 
-    If not, raise click.UsageError."""
+    If opt1 is set, check that opt2 was also set.
+
+    Parameters
+    ----------
+    opt1_set : bool
+        ``True`` if opt1, the antecedent, is set.
+    opt1_name : str
+        The name of opt1.
+    opt2_set : bool
+        ``True`` if opt2, the consequent, is set.
+    opt2_name : str
+        The name of opt2.
+
+    Raises
+    ------
+    click.UsageError:
+        Whenever `opt1_set` is ``True`` and `opt2_set` is ``False``.
+    """
 
     if opt1_set and not opt2_set:
         raise click.UsageError(f"--{opt1_name} may only be used with --{opt2_name}")
@@ -279,7 +377,22 @@ def resolve_group(group: str | list[str]) -> StorageGroup | set[StorageGroup]:
     Otherwise, should be given a list of str and will return a
     set of StorageGroups.
 
-    If any name can't be resolved, raises ClickException.
+    Parameters
+    ----------
+    group : str or list of str
+        The group names to find.
+
+    Returns
+    -------
+    StorageGroup or set of StorageGroup
+        If `group` was a single `str`, this is the corresponding `StorageGroup`.
+        Otherwise, it is a `set` of `StorageGroup` instances corresponding
+        to the list of input `group` names.
+
+    Raises
+    ------
+    click.ClickException
+        A non-existent `group` was given.
     """
     one_group = isinstance(group, str)
     if one_group:
@@ -304,7 +417,22 @@ def resolve_node(node: str | list[str]) -> StorageNode | set[StorageNode]:
     Otherwise, should be given a list of str and will return a
     set of StorageNodes.
 
-    If any name can't be resolved, raises ClickException.
+    Parameters
+    ----------
+    node : str or list of str
+        The node names to find.
+
+    Returns
+    -------
+    StorageNode or set of StorageNode
+        If `node` was a single `str`, this is the corresponding `StorageNode`.
+        Otherwise, it is a `set` of `StorageNode` instances corresponding
+        to the list of input `node` names.
+
+    Raises
+    ------
+    click.ClickException
+        A non-existent `node` was given.
     """
     one_node = isinstance(node, str)
     if one_node:
@@ -323,14 +451,28 @@ def resolve_node(node: str | list[str]) -> StorageNode | set[StorageNode]:
 
 
 def resolve_acq(acq: str | list[str]) -> ArchiveAcq | set[ArchiveAcq]:
-    """Convert --acq list to ArchiveAcq list.
+    """Convert ``--acq`` list to `ArchiveAcq` list.
 
     If given a single `str`, returns a single `ArchiveAcq`.
     Otherwise, should be given a list of str and will return a
     set of ArchiveAcqs.
 
-    Raises `click.ClickException` if a non-existent acqusition was
-    provided.
+    Parameters
+    ----------
+    acq : str or list of str
+        The acquisition names to find.
+
+    Returns
+    -------
+    ArchiveAcq or set of ArchiveAcq
+        If `acq` was a single `str`, this is the corresponding `ArchiveAcq`.
+        Otherwise, it is a `set` of `ArchiveAcq` instances corresponding
+        to the list of input `acq` names.
+
+    Raises
+    ------
+    click.ClickException
+        A non-existent `acq` was given.
     """
 
     one_acq = isinstance(acq, str)
@@ -358,11 +500,19 @@ def state_constraint(
 ) -> pw.Expression | None:
     """Select ArchiveFileCopy constraint for state.
 
-    Processes the --corrupt, --healthy, --missing, --suspect
-    flags and returns a peewee.Expression to be added to
-    a where() clause.
+    Processes the ``--corrupt``, ``--healthy``, ``--missing``, and ``--suspect``
+    flags.
 
-    If none of the flags are set, returns None.
+    Parameters
+    ----------
+    corrupt, healthy, missing, suspect : bool
+        The state of the corresponding `click` command-line flag.
+
+    Returns
+    -------
+    pw.Expression or None
+        If none of the flags are set, this is ``None``.  Otherwise it is a
+        `pw.expression` selecting file copies with any of the specified states.
     """
 
     if corrupt:
@@ -401,32 +551,30 @@ def state_constraint(
 
 
 def files_in_nodes(
-    nodes: list[StorageNode],
+    nodes: set[StorageNode] or list[StorageNode],
     state_expr: pw.Expression | None = None,
     in_any: bool = False,
 ) -> set[int] | None:
-    """Returns a set of files on a set of nodes.
-
-    By default, the intersection is returned; pass `in_any=True`
-    to return the union, instead.
+    """Find files on node(s).
 
     Parameters
     ----------
-    nodes:
-        list of StorageNodes.
-    state_expr:
-        if given and not None, a peewee.Expression defining the
-        state of files we're looking for.  If None, a
-        default constraint of only healthy files is used.
-    in_any:
-        if True, file needs to be only in one group.
-        If False, file needs to be in all group.
+    nodes : set or list of StorageNode
+        The node(s) to search.
+    state_expr : pw.Expression or None, optional
+        If given and not ``None``, a `peewee.Expression` defining the
+        state of files we're looking for.  If ``None``, a
+        default constraint of only healthy files is used
+        (i.e. `state_contraint(healthy=True)`).
+    in_any : bool, optional
+        If ``True``, file needs to be only in one group.
+        If ``False``, the default, file needs to be in all group.
 
     Returns
     -------
-    files_in_nodes:
-        If the input list was empty, this is None.  Otherwise,
-        it is a set of ArchiveFile.ids which are on any/all nodes.
+    set of int or None
+        If the input list was empty, this is ``None``.  Otherwise,
+        it is a `set` of `ArchiveFile.id` values which are on any/all nodes.
         The set may be empty, if no files satisfied the constraint.
     """
 
@@ -468,33 +616,30 @@ def files_in_nodes(
 
 
 def files_in_groups(
-    groups: set[StorageGroup],
+    groups: set[StorageGroup] | list[StorageGroup],
     state_expr: pw.Expression | None = None,
     in_any: bool = False,
 ) -> set[int] | None:
-    """Returns a set of files in a set of groups.
-
-    By default, the intersection is returned; pass `in_any=True`
-    to return the union, instead.
+    """Find files in group(s).
 
     Parameters
     ----------
-    groups:
-        set of StorageGroups.
-    state_expr:
-        if given and not None, a peewee.Expression defining the
-        state of files we're looking for.  If None, a
-        default constraint of has_file='Y & wants_file='Y' is applied.
-    in_any:
-        if True, file needs to be only in one group.
-        If False, file needs to be in all group.
+    groups : set or list of StorageGroup
+        The group(s) to search.
+    state_expr : pw.Expression or None, optional
+        If given and not ``None``, a `peewee.Expression` defining the
+        state of files we're looking for.  If ``None``, a
+        default constraint of ``has_file='Y & wants_file='Y'`` is applied.
+    in_any : bool, optional
+        If ``True``, files need to be only in one group.
+        If ``False``, the default, files need to be in all group.
 
     Returns
     -------
-    files_in_groups:
-        If the input list was empty, this is None.  Otherwise,
-        it is a set of ArchiveFile.ids which are in any/all groups.
-        The set may be empty, if no files satisfied the constraint.
+    set of int or None
+        If the input set of groups was empty, this is ``None``.  Otherwise,
+        it is a `set` of `ArchiveFile.id` values which are in any/all
+        groups.  The set may be empty, if no files satisfied the constraint.
     """
 
     group_files = None
@@ -540,14 +685,26 @@ def set_storage_type(
 ) -> str | None:
     """Set node storage_type.
 
-    Processes the --archive, --field, --transport options.
+    Processes the ``--archive``, ``--field``, ``--transport`` options.
 
-    Returns one of 'A', 'F', 'T', depending on which of the options is set.
+    Parameters
+    ----------
+    archive, field, transport : bool
+        The state of the corresponding `click` command-line flag.
+    none_ok : bool
+        Whether to return ``None`` if all flags are ``False``.
 
-    If none of the options are set, None is returned if `none_ok` is True, otherwise
-    the default 'F' is returned.
+    Returns
+    -------
+    str or None
+        One of 'A', 'F', 'T', depending on which of the options were set.
+        If none of the options are set, ``None`` is returned if `none_ok` was ``True``,
+        otherwise the default, 'F', is returned.
 
-    Raises a click.UsageError if more than one flag is set.
+    Raises
+    ------
+    click.ClickException
+        More than one of the flags was ``True``.
     """
 
     # Usage checks
@@ -571,22 +728,29 @@ def set_io_config(
 ) -> dict | None:
     """Set the I/O config from the command line.
 
-    Processes the --io-config and --io-var options.
+    Processes the ``--io-config`` and ``--io-var`` options.
 
     Parameters
     ----------
-    io_config:
-        The --io-config parameter data from click
-    io_var:
-        The --io-var parameter data from click
-    default:
-        If --io-config is None, use this as the default value before applying
-        io_var edits.  If a string, will be JSON decoded.
+    io_config : str or None
+        The ``--io-config`` parameter data.
+    io_var : str or None
+        The ``--io-var`` parameter data.
+    default : str or dict, optional
+        If ``--io-config`` is ``None``, this is used as the initial I/O config
+        before applying `io_var` edits.  If this is a `str`, it will be JSON
+        decoded.
 
     Returns
     -------
-    io_config : dict
-        The composed I/O config dict, or None if the dict ended up empty.
+    dict
+        The composed I/O config dict, or ``None`` if the dict ended up empty.
+
+    Raises
+    ------
+    click.ClickException
+        A JSON decode error occurred, or the user specified invalid `io_var`
+        data.
     """
 
     # Attempt to compose the I/O config
@@ -651,22 +815,27 @@ def set_io_config(
 
 
 def file_from_path(path: str, source: str | None = None) -> ArchiveFile:
-    """Get file record given a path
+    """Get file record given a `path`.
 
     Given an "acqname/filename" path-like string, find and return
-    the file name.
+    the corresponding `ArchiveFile` record.
 
     Parameters
     ----------
-    path:
-        The path to resolve into an ArchiveFile
-    source:
-        If not None, a location (i.e. a line in a file) added
+    path : str
+        The path to resolve into an `ArchiveFile`.
+    source : str or None
+        If not ``None``, a location (i.e. a line in a file) added
         to an error string.
 
-    Raises:
+    Returns
     -------
-    click.ClickException:
+    ArchiveFile
+        The record indicated by `path`.
+
+    Raises
+    ------
+    click.ClickException
         A record for `path` could not be found.
     """
 
@@ -712,24 +881,30 @@ def file_from_path(path: str, source: str | None = None) -> ArchiveFile:
 
 
 def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
-    """Check whether to automatically turn on check mode
+    """Check whether to automatically turn on check mode.
+
+    If the user indicates they're passing a file on stdin (via ``--file-list=-``,
+    then it's impossible (or at least inconvenient), to ask the user for
+    confirmation.  Therefore, if the user hasn't also used ``--force`` to skip
+    confirmation, we implicitly turn on ``--check`` mode in this case, to
+    safely avoid trying to ask for confirmation.
 
     The intent here is that the output of this function will be assigned to
     `check` in the caller.  Emits a warning if check mode is to be turned on.
 
     Parameters
     ----------
-    path:
-        the argument to --file-list
-    check:
-        the state of the --check flag
-    force:
-        the state of the --force flag
+    path : str
+        The argument to ``--file-list``.
+    check : bool
+        The state of the ``--check`` flag.
+    force : boool
+        The state of the ``--force`` flag.
 
     Returns
     -------
-    check:
-        True if `check` is True or if `check` and `force` are False
+    bool
+        ``True`` if `check` is True or if `check` and `force` are False
         and `path` is "-".  False otherwise.
     """
 
@@ -751,19 +926,31 @@ def check_if_from_stdin(path: str, check: bool, force: bool) -> bool:
 
 
 def files_from_file(path: str | None, node: str | None = None) -> set[ArchiveFile]:
-    """Read a file list from a file given with --file-list
+    """Read a file list from a file given with ``--file-list``.
 
     Returns a set of ArchiveFiles.
 
     Parameters
     ----------
-    path:
-        The path to the file to read.  If this is None, the empty set is returned.
-    node:
-        If not None, the name of the source StorageNode, whose root will be
-        removed from the files, if present.  (If `node` is None, only relative
+    path : str or None
+        The path to the file to read.  If this is ``None``, the empty set is returned.
+    node : str or None
+        If not ``None``, the name of the source `StorageNode`, whose root will be
+        removed from the files, if present.  (If `node` *is* None, only relative
         paths will be accepted.)
-    """
+
+    Returns
+    -------
+    set of ArchiveFile
+        The list of resolved ArchiveFiles.
+
+    Raises
+    ------
+    click.ClickException
+        Either `node` did not exist, or else one of the `path` elements did not
+        correspond to an `ArchiveFile` record, or an error occured trying to read
+        the file.
+    """  # numpydoc ignore=PR09
 
     files = set()
 
@@ -817,11 +1004,18 @@ def files_from_file(path: str | None, node: str | None = None) -> set[ArchiveFil
 
 
 def validate_md5(md5: str | None) -> None:
-    """Vet a user-provided MD5 hash
+    """Vet a user-provided MD5 hash.
 
-    The MD5 may be None.
+    Parameters
+    ----------
+    md5 : str or None
+        The MD5 hash to check, formatted as 32 hexadecimal digits.  May also be
+        ``None``, which will pass validation.
 
-    raises click.ClickException if validation fails.
+    Raises
+    ------
+    click.ClickException
+        Validation failed.
     """
 
     # None is fine.

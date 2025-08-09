@@ -16,11 +16,11 @@ log = logging.getLogger(__name__)
 # ==============================
 
 
-def log_exception(*args):
+def _log_exception(*args):
     log.error("Fatal error!", exc_info=args)
 
 
-sys.excepthook = log_exception
+sys.excepthook = _log_exception
 
 
 @click.command()

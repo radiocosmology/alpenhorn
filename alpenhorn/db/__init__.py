@@ -1,6 +1,8 @@
-"""Database connection and models
+"""``alpenhorn.db``: The Alpenhorn Data Index.
 
-This module abstracts the database connection, providing a minimally
+This module defines the Alpenhorn data index.
+
+It also abstracts the database connection logic, providing a minimally
 functional fallback if no external database module has been provided.
 
 More capable database connectors may be provided by a database extension
@@ -24,15 +26,13 @@ optional:
     - "close" : callable
             Invoked when closing the database connection.
 
-Before accessing the attributes of this module, `connect()` must be called
-once, from the MainThread, to set up the database.  After that function is
-called, the following attributes are available:
-
-- threadsafe: a boolean indicating whether the database can be concurrently
-            accessed from multiple threads.
-
 After `connect()` has been called, database access is possible, from any
 thread, typically via the peewee table models provided by this module.
+
+Attributes
+----------
+gamut : list
+    The list of all table models in the data index.
 """
 
 # Table models

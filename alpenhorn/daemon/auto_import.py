@@ -1,4 +1,4 @@
-"""Routines for the importing of files on a node.
+"""``alpenhorn.daemon.auto_import``: File copy import routines.
 
 This module should probably be called "import", because it's
 not just used for auto-importing, but that's a difficult name
@@ -37,10 +37,10 @@ def import_request_done(req: ArchiveFileImportRequest | None, result: str) -> No
 
     Parameters
     ----------
-    req:
+    req : ArchiveFileImportRequest or None
         Request that has been completed.  If None, this function does nothing.
-    result:
-        The result of the import request.  Used in the metric
+    result : str
+        The result of the import request.  Used in the metric.
     """
 
     if not req:
@@ -79,18 +79,18 @@ def import_file(
     Parameters
     ----------
     node : UpdateableNode
-        The node we're importing onto
+        The node we're importing onto.
     queue : FairMultiFIFOQueue
-        The tasks queue
+        The tasks queue.
     path : pathlib.PurePath
-        The path we're trying to import
+        The path we're trying to import.
     register : bool
-        True if we should register new files (files without ArchiveFile records),
-        or False to only import already registered files.
+        ``True`` if we should register new files (files without `ArchiveFile`
+        records), or ``False`` to only import already registered files.
     req : ArchiveFileImportRequest or None
-        This will be None when the import request was triggered by the auto-import
+        This will be ``None`` when the import request was triggered by the auto-import
         watchdog.  Otherwise, this is the import request which is being handled.
-        If not None, req will be marked as complete if the import isn't skipped.
+        If not ``None``, `req` will be marked as complete if the import isn't skipped.
     """
 
     path = pathlib.PurePath(path)
@@ -334,14 +334,15 @@ def _import_file(
 
 
 class RegisterFile(FileSystemEventHandler):
-    """
-    A watchdog.FileSystemEventHandler subclass handling watchdog
-    events on a storage node.
+    """`StorageNode` activity watchdog.
+
+    This is a `watchdog.FileSystemEventHandler` subclass handling watchdog
+    events on a `StorageNode`.
 
     Parameters
     ----------
     node : UpdateableNode
-        The node we're watching
+        The node we're watching.
     queue : FairMultiFIFOQueue
         The task queue.  Import tasks will be submitted to this queue.
     """
@@ -360,21 +361,21 @@ class RegisterFile(FileSystemEventHandler):
         self.queue = queue
         super().__init__()
 
-    def on_created(self, event):
+    def on_created(self, event):  # numpydoc ignore=GL08
         if not event.is_directory and not self._is_dotfile(event.src_path):
             import_file(
                 self.node, self.queue, pathlib.PurePath(event.src_path), True, None
             )
         return
 
-    def on_moved(self, event):
+    def on_moved(self, event):  # numpydoc ignore=GL08
         if not event.is_directory and not self._is_dotfile(event.dest_path):
             import_file(
                 self.node, self.queue, pathlib.PurePath(event.dest_path), True, None
             )
         return
 
-    def on_deleted(self, event):
+    def on_deleted(self, event):  # numpydoc ignore=GL08
         # For lockfiles: ensure that the file that was locked is added: it is
         # possible that the watchdog notices that a file has been closed before the
         # lockfile is deleted.
@@ -403,11 +404,11 @@ def update_observer(
     Parameters
     ----------
     node : UpdateableNode
-        The node we're updating the observer for
+        The node we're updating the observer for.
     queue : FairMultiFIFOQueue
-        The task queue
+        The task queue.
     force_stop : bool, optional
-        If True, a running observer is stopped, even if auto_import is enabled
+        If ``True``, a running observer is stopped, even if auto_import is enabled.
     """
 
     io_class = "Default" if node.io_class is None else node.io_class
@@ -493,18 +494,18 @@ def scan(
     Parameters
     ----------
     task : task.Task
-        The task containing this job
+        The task containing this job.
     node : UpdateableNode
-        The node we're scanning
+        The node we're scanning.
     queue : FairMultiFIFOQueue
-        The task queue
+        The task queue.
     path : path-like
         The path to scan.  Relative to `node.root`.
     register : bool
-        If True, register new files.  If False, only import files with existing
-        ArchiveFile records.
+        If ``True``, register new files.  If ``False``, only import files with existing
+        `ArchiveFile` records.
     req : ArchiveFileImportRequest or None
-        If not None, req will be marked as complete once the scan finishes.
+        If not ``None``, `req` will be marked as complete once the scan finishes.
     """
 
     path = pathlib.PurePath(path)

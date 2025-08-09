@@ -1,4 +1,4 @@
-"""StorageNode and StorageGroup table models."""
+"""``alpenhorn.db.storage``: Table models for the Storage Graph objects."""
 
 # Type annotation shennanigans
 from __future__ import annotations
@@ -18,6 +18,12 @@ log = logging.getLogger(__name__)
 class StorageGroup(base_model):
     """Storage group for the archive.
 
+    If `io_class` is, say, "IOClassName" then there must be a group I/O
+    class called `IOClassNameGroupIO` in either:
+
+     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
+     * an I/O module named "ioclassname" provided by an "io-module" extension.
+
     Attributes
     ----------
     name : string
@@ -30,11 +36,6 @@ class StorageGroup(base_model):
     io_config : string
         An optional JSON blob of configuration data interpreted by the
         I/O class.  If given, must be a JSON object literal.
-
-    If `io_class` is, say, "IOClassName" then there must be a group I/O
-    class called `IOClassNameGroupIO` in either:
-     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
-     * an I/O module named "ioclassname" provided by an "io-module" extension.
     """
 
     name = pw.CharField(max_length=64, unique=True)
@@ -43,7 +44,7 @@ class StorageGroup(base_model):
     io_config = pw.TextField(null=True)
 
     def state_on_node(self, file: ArchiveFile) -> tuple[str, StorageNode | None]:
-        """Return the state of a copy of `file` in the group.
+        """Check the state of a copy of `file` in the group.
 
         Returns the value of `has_file` for an ArchiveFileCopy for
         ArchiveFile `file` if found in this group, and the node it was
@@ -56,18 +57,16 @@ class StorageGroup(base_model):
         Parameters
         ----------
         file : ArchiveFile
-            The file to look for
+            The file to check.
 
         Returns
         -------
-        Always returns a 2-tuple:
-
         filecopy_state : str
             One of:
-            - 'Y' file copy exists
-            - 'X' file copy is corrupt
-            - 'M' file copy needs to be checked
-            - 'N' file copy does not exist
+            - ``'Y'``: file copy exists
+            - ``'X'``: file copy is corrupt
+            - ``'M'``: file copy needs to be checked
+            - ``'N'``: file copy does not exist
         node : StorageNode or None
             The StorageNode correpsonding to filecopy_state, or None, if
             there was no node with a copy of the file.
@@ -100,6 +99,12 @@ class StorageGroup(base_model):
 class StorageNode(base_model):
     """A place on a host where file copies are stored.
 
+    If `io_class` is, say, "IOClassName" then there must be a node I/O
+    class called `IOClassNameNodeIO` in either:
+
+     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
+     * an I/O module named "ioclassname" provided by an "io-module" extension.
+
     Attributes
     ----------
     name : string
@@ -113,7 +118,7 @@ class StorageNode(base_model):
     io_class : string
         The I/O class for this node.  See below.  If this is NULL,
         the value "Default" is used.
-    group : foreign key
+    group : StorageGroup
         The group to which this node belongs.
     active : bool
         Is the node active?
@@ -142,11 +147,6 @@ class StorageNode(base_model):
     io_config : string
         An optional JSON blob of configuration data interpreted by the
         I/O class.  If given, must be a JSON object literal.
-
-    If `io_class` is, say, "IOClassName" then there must be a node I/O
-    class called `IOClassNameNodeIO` in either:
-     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
-     * an I/O module named "ioclassname" provided by an "io-module" extension.
     """
 
     name = pw.CharField(max_length=64, unique=True)
@@ -168,45 +168,45 @@ class StorageNode(base_model):
     io_config = pw.TextField(null=True)
 
     @property
-    def local(self) -> bool:
+    def local(self) -> bool:  # numpydoc ignore=RT01,SS03,SS05
         from ..common import util
 
         """Is this node local to where we are running?"""
         return self.host == util.get_hostname()
 
     @property
-    def archive(self) -> bool:
+    def archive(self) -> bool:  # numpydoc ignore=RT01,SS03,SS05
         """Is this node an archival node?"""
         return self.storage_type == "A"
 
     @property
-    def under_min(self) -> bool:
+    def under_min(self) -> bool:  # numpydoc ignore=RT01,SS03,SS05
         """Is the amount of free space below the minimum allowed?
 
-        Will be False if `avail_gb` is None.
+        Will be ``False`` if `avail_gb` is None.
         """
         if self.avail_gb is None:
             return False
         return self.avail_gb < self.min_avail_gb
 
     def check_over_max(self) -> bool:
-        """Is the total size of files on the node greater than allowed?
+        """Check if the node is using too much space.
 
-        Calls `self.get_total_gb()` to get the total size.
+        Calls `get_total_gb` to get the total size.
 
         Returns
         -------
-        over_max : bool
-            False if `self.max_total_gb` is `None` or less than zero.
-            Also False if `self.get_total_gb()` is less than
-            `self.max_total_gb`.  Otherwise True.
+        bool
+            ``False`` if `max_total_gb` is ``None`` or less than zero.
+            Also ``False`` if `get_total_gb` is less than `max_total_gb`.
+            Otherwise ``True``.
         """
         if self.max_total_gb is None or self.max_total_gb <= 0:
             return False
         return self.get_total_gb() >= self.max_total_gb
 
     def named_copy_tracked(self, acqname: str, filename: str) -> bool:
-        """Is an ArchiveFileCopy named `acqname/filename` being tracked?
+        """Check if an ArchiveFileCopy named `acqname/filename` is tracked.
 
         "Tracked" here means an `ArchiveFileCopy` record exists for the
         file on this node with `has_file!='N'`.
@@ -214,15 +214,15 @@ class StorageNode(base_model):
         Parameters
         ----------
         acqname : str
-            The name of the ArchiveAcq
+            The name of the ArchiveAcq.
         filename : str
-            The name of the ArchiveFile
+            The name of the ArchiveFile.
 
         Returns
         -------
-        named_copy_tracked : bool
-            True if there is an ArchiveFileCopy with `has_file!='N'`
-            for the specified path.  False otherwise.
+        bool
+            ``True`` if there is an ArchiveFileCopy with `has_file!='N'`
+            for the specified path.  ``False`` otherwise.
         """
         from .acquisition import ArchiveAcq, ArchiveFile
         from .archive import ArchiveFileCopy
@@ -247,21 +247,21 @@ class StorageNode(base_model):
         return copy.has_file != "N"
 
     def filecopy_state(self, file: ArchiveFile) -> str:
-        """What is the state of `file` on this node?
+        """Find the state of `file` on this node.
 
         Parameters
         ----------
         file : ArchiveFile
-            the file to look for
+            The file to check.
 
         Returns
         -------
-        filecopy_state : str
+        str
             One of:
-            - 'Y' file copy exists
-            - 'X' file copy is corrupt
-            - 'M' file copy needs to be checked
-            - 'N' file copy does not exist
+            - ``'Y'``: file copy exists
+            - ``'X'``: file copy is corrupt
+            - ``'M'``: file copy needs to be checked
+            - ``'N'``: file copy does not exist
         """
         from .archive import ArchiveFileCopy
 
@@ -281,17 +281,16 @@ class StorageNode(base_model):
 
         Returns
         -------
-        total_gib : float
+        float
             The total (in GiB) of all apparent file sizes
             from the database.  That is, the sum of
             `ArchiveFileCopy.size_b` for all existing
             file copies.
 
-        Notes
-        -----
-        The value returned may be quite different than the
-        amount of actual space the file copies take up on
-        the underlying storage system.
+            .. tip::
+                The value returned may be quite different than the
+                amount of actual space the file copies take up on
+                the underlying storage system.
         """
         from .acquisition import ArchiveFile
         from .archive import ArchiveFileCopy
@@ -328,7 +327,7 @@ class StorageNode(base_model):
 
         Returns
         -------
-        all_files : set of pathlib.PurePath
+        set of pathlib.PurePath
             A set of paths relative to `root` for all files with the requested criteria.
             If all parameters are set to `False`, or no files match, an empty
             set is returned without raising an error.
@@ -386,9 +385,9 @@ class StorageNode(base_model):
 
         Returns
         -------
-        result : bool
-            True if the request should continue, or False if the request
-            should be skipped (and attempted again later).
+        bool
+            ``True`` if the request should continue, or ``False`` if the request
+            should be skipped (and, if not cancelled, attempted again later).
         """
 
         if not message:
@@ -418,8 +417,8 @@ class StorageNode(base_model):
 
         Parameters
         ----------
-        new_avail : integer or None
-            The amount of available space in bytes
+        new_avail : int or None
+            The amount of available space in bytes.
         """
         # The value in the database is in GiB (2**30 bytes)
         if new_avail is None:
@@ -440,42 +439,41 @@ class StorageNode(base_model):
 class StorageTransferAction(base_model):
     """Storage transfer rules for the archive.
 
-    This provides configuration for the edges in the storage node/group directed
-    graph.
+    This provides configuration for the edges in the storage graph.
+
+    Two actions are defined:
+    - Autosyncing:
+        If `autosync` between a NODE and a GROUP is enabled, then whenever a
+        new file copy is added to NODE (i.e. after a successful import or pull),
+        then a new `ArchiveFileCopyRequest` will be created to transfer the file
+        from NODE to GROUP, so long as the file doesn't already exist in GROUP.
+    - Autocleaning:
+        If `autoclean` between a NODE and a GROUP is enabled, then whenever a
+        new file copy is added to GROUP (i.e. after a successful import or pull,
+        regardless of the origin of the file), then the file will be scheduled
+        for deletion from NODE (by setting `ArchiveFileCopy.wants_file` to "N"
+        for the file copy on NONE).
+
+    .. note::
+        Alpenhorn ignores records where ``group_to == node_from.group`` (self-loops).
+
+    .. hint::
+        If *NODE_A* is in *GROUP_A* and *NODE_B* in *GROUP_B*, then
+        ``StorageTransferAction(node_from=NODE_A, group_to=NODE_B)`` and
+        ``StorageTransferAction(node_from=NODE_B, group_to=NODE_A)`` are distinct.
+        (i.e. all edges are directed).
 
     Attributes
     ----------
-    node_from : foreign key
+    node_from : StorageNode
         The source node for the transfer.
-    group_to : foreign key
+    group_to : StorageGroup
         The destination group for the transfer.
     autosync : boolean
         If True, automatically copy files from `node_from` to `group_to`.
     autoclean : boolean
         If True, automatically delete file copies from `node_from` after they
         end up in `group_to`.
-
-    Notes
-    -----
-    If `NODE_A` is in `GROUP_A` and `NODE_B` in `GROUP_B`, then
-    `StorageTransferAction(node_from=NODE_A, group_to=NODE_B)` and
-    `StorageTransferAction(node_from=NODE_B, group_to=NODE_A)` are distinct.
-    (i.e. all edges are directed).
-
-    Alpenhorn ignores records where `group_to == node_from.group` (self-loops).
-
-    Autosyncing:
-        If `autosync` between a NODE and a GROUP is enabled, then whenever a
-        new file copy is added to NODE (i.e. after a successful import or pull),
-        then a new `ArchiveFileCopyRequest` will be created to transfer the file
-        from NODE to GROUP, so long as the file doesn't already exist in GROUP.
-
-    Autocleaning:
-        If `autoclean` between a NODE and a GROUP is enabled, then whenever a
-        new file copy is added to GROUP (i.e. after a successful import or pull,
-        regardless of the origin of the file), then the file will be scheduled
-        for deletion from NODE (by setting `ArchiveFileCopy.wants_file` to "N"
-        for the file copy on NONE).
     """
 
     node_from = pw.ForeignKeyField(StorageNode, backref="transfers_from")
@@ -484,11 +482,14 @@ class StorageTransferAction(base_model):
     autoclean = pw.BooleanField(default=False)
 
     @property
-    def self_loop(self) -> bool:
-        """True if this is a self-loop (i.e. node_from.group == group_to)."""
+    def self_loop(self) -> bool:  # numpydoc ignore=RT01
+        """True if this is a self-loop (i.e. `node.from` is in group `group_to`).
+
+        Self-loop records are generally ignored by Alpenhorn.
+        """
         return self.node_from.group == self.group_to
 
-    class Meta:
+    class Meta:  # numpydoc ignore=GL08
         indexes = (
             (("node_from", "group_to"), True),
         )  # (node_from, group_to) is unique

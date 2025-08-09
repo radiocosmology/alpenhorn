@@ -1,4 +1,4 @@
-"""Data Index metadata
+"""``alpenhorn.db.data_index``: Data Index metadata.
 
 This module provides access to metadata about the Data Index
 itself.
@@ -50,7 +50,7 @@ def schema_version(
     component: str | None = None,
     component_version: int | None = None,
 ) -> int:
-    """Report and optionally check Data Index schema version
+    """Report and optionally check Data Index schema version.
 
     By default, this function returns the schema version of the
     Data Index in the database.  This function can also be used
@@ -61,31 +61,31 @@ def schema_version(
 
     Parameters
     ----------
-    check:
-        If True, check that the alpenhorn Data Index schema version
+    check : bool
+        If ``True``, check that the Alpenhorn Data Index schema version
         is equal to `alpenhorn.db.current_version` and raise an
-        exception if it isn't.  If this is True, the other parameters
-        to this function are ignored.  Setting this to True is equivalent
+        exception if it isn't.  If this is ``True``, the other parameters
+        to this function are ignored: setting this to ``True`` is equivalent
         to setting `component` to "alpenhorn" and `component_version` to
         `alpenhorn.db.current_version`.
-    component:
+    component : str or None, optional
         The name of the schema component to report/check.  Setting this
-        to `None` (the default) is equivalent to setting it to "alpenhorn".
-    component_version:
-        If not `None`, raise an exception if the schema version of the
+        to ``None`` (the default) is equivalent to setting it to "alpenhorn".
+    component_version : int or None, optional
+        If not ``None``, raise an exception if the schema version of the
         component specified by `component` is not equal to this value.
-        If `component` is not present in the DataIndexVersion table, this
+        If `component` is not present in the `DataIndexVersion` table, this
         check always fails.
 
     Returns
     -------
-    version : int
-        The schema version of the specified component, or of the alpenhorn
+    int
+        The schema version of the specified component, or of the Alpenhorn
         Data Index itself, if no other component was specified.  If this
         function was requested to check the version (because `check` or
         `component_version` was set), this will always equal the target
         version (because any other version will result in an exception, instead).
-        If the `component` was not listed in the DataIndexVersion table, zero
+        If the `component` was not listed in the `DataIndexVersion` table, zero
         is returned.
 
     Raises

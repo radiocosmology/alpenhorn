@@ -45,7 +45,13 @@ class updateable_base:
 
     @property
     def name(self) -> str:
-        """The name of this instance."""
+        """The name of this instance.
+
+        Returns
+        -------
+        str
+            The name of this instance.
+        """
         return self.db.name
 
     def _check_io_reinit(self, new: StorageNode | StorageGroup) -> bool:
@@ -179,12 +185,12 @@ class updateable_base:
         Parameters
         ----------
         storage : StorageNode or StorageGroup
-            The newly-fetched database storage instance
+            The newly-fetched database storage instance.
 
         Returns
         -------
-        did_reinit : bool
-            True if the I/O object was re-initialised
+        bool
+            ``True`` if the I/O object was re-initialised.  ``False`` otherwise.
         """
         # Does I/O instance need to be re-instantiated?
         if self._check_io_reinit(storage):
@@ -229,7 +235,7 @@ class updateable_base:
 
 
 class RemoteNode(updateable_base):
-    """Remote storage node.
+    """Remote StorageNode.
 
     This represents a (potentially) non-local node used
     as the source-side of a pull request.
@@ -237,7 +243,7 @@ class RemoteNode(updateable_base):
     Parameters
     ----------
     node : StorageNode
-        The underlying StorageNode instance
+        The underlying StorageNode instance.
     """
 
     is_group = False
@@ -253,7 +259,7 @@ class RemoteNode(updateable_base):
 
 
 class UpdateableNode(updateable_base):
-    """Updateable storage node
+    """Updateable Node.
 
     This is a container class which combines a StorageNode
     and its I/O class, and implements the update logic
@@ -262,9 +268,9 @@ class UpdateableNode(updateable_base):
     Parameters
     ----------
     queue : FairMultiFIFOQueue
-        The task queue/scheduler
+        The task manager.
     node : StorageNode
-        The underlying StorageNode instance
+        The underlying StorageNode instance.
     """
 
     is_group = False
@@ -326,8 +332,8 @@ class UpdateableNode(updateable_base):
 
         Returns
         -------
-        did_reinit : bool
-            True if re-init happened.
+        bool
+            ``True`` if re-init happened.  ``False`` otherwise.
         """
         # Most of the work is done in the base class reinit()
         did_reinit = super().reinit(node)
@@ -340,10 +346,14 @@ class UpdateableNode(updateable_base):
 
     @property
     def idle(self) -> bool:
-        """Is I/O occurring on this node?
+        """Report if I/O occurring on this node.
 
-        True whenever the queue FIFO associated with this node is empty;
-        False otherwise."""
+        Returns
+        -------
+        bool
+            ``True`` whenever the queue FIFO associated with this node is empty;
+            ``False`` otherwise.
+        """
         return self._queue.fifo_size(self.io.fifo) == 0
 
     def check_init(self) -> bool:
@@ -353,8 +363,8 @@ class UpdateableNode(updateable_base):
 
         Returns
         -------
-        initialised : bool
-            Whether or not the node is initialised.
+        bool
+            ``True`` if the node is initialised.  ``False`` otherwise.
         """
 
         def _async(
@@ -729,7 +739,7 @@ class UpdateableNode(updateable_base):
 
 
 class UpdateableGroup(updateable_base):
-    """Updateable Group
+    """DAUpdateable Group.
 
     This is a container class which combines a StorageGroup
     and its I/O class, and implements the update logic
@@ -738,14 +748,13 @@ class UpdateableGroup(updateable_base):
     Parameters
     ----------
     queue : FairMultiFIFOQueue
-        The task queue/scheduler
+        The task manager.
     group : StorageGroup
-        The underlying StorageGroup instance
+        The underlying StorageGroup instance.
     nodes : list of UpdateableNodes
-        The nodes active on this host in this group
+        The nodes active on this host in this group.
     idle : bool
-        Were all nodes in `nodes` idle at the start of the
-        current update loop?
+        True if all nodes were idle at the start of the current update loop.
     """
 
     is_group = True
@@ -794,12 +803,13 @@ class UpdateableGroup(updateable_base):
         Parameters
         ----------
         group : StorageGroup
-            The newly-fetched StorageGroup instance
+            The newly-fetched StorageGroup instance.
         nodes : list of UpdateableNodes
-            The nodes active on this host in this group
+            The nodes active on this host in this group, as determined from
+            the data index.
         idle : bool
-            Were all nodes in `nodes` idle at the start of the
-            current update loop?
+            ``True`` if all nodes in `nodes` were idle at the start of the
+            current update loop.  ``False`` otherwise.
         """
         self._init_idle = idle
 
@@ -814,9 +824,14 @@ class UpdateableGroup(updateable_base):
 
     @property
     def idle(self) -> bool:
-        """Is this group idle?
+        """Check if this group is idle.
 
-        False whenever any consitiuent node is not idle."""
+        Returns
+        -------
+        bool
+            ``False`` whenever any consitiuent node is not idle.
+            ``True`` otherwise.
+        """
 
         # If the group fifo isn't empty, the group is not idle.
         if self._queue.fifo_size(self.io.fifo):
@@ -853,7 +868,12 @@ class UpdateableGroup(updateable_base):
             self.io.pull(req, did_search=False)
 
     def update(self) -> None:
-        """Perform I/O updates on the group"""
+        """Perform I/O updates on the group.
+
+        Typically, the only update that happens at the
+        group level is handling pull requests into the
+        group.
+        """
 
         self._do_idle_updates = False
 
@@ -918,10 +938,10 @@ def update_loop(
     If `once` is false, the daemon cycles through the update loop until it is
     terminated in one of three ways:
 
-    - receiving SIGINT (AKA KeyboardInterrupt).  This causes a clean exit.
+    - receiving ``SIGINT`` (AKA `KeyboardInterrupt`).  This causes a clean exit.
     - a global abort caused by an uncaught exception in a worker thread.  This
         causes a clean exit.
-    - a crash due to an uncaught exception in the main thread.  This does _not_
+    - a crash due to an uncaught exception in the main thread.  This does *not*
         cause a clean exit.
 
     During a clean exit, alpenhornd will try to finish in-progress tasks before
@@ -930,17 +950,17 @@ def update_loop(
     Parameters
     ----------
     queue : FairMultiFIFOQueue
-        the task manager
+        The task manager.
     pool : WorkerPool
-        the pool of worker threads (may be empty)
+        The pool of worker threads (may be empty).
     once : bool
-        If True, only run the loop once, wait for the queue to empty,
-        and then exit.  If False, loop forever.
+        If ``True``, only run the update loop once, then wait for the queue
+        to empty, and finally exit.  If ``False``, loop forever.
 
-    Return
-    ------
-    result:
-        0 if exiting after running once.  1 otherwise.
+    Returns
+    -------
+    int
+        ``0`` if exiting after running once.  ``1`` otherwise.
     """
 
     # Get the name of this host
@@ -1153,10 +1173,15 @@ def update_loop(
 
 
 def serial_io(queue: FairMultiFIFOQueue) -> None:
-    """Execute I/O tasks from the queue
+    """Execute I/O tasks from the queue.
 
     This function is only called when alpenhorn has no worker threads.  It runs
     I/O tasks in the main loop for a limited period of time.
+
+    Parameters
+    ----------
+    queue : FairMultiFIFOQueue
+        The task manager.
     """
     task_metric = Metric(
         "serialio_tasks", "Count of tasks run via Serial I/O", counter=True
