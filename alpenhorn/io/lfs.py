@@ -1,4 +1,4 @@
-"""lfs(1) wrapper.
+"""``alpenhorn.io.lfs``: lfs(1) wrapper.
 
 This module provides the `LFS` class which wraps invocations of
 `lfs(1)` to interact with a Lustre filesystem.
@@ -47,28 +47,30 @@ class HSMState(Enum):
     Indicates the state of a file in HSM (the external storage).
 
     Four states are possible:
-    HSMState.MISSING:
+
+    * HSMState.MISSING:
         The file is not on the system (disk or external storage) at all
-    HSMState.UNARCHIVED:
+    * HSMState.UNARCHIVED:
         This file is on the Lustre disk but not in external storage.  This
         is the state of newly created files until they are archived.
-    HSMState.RELEASED:
+    * HSMState.RELEASED:
         The file is in external storage but not on disk.
-    HSMState.RESTORING:
+    * HSMState.RESTORING:
         The file is in external storage only, and HSM is in the process of
         bringing it back to disk
-    HSMState.RESTORED:
+    * HSMState.RESTORED:
         The file is both in external storage and on disk.
 
-    A new file starts off in state UNARCHIVED.  Initial archiving is beyond
+    A new file starts off in state `UNARCHIVED`.  Initial archiving is beyond
     our control, but once the file has been archived, it moves from state
-    UNARCHIVED to state RESTORED.
+    `UNARCHIVED` to state `RESTORED`.
 
-    A `lfs.hsm_restore()` requests a file's state change from RELEASED to RESTORED.
-    After this call, the files state changes to RESTORING until the restore is
-    complete.
+    A `lfs.hsm_restore()` requests a file's state change from `RELEASED` to
+    `RESTORED`.  Immediately after this call, the file's state changes to
+    `RESTORING` until the restore is complete.
 
-    A `lfs.hsm_release()` requests a file's state change from RESTORED to RELEASED.
+    A `lfs.hsm_release()` requests a file's state change from `RESTORED`
+    to `RELEASED`.
     """
 
     MISSING = 0
@@ -79,25 +81,25 @@ class HSMState(Enum):
 
 
 class LFS:
-    """A class that wraps invocations of the lfs(1) command for use on Lustre
-    filesystems.
+    """Wrapper for lfs(1) invocations.
 
-    If the lfs(1) command can't be found in the PATH, attempting to instantiate
-    this class will fail with RuntimeError.
+    This class wraps invocations of the lfs(1) command for use on Lustre
+    filesystems.  If the lfs(1) command can't be found in the ``PATH``,
+    attempting to instantiate this class will fail with `RuntimeError`.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     quota_id : str
         The username, uid, group name, gid, or project id to query quota for.
         The interpretation of this parameter is set by the value of quota_type.
     quota_type : str
         One of "user", "group", "project", indicating the type of quota to fetch.
-    fixed_quota : integer, optional
+    fixed_quota : int, optional
         If not None, a quota size in kiB which will override the maximum quota
         reported by "lfs quota".
-    lfs : string, optional
+    lfs : str, optional
         The name of the lfs(1) command; may include a path.  Defaults to "lfs".
-    path : string, optional
+    path : str, optional
         If not None, the search path to use to look for the lfs(1)
         commnad.  If None, the "PATH" environmental variable is used.
     timeout : int, optional
@@ -150,25 +152,25 @@ class LFS:
 
         Parameters
         ----------
-        *args : strings
+        *args : str
             The list of command-line arguments to pass to the
             lfs command.
 
         Returns
         -------
-        result : dict
+        dict
             A dict is returned with the following keys:
 
-         - missing : bool
-            True if the file was missing; False otherwise
-         - timeout : bool
-            True if the command timed out; False otherwise
-         - failed : bool
-            True if the command failed; False otherwise
-         - output : str or None
-            If the command succeeded (i.e. all three booleans
-            are false), this has the standard output of
-            the command.  Otherwise, this is None.
+            - missing : bool
+                ``True`` if the file was missing; ``False`` otherwise.
+            - timeout : bool
+                ``True`` if the command timed out; ``False`` otherwise.
+            - failed : bool
+                ``True`` if the command failed; ``False`` otherwise.
+            - output : str or None
+                If the command succeeded (i.e. all three booleans
+                are ``False``), this has the standard output of
+                the command.  Otherwise, this is ``None``.
         """
         result = {"missing": False, "timeout": False, "failed": False, "output": None}
 
@@ -211,19 +213,19 @@ class LFS:
         Parameters
         ----------
         path : str
-            The path to get the quota for
+            The path to get the quota for.
 
         Returns
         -------
-        quota_remaining : int or None
-            The remaining quota for `path`, or None if running
+        int or None
+            The remaining quota, in bytes, for `path`, or ``None`` if running
             "lfs quota" failed.
 
         Raises
         ------
         ValueError
-            The quota group is using the default block quota setting,
-            but no fixed_quota was specified.
+            Lustre is using the default block quota setting, for
+            the target quota id, but no `fixed_quota` was specified.
         """
 
         # If possible, "lfs quota -q <type> <id> <path>" will output quota
@@ -300,10 +302,7 @@ class LFS:
         return (quota_limit - quota) * 2**10
 
     def hsm_restoring(self, path: os.PathLike | str) -> bool:
-        """Is HSM processing a restore request?
-
-        Returns True if HSM is currently working on a restore
-        request for `path`, and False otherwise.
+        """Check if HSM is processing a restore request for `path`.
 
         Runs `lfs hsm_action` to check the current HSM action
         or the file.
@@ -315,9 +314,9 @@ class LFS:
 
         Returns
         -------
-        restoring : bool or None
-            True if a RESTORE is in progress.  False otherwise.
-            None if the command failed.
+        bool or None
+            ``True`` if a RESTORE is in progress.  ``False`` if it isn't.
+            ``None`` if the command failed.
         """
 
         # Stringify path
@@ -329,7 +328,7 @@ class LFS:
         return "RESTORE" in stdout
 
     def hsm_state(self, path: os.PathLike | str) -> HSMState:
-        """Returns the HSM state of path.
+        """Get the HSM state of `path`.
 
         Parameters
         ----------
@@ -338,8 +337,8 @@ class LFS:
 
         Returns
         -------
-        state : HSMState or None
-            The state of the file, or None, if running "lfs hsm_state"
+        `HSMState` or None
+            The state of the file, or ``None``, if running "lfs hsm_state"
             failed.  If `path` doesn't exist, this will be `HSMState.MISSING`.
         """
 
@@ -394,7 +393,19 @@ class LFS:
         return HSMState.RELEASED
 
     def hsm_archived(self, path: os.PathLike) -> bool:
-        """Is `path` archived by HSM?"""
+        """Check if `path` has been archived by HSM.
+
+        Parameters
+        ----------
+        path : path-like
+            The path to the file to check.
+
+        Returns
+        -------
+        bool
+            ``True`` if the file has been archived in HSM.
+            ``False`` otherwise.
+        """
         state = self.hsm_state(path)
         return (
             state == HSMState.RESTORED
@@ -403,7 +414,19 @@ class LFS:
         )
 
     def hsm_released(self, path: os.PathLike) -> bool:
-        """Is `path` released to external storage?"""
+        """Check if `path` is released to external storage.
+
+        Parameters
+        ----------
+        path : path-like
+            The path to the file to check.
+
+        Returns
+        -------
+        bool
+            ``True`` if the file is released, even if it's in the
+            process of being restored.  ``False`` otherwise.
+        """
         state = self.hsm_state(path)
         return state == HSMState.RELEASED or state == HSMState.RESTORING
 
@@ -419,10 +442,11 @@ class LFS:
 
         Returns
         -------
-        restored : bool or None
-            None if the request timed out.
-            False if the request failed.
-            True if a successful restore request was made, or if
+        bool or None
+
+            * ``None`` if the request timed out.
+            * ``False`` if the request failed.
+            * ``True`` if a successful restore request was made, or if
             `path` was already restored.
         """
         state = self.hsm_state(path)
@@ -447,7 +471,7 @@ class LFS:
         """Trigger release of `path` from disk.
 
         If `path` is already released, or can't be released
-        because it's either unarchived or missing, does nothing.
+        because it's either unarchived or missing, this does nothing.
 
         Parameters
         ----------
@@ -456,9 +480,9 @@ class LFS:
 
         Returns
         -------
-        released : bool
-            True if a successful release request was made, or if
-            `path` was already released.  False otherwise.
+        bool
+            ``True`` if a successful release request was made, or if
+            `path` was already released.  ``False`` otherwise.
         """
 
         state = self.hsm_state(path)

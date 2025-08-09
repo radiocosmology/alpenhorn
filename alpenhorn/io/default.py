@@ -50,23 +50,41 @@ class DefaultNodeRemote(BaseNodeRemote):
     """I/O class for a remote DefaultIO StorageNode."""
 
     def pull_ready(self, file: ArchiveFile) -> bool:
-        """Is `file` ready for pulling from this remote node?
+        """Return True.
+
+        Files on a Default I/O node are always ready.
 
         Parameters
         ----------
         file : ArchiveFile
-            the file being checked
+            Unused.
 
         Returns
         -------
-        True
-            Files on Default nodes are always ready.
+        bool
+            ``True``.
         """
         return True
 
 
 class DefaultNodeIO(BaseNodeIO):
-    """A simple StorageNode backed by a regular POSIX filesystem."""
+    """Default Node I/O.
+
+    This represents a simple StorageNode backed by a regular POSIX filesystem.
+    If you have a StorageNode on a "regular" locally-connected disk, this is
+    probably the Node I/O class to use.
+
+    Parameters
+    ----------
+    node : StorageNode
+        The node we're performing I/O on.
+    config : dict
+        The I/O config.
+    queue : FairMultiFIFIOQueue
+        The task scheduler.
+    fifo : Hashable
+        The queue FIFO key to use.
+    """
 
     # SETUP
 
@@ -153,23 +171,20 @@ class DefaultNodeIO(BaseNodeIO):
 
     # I/O METHODS
 
-    def bytes_avail(self, fast: bool = False) -> int | None:
-        """bytes_avail: Return amount of free space (in bytes) of the node, or
-        None if that cannot be determined.
+    def bytes_avail(self, fast: bool = False) -> int:
+        """Calculate the amount of free space of the node.
 
         Does not account for space reserved via reserve_bytes().
 
         Parameters
         ----------
         fast : bool
-            If True, then this is a fast call, and I/O classes for which
-            checking available space is expensive may skip it by returning None.
+            Unused: this method always returns the available size.
 
         Returns
         -------
-        bytes_avail : int or None
-            the total bytes available on the storage system, or None if that
-            can't be or wasn't determined.
+        int
+            The total bytes available on this nodes' filesystem.
         """
         x = os.statvfs(self.node.root)
         return x.f_bavail * x.f_bsize
@@ -182,7 +197,7 @@ class DefaultNodeIO(BaseNodeIO):
         Parameters
         ----------
         copy : ArchiveFileCopy
-            the file copy to check
+            The file copy to check.
         """
 
         Task(
@@ -196,14 +211,14 @@ class DefaultNodeIO(BaseNodeIO):
     def check_init(self) -> bool:
         """Check that this node is initialised.
 
-        Checks that the file `node.root`/ALPENHORN_NODE exists and
+        Checks that the file ``<node.root>/ALPENHORN_NODE`` exists and
         contains the name of the node.
 
         Returns
         -------
-        init : bool
-            True if the `ALPENHORN_NODE` check succeeded;
-            False otherwise.
+        bool
+            ``True`` if the `ALPENHORN_NODE` check succeeded;
+            ``False`` otherwise.
         """
 
         try:
@@ -225,7 +240,16 @@ class DefaultNodeIO(BaseNodeIO):
         return False
 
     def delete(self, copies: list[ArchiveFileCopy]) -> None:
-        """Queue a single asynchronous I/O task to delete the list of file copies."""
+        """Delete some files.
+
+        Queues a single asynchronous I/O task to delete the
+        list of file copies given.
+
+        Parameters
+        ----------
+        copies : list of ArchiveFileCopy
+            The list of file copies to delete.
+        """
 
         # Nothing to do
         if len(copies) == 0:
@@ -242,12 +266,19 @@ class DefaultNodeIO(BaseNodeIO):
         )
 
     def exists(self, path: pathlib.PurePath) -> bool:
-        """Does `path` exist?
+        """Check if `path` exists.
+
+        The check is really "exists and is a file".
 
         Parameters
         ----------
         path : pathlib.PurePath
-            path relative to `node.root`
+            The path to check, relative to `node.root`.
+
+        Returns
+        -------
+        bool
+            ``True`` if the path was found.  ``False`` otherwise.
         """
         return pathlib.Path(self.node.root, path).is_file()
 
@@ -256,12 +287,17 @@ class DefaultNodeIO(BaseNodeIO):
 
         Parameters
         ----------
-        path: path-like
+        path : path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual: bool, optional
-            If True, return the amount of space the file actually takes
+        actual : bool, optional
+            If ``True``, return the amount of space the file actually takes
             up on the storage system.  Otherwise return apparent size.
+
+        Returns
+        -------
+        int
+            The absolute or apparent size, in bytes, of the file.
         """
         path = pathlib.Path(path)
         if not path.is_absolute():
@@ -274,10 +310,19 @@ class DefaultNodeIO(BaseNodeIO):
         # Apparent size
         return path.stat().st_size
 
-    def file_walk(self, path) -> Iterable[pathlib.PurePath]:
-        """An iterator over all regular files under `node.root/path`
+    def file_walk(self, path: str | os.PathLike) -> Iterable[pathlib.PurePath]:
+        """An iterator over all regular files under `path`.
 
-        pathlib.PurePaths returned by the iterator are absolute
+        Parameters
+        ----------
+        path : path-like
+            The path relative the the node root to walk.
+
+        Returns
+        -------
+        Iterable
+            An iterable containg absolute `pathlib.PurePath` elements
+            for all files in the specified path.
         """
 
         # path must not be absolute
@@ -315,27 +360,33 @@ class DefaultNodeIO(BaseNodeIO):
         return ()
 
     def fits(self, size_b: int) -> bool:
-        """Does `size_b` bytes fit on this node?
+        """Check for at least `size_b` bytes of free space.
 
         Takes into account reserved space.
 
         Parameters
         ----------
         size_b : int
-            The size of the file we're trying to fit
+            The amount of data we're trying to fit.
 
         Returns
         -------
-        fits : bool
-            True if `size_b` fits on the node.  False otherwise.
+        bool
+            ``True`` if `size_b` bytes fits on the node.  ``False`` otherwise.
         """
         return self.reserve_bytes(size_b, check_only=True)
 
     def init(self) -> bool:
         """Initialise this node.
 
-        We do that by creating the ALPENHORN_NODE file, if it
-        doesn't already exit.
+        We do that by creating the ``ALPENHORN_NODE`` file, if it
+        doesn't already exit.  If this node is already initialised,
+        this function does nothing and returns ``True``.
+
+        Returns
+        -------
+        bool
+            ``False`` if node initialisation failed; ``True`` otherwise.
         """
 
         # Sanity check
@@ -355,10 +406,10 @@ class DefaultNodeIO(BaseNodeIO):
         return True
 
     def locked(self, path: os.PathLike) -> bool:
-        """Is file `path` locked?
+        """Check if file `path` is locked.
 
-        A file with path `dir/subdir/name.ext` is locked if a file named
-        `dir/subdir/.name.ext.lock` exists.
+        A file at the path ``dir/subdir/name.ext`` is locked if a file
+        named ``dir/subdir/.name.ext.lock`` exists.
 
         Parameters
         ----------
@@ -367,8 +418,8 @@ class DefaultNodeIO(BaseNodeIO):
 
         Returns
         -------
-        locked : bool
-            True if `path` is locked; False otherwise.
+        bool
+            ``True`` if `path` is locked; ``False`` otherwise.
         """
 
         # Ensure we have an absolute pathlib.Path
@@ -386,15 +437,15 @@ class DefaultNodeIO(BaseNodeIO):
         Parameters
         ----------
         path : PathLike
-            path (or first part of the, path if other `segments` provided) to
+            Path (or first part of the, path if other `segments` provided) to
             the file to hash.  Relative to `node.root`.
         *segments : iterable, optional
-            other path segments path-concatenated and appended to `path`.
+            Other path segments path-concatenated and appended to `path`.
 
         Returns
         -------
-        md5sum : str | None
-            the base64-encoded MD5 hash value or None on error
+        str or None
+            The base64-encoded MD5 hash value, or ``None`` on error.
         """
         path = pathlib.Path(self.node.root, path, *segments)
         try:
@@ -408,21 +459,21 @@ class DefaultNodeIO(BaseNodeIO):
     def open(self, path: os.PathLike | str, binary: bool = True) -> IO:
         """Open the file specified by `path` for reading.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         path : pathlike
-            Relative to `node.root`
+            Relative to `node.root`.
         binary : bool, optional
-            If True, open the file in binary mode, otherwise open the file in
-            text mode.
+            If ``True`` (the default), open the file in binary mode; otherwise,
+            open the file in text mode.
 
         Returns
         -------
-        file : file-like
+        IO
             An open, read-only file.
 
         Raises
-        -------
+        ------
         ValueError
             `path` was absolute
         """
@@ -432,18 +483,18 @@ class DefaultNodeIO(BaseNodeIO):
         return open(pathlib.Path(self.node.root, path), mode="rb" if binary else "rt")
 
     def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
-        """Pull file specified by copy request `req` onto `self.node`.
+        """Pull file specified by copy request `req` onto this node.
 
         Most of the work happens in an asynchronous I/O task.
 
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the copy request to fulfill.  We are the destination node (i.e.
+            The copy request to fulfill.  We are the destination node (i.e.
             `req.group_to == self.node.group`).
-        did_search : boolean
-            True if a group-level pre-pull search for an existing file was
-            performed.  False otherwise.
+        did_search : bool
+            ``True`` if a group-level pre-pull search for an existing file was
+            performed.  ``False`` otherwise.
         """
 
         # Run early DB checks.  The group has already run checks on the source node.
@@ -474,8 +525,8 @@ class DefaultNodeIO(BaseNodeIO):
 
         Parameters
         ----------
-        size : integer
-            the number of bytes to release
+        size : int
+            The number of bytes to release.
 
         Raises
         ------
@@ -498,16 +549,16 @@ class DefaultNodeIO(BaseNodeIO):
         Parameters
         ----------
         size : int
-            the number of bytes to reserve
+            The number of bytes to reserve.
         check_only : bool, optional
-            If True, no reservation is made, and the only effect is
+            If ``True``, no reservation is made, and the only effect is
             the return value.
 
         Returns
         -------
-        success : bool
-            False if there was insufficient space to make the reservation.
-            True otherwise.
+        bool
+            ``False`` if there was insufficient space to make the reservation.
+            ``True`` otherwise.
         """
         size *= self.reserve_factor
         with _mutex:
@@ -536,19 +587,33 @@ class DefaultNodeIO(BaseNodeIO):
         return True
 
     def ready_pull(self, req: ArchiveFileCopyRequest) -> None:
-        """Ready a file to be pulled as specified by `req`.
+        """Do nothing.
 
-        This method does nothing: DefaultIO file copies are
-        always ready.
+        This method does nothing: DefaultIO file copies are always ready.
+
+        Parameters
+        ----------
+        req : ArchiveFileCopyRequest
+            Unused.
         """
         pass
 
 
 class DefaultGroupIO(BaseGroupIO):
-    """A simple StorageGroup.
+    """Default Group I/O.
 
-    Permits any number of StorageNodes in the group, but only permits at most
-    one to be active on a given host at any time.
+    The Default I/O group may only have a single active Storage node.
+
+    Parameters
+    ----------
+    group : StorageGroup
+        The group we're performing I/O on.
+    config : dict
+        The I/O config.
+    queue : FairMultiFIFIOQueue
+        The task scheduler.
+    fifo : Hashable
+        The queue FIFO key to use.
     """
 
     # Because Default groups allow only a single node, they don't need to do
@@ -562,17 +627,22 @@ class DefaultGroupIO(BaseGroupIO):
     # SETUP
 
     def __init__(
-        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue, fifo: Hashable
+        self,
+        group: StorageGroup,
+        config: dict,
+        queue: FairMultiFIFOQueue,
+        fifo: Hashable,
     ) -> None:
-        super().__init__(node, config, queue, fifo)
+        super().__init__(group, config, queue, fifo)
         self._node = None
 
     @property
-    def nodes(self) -> list[UpdateableNode]:
+    def nodes(self) -> list[UpdateableNode]:  # numpydoc ignore=RT01
         """The list of nodes in this group.
 
         This is a single element list containing the node assigned to this I/O
-        instance, or the empty list if no node has been assigned."""
+        instance, or the empty list if no node has been assigned.
+        """
         if self._node:
             return [self._node]
         return []
@@ -586,13 +656,13 @@ class DefaultGroupIO(BaseGroupIO):
         Parameters
         ----------
         nodes : list of UpdateableNodes
-            This should always be a single-element list containing the
-            group's StorageNode.
+            This will always be a single-element list containing the
+            group's `StorageNode`.
 
         Raises
         ------
         ValueError
-            whenever `len(nodes) != 1`
+            Whenever `len(nodes) != 1`
         """
 
         if len(nodes) != 1:
@@ -609,14 +679,14 @@ class DefaultGroupIO(BaseGroupIO):
         Parameters
         ----------
         path : pathlib.PurePath
-            the path, relative to node `root` of the file to
+            The path, relative to node `root` of the file to
             search for.
 
         Returns
         -------
-        node : UpdateableNode or None
+        UpdateableNode or None
             If the file exists, returns the node in the group.
-            If the file doesn't exist in the group, this is None.
+            If the file doesn't exist in the group, this is ``None``.
         """
         if self._node.io.exists(path):
             return self._node
@@ -631,11 +701,11 @@ class DefaultGroupIO(BaseGroupIO):
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the request to fulfill.  We are the destination group (i.e.
-            `req.group_to == self.group`).
-        did_search : boolean
-            True if a group-level pre-pull search for an existing file was
-            performed.  False otherwise.
+            The request to fulfill.  We are the destination group (i.e.
+            ``req.group_to == self.group``).
+        did_search : bool
+            ``True`` if a group-level pre-pull search for an existing file was
+            performed.  ``False`` otherwise.
         """
         self._node.io.pull(req, did_search)
 
@@ -649,19 +719,18 @@ class DefaultGroupIO(BaseGroupIO):
         is skipped.  Otherwise, `pull` will be called to actually
         pull the file.
 
+        .. hint::
+            The DefaultGroupIO class itself sets `do_pull_search` to False
+            because it's not needed by the DefaultIO, but this method is
+            implemented to dispatch the search task anyways so that other
+            I/O classes which derive from DefaultIO can set `do_pull_search`
+            back to True and not have to re-implement this method themselves.
+
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the request to fulfill.  We are the destination group (i.e.
-            `req.group_to == self.group`).
-
-        Notes
-        -----
-        The DefaultGroupIO class itself sets `do_pull_search` to False
-        because it's not needed by the DefaultIO, but this method is
-        implemented to dispatch the search task anyways so that other
-        I/O classes which derive from DefaultIO can set `do_pull_search`
-        back to True and not have to re-implement this method themselves.
+            The request to fulfill.  We are the destination group (i.e.
+            ``req.group_to == self.group``).
         """
 
         # The existing file search needs to happen in a Task.

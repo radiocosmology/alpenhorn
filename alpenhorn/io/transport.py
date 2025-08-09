@@ -1,4 +1,8 @@
-"""Transport Group I/O."""
+"""``alpenhorn.io.transport``: The "Transport" I/O class.
+
+This I/O module defines the `TransportGroupIO` class which
+implements the transport group logic.
+"""
 
 from __future__ import annotations
 
@@ -35,10 +39,11 @@ class TransportGroupIO(DefaultGroupIO):
     do_pull_search = True
 
     @property
-    def nodes(self) -> list[UpdateableNode]:
-        """List of nodes in this group.
+    def nodes(self) -> list[UpdateableNode]:  # numpydoc ignore=RT01
+        """List of `UpdateableNode` instances in this group.
 
-        Sorted in priority fill order."""
+        Sorted in priority fill order.
+        """
 
         # Sort nodes by fullness
         def _node_key(node):
@@ -58,7 +63,7 @@ class TransportGroupIO(DefaultGroupIO):
 
     @nodes.setter
     def nodes(self, nodes: list[UpdateableNode]) -> None:
-        """nodes setter
+        """Set nodes.
 
         This checks that nodes in group are transport nodes
         (storage_type == "T").
@@ -66,12 +71,12 @@ class TransportGroupIO(DefaultGroupIO):
         Parameters
         ----------
         nodes : list of UpdateableNodes
-            local active nodes in this group
+            Local active nodes in this group.
 
         Raises
         ------
         ValueError
-            none of the supplied `nodes` were Transport nodes.
+            None of the supplied `nodes` were Transport nodes.
         """
         self._nodes = []
         for node in nodes:
@@ -90,23 +95,23 @@ class TransportGroupIO(DefaultGroupIO):
             )
 
     def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
-        """Checks whether a file at `path` exists in this group.
+        """Check whether a file at `path` exists in this group.
 
         Parameters
         ----------
         path : pathlib.PurePath
-            the path to search for; relative to node root
+            The path to search for; relative to node root.
 
         Returns
         -------
-        exists : UpdateableNode or None
+        UpdateableNode or None
             If `path` is found on a node in the group, this is the node.
-            If `path` was not found, this is None.
+            If `path` was not found, this is ``None``.
 
         Notes
         -----
         If `path` exists on multiple nodes in the group, then one of the
-        nodes where it exists is returned.  The caller should _not_ assume
+        nodes where it exists is returned.  The caller should *not* assume
         this is stable: multiple calls to this method with the same `path`
         may return different nodes.
         """
@@ -127,11 +132,11 @@ class TransportGroupIO(DefaultGroupIO):
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the request to fulfill.  We are the destination group (i.e.
-            `req.group_to == self.group`).
-        did_search : boolean
-            True if a group-level pre-pull search for an existing file was
-            performed.  False otherwise.
+            The request to fulfill.  We are the destination group (i.e.
+            ``req.group_to == self.group``).
+        did_search : bool
+            ``True`` if a group-level pre-pull search for an existing file was
+            performed.  ``False`` otherwise.
         """
 
         # If this is a non-local transfer, skip it.

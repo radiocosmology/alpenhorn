@@ -1,14 +1,10 @@
-"""Alpenhorn LustreQuota Node I/O class.
+"""``alpenhorn.io.lustrequota``: LustreQuota I/O class.
 
-This I/O class extends the DefaultNodeIO.  The primary change is that it
-uses the "lfs quota" command to determine free space on a quota-tracking
-Lustre filesystem.
+This I/O module defines the `LustreQuotaNodeIO` class which extends `DefaultNodeIO`.
+The primary change is that it uses the "lfs quota" command to determine free space
+on a quota-tracking Lustre filesystem.
 
-This module only queries group quota.  The group used must be provided in
-the `io_config`.
-
-The quota target can either be the one reported by "lfs quota" directly
-or else set to a fixed value via the `io_config`.
+The quota to query must be specified in the `io_config`.
 """
 
 from __future__ import annotations
@@ -25,16 +21,28 @@ log = logging.getLogger(__name__)
 
 
 class LustreQuotaNodeIO(DefaultNodeIO):
-    """An extension to DefaultNodeIO which uses the "lfs quota" to determine
+    """LustreQuota Node I/O.
+
+    An extension to DefaultNodeIO which uses the "lfs quota" to determine
     free space, rather than stat.
 
     Required io_config keys:
+
         * quota_id: the id (username, uid, group name, gid, or project id) to query
             quota for.
         * quota_type: One of "user", "group" or "project" indicating how to
             interpret the value of quota_id.
 
+            .. note::
+
+                If the provided `quota_id` is using the default block quota on
+                the filesystem, then block quota max cannot be determined from
+                the lfs(1) output.  In this case, `fixed_quota` *must* be used to
+                specify the default quota for any meaningful free space value to
+                be returned.
+
     Optional io_config keys:
+
         * fixed_quota: a fixed number of kiB to use to override the max quota
             reported by the "lfs quota" command.
         * lfs: the lfs(1) executable.  Defaults to "lfs"; may be a full path.
@@ -42,12 +50,16 @@ class LustreQuotaNodeIO(DefaultNodeIO):
             that run longer than this will be abandonned.  Defaults to 60
             seconds if not given.
 
-    Notes
-    -----
-    If the provided `quota_id` is using the default block quota on the filesystem,
-    then block quota max cannot be determined from the lfs(1) output.  In this case,
-    `fixed_quota` _must_ be used to specify the default quota for any meaningful free
-    space value to be returned.
+    Parameters
+    ----------
+    node : StorageNode
+        The node we're performing I/O on.
+    config : dict
+        The I/O config.
+    queue : FairMultiFIFIOQueue
+        The task scheduler.
+    fifo : Hashable
+        The queue FIFO key to use.
     """
 
     def __init__(
@@ -97,13 +109,14 @@ class LustreQuotaNodeIO(DefaultNodeIO):
         Parameters
         ----------
         fast : bool
-            If True, then this is a fast call and we simply return None.
-            Otherwise (slow call) we do th "lfs quota" query.
+            If ``True``, then this is a fast call and we simply return ``None``.
+            Otherwise, it's a "slow call" and we do the "lfs quota" query.
 
         Returns
         -------
-        bytes_avail : int or None
-            None if `fast is True` otherwise, the available quota.
+        int or None
+            ``None`` if `fast` is ``True``. Otherwise, the available quota
+            in bytes.
         """
         if fast:
             return None

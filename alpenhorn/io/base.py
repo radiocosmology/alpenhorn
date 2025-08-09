@@ -42,9 +42,9 @@ class BaseNodeRemote:
     Parameters
     ----------
     node : StorageNode
-        the remote node
+        The remote node.
     config : dict
-        the parsed `node.io_config`. If `node.io_config` is None,
+        The parsed `node.io_config`. If `node.io_config` is None,
         this is an empty `dict`.
     """
 
@@ -55,7 +55,7 @@ class BaseNodeRemote:
     def file_addr(self, file: ArchiveFile) -> str:
         """Return an remote file address suitable for use with rsync.
 
-        i.e., a string of the form: <username>@<host>:<path>
+        Typicall, this is a string of the form: ``<username>@<host>:<path>``.
 
         Parameters
         ----------
@@ -64,8 +64,8 @@ class BaseNodeRemote:
 
         Returns
         -------
-        addr : str
-            The file address
+        str
+            The remote file address.
 
         Raises
         ------
@@ -85,30 +85,30 @@ class BaseNodeRemote:
         By default, returns the path contcatenation of `node.root` and
         `file.path`.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         file : ArchiveFile
             The file to return the path for.
 
-        Returns:
-        --------
-        path : str
-            the remote path
+        Returns
+        -------
+        str
+            The remote path.
         """
         return str(pathlib.PurePath(self.node.root, file.path))
 
     def pull_ready(self, file: ArchiveFile) -> bool:
-        """Is `file` ready for pulling from this remote node?
+        """Check if `file` ready for pulling from this node.
 
         Parameters
         ----------
         file : ArchiveFile
-            the file being checked
+            The file to check.
 
         Returns
         -------
-        ready : bool
-            True if `file` is ready on the node; False otherwise.
+        bool
+            ``True`` if `file` is ready on the node; ``False`` otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -119,14 +119,14 @@ class BaseNodeIO:
     Parameters
     ----------
     node : StorageNode
-        the node
+        The node to perform I/O on.
     config : dict
-        the parsed `node.io_config`. If `node.io_config` is None,
+        The JSON-decoded `node.io_config` dict. If `node.io_config` is None,
         this is an empty `dict`.
     queue : FairMultiFIFOQueue
-        the task queue
+        The task queue.
     fifo : Hashable
-        the queue fifo key to use when submitting tasks.
+        The queue fifo key to use when submitting tasks.
     """
 
     # SETUP
@@ -170,7 +170,7 @@ class BaseNodeIO:
         Parameters
         ----------
         node : StorageNode
-            the updated node instance read from the database
+            The updated node instance read from the database.
         """
         self.node = node
 
@@ -179,19 +179,23 @@ class BaseNodeIO:
     def before_update(self, idle: bool) -> bool:
         """Pre-update hook.
 
-        Called each update loop before node updates happen.
+        Called each update loop before node updates happen.  The I/O
+        framework can use this hook to indicate to the daemon whether the
+        update can occur this time through the loop.  Any pre-update work
+        can also be performed at this time.
 
         Parameters
         ----------
         idle : bool
-            If False, updates for this node are going to be skipped this
-            update loop.
+            If ``False``, updates for this node are going to be skipped this
+            update loop, regardless of what this method returns, because the
+            node is not idle.
 
         Returns
         -------
-        do_update : bool
-            Whether to proceed with the update or not (skip it).  If
-            False, the update will be skipped.
+        bool
+            ``True`` if the daemon should perform the update, or ``False``
+            if the current update should be skipped.
         """
         # By default, we do nothing and allow the update to continue
         return True
@@ -227,34 +231,39 @@ class BaseNodeIO:
     # I/O METHODS
 
     def bytes_avail(self, fast: bool = False) -> int | None:
-        """bytes_avail: Return amount of free space (in bytes) of the node, or
-        None if that cannot be determined.
+        """Report the amount of free space on the node.
 
-        Note: this is a measure of free space on the underlying storage system,
-        not how close to node.max_total_gb the value of self.size_bytes() is.
-        The value returned may exceed node.max_total_gb.
+        This is a measure of free space on the underlying storage system,
+        not how close to `node.max_total_gb` the value of `self.size_bytes()` is.
+        The value returned may exceed `node.max_total_gb`.
 
         Parameters
         ----------
         fast : bool
-            If True, then this is a fast call, and I/O classes for which
-            checking available space is expensive may skip it by returning None.
+            If ``True``, then this is a fast call, and I/O classes for which
+            checking available space is expensive may skip it by returning
+            ``None``.
 
         Returns
         -------
-        bytes_avail : int or None
-            the total bytes available on the storage system, or None if that
+        int or None
+            The total bytes available on the storage system, or ``None`` if that
             can't be or wasn't determined.
         """
         return None
 
     def check(self, copy: ArchiveFileCopy) -> None:
-        """Check whether ArchiveFileCopy `copy` is corrupt.
+        """Check ArchiveFileCopy `copy` for corruption.
+
+        Typically this will involve MD5 hashing the file and comparing
+        it to the hash stored in the `ArchiveFileCopy`, though some I/O
+        implementations may have other, more efficient ways, to detect
+        corruption.
 
         Parameters
         ----------
         copy : ArchiveFileCopy
-            the file copy to check
+            The file copy to check.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -264,10 +273,12 @@ class BaseNodeIO:
         This check should be done by inspecting the storage system, rather than
         checking the database.
 
-        Returns True if the node is initialised, or False if not.
-
-        The default is to just return False (i.e. assume it's never initialised.)
+        Returns
+        -------
+        bool
+            ``True`` if the node is initialised, or ``False`` if not.
         """
+        # By default, nothing is ever initialised.
         return False
 
     def delete(self, copies: list[ArchiveFileCopy]) -> None:
@@ -281,25 +292,25 @@ class BaseNodeIO:
         raise NotImplementedError("method must be re-implemented in subclass.")
 
     def exists(self, path: pathlib.PurePath) -> bool:
-        """Does `path` exist?
+        """Check if a file at `path` exists.
 
         Parameters
         ----------
         path : pathlib.PurePath
-            path relative to `node.root`
+            The path relative to `node.root`.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
-        """Return size in bytes of the file given by `path`.
+        """Return size, in bytes, of the file given by `path`.
 
         Parameters
         ----------
-        path: path-like
+        path : path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual: bool, optional
-            If True, return the amount of space the file actually takes
+        actual : bool, optional
+            If ``True``, return the amount of space the file actually takes
             up on the storage system.  Otherwise return apparent size.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
@@ -307,25 +318,36 @@ class BaseNodeIO:
     def file_walk(self, path: pathlib.Path) -> Iterable[pathlib.PurePath]:
         """Iterate through directory `path`.
 
-        Should successively yield a pathlib.PurePath for each file under `path`,
-        which is relative to the node `root.  The returned path may either be
-        absolute (i.e have node.root pre-pended) or else be relative to
-        node.root.  The former is preferred.
+        This method should successively yield a pathlib.PurePath for each file
+        under `path`, which is relative to the node `root.
+
+        Parameters
+        ----------
+        path : path-like
+            The directory path to iterate through.
+
+        Returns
+        -------
+        Iterable
+            The caller should iterate over the returned value to retrieve
+            successive paths.   The paths returned may either be absolute (i.er
+            have `node.root` pre-pended) or else be relative to node.root.
+            The former is preferred.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
     def fits(self, size_b: int) -> bool:
-        """Does `size_b` bytes fit on this node?
+        """Check if `size_b` bytes fits on this node.
 
         Parameters
         ----------
         size_b : int
-            The size of the file we're trying to fit
+            The number of bytes we're trying to fit.
 
         Returns
         -------
-        fits : bool
-            True if `size_b` fits on the node.  False otherwise.
+        bool
+            ``True`` if `size_b` fits on the node.  ``False`` otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -334,17 +356,18 @@ class BaseNodeIO:
 
         This method will only be called if `check_init` returns False.
         If initialisation is successful, subsequent `check_init` calls should
-        return True.
+        return ``True``.
 
         Returns
         -------
-        init_successful : bool
-            Did initialisation succeed?
+        bool
+            ``True`` if initialisation succeed, or if the node was already
+            initialised.  ``False`` if initialisation failed.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
     def locked(self, path: os.PathLike) -> bool:
-        """Is file `path` locked?
+        """Check if the file at `path` is locked.
 
         Locked files cannot be imported.
 
@@ -355,8 +378,8 @@ class BaseNodeIO:
 
         Returns
         -------
-        locked : bool
-            True if `path` is locked; False otherwise.
+        bool
+            ``True`` if `path` is locked; ``False`` otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -366,15 +389,15 @@ class BaseNodeIO:
         Parameters
         ----------
         path : PathLike
-            path (or first part of the, path if other `segments` provided) to
+            The path (or first part of the, path if other `segments` provided) to
             the file to hash.  Relative to `node.root`.
         *segments : iterable, optional
-            other path segments path-concatenated and appended to `path`.
+            Other path segments path-concatenated and appended to `path`.
 
         Returns
         -------
-        md5sum : str or None
-            the base64-encoded MD5 hash value, or None if the hash couldn't be
+        str or None
+            The base64-encoded MD5 hash value, or None if the hash couldn't be
             computed.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
@@ -382,18 +405,18 @@ class BaseNodeIO:
     def open(self, path: os.PathLike | str, binary: bool = True) -> IO:
         """Open the file specified by `path` for reading.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         path : pathlike
-            Relative to `node.root`
+            The Path to open.  Relative to `node.root`.
         binary : bool, optional
-            If True, open the file in binary mode, otherwise open the file in
-            text mode.
+            If ``True`` (the default), open the file in binary mode; otherwise,
+            open the file in text mode.
 
         Returns
         -------
-        file : file-like
-            An open, read-only file.
+        IO
+            The open, read-only file.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -405,11 +428,11 @@ class BaseNodeIO:
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the copy request to fulfill.  We are in the destination group
+            The copy request to fulfill.  We are in the destination group
             (i.e. `req.group_to == self.node.group`).
-        did_search : boolean
-            True if a group-level pre-pull search for an existing file was
-            performed.  False otherwise.
+        did_search : bool
+            ``True`` if a group-level pre-pull search for an existing file was
+            performed.  ``False`` otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -425,13 +448,10 @@ class BaseNodeIO:
 
         Returns
         -------
-        ready : bool
-            True if `path` is ready for I/O.  False otherwise.
-
-        Notes
-        -----
-        If this returns False, the caller may wait and then call this
-        method again to try again.
+        bool
+            ``True`` if `path` is ready for I/O.  ``False`` otherwise.
+            If ``False``, the caller may wait and then call this method again
+            to try again.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -448,8 +468,8 @@ class BaseNodeIO:
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the copy request to ready.  We are the source node (i.e.
-            `req.node_from == self.node`).
+            The copy request to ready.  We are the source node (i.e.
+            ``req.node_from == self.node``).
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
@@ -460,14 +480,14 @@ class BaseGroupIO:
     Parameters
     ----------
     group : StorageGroup
-        The group
+        The group.
     config : dict
         The parsed `group.io_config`. If `group.io_config` is None,
         this is an empty `dict`.
     queue : FairMultiFIFOQueue
-        the task queue
+        The task queue.
     fifo : Hashable
-        the queue fifo key to use when submitting tasks.
+        The queue fifo key to use when submitting tasks.
     """
 
     # SETUP
@@ -509,24 +529,19 @@ class BaseGroupIO:
         Parameters
         ----------
         group : StorageGroup
-            the updated group instance read from the database
+            The new `StorageGroup` instance read from the database.
         """
         self.group = group
 
     @property
-    def nodes(self) -> list[UpdateableNode]:
+    def nodes(self) -> list[UpdateableNode]:  # numpydoc ignore=RT01
         """The list of nodes in this group.
 
         Ordering is important: nodes at the start of the list are more likely
         to have I/O performed against them.
 
         If this group has no nodes, perhaps because it rejected all nodes it was
-        offered by the daemon, this should be the empty list."""
-        raise NotImplementedError("method must be re-implemented in subclass.")
-
-    @nodes.setter
-    def nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
-        """Set the list of local active nodes in this group.
+        offered by the daemon, this should be the empty list.
 
         The daemon will attempt to assign to this property the list of
         locally-active nodes.  This happens each time through the main loop,
@@ -534,17 +549,23 @@ class BaseGroupIO:
         updates commence.
 
         If group I/O cannot proceed with the supplied list of nodes,
-        implementations should raise ValueError with a message which will
+        the setter should raise `ValueError` with a message which will
         be written to the log.
 
-        Otherwise, it may choose to operate on any non-empty subset of
-        `nodes`.  In this case, the `nodes` property should later return
-        the list of nodes which have been selected.
+        Otherwise, the setter may choose to operate on any non-empty subset of
+        the nodes it was provided.  In this case, this `nodes` property should later
+        provide the list of nodes which were selected.
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    @nodes.setter
+    def nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
+        """Setter for `nodes` (q.v.).
 
         Parameters
         ----------
         nodes : list of UpdateableNodes
-            local active nodes in this group.  Will never be empty.
+            Local active nodes in this group.  Will never be empty.
 
         Raises
         ------
@@ -563,15 +584,15 @@ class BaseGroupIO:
 
         Parameters
         ----------
-        idle : boolean
-                True if all the `nodes` were idle when the current
+        idle : bool
+                ``True`` if all the `nodes` were idle when the current
                 update loop started.
 
         Returns
         -------
-        do_update : bool
-            Whether to proceed with the update or not (skip it).  If
-            False, the update will be skipped.
+        bool
+            ``True`` if the daemon should continue with the update.  If
+            ``False``, the update will be skipped.
         """
         # By default, we do nothing and allow the update to continue
         return True
@@ -604,49 +625,48 @@ class BaseGroupIO:
     def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
         """Check whether the file `path` exists in this group.
 
-        If the file exists on more than one node in the group,
-        implementations may use any method to choose which node
-        to return.
+        If the file exists on more than one node in the group, implementations
+        may use any method to choose which node to return.
 
         Parameters
         ----------
         path : pathlib.PurePath
-            the path, relative to a node `root` of the file to
-            search for.
+            The path, relative to a node root of the file to search for.
 
         Returns
         -------
-        node : UpdateableNode or None
-            If the file exists, the node containing it.  This should be
-            one of the `UpdateableNode` instances provided to `set_nodes`.
-            If the file doesn't exist in the group, this is None.
+        UpdateableNode or None
+            If the file exists, this should be the node containing it.
+            The value returned should be one of the `UpdateableNode` elements
+            in the list returned by the `nodes` attribute.
+            If the file doesn't exist in the group, this should be ``None``.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
     def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
-        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
+        """Handle `ArchiveFileCopyRequest` `req` by pulling into this group.
 
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the request to fulfill.  We are the destination group (i.e.
-            `req.group_to == self.group`).
-        did_search : boolean
-            True if a group-level pre-pull search for an existing file was
-            performed.  False otherwise.
+            The request to fulfill.  We are the destination group (i.e.
+            ``req.group_to == self.group``).
+        did_search : bool
+            ``True`` if a group-level pre-pull search for an existing file was
+            performed.  ``False`` otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
     def pull_search(self, req: ArchiveFileCopyRequest) -> None:
         """Search for an existing copy of a file in a group.
 
-        This method is only called if `do_pull_search` is True.  This provides the
-        group an opportunity to search the group for an exising unregistered copy
-        of a file which needs to be pulled into this group.
+        This method is only called if the attribute `do_pull_search` is ``True``.
+        This provides the group an opportunity to search the group for an exising
+        unregistered copy of a file which needs to be pulled into this group.
 
         If a search is performed and a file is found, this method should cancel
         the request, and instead request import of the existing file copy (by
-        creating/updating a corresponding ArchiveFileCopy record).
+        creating/updating a corresponding `ArchiveFileCopy` record).
 
         If a search is performed and no file is found, or this method decides
         to skip the search, this method should end with a call to the `pull`
@@ -655,7 +675,7 @@ class BaseGroupIO:
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the request to fulfill.  We are the destination group (i.e.
-            `req.group_to == self.group`).
+            The request to fulfill.  We are the destination group (i.e.
+            ``req.group_to == self.group``).
         """
         raise NotImplementedError("method must be re-implemented in subclass.")

@@ -283,9 +283,9 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
     task : Task
         The task instance containing this async.
     io : Node I/O instance
-        The I/O instance on which the file copy lives
+        The I/O instance on which the file copy lives.
     copy : ArchiveFileCopy
-        The copy to check
+        The file copy to check.
     """
 
     copyname = copy.file.path
@@ -431,7 +431,7 @@ def group_search_async(
     ----------
     task : Task
         The task instance containing this async.
-    io : Group I/O instance
+    groupio : Group I/O instance
         The I/O instance for the pull destination group.
     req : ArchiveFileCopyRequest
         The request we're fulfilling.

@@ -1,10 +1,11 @@
-"""Lustre Hierarchical Storage Management (HSM) I/O.
+"""``alpenhorn.io.lustrehsm``: Lustre HSM I/O.
 
-These I/O classes provide support for using external storage (typically
+This I/O module provides support for using external storage (typically
 a tape system) as a StorageNode via Lustre's Hierarchical Storage
 Management (HSM) framework.
 
 This module provides:
+
 * LustreHSMNodeIO and LustreHSMNodeRemote, representing a StorageNode on the
     HSM-managed external storage
 * LustreHSMGroupIO, which allows pairing a `LustreHSMNodeIO` HSM StorageNode
@@ -39,17 +40,17 @@ class LustreHSMNodeRemote(BaseNodeRemote):
     """LustreHSMNodeRemote: information about a LustreHSM remote node."""
 
     def pull_ready(self, file: ArchiveFile) -> bool:
-        """Is `file` ready for pulling from this remote node?
+        """Check if `file` ready for pulling from this remote node.
 
         Parameters
         ----------
         file : ArchiveFile
-            the file being checked
+            The file being checked.
 
         Returns
         -------
-        ready : bool
-            True if `file` is ready on the node; False otherwise.
+        bool
+            ``True`` if `file` is ready on the node; ``False`` otherwise.
         """
         try:
             copy = ArchiveFileCopy.get(file=file, node=self.node)
@@ -60,9 +61,10 @@ class LustreHSMNodeRemote(BaseNodeRemote):
 
 
 class LustreHSMNodeIO(LustreQuotaNodeIO):
-    """LustreHSM node I/O.
+    """LustreHSM Node I/O.
 
     Required io_config keys:
+
         * headroom: float
             the amount of space in kiB to keep empty on the disk.
         * quota_id: the id (username, uid, group name, gid, or project id) to query
@@ -71,6 +73,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             interpret the value of quota_id.
 
     Optional io_config keys:
+
         * lfs : string
             the lfs(1) executable.  Defaults to "lfs"; may be a full path.
         * lfs_timeout: the timeout, in seconds, for an lfs(1) call.  Calls
@@ -86,6 +89,17 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         * restore_wait : integer
             The number of seconds to wait between checking if a restore request
             has completed.  Default is 600 seconds (10 minutes).
+
+    Parameters
+    ----------
+    node : StorageNode
+        The node we're performing I/O on.
+    config : dict
+        The I/O config.
+    queue : FairMultiFIFIOQueue
+        The task scheduler.
+    fifo : Hashable
+        The queue FIFO key to use.
     """
 
     remote_class = LustreHSMNodeRemote
@@ -280,16 +294,17 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         """Pre-update hook.
 
         If the node is idle (i.e. the update will happen), then
-        call `self.release_files to potentially free up space.
+        call `self.release_files` to potentially free up space.
 
         Parameters
         ----------
         idle : bool
-            Is the node currently idle?
+            ``True`` if the node is currently idle.  ``False`` otherwise.
 
         Returns
         -------
-        True
+        bool
+            ``True``, indicating the update should continue.
         """
         # Clear up headroom, if necessary
         if idle:
@@ -298,7 +313,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         # Continue with the update
         return True
 
-    def idle_update(self, newly_idle) -> None:
+    def idle_update(self, newly_idle: bool) -> None:
         """Update HSM state of copies when idle.
 
         If the node is idle after an update, double check the HSM state
@@ -307,6 +322,11 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         Any I/O on a HSM file will restore it.  It's important for the
         data index to reflect changes made in this way outside of alpenhorn so that
         the alpenhornd daemon can properly manage free space.
+
+        Parameters
+        ----------
+        newly_idle : bool
+            Unused.
         """
 
         # Run DefautlIO idle checks
@@ -390,7 +410,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         Parameters
         ----------
         copy : ArchiveFileCopy
-            the file copy to auto-verify
+            The file copy to auto-verify.
         """
 
         def _async(
@@ -460,19 +480,28 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     def check_init(self) -> bool:
         """Check that this node is initialised.
 
-        There's no ALPENHORN_NODE file on HSM, so just return True.
+        Returns
+        -------
+        bool
+            ``True``: HSM nodes are implicitly initialised.
         """
         return True
 
     def exists(self, path: pathlib.PurePath) -> bool:
-        """Does `path` exist?
+        """Check if `path` exists.
 
-        Checks whether `lfs hsm_state` returns ENOENT.
+        Specifically, this checks whether ``lfs hsm_state <PATH>`` returns
+        ``ENOENT``.
 
         Parameters
         ----------
         path : pathlib.PurePath
-            path relative to `node.root`
+            The path to check, relative to `node.root`.
+
+        Returns
+        -------
+        bool
+            ``True`` if the path exists.  ``False`` otherwise.
         """
         full_path = pathlib.PurePath(self.node.root).joinpath(path)
         return self._lfs.hsm_state(full_path) != self._lfs.HSM_MISSING
@@ -480,17 +509,22 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
         """Return size in bytes of the file given by `path`.
 
-        This _always_ returns the apprent size, since the size on tape is
+        This *always* returns the apparent size, since the size on tape is
         not known (or important), and the size on disk is usually that of the
         the file stub.
 
         Parameters
         ----------
-        path: path-like
+        path : path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual: bool, optional
+        actual : bool, optional
             Ignored.
+
+        Returns
+        -------
+        int
+            The size, in bytes, of the file.
         """
         path = pathlib.Path(path)
         if not path.is_absolute():
@@ -498,9 +532,17 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         return path.stat().st_size
 
     def fits(self, size_b: int) -> bool:
-        """Does `size_b` bytes fit on this node?
+        """Check that `size_b` bytes fit on this node.
 
-        Returns True: everything fits in HSM.
+        Parameters
+        ----------
+        size_b : int
+            Unused.
+
+        Returns
+        -------
+        bool
+            ``True``: *everything* fits in HSM.
         """
         return True
 
@@ -509,6 +551,11 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
         This should never be called, because check_init always returns
         True, but in case it does, we implement it anyways.
+
+        Returns
+        -------
+        bool
+            ``True``.
         """
         # Initialisaiton is a no-op
         return True
@@ -516,17 +563,17 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
     def open(self, path: os.PathLike | str, binary: bool = True) -> IO:
         """Open the file specified by `path` for reading.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         path : pathlike
-            Relative to `node.root`
+            Relative to `node.root`.
         binary : bool, optional
-            If True, open the file in binary mode, otherwise open the file in
-            text mode.
+            If ``True``, open the file in binary mode (the default).  Otherwise,
+            open the file in text mode.
 
         Returns
         -------
-        file : file-like
+        IO
             An open, read-only file.
 
         Raises
@@ -550,9 +597,10 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         return open(p, mode="rb" if binary else "rt")
 
     def ready_path(self, path: os.PathLike) -> bool:
-        """Recall the specified path so it can be read.
+        """Restore the specified `path` so it can be read.
 
-        This should only be used on paths not already managed by alpenhorn.
+        This should only be used on paths not already managed by alpenhorn
+        (because the restore won't be reflected in the database state).
 
         Parameters
         ----------
@@ -561,8 +609,8 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
 
         Returns
         -------
-        ready : bool
-            True if `path` is ready for I/O.  False otherwise.
+        bool
+            ``True`` if `path` is ready for I/O.  ``False`` otherwise.
         """
         fullpath = pathlib.Path(self.node.root, path)
         state = self._lfs.hsm_state(fullpath)
@@ -580,8 +628,8 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the copy request to ready.  We are the source node (i.e.
-            `req.node_from == self.node`).
+            The copy request to ready.  We are the source node (i.e.
+            ``req.node_from == self.node``).
         """
 
         # A small async to restore-and-wait for the file
@@ -631,29 +679,68 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
             )
 
     def release_bytes(self, size: int) -> None:
-        """Does nothing."""
+        """Do nothing.
+
+        There's no pre-reservation of space on the HSM node, so this
+        method has nothing to do.
+
+        Parameters
+        ----------
+        size : int
+            Unused.
+        """
         pass
 
     def reserve_bytes(self, size: int, check_only: bool = False) -> bool:
-        """Returns True."""
+        """Return ``True``.
+
+        It's not necessary to pre-reserve space on the HSM node.  So, this
+        always returns ``True`` to simulate to the underlying Default I/O
+        substrate that pre-reservation has succeeded.
+
+        Parameters
+        ----------
+        size : int
+            Unused.
+        check_only : bool, optional
+            Unused.
+
+        Returns
+        -------
+        bool
+            ``True``.
+        """
         return True
 
 
 class LustreHSMGroupIO(DefaultGroupIO):
-    """LustreHSM Group I/O
+    """LustreHSM Group I/O.
 
     The LustreHSM Group contains two nodes:
+
      - a primary node pointing to the HSM storage itself.
      - a secondary node on a regular disk used for storing files too small for HSM.
 
-    The primary node must have `io_class=="LustreHSM"`.  The secondary node must
-    _not_ have `io_class=="LustreHSM`.
+    The primary node must have an I/O class of "LustreHSM".  The secondary node must
+    *not* have an I/O class oa "LustreHSM".
 
     Optional io_config keys:
+
      - threshold : integer
             The smallfile threshold, in bytes.  Files above this size are sent to
             HSM and put on tape.  The small files are sent to the secondary
-            node.  Default is 1000000000 bytes (1 GB).
+            node.  Default is 1,000,000,000 bytes (1 GB).
+
+    Parameters
+    ----------
+    group : StorageGroup
+        The group we're performing I/O on.
+    config : dict
+        The I/O config.
+    queue : FairMultiFIFIOQueue
+        The task scheduler.
+    fifo : Hashable
+        The queue FIFO key to use.
     """
 
     # SETUP
@@ -675,12 +762,13 @@ class LustreHSMGroupIO(DefaultGroupIO):
     # HOOKS
 
     @property
-    def nodes(self) -> list[UpdateableNode]:
+    def nodes(self) -> list[UpdateableNode]:  # numpydoc ignore=RT01
         """List of nodes in this group.
 
         If non-empty, the this will always be a two-element list.
         The first element is the smallfile node, the second is the HSM
-        node."""
+        node.
+        """
 
         if self._hsm:
             return [self._smallfile, self._hsm]
@@ -734,14 +822,14 @@ class LustreHSMGroupIO(DefaultGroupIO):
         Parameters
         ----------
         path : pathlib.PurePath
-            the path, relative to a node `root` of the file to
+            The path, relative to a node `root` of the file to
             search for.
 
         Returns
         -------
-        node : UpdateableNode or None
-            If the file exists, the UpdateableNode on which it is.
-            If the file doesn't exist in the group, this is None.
+        UpdateableNode or None
+            If the file exists, the `UpdateableNode` on which it is.
+            If the file doesn't exist in the group, this is ``None``.
         """
         if self._smallfile.io.exists(path):
             return self._smallfile
@@ -758,11 +846,11 @@ class LustreHSMGroupIO(DefaultGroupIO):
         Parameters
         ----------
         req : ArchiveFileCopyRequest
-            the request to fulfill.  We are the destination group (i.e.
-            `req.group_to == self.group`).
-        did_search : boolean
-            True if a group-level pre-pull search for an existing file was
-            performed.  False otherwise.
+            The request to fulfill.  We are the destination group (i.e.
+            ``req.group_to == self.group``).
+        did_search : bool
+            ``True`` if a group-level pre-pull search for an existing file was
+            performed.  ``False`` otherwise.
         """
         if req.file.size_b <= self._threshold:
             self._smallfile.io.pull(req, did_search)

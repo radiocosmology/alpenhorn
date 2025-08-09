@@ -80,31 +80,30 @@ def _pull_timeout(size_b: int) -> float | None:
 def bbcp(source: str | os.PathLike, target: str | os.PathLike, size_b: int) -> dict:
     """Transfer a file with BBCP.
 
-    Command times out after `_pull_timeout(size_b)` seconds have elapsed.
+    Command times out after ``_pull_timeout(size_b)`` seconds have elapsed.
 
     Parameters
     ----------
     source : path-like
-        Source location
+        Source location.
     target : path-like
-        Target location
+        Target location.
     size_b : int
-        Size of the file to transfer.  Only used to
-        set the timeout.
+        Size of the file to transfer.  Only used to set the timeout.
 
     Returns
     -------
-    ioresult : dict
+    dict
         Result of the transfer, with keys:
-        "ret": int
-            exit code of bbcp (0 == success)
-        "md5sum": str
-            MD5 hash of the transferred file.  Only present
-            if ret == 0
-        "stderr": str
-            Standard error output from bbcp
-        "check_src": bool
-            True unless it's clear that a failure wasn't
+
+        * "ret": int
+            exit code of bbcp (0 indicates success).
+        * "md5sum" : str
+            MD5 hash of the transferred file.  Only present if `ret` is zero.
+        * "stderr" : str
+            Standard error output from bbcp.
+        * "check_src" : bool
+            ``True`` unless it's clear that a failure wasn't
             due to a problem with the source file.
     """
 
@@ -203,33 +202,33 @@ def rsync(
 ) -> dict:
     """Rsync a file (either local or remote).
 
-    Command times out after `_pull_timeout(size_b)` seconds have elapsed.
+    Command times out after ``_pull_timeout(size_b)`` seconds have elapsed.
 
     Parameters
     ----------
     source : path-like
-        Source location
+        Source location.
     target : path-like
-        Target location
+        Target location.
     size_b : int
-        Size of the file to transfer.  Only used to
-        set the timeout.
+        Size of the file to transfer.  Only used to set the timeout.
     local : bool
-        False if this is a network transfer.  In that
-        case, compression is turned on in rsync.
+        ``False`` if this is a network transfer.  In that case, compression is
+        turned on in rsync.
 
     Returns
     -------
-    ioresult : dict
+    dict
         Result of the transfer, with keys:
-        "ret": int
-            exit code of rsync (0 == success)
-        "md5sum": bool
-            True if ret == 0, absent otherwise
-        "stderr": str
+
+        * "ret" : int
+            Exit code of rsync (0 == success)
+        * "md5sum" : bool
+            ``True`` if ``ret == 0``, absent otherwise
+        * "stderr" : str
             Standard error output from rsync
-        "check_src": bool
-            True unless it's clear that a failure wasn't
+        * "check_src" : bool
+            ``True`` unless it's clear that a failure wasn't
             due to a problem with the source file.
     """
 
@@ -288,29 +287,28 @@ def rsync(
 def hardlink(
     from_path: str | os.PathLike, to_dir: str | os.PathLike, filename: str
 ) -> dict | None:
-    """Hard link `from_path` as `to_dir/filename`
+    """Hard link `from_path` as `to_dir/filename`.
 
     Atomically overwrites an existing `to_dir/filename`.
 
-    If hardlinking fails, this funciton assumes it's because src and dest
+    If hardlinking fails, this funciton assumes it's because `src` and `dest`
     aren't on the same filesystem (i.e., failure is probably not for an
     interesting reason).
 
     Parameters
     ----------
     from_path : path-like
-        Source location
+        Source location.
     to_dir : path-like
-        Destination directory
+        Destination directory.
     filename : str
-        Destination filename
+        Destination filename.
 
     Returns
     -------
-    ioresult : dict or None
-        `{"ret": 1}` if the attempt timed out;
-        None if hardlinking failed; otherwise, the dict
-        `{"ret": 0, "md5sum": True}`
+    dict or None
+        ``{"ret": 1}`` if the attempt timed out; ``None`` if hardlinking failed;
+        otherwise, the dict ``{"ret": 0, "md5sum": True}``.
     """
 
     from_path = pathlib.Path(from_path)
@@ -344,11 +342,11 @@ def hardlink(
 def local_copy(
     from_path: str | os.PathLike, to_dir: str | os.PathLike, filename: str, size_b: int
 ) -> dict:
-    """Copy `from_path` to `to_dir/filename` using `shutil`
+    """Copy `from_path` to `to_dir/filename` using `shutil`.
 
-    Atomically overwrites an existing `to_dir/filename`.
+    Atomically overwrites an existing ``to_dir/filename``.
 
-    Copy attempt times out after `_pull_timeout(size_b)` seconds have elapsed.
+    Copy attempt times out after ``_pull_timeout(size_b)`` seconds have elapsed.
 
     After a successful copy, `common.util.md5sum_file` will be called to verify
     the transfer was successful.
@@ -356,28 +354,29 @@ def local_copy(
     Parameters
     ----------
     from_path : path-like
-        Source location
+        Source location.
     to_dir : path-like
-        Destination directory
+        Destination directory.
     filename : str
-        Destination filename
+        Destination filename.
     size_b : int
-        Size in bytes of file
+        Size in bytes of file.
 
     Returns
     -------
-    ioresult : dict
+    dict
         Result of the transfer, with keys:
-        "ret": int
+
+        * "ret" : int
             0 if copy succeeded; 1 if it failed
-        "md5sum": str
-            Only present if ret == 0: md5sum of the file computed via
+        * "md5sum" : str
+            Only present if ``ret == 0``: MD5 hash of the file computed via
             `util.md5sum_file`
-        "stderr": str
-            Only present if ret == 1: a message indicating what went wrong.
-        "check_src": bool
-            True unless it's clear that a failure wasn't
-            due to a problem with the source file.
+        * "stderr" : str
+            Only present if ``ret == 1``: a message indicating what went wrong.
+        * "check_src" : bool
+            ``True`` unless it's clear that a failure wasn't due to a problem with
+            the source file.
     """
 
     from_path = pathlib.Path(from_path)
@@ -479,27 +478,28 @@ def copy_request_done(
     Parameters
     ----------
     req : ArchiveFileCopyRequest
-        The copy request that was attempted
-    io : Node I/O instance
-        The I/O instance of the destination node
+        The copy request that was attempted.
+    io : BaseNodeIO subclass
+        The I/O instance of the destination node.
     success : bool
-        True unless the file transfer failed.
-    md5ok : boolean or str
+        ``True`` unless the file transfer failed.
+    md5ok : bool or str
         Either a boolean indicating if the MD5 sum was correct or
         else a string MD5 sum which we need to verify.  Ignored if
-        success is not True.
+        success is not ``True``.
     start_time : float
-        time.time() when the transfer was started
-    check_src : boolean
-        if success is False, should the source file be marked suspect?
+        The `time.time()` when the transfer was started.
+    check_src : bool
+        If success is ``False``, indicates whether the source file
+        should be marked suspect.
     stderr : str or None
-        if success is False, this will be copied into the log
+        If success is ``False``, this will be copied into the log.
 
     Returns
     -------
-    good_transfer : bool
-        True if the parameters indicate the transfer was successful
-        or False if the transfer failed.
+    bool
+        ``True`` if the parameters indicate the transfer was successful,
+        or ``False`` if the transfer failed.
     """
 
     # The only label left unbound here is "result"
@@ -613,7 +613,7 @@ def copy_request_done(
 def remove_filedir(
     node: StorageNode, dirname: pathlib.Path, tree_lock: UpDownLock
 ) -> None:
-    """Try to delete a file's parent directory(s) from a node
+    """Try to delete a file's parent directory(s) from a node.
 
     Will attempt to remove the enitre tree given as `dirname`
     while holding the `tree_lock` down until reaching `node.root`.
@@ -631,11 +631,11 @@ def remove_filedir(
 
     Parameters
     ----------
-    node: StorageNode
+    node : StorageNode
         The node to delete the acq directory from.
-    dirname: pathlib.Path
+    dirname : pathlib.Path
         The path to delete.  Must be absolute and rooted at `node.root`.
-    tree_lock: UpDownLock
+    tree_lock : UpDownLock
         This function will block until it can acquire the down lock and
         all I/O will happen while holding the lock down.
 
