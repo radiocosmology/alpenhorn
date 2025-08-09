@@ -514,7 +514,8 @@ def get_bytes(path, default: str | None = None) -> int:
     Returns
     -------
     int
-        The value of the requested config parameter, or the default, converted to an int.
+        The value of the requested config parameter, or the default, converted to an
+        int.
 
     Raises
     ------
