@@ -87,6 +87,7 @@ override_SS05 = [  # override SS05 to allow docstrings starting with these words
 ]
 
 
+
 [tool.ruff]
 lint.select = ["E", "F", "I", "UP", "NPY", "RUF", "BLE", "C4", "RET"]
 
