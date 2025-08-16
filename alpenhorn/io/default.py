@@ -575,21 +575,33 @@ class DefaultGroupIO(BaseGroupIO):
 
     # SETUP
 
-    def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
-        """Set the list of nodes to operate on.
+    def __init__(
+        self, node: StorageNode, config: dict, queue: FairMultiFIFOQueue, fifo: Hashable
+    ) -> None:
+        super().__init__(node, config, queue, fifo)
+        self._node = None
+
+    @property
+    def nodes(self) -> list[UpdateableNode]:
+        """The list of nodes in this group.
+
+        This is a single element list containing the node assigned to this I/O
+        instance, or the empty list if no node has been assigned."""
+        if self._node:
+            return [self._node]
+        return []
+
+    @nodes.setter
+    def nodes(self, nodes: list[UpdateableNode]) -> None:
+        """Set the node in this group.
 
         DefaultGroupIO only accepts a single node to operate on.
 
         Parameters
         ----------
         nodes : list of UpdateableNodes
-            The local active nodes in this group.  Will never be
-            empty.
-
-        Returns
-        -------
-        nodes : list of UpdateableNodes
-            `nodes`, if `len(nodes) == 1`
+            This should always be a single-element list containing the
+            group's StorageNode.
 
         Raises
         ------
@@ -598,16 +610,15 @@ class DefaultGroupIO(BaseGroupIO):
         """
 
         if len(nodes) != 1:
+            # The nodes list passed in is never empty, so this message is reasonable.
             raise ValueError(f"Too many active nodes in group {self.group.name}.")
 
-        self.node = nodes[0]
-        return nodes
+        self._node = nodes[0]
 
     # I/O METHODS
 
     def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
         """Check whether the file `path` exists in this group.
-
 
         Parameters
         ----------
@@ -621,8 +632,8 @@ class DefaultGroupIO(BaseGroupIO):
             If the file exists, returns the node in the group.
             If the file doesn't exist in the group, this is None.
         """
-        if self.node.io.exists(path):
-            return self.node
+        if self._node.io.exists(path):
+            return self._node
 
         return None
 
@@ -640,7 +651,7 @@ class DefaultGroupIO(BaseGroupIO):
             True if a group-level pre-pull search for an existing file was
             performed.  False otherwise.
         """
-        self.node.io.pull(req, did_search)
+        self._node.io.pull(req, did_search)
 
     def pull_search(self, req: ArchiveFileCopyRequest) -> None:
         """Search for an existing copy of a file in a group.

@@ -220,10 +220,10 @@ def test_update_group_copy_state(
     assert not ArchiveFileCopyRequest.get(file=fileM).cancelled
     assert call.pull_search(afcrM) not in mockio.group.mock_calls
 
-    # afcrX called pull directly
+    # afcrX called pull_search
     assert not ArchiveFileCopyRequest.get(file=fileX).completed
     assert not ArchiveFileCopyRequest.get(file=fileX).cancelled
-    assert call.pull(afcrX, did_search=True) in mockio.group.mock_calls
+    assert call.pull_search(afcrX) in mockio.group.mock_calls
 
     # afcrN called pull_search
     assert not ArchiveFileCopyRequest.get(file=fileN).completed

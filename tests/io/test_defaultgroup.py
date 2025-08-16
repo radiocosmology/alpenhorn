@@ -32,7 +32,7 @@ def test_too_many_nodes(storagegroup, storagenode, queue):
     node2 = UpdateableNode(queue, storagenode(name="node2", group=stgroup, active=True))
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=[node1, node2], idle=True)
-    assert group._nodes is None
+    assert not group.io.nodes
 
 
 def test_just_enough_nodes(storagegroup, storagenode, queue):
@@ -42,7 +42,7 @@ def test_just_enough_nodes(storagegroup, storagenode, queue):
     node = UpdateableNode(queue, storagenode(name="node1", group=stgroup, active=True))
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=[node], idle=True)
-    assert group._nodes == [node]
+    assert group.io.nodes == [node]
 
 
 def test_exists(xfs, groupnode):

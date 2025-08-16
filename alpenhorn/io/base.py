@@ -516,36 +516,41 @@ class BaseGroupIO:
         """
         self.group = group
 
-    def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
+    @property
+    def nodes(self) -> list[UpdateableNode]:
+        """The list of nodes in this group.
+
+        Ordering is important: nodes at the start of the list are more likely
+        to have I/O performed against them.
+
+        If this group has no nodes, perhaps because it rejected all nodes it was
+        offered by the daemon, this should be the empty list."""
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    @nodes.setter
+    def nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
         """Set the list of local active nodes in this group.
 
-        This method is called to communicate to the I/O instance the list
-        of locally-active nodes.
-
-        This method is called each main loop, after regular
-        node I/O has completed but before any group I/O updates commence.
+        The daemon will attempt to assign to this property the list of
+        locally-active nodes.  This happens each time through the main loop,
+        after regular node I/O has completed but before any group I/O
+        updates commence.
 
         If group I/O cannot proceed with the supplied list of nodes,
         implementations should raise ValueError with a message which will
         be written to the log.
 
         Otherwise, it may choose to operate on any non-empty subset of
-        `nodes`.  In this case it should return the list of nodes which has
-        been selected, and record the list locally, if needed.
+        `nodes`.  In this case, the `nodes` property should later return
+        the list of nodes which have been selected.
 
         Parameters
         ----------
         nodes : list of UpdateableNodes
             local active nodes in this group.  Will never be empty.
 
-        Returns
-        -------
-        selected_nodes : list of UpdateableNodes
-            `nodes` or a non-empty subset of `nodes` on which group I/O
-            will be performed.
-
-                Raises
-                ------
+        Raises
+        ------
         ValueError
             `nodes` was not sufficient to permit group I/O to proceed.
         """

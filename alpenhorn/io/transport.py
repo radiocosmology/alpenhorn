@@ -39,18 +39,39 @@ class TransportGroupIO(DefaultGroupIO):
     # Enable the group-level pre-pull search
     do_pull_search = True
 
-    def set_nodes(self, nodes: list[UpdateableNode]) -> list[UpdateableNode]:
-        """Check that nodes in group are transit nodes.
+    @property
+    def nodes(self) -> list[UpdateableNode]:
+        """List of nodes in this group.
+
+        Sorted in priority fill order."""
+
+        # Sort nodes by fullness
+        def _node_key(node):
+            """Sort key function for Transport nodes.
+
+            Returns `node.db.avail_gb`, if that's numeric, or else a very
+            large float if it's `None`."""
+            n = node.db.avail_gb
+            if n is not None:
+                return n
+
+            # Using node.db.id here makes ordering stable.  1e9 GB = 1EB, so we'll
+            # be fine for a while until disks get too big.
+            return node.db.id * 1e9
+
+        return sorted(self._nodes, key=_node_key)
+
+    @nodes.setter
+    def nodes(self, nodes: list[UpdateableNode]) -> None:
+        """nodes setter
+
+        This checks that nodes in group are transport nodes
+        (storage_type == "T").
 
         Parameters
         ----------
         nodes : list of UpdateableNodes
             local active nodes in this group
-
-        Returns
-        -------
-        nodes : list of UpdateableNodes
-            subset of `nodes` which are Transport nodes.
 
         Raises
         ------
@@ -73,8 +94,6 @@ class TransportGroupIO(DefaultGroupIO):
                 f"Transport group {self.group.name}"
             )
 
-        return self._nodes
-
     def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
         """Checks whether a file at `path` exists in this group.
 
@@ -96,7 +115,7 @@ class TransportGroupIO(DefaultGroupIO):
         this is stable: multiple calls to this method with the same `path`
         may return different nodes.
         """
-        for node in self._nodes:
+        for node in self.nodes:
             if node.io.exists(path):
                 return node
 
@@ -129,26 +148,11 @@ class TransportGroupIO(DefaultGroupIO):
             )
             return
 
-        # Sort the nodes; this has to be done for every request because
-        # available space (hopefully) changes as requests are submitted and
-        # completed.
-
-        # Our node-sorting function
-        def _node_key(node):
-            """Sort key function for Transport nodes.
-
-            Returns `node.db.avail_gb`, if that's numeric, or else a very
-            large float if it's `None`."""
-            n = node.db.avail_gb
-            if n is not None:
-                return n
-
-            # Using node.db.id here makes ordering stable.  1e9 GB = 1EB, so we'll
-            # be fine for a while until disks get too big.
-            return node.db.id * 1e9
-
         # loop through sorted nodes and pick a node
-        for node in sorted(self._nodes, key=_node_key):
+        #
+        # Note: the node list returned by self.nodes has been sorted to
+        #       put the most-desired node first
+        for node in self.nodes:
             # Skip node out of space
             if node.db.under_min:
                 log.debug(f"Ignoring transport node {node.name}: hit min_avail_gb")
