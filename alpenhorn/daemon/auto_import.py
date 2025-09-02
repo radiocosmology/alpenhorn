@@ -23,14 +23,13 @@ from ..db import (
     ArchiveFileImportRequest,
     utcnow,
 )
-from ..io import ioutil
-from ..scheduler import Task
+from .io import ioutil
+from .scheduler import FairMultiFIFOQueue, Task
 
 if TYPE_CHECKING:
     import os
     from collections.abc import Generator
 
-    from ..scheduler import FairMultiFIFOQueue
     from .update import UpdateableNode
 del TYPE_CHECKING
 

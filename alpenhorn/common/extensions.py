@@ -46,7 +46,7 @@ functionality they provide. There are currently three supported keys:
     order given in the config file until one of them indicates a successful match.
 `io-modules`
     A dict providing I/O modules to augment the default modules provided in
-    `alpenhorn.io`.  Each I/O module should have a node I/O or group I/O class
+    `alpenhorn.daemon.io`.  Each I/O module should have a node I/O or group I/O class
     (or both).  I/O class names and dict keys must adhere to the following naming
     conventions:
       * For a StorageNode with `io_class` equal to "IOClassName", the node I/O class
@@ -61,7 +61,7 @@ functionality they provide. There are currently three supported keys:
 
     Multiple `io-modules` extensions may be provided; no two extensions may provide
     the same dict keys, nor may any extension provide a key which is the name of an
-    existing `alpenhorn.io` submodule.
+    existing `alpenhorn.daemon.io` submodule.
 
 If other keys are present in the dictionary returned by `register_extension`, they
 are ignored.
@@ -80,9 +80,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from types import ModuleType
 
-    from .alpenhorn import ArchiveAcq, ArchiveFile
-    from .archive import ArchiveFileCopy
-    from .update import UpdateableNode
+    from ..daemon.update import UpdateableNode
+    from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy
 
     ImportCallback = Callable[
         [ArchiveFileCopy, ArchiveFile | None, ArchiveAcq | None, UpdateableNode], None
@@ -183,7 +182,7 @@ def load_extensions() -> None:
 
             for modname, extmod in extension_dict["io-modules"].items():
                 # Check if this module is present in a previously imported
-                # extension.  This test is easier to do then the alpenhorn.io
+                # extension.  This test is easier to do then the alpenhorn.daemon.io
                 # check, so we do it first
                 if modname in _io_ext:
                     raise ValueError(
@@ -191,12 +190,12 @@ def load_extensions() -> None:
                         "imported from an earlier extension module."
                     )
 
-                # Second, check if this module already exists in alpenhorn.io
+                # Second, check if this module already exists in alpenhorn.daemon.io
                 try:
-                    importlib.import_module("alpenhorn.io." + modname)
+                    importlib.import_module("alpenhorn.daemon.io." + modname)
                     raise ValueError(
                         f'I/O module "{modname}" in extension {name} duplicates '
-                        f'existing module "alpenhorn.io.{modname}"'
+                        f'existing module "alpenhorn.daemon.io.{modname}"'
                     )
                 except ImportError:
                     pass
@@ -257,7 +256,7 @@ def io_module(name: str) -> ModuleType | None:
     -------
     iomod : module or None
         The Python module providing the implementation of the named I/O class.
-        It is either a submodule of `alpenhorn.io` or else a module
+        It is either a submodule of `alpenhorn.daemon.io` or else a module
         provided by one of the io-module extensions.
 
         This will be None if no I/O module could be found.
@@ -270,9 +269,9 @@ def io_module(name: str) -> ModuleType | None:
     if name == "base":
         return None
 
-    # Try to load the module from alpenhorn.io
+    # Try to load the module from alpenhorn.daemon.io
     try:
-        return importlib.import_module("alpenhorn.io." + name)
+        return importlib.import_module("alpenhorn.daemon.io." + name)
     except ImportError:
-        # No alpenhorn.io module, maybe it's an extension module
+        # No alpenhorn.daemon.io module, maybe it's an extension module
         return _io_ext.get(name)

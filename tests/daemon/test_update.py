@@ -5,10 +5,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from alpenhorn.daemon import update
+from alpenhorn.daemon.io.base import BaseGroupIO, BaseNodeIO
+from alpenhorn.daemon.scheduler import FairMultiFIFOQueue, Task, pool
 from alpenhorn.db import StorageGroup, StorageNode
-from alpenhorn.io.base import BaseGroupIO, BaseNodeIO
-from alpenhorn.scheduler import Task, pool
-from alpenhorn.scheduler.queue import FairMultiFIFOQueue
 
 
 @pytest.fixture

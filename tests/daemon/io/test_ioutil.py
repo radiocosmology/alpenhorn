@@ -1,4 +1,4 @@
-"""Test alpenhorn.io.ioutil"""
+"""Test alpenhorn.daemon.io.ioutil"""
 
 import datetime
 import pathlib
@@ -6,9 +6,9 @@ import pathlib
 import peewee as pw
 import pytest
 
+from alpenhorn.daemon.io import ioutil
+from alpenhorn.daemon.io.updownlock import UpDownLock
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.io import ioutil
-from alpenhorn.io.updownlock import UpDownLock
 
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
@@ -78,7 +78,7 @@ def test_bbcp_good(mock_run_command):
 def test_bbcp_port(mock_run_command):
     """Test setting bbcp from worker threads."""
 
-    from alpenhorn.scheduler.pool import threadlocal
+    from alpenhorn.daemon.scheduler.pool import threadlocal
 
     # Ensure we have no worker id
     try:

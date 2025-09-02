@@ -21,9 +21,9 @@ from ..db import (
     StorageNode,
     utcnow,
 )
-from ..scheduler import EmptyPool, Task, WorkerPool, global_abort
 from . import auto_import
 from .querywalker import QueryWalker
+from .scheduler import EmptyPool, Task, WorkerPool, global_abort
 
 if TYPE_CHECKING:
     from .queue import FairMultiFIFOQueue

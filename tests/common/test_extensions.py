@@ -175,9 +175,9 @@ def test_io_module_external(set_config):
 
 def test_io_module_internal():
     """Test io_module() returning an internal io module."""
-    import alpenhorn.io.default
+    import alpenhorn.daemon.io.default
 
-    assert alpenhorn.io.default is extensions.io_module("Default")
+    assert alpenhorn.daemon.io.default is extensions.io_module("Default")
 
 
 def test_io_module_missing():

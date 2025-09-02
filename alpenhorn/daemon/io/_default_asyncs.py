@@ -11,16 +11,16 @@ from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from ..common.metrics import Metric
-from ..common.util import timeout_call
-from ..daemon.update import RemoteNode
-from ..db import (
+from ...common.metrics import Metric
+from ...common.util import timeout_call
+from ...db import (
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     StorageNode,
     utcnow,
 )
+from ..update import RemoteNode
 from . import ioutil
 
 if TYPE_CHECKING:

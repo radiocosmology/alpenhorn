@@ -17,8 +17,7 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Hashable, Iterable
 
-    from ..daemon.update import UpdateableNode
-    from ..db import (
+    from ...db import (
         ArchiveFile,
         ArchiveFileCopy,
         ArchiveFileCopyRequest,
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
         StorageNode,
     )
     from ..scheduler import FairMultiFIFOQueue
+    from ..update import UpdateableNode
 del TYPE_CHECKING
 
 log = logging.getLogger(__name__)

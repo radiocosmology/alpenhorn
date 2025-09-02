@@ -289,7 +289,7 @@ def mock_rsync(xfs):
         return {"ret": 0, "stdout": "", "md5sum": True}
 
     with patch("shutil.which", _mocked_which):
-        with patch("alpenhorn.io.ioutil.rsync", _mocked_rsync):
+        with patch("alpenhorn.daemon.io.ioutil.rsync", _mocked_rsync):
             yield
 
 

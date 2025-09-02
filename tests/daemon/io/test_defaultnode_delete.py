@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import pytest
 
+from alpenhorn.daemon.io._default_asyncs import delete_async
+from alpenhorn.daemon.io.updownlock import UpDownLock
 from alpenhorn.db.archive import ArchiveFileCopy
-from alpenhorn.io._default_asyncs import delete_async
-from alpenhorn.io.updownlock import UpDownLock
 
 
 @pytest.fixture

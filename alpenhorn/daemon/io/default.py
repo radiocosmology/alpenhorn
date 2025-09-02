@@ -18,8 +18,8 @@ from typing import IO, TYPE_CHECKING
 
 from watchdog.observers import Observer
 
-from ..common import util
-from ..db import ArchiveAcq, ArchiveFile
+from ...common import util
+from ...db import ArchiveAcq, ArchiveFile
 from ..scheduler import Task
 from . import ioutil
 
@@ -31,9 +31,9 @@ from .updownlock import UpDownLock
 if TYPE_CHECKING:
     from collections.abc import Hashable, Iterable
 
-    from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
-    from ..service.queue import FairMultiFIFOQueue
-    from ..service.update import UpdateableNode
+    from ...db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
+    from ..scheduler import FairMultiFIFOQueue
+    from ..update import UpdateableNode
 del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ class DefaultNodeIO(BaseNodeIO):
     remote_class = DefaultNodeRemote
 
     # Uses the platform-default observer.  On Linux, this will be the InotifyObserver
-    # which doesn't work on NFS mounts (for which use alpenhorn.io.polling instead).
+    # which doesn't work on NFS mounts (for which use the "Polling" I/O instead).
     observer = Observer
 
     def __init__(

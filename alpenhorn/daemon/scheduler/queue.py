@@ -20,7 +20,7 @@ from collections.abc import Hashable
 from time import monotonic, sleep
 from typing import Any
 
-from ..common.metrics import Metric
+from ...common.metrics import Metric
 
 
 class FairMultiFIFOQueue:

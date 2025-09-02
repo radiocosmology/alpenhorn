@@ -21,10 +21,10 @@ from typing import IO, TYPE_CHECKING
 
 import peewee as pw
 
-from ..common.util import pretty_bytes, pretty_deltat
-from ..daemon.querywalker import QueryWalker
-from ..db import ArchiveFileCopy, utcnow
-from ..scheduler import Task
+from ...common.util import pretty_bytes, pretty_deltat
+from ...db import ArchiveFileCopy, utcnow
+from ..querywalker import QueryWalker
+from ..scheduler import FairMultiFIFOQueue, Task
 from .base import BaseNodeRemote
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO
@@ -33,9 +33,8 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Generator, Hashable
 
-    from ..db import ArchiveFile, ArchiveFileCopyRequest
-    from ..scheduler import FairMultiFIFOQueue
-    from ..service.update import UpdateableGroup, UpdateableNode
+    from ...db import ArchiveFile, ArchiveFileCopyRequest
+    from ..update import UpdateableGroup, UpdateableNode
 del TYPE_CHECKING
 
 log = logging.getLogger(__name__)

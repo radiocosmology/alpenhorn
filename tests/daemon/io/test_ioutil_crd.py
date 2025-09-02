@@ -1,4 +1,4 @@
-"""Test alpenhorn.io.ioutil.copy_request_done()."""
+"""Test alpenhorn.daemon.io.ioutil.copy_request_done()."""
 
 import datetime
 import time
@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from alpenhorn.daemon.io.ioutil import copy_request_done
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db import utcfromtimestamp, utcnow
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.io.ioutil import copy_request_done
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def mock_post_add():
     """Yields a mocked post_add"""
 
     mock = MagicMock()
-    with patch("alpenhorn.io.ioutil.post_add", mock):
+    with patch("alpenhorn.daemon.io.ioutil.post_add", mock):
         yield mock
 
 

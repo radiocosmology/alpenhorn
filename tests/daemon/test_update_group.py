@@ -130,7 +130,8 @@ def test_update_group_notready(mockgroupandnode, hostname, queue, pull):
 
     # Force source not ready
     with patch(
-        "alpenhorn.io.default.DefaultNodeRemote.pull_ready", lambda self, file: False
+        "alpenhorn.daemon.io.default.DefaultNodeRemote.pull_ready",
+        lambda self, file: False,
     ):
         # run update
         group.update()

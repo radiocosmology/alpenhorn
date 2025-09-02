@@ -247,7 +247,7 @@ def test_check_missing(queue, node):
 
     # Mock the check async, which is called by the task to do the heavy lifting
     async_mock = MagicMock()
-    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+    with patch("alpenhorn.daemon.io._default_asyncs.check_async", async_mock):
         # Run task
         task, key = queue.get()
         task()
@@ -281,7 +281,7 @@ def test_check_ready_restored(xfs, queue, node, mock_lfs):
     assert queue.qsize == 1
 
     async_mock = MagicMock()
-    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+    with patch("alpenhorn.daemon.io._default_asyncs.check_async", async_mock):
         # Run task
         task, key = queue.get()
         task()
@@ -315,7 +315,7 @@ def test_check_released(xfs, queue, mock_lfs, node):
 
     # Mock the check async, which is called by the task to do the heavy lifting
     async_mock = MagicMock()
-    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+    with patch("alpenhorn.daemon.io._default_asyncs.check_async", async_mock):
         # Run task
         task, key = queue.get()
         task()
@@ -360,7 +360,7 @@ def test_check_ready_released(xfs, queue, mock_lfs, node):
 
     # Mock the check async, which is called by the task to do the heavy lifting
     async_mock = MagicMock()
-    with patch("alpenhorn.io._default_asyncs.check_async", async_mock):
+    with patch("alpenhorn.daemon.io._default_asyncs.check_async", async_mock):
         # Run task
         task, key = queue.get()
         task()

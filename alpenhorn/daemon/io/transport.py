@@ -10,7 +10,7 @@ from .default import DefaultGroupIO
 if TYPE_CHECKING:
     import pathlib
 
-    from ..archive import ArchiveFileCopyRequest
+    from ...db import ArchiveFileCopyRequest
     from ..update import UpdateableNode
 del TYPE_CHECKING
 

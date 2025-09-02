@@ -7,7 +7,7 @@ from types import FrameType
 
 from peewee import OperationalError
 
-from ..common.metrics import Metric
+from ...common.metrics import Metric
 from .queue import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
