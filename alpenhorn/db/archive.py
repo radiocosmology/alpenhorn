@@ -176,6 +176,7 @@ class ArchiveFileCopyRequest(base_model):
             self.cancelled = True
             self.save(only=[ArchiveFileCopyRequest.cancelled])
             comp_metric.inc(result="duplicate")
+            return False
         if copy_state == "M":
             log.warning(
                 f"Skipping pull request for "
@@ -218,6 +219,7 @@ class ArchiveFileCopyRequest(base_model):
             self.cancelled = True
             self.save(only=[ArchiveFileCopyRequest.cancelled])
             comp_metric.inc(result="missing")
+            return False
         if state == "M":
             log.info(
                 f"Skipping request for {self.file.acq.name}/{self.file.name}:"
