@@ -73,7 +73,7 @@ def test_update_node_not_idle(
     hostname, xfs, mockgroupandnode, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with a not idle node."""
-    mockio, _, node = mockgroupandnode
+    mockio, _, _ = mockgroupandnode
 
     # Set up the I/O mock
     mockio.node.before_update.return_value = True
@@ -210,7 +210,7 @@ def test_update_group_not_idle_node(
     As a result, the group idle check doesn't happen (group idle
     is forced to be False in this instance)."""
 
-    mockio, _, node = mockgroupandnode
+    mockio, _, _ = mockgroupandnode
 
     # Set up the I/O mock
     mockio.node.before_update.return_value = True
@@ -242,7 +242,7 @@ def test_update_group_not_idle_group(
     but we force the group to appear non-idle after
     the update."""
 
-    mockio, group, node = mockgroupandnode
+    mockio, _, _ = mockgroupandnode
 
     # This function adds something to the queue so that after the
     # node update, it's not idle

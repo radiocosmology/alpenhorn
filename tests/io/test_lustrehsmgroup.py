@@ -123,7 +123,7 @@ def test_idle(queue, group):
         assert group.idle is False
 
         # Dequeue it
-        task, key = queue.get()
+        queue.get()
         queue.task_done(node.io.fifo)
 
         # Now idle again

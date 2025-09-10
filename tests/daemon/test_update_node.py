@@ -135,7 +135,7 @@ def test_idle(unode, queue):
     assert unode.idle is False
 
     # Dequeue it
-    task, key = queue.get()
+    _, key = queue.get()
 
     # Still not idle, because task is in-progress
     assert unode.idle is False
