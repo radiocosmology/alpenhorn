@@ -9,7 +9,6 @@ from .. import db
 from ..common import config, metrics
 from ..common.util import help_config_option, start_alpenhorn, version_option
 from ..scheduler import FairMultiFIFOQueue, pool
-from . import auto_import, update
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +61,8 @@ def entry(ctx, conf, once, test_isolation):
     it to run only a single update pass and then exit after updates have completed
     by using the "--exit-after-update" flag.
     """
+
+    from . import auto_import, update
 
     # Turn on test isolation, if requested
     config.test_isolation(enable=test_isolation)

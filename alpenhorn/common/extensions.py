@@ -71,27 +71,21 @@ from __future__ import annotations
 
 import importlib
 import logging
-from typing import TYPE_CHECKING
+import pathlib
+from collections.abc import Callable
+from types import ModuleType
 
+from ..daemon import UpdateableNode
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy
 from . import config
 
-if TYPE_CHECKING:
-    import pathlib
-    from collections.abc import Callable
-    from types import ModuleType
-
-    from .alpenhorn import ArchiveAcq, ArchiveFile
-    from .archive import ArchiveFileCopy
-    from .update import UpdateableNode
-
-    ImportCallback = Callable[
-        [ArchiveFileCopy, ArchiveFile | None, ArchiveAcq | None, UpdateableNode], None
-    ]
-    ImportDetect = Callable[
-        [pathlib.Path, UpdateableNode],
-        tuple[pathlib.Path | str | None, ImportCallback | None],
-    ]
-del TYPE_CHECKING
+ImportCallback = Callable[
+    [ArchiveFileCopy, ArchiveFile | None, ArchiveAcq | None, UpdateableNode], None
+]
+ImportDetect = Callable[
+    [pathlib.Path, UpdateableNode],
+    tuple[pathlib.Path | str | None, ImportCallback | None],
+]
 
 log = logging.getLogger(__name__)
 

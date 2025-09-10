@@ -5,19 +5,16 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import socket
 import subprocess
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import Any
 
 import click
 
-from . import config, extensions, logger
+from . import config
 from .metrics import Metric
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-    from os import PathLike
-del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
@@ -139,6 +136,8 @@ def start_alpenhorn(
     verbosity : int, optional
         For the cli, the initial verbosity level.  Ignored for daemons.
     """
+    from . import extensions, logger
+
     # Initialise logging
     logger.init_logging(cli=cli, verbosity=verbosity)
 
@@ -245,7 +244,7 @@ def timeout_call(func: Callable, timeout: float, /, *args: Any, **kwargs: Any) -
     return asyncio.run(_async_wrapper(func, timeout, args, kwargs))
 
 
-async def _md5sum_file(filename: str | PathLike) -> str | None:
+async def _md5sum_file(filename: str | os.PathLike) -> str | None:
     """asyncio implementation of md5sum_file().
 
     Aborts and returns None if computation is too slow.
@@ -293,7 +292,7 @@ async def _md5sum_file(filename: str | PathLike) -> str | None:
     return md5.hexdigest()
 
 
-def md5sum_file(filename: str | PathLike) -> str | None:
+def md5sum_file(filename: str | os.PathLike) -> str | None:
     """Find the md5sum of a given file.
 
     This implementation runs in an asyncio wrapper and will time out

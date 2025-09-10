@@ -14,17 +14,12 @@ or else set to a fixed value via the `io_config`.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Hashable
 
+from ..db import StorageNode
+from ..scheduler import FairMultiFIFOQueue
 from .default import DefaultNodeIO
 from .lfs import LFS
-
-if TYPE_CHECKING:
-    from collections.abc import Hashable
-
-    from ..queue import FairMultiFIFOQueue
-    from ..storage import StorageNode
-del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 

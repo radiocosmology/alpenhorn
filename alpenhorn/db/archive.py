@@ -153,7 +153,7 @@ class ArchiveFileCopyRequest(base_model):
             True if processing the request should continue.  False if
             the request has been cancelled, or should be skipped.
         """
-        from ..daemon.update import RemoteNode
+        from ..daemon import RemoteNode
 
         # The only label left unbound here is "result"
         comp_metric = metrics.by_name("requests_completed").bind(

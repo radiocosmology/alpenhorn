@@ -10,23 +10,20 @@ by subclassing from DefaultIO instead of from here directly.
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
-from typing import IO, TYPE_CHECKING
+from collections.abc import Hashable, Iterable
+from typing import IO
 
-if TYPE_CHECKING:
-    import os
-    from collections.abc import Hashable, Iterable
-
-    from ..daemon.update import UpdateableNode
-    from ..db import (
-        ArchiveFile,
-        ArchiveFileCopy,
-        ArchiveFileCopyRequest,
-        StorageGroup,
-        StorageNode,
-    )
-    from ..scheduler import FairMultiFIFOQueue
-del TYPE_CHECKING
+from ..daemon import UpdateableNode
+from ..db import (
+    ArchiveFile,
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    StorageGroup,
+    StorageNode,
+)
+from ..scheduler import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
 

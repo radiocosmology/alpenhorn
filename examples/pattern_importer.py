@@ -25,22 +25,23 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import re
 from functools import partial
-from typing import TYPE_CHECKING
 
 import peewee as pw
 
 from alpenhorn.common import config as alpenconf
-from alpenhorn.db import ArchiveAcq, ArchiveFile, base_model, connect, database_proxy
-
-if TYPE_CHECKING:
-    import pathlib
-
-    from alpenhorn.common.extensions import ImportCallback
-    from alpenhorn.daemon.update import UpdateableNode
-    from alpenhorn.db.archive import ArchiveFileCopy
-del TYPE_CHECKING
+from alpenhorn.common.extensions import ImportCallback
+from alpenhorn.daemon import UpdateableNode
+from alpenhorn.db import (
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+    base_model,
+    connect,
+    database_proxy,
+)
 
 
 class TypeBase(base_model):
@@ -284,7 +285,8 @@ def demo_init() -> None:
     """Extension init for alpenhorn demo
 
     This function initialises the alpenhorn data index to support this extension
-    when used in the the alpenhorn demo (see alpenhorn/dmeo/demo-script.md).
+    when used in the the alpenhorn demo (see
+    https://alpenhorn.readthedocs.io/en/latest/demo.html)
 
     It creates the AcqType, FileType, AcqData, and FileData tables and
     then populates the AcqType and FileType tables to allow the demo

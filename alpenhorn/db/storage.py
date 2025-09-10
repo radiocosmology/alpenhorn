@@ -5,17 +5,12 @@ from __future__ import annotations
 
 import logging
 import pathlib
-from typing import TYPE_CHECKING
 
 import peewee as pw
 from peewee import fn
 
-from ..common import util
 from ._base import EnumField, base_model
-
-if TYPE_CHECKING:
-    from .acquisition import ArchiveFile
-del TYPE_CHECKING
+from .acquisition import ArchiveFile
 
 log = logging.getLogger(__name__)
 
@@ -174,6 +169,8 @@ class StorageNode(base_model):
 
     @property
     def local(self) -> bool:
+        from ..common import util
+
         """Is this node local to where we are running?"""
         return self.host == util.get_hostname()
 

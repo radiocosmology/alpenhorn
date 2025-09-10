@@ -14,27 +14,25 @@ import logging
 import os
 import pathlib
 import threading
-from typing import IO, TYPE_CHECKING
+from collections.abc import Hashable, Iterable
+from typing import IO
 
 from watchdog.observers import Observer
 
 from ..common import util
-from ..db import ArchiveAcq, ArchiveFile
-from ..scheduler import Task
+from ..daemon import UpdateableNode
+from ..db import (
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+    ArchiveFileCopyRequest,
+    StorageNode,
+)
+from ..scheduler import FairMultiFIFOQueue, Task
 from . import ioutil
-
-# The asyncs are over here:
 from ._default_asyncs import check_async, delete_async, group_search_async, pull_async
 from .base import BaseGroupIO, BaseNodeIO, BaseNodeRemote
 from .updownlock import UpDownLock
-
-if TYPE_CHECKING:
-    from collections.abc import Hashable, Iterable
-
-    from ..db import ArchiveFileCopy, ArchiveFileCopyRequest, StorageNode
-    from ..service.queue import FairMultiFIFOQueue
-    from ..service.update import UpdateableNode
-del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
