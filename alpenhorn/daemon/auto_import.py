@@ -162,7 +162,7 @@ def _import_file(
         If not None, req will be marked as complete if the import isn't skipped.
     """
 
-    from ..io import ioutil
+    from .pullutil import post_add
 
     # Skip non-files
     fullpath = pathlib.Path(node.db.root).joinpath(path)
@@ -322,7 +322,7 @@ def _import_file(
     import_request_done(req, "success")
 
     # Run post-add actions, if any
-    ioutil.post_add(node.db, file_)
+    post_add(node.db, file_)
 
     # Run the extension module's callback, if necessary
     if callable(callback):

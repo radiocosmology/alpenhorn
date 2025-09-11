@@ -1,8 +1,11 @@
-"""I/O utility functions."""
+"""File copying functions.
+
+These are the low-level functions used by Default I/O
+to copy files around.
+"""
 
 from __future__ import annotations
 
-import errno
 import logging
 import os
 import pathlib
@@ -11,23 +14,19 @@ import shutil
 import time
 from tempfile import TemporaryDirectory
 
-import peewee as pw
-
-from .. import db
-from ..common import config, metrics, util
-from ..common.metrics import Metric
-from ..daemon.scheduler import threadlocal
-from ..db import (
-    ArchiveFile,
-    ArchiveFileCopy,
+from ...common import config, util
+from ...common.metrics import Metric
+from ...daemon import RemoteNode
+from ...daemon.pullutil import copy_request_done
+from ...daemon.scheduler import Task, threadlocal
+from ...db import (
     ArchiveFileCopyRequest,
-    StorageNode,
-    StorageTransferAction,
-    utcfromtimestamp,
-    utcnow,
 )
-from .base import BaseNodeIO
+from ..base import BaseNodeIO
+from .check import force_check_filecopy
 from .updownlock import UpDownLock
+
+__all__ = ["bbcp", "hardlink", "local_copy", "rsync"]
 
 log = logging.getLogger(__name__)
 
@@ -414,257 +413,195 @@ def local_copy(
     return {"ret": 0, "md5sum": md5}
 
 
-def post_add(node: StorageNode, file_: ArchiveFile) -> None:
-    """Run any actions after adding `file` to `node`.
-
-    Possible actions are autosync or autoclean.
-
-    Parameters
-    ----------
-    node : StorageNode
-        The node the file copy was added to.
-    file_ : ArchiveFile
-        The file added.
-    """
-
-    # Autosync: find all StorageTransferActions where we're the source node
-    for edge in StorageTransferAction.select().where(
-        StorageTransferAction.node_from == node,
-        StorageTransferAction.group_to != node.group,
-        StorageTransferAction.autosync == True,  # noqa: E712
-    ):
-        if edge.group_to.state_on_node(file_)[0] != "Y":
-            log.debug(
-                f"Autosyncing {file_.path} from node {node.name} "
-                f"to group {edge.group_to.name}"
-            )
-
-            ArchiveFileCopyRequest.create(
-                node_from=node, group_to=edge.group_to, file=file_
-            )
-
-    # Autoclean: find all the StorageTransferActions where we're in the
-    # destination group
-    for edge in StorageTransferAction.select().where(
-        StorageTransferAction.group_to == node.group,
-        StorageTransferAction.node_from != node,
-        StorageTransferAction.autoclean == True,  # noqa: E712
-    ):
-        count = (
-            ArchiveFileCopy.update(wants_file="N", last_update=utcnow())
-            .where(
-                ArchiveFileCopy.file == file_,
-                ArchiveFileCopy.node == edge.node_from,
-                ArchiveFileCopy.has_file == "Y",
-                ArchiveFileCopy.wants_file == "Y",
-            )
-            .execute()
-        )
-
-        if count > 0:
-            log.debug(f"Autocleaning {file_.path} from node {edge.node_from.name}")
-
-
-def copy_request_done(
-    req: ArchiveFileCopyRequest,
+def pull_async(
+    task: Task,
     io: BaseNodeIO,
-    success: bool,
-    md5ok: bool | str,
-    start_time: float,
-    check_src: bool = True,
-    stderr: str | None = None,
-) -> bool:
-    """Update the database after attempting a copy request.
-
-    Parameters
-    ----------
-    req : ArchiveFileCopyRequest
-        The copy request that was attempted
-    io : Node I/O instance
-        The I/O instance of the destination node
-    success : bool
-        True unless the file transfer failed.
-    md5ok : boolean or str
-        Either a boolean indicating if the MD5 sum was correct or
-        else a string MD5 sum which we need to verify.  Ignored if
-        success is not True.
-    start_time : float
-        time.time() when the transfer was started
-    check_src : boolean
-        if success is False, should the source file be marked suspect?
-    stderr : str or None
-        if success is False, this will be copied into the log
-
-    Returns
-    -------
-    good_transfer : bool
-        True if the parameters indicate the transfer was successful
-        or False if the transfer failed.
-    """
-
-    # The only label left unbound here is "result"
-    transf_metric = metrics.by_name("transfers").bind(
-        node_from=req.node_from.name,
-        group_to=req.group_to.name,
-    )
-
-    # Check the result
-    if not success:
-        if stderr is None:
-            stderr = "Unspecified error."
-            transf_metric.inc(result="failure")
-        if check_src:
-            # If the copy didn't work, then the remote file may be corrupted.
-            log.error("Copy failed.  Marking source file suspect.")
-            log.info(f"Output: {stderr}")
-            ArchiveFileCopy.update(has_file="M", last_update=utcnow()).where(
-                ArchiveFileCopy.file == req.file,
-                ArchiveFileCopy.node == req.node_from,
-            ).execute()
-            transf_metric.inc(result="check_src")
-        else:
-            # An error occurred that can't be due to the source being corrupt
-            log.error("Copy failed")
-            log.info(f"Output: {stderr}")
-            transf_metric.inc(result="failure")
-        return False
-
-    # Otherwise, transfer was completed, remember end time
-    end_time = time.time()
-
-    # Check integrity.
-    if isinstance(md5ok, str):
-        md5ok = md5ok == req.file.md5sum
-    if not md5ok:
-        log.error(
-            f"MD5 mismatch on node {io.node.name}; "
-            f"Marking source file {req.file.name} on node {req.node_from} suspect."
-        )
-        ArchiveFileCopy.update(has_file="M", last_update=utcnow()).where(
-            ArchiveFileCopy.file == req.file,
-            ArchiveFileCopy.node == req.node_from,
-        ).execute()
-        transf_metric.inc(result="integrity")
-        return False
-
-    # Transfer successful
-    trans_time = end_time - start_time
-    rate = req.file.size_b / trans_time
-    log.info(
-        f"Pull of {req.file.path} complete. "
-        f"Transferred {util.pretty_bytes(req.file.size_b)} "
-        f"in {util.pretty_deltat(trans_time)} [{util.pretty_bytes(rate)}/s]"
-    )
-
-    with db.database_proxy.atomic():
-        # Upsert the FileCopy
-        size = io.filesize(req.file.path, actual=True)
-        try:
-            ArchiveFileCopy.insert(
-                file=req.file,
-                node=io.node,
-                has_file="Y",
-                wants_file="Y",
-                ready=True,
-                size_b=size,
-                last_update=utcnow(),
-            ).execute()
-        except pw.IntegrityError:
-            ArchiveFileCopy.update(
-                has_file="Y",
-                wants_file="Y",
-                ready=True,
-                size_b=size,
-                last_update=utcnow(),
-            ).where(
-                ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == io.node
-            ).execute()
-
-        # Mark AFCR as completed
-        ArchiveFileCopyRequest.update(
-            completed=True,
-            transfer_started=utcfromtimestamp(start_time),
-            transfer_completed=utcfromtimestamp(end_time),
-        ).where(ArchiveFileCopyRequest.id == req.id).execute()
-
-    # Update metrics
-    metrics.by_name("requests_completed").inc(
-        type="copy",
-        node=req.node_from.name,
-        group=req.group_to.name,
-        result="success",
-    )
-    transf_metric.inc(result="success")
-
-    # This can be used to measure throughput
-    Metric(
-        "pulled_bytes",
-        "Count of bytes pulled",
-        counter=True,
-        bound={"node_from": req.node_from.name, "group_to": req.group_to.name},
-    ).add(req.file.size_b)
-
-    # Run post-add actions, if any
-    post_add(io.node, req.file)
-
-    return True
-
-
-def remove_filedir(
-    node: StorageNode, dirname: pathlib.Path, tree_lock: UpDownLock
+    tree_lock: UpDownLock,
+    req: ArchiveFileCopyRequest,
+    did_search: bool,
 ) -> None:
-    """Try to delete a file's parent directory(s) from a node
+    """Fulfill `req` by pulling a file onto the local node.
 
-    Will attempt to remove the enitre tree given as `dirname`
-    while holding the `tree_lock` down until reaching `node.root`.
-    Blocks until the lock can be acquired.
-
-    The attempt to delete starts at `acq.name` and walks upwards until
-    it runs out of path elements in `acq.name`.
-
-    As soon as a non-empty directory is encountered, the attempt stops
-    without raising an error.
-
-    If `acq.name` is missing, or partially missing, that is not an error
-    either, but an attempt to delete the part remaining will still be
-    attempted.
+    Things to try:
+        - hard link (for nodes on the same filesystem)
+        - bbcp (remote transfers only)
+        - rsync
+        - shutil.copy (local transfers only)
 
     Parameters
     ----------
-    node: StorageNode
-        The node to delete the acq directory from.
-    dirname: pathlib.Path
-        The path to delete.  Must be absolute and rooted at `node.root`.
-    tree_lock: UpDownLock
-        This function will block until it can acquire the down lock and
-        all I/O will happen while holding the lock down.
-
-    Raises
-    ------
-    ValueError
-        `dirname` was not a subdirectory of `node.root`
+    task : Task
+        The task instance containing this async.
+    io : Node I/O instance
+        The I/O instance for the pull destination node.
+    tree_lock : UpDownLock
+        The directory tree modificiation lock.
+    req : ArchiveFileCopyRequest
+        The request we're fulfilling.
+    did_search : bool
+        True if a search for an existing unregistered copy was
+        already performed.
     """
-    # Sanity check
-    if not dirname.is_relative_to(node.root):
-        raise ValueError(f"dirname {dirname} not rooted under {node.root}")
 
-    # try to delete the directories.  This must be done while locking down the tree lock
-    with tree_lock.down:
-        while str(dirname) != node.root:
-            try:
-                dirname.rmdir()
-                log.info(f"Removed directory {dirname} on {node.name}")
-            except OSError as e:
-                if e.errno == errno.ENOTEMPTY:
-                    # This is fine, but stop trying to rmdir.
-                    break
-                if e.errno == errno.ENOENT:
-                    # Already deleted, which is fine.
-                    pass
-                else:
-                    log.warning(
-                        f"Error deleting directory {dirname} on {node.name}: {e}"
-                    )
-                    # Otherwise, let's try to soldier on
+    # Before we were queued, NodeIO reserved space for this file.
+    # Automatically release bytes on task completion
+    task.on_cleanup(io.release_bytes, args=(req.file.size_b,))
 
-            dirname = dirname.parent
+    pullrun_metric = Metric(
+        "pull_running_count",
+        "Count of in-progress pulls",
+        unbound={"method", "remote"},
+        bound={"node": io.node.name},
+    )
+
+    # Rerun the database checks, because we don't know how long we've been in the queue
+    if not req.check(node_to=io.node):
+        return
+
+    # We know dest is local, so if source is too, this is a local transfer
+    local = req.node_from.local
+
+    # The Remote Node
+    remote = RemoteNode(req.node_from)
+
+    # Source spec
+    if local:
+        from_path = remote.io.file_path(req.file)
+    else:
+        try:
+            from_path = remote.io.file_addr(req.file)
+        except ValueError:
+            log.warning(
+                f"Skipping request for {req.file.path} "
+                f"due to unconfigured route to host for node {req.node_from.name}."
+            )
+            return
+
+    to_file = pathlib.Path(io.node.root, req.file.path)
+    to_dir = to_file.parent
+
+    # Check for existing file, if not done already
+    if not did_search:
+        try:
+            if io.exists(req.file.path):
+                log.warning(
+                    "Skipping pull request for "
+                    f"{req.file.acq.name}/{req.file.name}: "
+                    f"file already on disk on node {io.node.name}."
+                )
+
+                force_check_filecopy(req.file, io.node, io)
+                # request not resolved.  Should be sorted out after
+                # the file check happens.
+                return
+        except OSError:
+            # On error, try to do the pull
+            pass
+
+    # Placeholder file
+    placeholder = pathlib.Path(to_dir, f".{to_file.name}.placeholder")
+
+    # Create directories.  This must be done while locking up the tree lock
+    with tree_lock.up:
+        if not to_dir.exists():
+            log.info(f'Creating directory "{to_dir}".')
+            to_dir.mkdir(parents=True, exist_ok=True)
+
+        # If the file doesn't exist, create a placeholder so we can release
+        # the tree lock without having to wait for the transfer to complete
+        if not to_file.exists():
+            placeholder.touch(mode=0o600, exist_ok=True)
+
+    # Giddy up!
+    start_time = time.time()
+
+    # Attempt to transfer the file. Each of the methods below needs to return
+    # a dict with required key:
+    #  - ret : integer
+    #        return code (0 == success)
+    # optional keys:
+    #  - md5sum : string or True
+    #        If True, the sum is guaranteed to be right; otherwise, it's a
+    #        md5sum to check against the source.  Must be present if ret == 0
+    #  - stderr : string
+    #        if given, printed to the log when ret != 0
+    #  - check_src : bool
+    #        if given and False, the source file will _not_ be marked suspect
+    #        when ret != 0; otherwise, a failure results in a source check
+
+    # First we need to check if we are copying over the network
+    if not local:
+        if shutil.which("bbcp") is not None:
+            # First try bbcp which is a fast multistream transfer tool. bbcp can
+            # calculate the md5 hash as it goes, so we'll do that to save doing
+            # it at the end.
+            log.info(f"Pulling remote file {req.file.path} using bbcp")
+            pullrun_metric.inc(method="bbcp", remote="1")
+            ioresult = bbcp(from_path, to_file, req.file.size_b)
+            pullrun_metric.dec(method="bbcp", remote="1")
+        elif shutil.which("rsync") is not None:
+            # Next try rsync over ssh.
+            log.info(f"Pulling remote file {req.file.path} using rsync")
+            pullrun_metric.inc(method="rsync", remote="1")
+            ioresult = rsync(from_path, to_file, req.file.size_b, local)
+            pullrun_metric.dec(method="rsync", remote="1")
+        else:
+            # We have no idea how to transfer the file...
+            log.error("No commands available to complete remote pull.")
+            ioresult = {"ret": -1, "check_src": False}
+
+    else:
+        # Okay, great we're just doing a local transfer.
+
+        # First try to just hard link the file. This will only work if we
+        # are on the same filesystem.  If it didn't work, ioresult will be None
+        #
+        # But don't do this if it creates a hardlink between an archive node and
+        # a non-archive node
+        if req.node_from.archive == io.node.archive:
+            pullrun_metric.inc(method="link", remote="0")
+            ioresult = hardlink(from_path, to_dir, req.file.name)
+            pullrun_metric.dec(method="link", remote="0")
+            if ioresult is not None:
+                log.info(f"Hardlinked local file {req.file.path}")
+        else:
+            ioresult = None
+
+        # If we couldn't just link the file, try copying it with rsync.
+        if ioresult is None:
+            if shutil.which("rsync") is not None:
+                log.info(f"Pulling local file {req.file.path} using rsync")
+                pullrun_metric.inc(method="rsync", remote="0")
+                ioresult = rsync(from_path, to_file, req.file.size_b, local)
+                pullrun_metric.dec(method="rsync", remote="0")
+            else:
+                # No rsync?  Just use shutil.copy, I guess
+                log.warning("Falling back on shutil.copy to complete local pull.")
+                pullrun_metric.inc(method="internal", remote="0")
+                ioresult = local_copy(from_path, to_dir, req.file.name, req.file.size_b)
+                pullrun_metric.dec(method="internal", remote="0")
+
+    # Delete the placeholder, if we created it
+    placeholder.unlink(missing_ok=True)
+
+    if not copy_request_done(
+        req,
+        io,
+        check_src=ioresult.get("check_src", True),
+        md5ok=ioresult.get("md5sum", None),
+        start_time=start_time,
+        stderr=ioresult.get("stderr", None),
+        success=(ioresult["ret"] == 0),
+    ):
+        # Remove file, on error
+        try:
+            to_file.unlink(missing_ok=True)
+        except OSError as e:
+            log.error(f"Error removing corrupt file {to_file}: {e}")
+
+    # Whatever has happened, update free space, if possible
+    new_avail = io.bytes_avail(fast=True)
+
+    # This was a fast update, so don't save "None" to the database
+    if new_avail is not None:
+        io.node.update_avail_gb(new_avail)

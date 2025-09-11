@@ -384,7 +384,7 @@ def test_pull_async_link_arccontam(queue, pull_async_true, skip_db_checks):
     # Mock local_copy.  We'll end up falling back on this
     # due to no other copy method working
     mock = MagicMock()
-    with patch("alpenhorn.io.ioutil.local_copy", mock):
+    with patch("alpenhorn.io.default.pull.local_copy", mock):
         task()
     queue.task_done(key)
 

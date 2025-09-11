@@ -1,10 +1,10 @@
-"""Test alpenhorn.io.lfs LFS wrapper."""
+"""Test alpenhorn.io._lfs LFS wrapper."""
 
 import pathlib
 
 import pytest
 
-from alpenhorn.io.lfs import LFS
+from alpenhorn.io._lfs import LFS
 
 
 @pytest.fixture

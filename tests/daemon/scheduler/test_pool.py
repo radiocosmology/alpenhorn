@@ -204,7 +204,7 @@ def test_worker_id(queue, pool):
     def task():
         """A task that reports its worker ID."""
 
-        from alpenhorn.daemon.scheduler.pool import threadlocal
+        from alpenhorn.daemon.scheduler import threadlocal
 
         nonlocal ids, barrier
         ids[threadlocal.worker_id] = 1 + ids.get(threadlocal.worker_id, 0)

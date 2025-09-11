@@ -437,7 +437,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 return
 
             # Do the check by inlining the Default-I/O function
-            from ._default_asyncs import check_async
+            from .default import check_async
 
             check_async(task, node_io, copy)
 
