@@ -15,7 +15,7 @@ def clean_queue(queue):
     # Check that the queue is clean by pulling everything out
     count = 0
     while queue.qsize > 0:
-        item, key = queue.get()
+        _, key = queue.get()
         queue.task_done(key)
         count += 1
 
@@ -122,7 +122,7 @@ def test_concurrency(clean_queue):
     # Consumer thread
     def consumer(clean_queue):
         for i in range(100):
-            item, key = clean_queue.get()
+            _, key = clean_queue.get()
             clean_queue.task_done(key)
 
     # Create a bunch of consumers
@@ -240,7 +240,7 @@ def test_clear_nokeep(clean_queue):
     assert clean_queue.qsize == 1
 
     # Clean up
-    item, key = clean_queue.get()
+    _, key = clean_queue.get()
     clean_queue.task_done(key)
 
 
@@ -282,11 +282,11 @@ def test_clear_pending(clean_queue):
     assert clean_queue.fifo_size("fifo") == 0
 
     # Remove the rest
-    item, key = clean_queue.get()
+    _, key = clean_queue.get()
     clean_queue.task_done(key)
-    item, key = clean_queue.get()
+    _, key = clean_queue.get()
     clean_queue.task_done(key)
-    item, key = clean_queue.get()
+    _, key = clean_queue.get()
     clean_queue.task_done(key)
 
 

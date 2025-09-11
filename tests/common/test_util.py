@@ -7,13 +7,13 @@ from alpenhorn.common import util
 
 def test_run_retval0():
     """Test getting success from run_command."""
-    retval, stdout, stderr = util.run_command(["true"])
+    retval, _, _ = util.run_command(["true"])
     assert retval == 0
 
 
 def test_run_retval1():
     """Test getting failure from run_command."""
-    retval, stdout, stderr = util.run_command(["false"])
+    retval, _, _ = util.run_command(["false"])
     assert retval != 0
 
 
@@ -37,7 +37,7 @@ def test_run_stderr():
 
 def test_run_timeout():
     """Test run_command timing out."""
-    retval, stdout, stderr = util.run_command(["sleep", "10"], timeout=0.1)
+    retval, _, _ = util.run_command(["sleep", "10"], timeout=0.1)
     assert retval is None
 
 

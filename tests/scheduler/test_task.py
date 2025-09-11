@@ -188,7 +188,7 @@ def test_exclusive_task(queue):
     assert queue.qsize == 3
 
     # Pop the first task
-    task, key = queue.get(timeout=0.1)
+    _, key = queue.get(timeout=0.1)
 
     # Can't pop the second task yet
     assert queue.get(timeout=0.1) is None
@@ -197,7 +197,7 @@ def test_exclusive_task(queue):
     queue.task_done(key)
 
     # Now we can get the second task
-    task, key = queue.get(timeout=0.1)
+    _, key = queue.get(timeout=0.1)
 
     # Fail to get the third task because
     # we're now executing an exclusive task
@@ -207,7 +207,7 @@ def test_exclusive_task(queue):
     queue.task_done(key)
 
     # Now we can get the third task
-    item, key = queue.get(timeout=0.1)
+    _, key = queue.get(timeout=0.1)
     queue.task_done(key)
 
     # Everything's taken care of

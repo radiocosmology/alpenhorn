@@ -248,7 +248,7 @@ def rsync(
             "--rsh=ssh -q",
         ]
 
-    ret, stdout, stderr = util.run_command(
+    ret, _, stderr = util.run_command(
         [
             "rsync",
             *remote_args,

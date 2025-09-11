@@ -87,8 +87,8 @@ def pull(
 def test_update_group_inactive(mockgroupandnode, hostname, queue, pull, simplenode):
     """Test running update.update_group with source node inactive."""
 
-    mockio, group, node = mockgroupandnode
-    file, copy, afcr = pull
+    mockio, group, _ = mockgroupandnode
+    file, _, _ = pull
 
     # Source not active
     simplenode.active = False
@@ -106,8 +106,8 @@ def test_update_group_inactive(mockgroupandnode, hostname, queue, pull, simpleno
 def test_update_group_nosrc(mockgroupandnode, hostname, queue, pull):
     """Test running update.update_group with source file missing."""
 
-    mockio, group, node = mockgroupandnode
-    file, copy, afcr = pull
+    mockio, group, _ = mockgroupandnode
+    _, copy, afcr = pull
 
     # Source not present
     copy.has_file = "N"
@@ -125,8 +125,8 @@ def test_update_group_nosrc(mockgroupandnode, hostname, queue, pull):
 def test_update_group_notready(mockgroupandnode, hostname, queue, pull):
     """Test running update.update_group with source file not ready."""
 
-    mockio, group, node = mockgroupandnode
-    file, copy, afcr = pull
+    mockio, group, _ = mockgroupandnode
+    file, _, afcr = pull
 
     # Force source not ready
     with patch(
@@ -152,8 +152,8 @@ def test_update_group_multicopy(
 ):
     """update.update_group shouldn't queue simultaneous pulls for the same file."""
 
-    mockio, group, node = mockgroupandnode
-    file, copy, afcr = pull
+    mockio, group, _ = mockgroupandnode
+    file, _, afcr = pull
 
     # Make a duplicate AFCR
     archivefilecopyrequest(node_from=afcr.node_from, group_to=afcr.group_to, file=file)
@@ -202,10 +202,10 @@ def test_update_group_copy_state(
     # Make some pull requests
     commonargs = (simpleacq, simplenode, "Y", group.db, node.db)
     factories = (archivefile, archivefilecopy, archivefilecopyrequest)
-    fileY, srcY, dstY, afcrY = make_afcr("fileY", *commonargs, "Y", *factories)
-    fileM, srcM, dstM, afcrM = make_afcr("fileM", *commonargs, "M", *factories)
-    fileX, srcX, dstX, afcrX = make_afcr("fileX", *commonargs, "X", *factories)
-    fileN, srcN, dstN, afcrN = make_afcr("fileN", *commonargs, "N", *factories)
+    fileY, _, _, afcrY = make_afcr("fileY", *commonargs, "Y", *factories)
+    fileM, _, _, afcrM = make_afcr("fileM", *commonargs, "M", *factories)
+    fileX, _, _, afcrX = make_afcr("fileX", *commonargs, "X", *factories)
+    fileN, _, _, afcrN = make_afcr("fileN", *commonargs, "N", *factories)
 
     # run update
     group.update()
@@ -233,7 +233,7 @@ def test_update_group_copy_state(
 
 def test_group_idle_group(queue, mockgroupandnode):
     """Test DefaultGroupIO.idle via group queue."""
-    mockio, group, node = mockgroupandnode
+    _, group, _ = mockgroupandnode
 
     # Currently idle
     assert group.idle is True
@@ -245,7 +245,7 @@ def test_group_idle_group(queue, mockgroupandnode):
     assert group.idle is False
 
     # Dequeue it
-    task, key = queue.get()
+    _, key = queue.get()
 
     # Still not idle, because task is in-progress
     assert group.idle is False
@@ -259,7 +259,7 @@ def test_group_idle_group(queue, mockgroupandnode):
 
 def test_group_idle_node(queue, mockgroupandnode):
     """Test DefaultGroupIO.idle via node queue."""
-    mockio, group, node = mockgroupandnode
+    _, group, node = mockgroupandnode
 
     # Currently idle
     assert group.idle is True
@@ -271,7 +271,7 @@ def test_group_idle_node(queue, mockgroupandnode):
     assert group.idle is False
 
     # Dequeue it
-    task, key = queue.get()
+    _, key = queue.get()
 
     # Still not idle, because task is in-progress
     assert group.idle is False

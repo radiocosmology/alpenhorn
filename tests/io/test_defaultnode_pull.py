@@ -188,7 +188,7 @@ def test_pull_sync_fit(xfs, queue, test_req):
 def test_pull_async_noroute(queue, pull_async_true):
     """Test no route for remote pull."""
 
-    node, req = pull_async_true
+    _, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -211,7 +211,7 @@ def test_pull_async_noroute(queue, pull_async_true):
 def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true, skip_db_checks):
     """Test an unsuccessful bbcp remote pull."""
 
-    node, req = pull_async_true
+    _, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -271,7 +271,7 @@ def test_pull_async_remote_rsync_fail(
 ):
     """Test an unsuccessful rsync remote pull."""
 
-    node, req = pull_async_true
+    _, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -328,7 +328,7 @@ def test_pull_async_remote_rsync_succeed(
 def test_pull_async_remote_nomethod(queue, pull_async_true):
     """Test remote pull with no command available."""
 
-    node, req = pull_async_true
+    _, req = pull_async_true
 
     # Make the request non-local
     req.node_from.host = "other-host"
@@ -373,7 +373,7 @@ def test_pull_async_link(queue, pull_async_true, skip_db_checks):
 def test_pull_async_link_arccontam(queue, pull_async_true, skip_db_checks):
     """Test not creating hardlinks between archive nodes."""
 
-    node, req = pull_async_true
+    node, _ = pull_async_true
 
     # Make one node non-archival
     node.db.storage_type = "F"

@@ -167,7 +167,7 @@ def test_idle(queue, transport_fleet):
     assert group.idle is False
 
     # Dequeue it
-    task, key = queue.get()
+    queue.get()
     queue.task_done(nodes[2].io.fifo)
 
     # Now idle again
@@ -280,7 +280,7 @@ def test_pull_nonode(req, archivefilecopy, transport_fleet):
 def test_pull_search(transport_fleet, simplecopyrequest, queue):
     """Test task submission in TransportGroupIO.pull_search()."""
 
-    group, nodes = transport_fleet
+    group, _ = transport_fleet
 
     # The patch is done in io.default, where the pull_search method
     # is actually defined.
@@ -306,7 +306,7 @@ def test_pull_search(transport_fleet, simplecopyrequest, queue):
 def test_group_search_dispatch(transport_fleet, dbtables, simplecopyrequest, queue):
     """Test group_search_async dispatch to pull"""
 
-    group, nodes = transport_fleet
+    group, _ = transport_fleet
 
     mock = MagicMock()
     group.io.pull = mock

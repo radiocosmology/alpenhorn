@@ -252,7 +252,7 @@ def test_md5ok_str(db_setup):
 def test_dstcopy(db_setup_with_copy):
     """Test successful transfer with existing destination copy record."""
 
-    io, copy, req, start_time, post_add, dstcopy = db_setup_with_copy
+    io, _, req, start_time, post_add, dstcopy = db_setup_with_copy
 
     assert (
         copy_request_done(

@@ -22,7 +22,7 @@ def cleanup():
 
     # Delete all metrics from the prometheus client registry and our dict
     while metrics._metrics:
-        key, value = metrics._metrics.popitem()
+        _, value = metrics._metrics.popitem()
         REGISTRY.unregister(value[0])
 
 
