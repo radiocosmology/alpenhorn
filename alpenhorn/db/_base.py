@@ -9,8 +9,6 @@ import click
 import peewee as pw
 from playhouse import db_url
 
-from ..common import config, extensions
-
 # All peewee-generated logs are logged to this namespace.
 log = logging.getLogger(__name__)
 
@@ -75,6 +73,8 @@ def connect() -> None:
     This must be called once, after extensions are loaded, before
     threads are created.
     """
+    from ..common import config, extensions
+
     # attempt to load a database extension
     global _db_ext
     _db_ext = extensions.database_extension()

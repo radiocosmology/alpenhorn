@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 import click
 
 from ..common.logger import echo
 from ..db import connect, schema_version
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-del TYPE_CHECKING
 
 
 def dbconnect(check: bool = True) -> None:

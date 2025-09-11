@@ -6,12 +6,10 @@ import json
 import logging
 import pathlib
 import time
-from typing import TYPE_CHECKING
 
 import peewee as pw
 
 from ..common import config, util
-from ..common.extensions import io_module
 from ..common.metrics import Metric
 from ..db import (
     ArchiveFileCopy,
@@ -21,13 +19,8 @@ from ..db import (
     StorageNode,
     utcnow,
 )
-from ..scheduler import EmptyPool, Task, WorkerPool, global_abort
-from . import auto_import
+from ..scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 from .querywalker import QueryWalker
-
-if TYPE_CHECKING:
-    from .queue import FairMultiFIFOQueue
-del TYPE_CHECKING
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +112,8 @@ class updateable_base:
 
     def _get_io_class(self):
         """Return the I/O class for our Storage object."""
+
+        from ..common.extensions import io_module
 
         # If no io_class is specified, the Default I/O classes are used
         io_name = "Default" if self.db.io_class is None else self.db.io_class
@@ -313,6 +308,8 @@ class UpdateableNode(updateable_base):
 
         Stops auto-import, if running, and clears all pending tasks.
         """
+        from . import auto_import
+
         if self._fifo is not None:
             auto_import.update_observer(self, self._queue, force_stop=True)
         super().stop()
@@ -367,6 +364,8 @@ class UpdateableNode(updateable_base):
 
             Completes `req` only if initialisation succeeds.
             """
+
+            from . import auto_import
 
             # recheck
             if node.io.check_init():
@@ -572,6 +571,8 @@ class UpdateableNode(updateable_base):
     def update_import(self) -> None:
         """Handle ArchiveFileImportRequests for this node."""
 
+        from . import auto_import
+
         # Loop over uncompleted requests for this node
         for req in ArchiveFileImportRequest.select().where(
             ArchiveFileImportRequest.node == self.db,
@@ -646,6 +647,8 @@ class UpdateableNode(updateable_base):
         Sets self._updated to indicate whether the update happened or
         not.
         """
+
+        from . import auto_import
 
         # Is this node's FIFO empty?  If not, we'll skip this
         # update since we can't know whether we'd duplicate tasks

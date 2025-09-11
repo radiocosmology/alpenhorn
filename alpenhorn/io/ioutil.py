@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import errno
 import logging
+import os
 import pathlib
 import re
 import shutil
 import time
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
 
 import peewee as pw
 
@@ -17,6 +17,7 @@ from .. import db
 from ..common import config, metrics, util
 from ..common.metrics import Metric
 from ..db import (
+    ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     StorageNode,
@@ -25,15 +26,8 @@ from ..db import (
     utcnow,
 )
 from ..scheduler import threadlocal
-
-if TYPE_CHECKING:
-    import os
-
-    from ..acquisition import ArchiveFile
-    from .base import BaseNodeIO
-    from .updownlock import UpDownLock
-del TYPE_CHECKING
-
+from .base import BaseNodeIO
+from .updownlock import UpDownLock
 
 log = logging.getLogger(__name__)
 

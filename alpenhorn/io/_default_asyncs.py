@@ -7,13 +7,12 @@ import logging
 import pathlib
 import shutil
 import time
-from typing import TYPE_CHECKING
 
 import peewee as pw
 
 from ..common.metrics import Metric
 from ..common.util import timeout_call
-from ..daemon.update import RemoteNode
+from ..daemon import RemoteNode
 from ..db import (
     ArchiveFile,
     ArchiveFileCopy,
@@ -21,13 +20,10 @@ from ..db import (
     StorageNode,
     utcnow,
 )
+from ..scheduler import Task
 from . import ioutil
-
-if TYPE_CHECKING:
-    from ..scheduler import Task
-    from .base import BaseGroupIO, BaseNodeIO
-    from .updownlock import UpDownLock
-del TYPE_CHECKING
+from .base import BaseGroupIO, BaseNodeIO
+from .updownlock import UpDownLock
 
 log = logging.getLogger(__name__)
 

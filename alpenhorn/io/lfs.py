@@ -32,16 +32,11 @@ run these commands:
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from alpenhorn.common import util
-
-if TYPE_CHECKING:
-    import os
-del TYPE_CHECKING
-
 
 log = logging.getLogger(__name__)
 

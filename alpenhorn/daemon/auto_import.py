@@ -8,8 +8,9 @@ for a module.
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
-from typing import TYPE_CHECKING
+from collections.abc import Generator
 
 import peewee as pw
 from watchdog.events import FileSystemEventHandler
@@ -23,17 +24,8 @@ from ..db import (
     ArchiveFileImportRequest,
     utcnow,
 )
-from ..io import ioutil
-from ..scheduler import Task
-
-if TYPE_CHECKING:
-    import os
-    from collections.abc import Generator
-
-    from ..scheduler import FairMultiFIFOQueue
-    from .update import UpdateableNode
-del TYPE_CHECKING
-
+from ..scheduler import FairMultiFIFOQueue, Task
+from .update import UpdateableNode
 
 log = logging.getLogger(__name__)
 
@@ -169,6 +161,8 @@ def _import_file(
     req : ArchiveFileImportRequest or None
         If not None, req will be marked as complete if the import isn't skipped.
     """
+
+    from ..io import ioutil
 
     # Skip non-files
     fullpath = pathlib.Path(node.db.root).joinpath(path)
