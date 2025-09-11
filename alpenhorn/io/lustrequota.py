@@ -16,8 +16,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Hashable
 
+from ..daemon.scheduler import FairMultiFIFOQueue
 from ..db import StorageNode
-from ..scheduler import FairMultiFIFOQueue
 from .default import DefaultNodeIO
 from .lfs import LFS
 

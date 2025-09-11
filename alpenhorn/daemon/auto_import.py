@@ -24,7 +24,7 @@ from ..db import (
     ArchiveFileImportRequest,
     utcnow,
 )
-from ..scheduler import FairMultiFIFOQueue, Task
+from .scheduler import FairMultiFIFOQueue, Task
 from .update import UpdateableNode
 
 log = logging.getLogger(__name__)

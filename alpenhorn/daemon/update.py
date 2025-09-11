@@ -19,8 +19,8 @@ from ..db import (
     StorageNode,
     utcnow,
 )
-from ..scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 from .querywalker import QueryWalker
+from .scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 
 log = logging.getLogger(__name__)
 

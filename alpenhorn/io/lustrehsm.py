@@ -26,8 +26,8 @@ import peewee as pw
 from ..common.util import pretty_bytes, pretty_deltat
 from ..daemon import UpdateableGroup, UpdateableNode
 from ..daemon.querywalker import QueryWalker
+from ..daemon.scheduler import FairMultiFIFOQueue, Task
 from ..db import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
-from ..scheduler import FairMultiFIFOQueue, Task
 from .base import BaseNodeRemote
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO

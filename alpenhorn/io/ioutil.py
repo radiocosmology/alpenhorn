@@ -16,6 +16,7 @@ import peewee as pw
 from .. import db
 from ..common import config, metrics, util
 from ..common.metrics import Metric
+from ..daemon.scheduler import threadlocal
 from ..db import (
     ArchiveFile,
     ArchiveFileCopy,
@@ -25,7 +26,6 @@ from ..db import (
     utcfromtimestamp,
     utcnow,
 )
-from ..scheduler import threadlocal
 from .base import BaseNodeIO
 from .updownlock import UpDownLock
 
