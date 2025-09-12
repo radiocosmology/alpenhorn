@@ -78,7 +78,7 @@ def test_bbcp_good(mock_run_command):
 def test_bbcp_port(mock_run_command):
     """Test setting bbcp from worker threads."""
 
-    from alpenhorn.scheduler.pool import threadlocal
+    from alpenhorn.daemon.scheduler.pool import threadlocal
 
     # Ensure we have no worker id
     try:

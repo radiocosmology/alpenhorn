@@ -21,6 +21,7 @@ from watchdog.observers import Observer
 
 from ..common import util
 from ..daemon import UpdateableNode
+from ..daemon.scheduler import FairMultiFIFOQueue, Task
 from ..db import (
     ArchiveAcq,
     ArchiveFile,
@@ -28,7 +29,6 @@ from ..db import (
     ArchiveFileCopyRequest,
     StorageNode,
 )
-from ..scheduler import FairMultiFIFOQueue, Task
 from . import ioutil
 from ._default_asyncs import check_async, delete_async, group_search_async, pull_async
 from .base import BaseGroupIO, BaseNodeIO, BaseNodeRemote

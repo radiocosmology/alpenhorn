@@ -16,6 +16,7 @@ from peewee import SqliteDatabase
 import alpenhorn.common.logger
 from alpenhorn import db
 from alpenhorn.common import config, extensions
+from alpenhorn.daemon.scheduler import FairMultiFIFOQueue
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,
@@ -28,7 +29,6 @@ from alpenhorn.db import (
     StorageNode,
     StorageTransferAction,
 )
-from alpenhorn.scheduler import FairMultiFIFOQueue
 
 
 def pytest_configure(config):

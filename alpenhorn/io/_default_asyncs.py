@@ -13,6 +13,7 @@ import peewee as pw
 from ..common.metrics import Metric
 from ..common.util import timeout_call
 from ..daemon import RemoteNode
+from ..daemon.scheduler import Task
 from ..db import (
     ArchiveFile,
     ArchiveFileCopy,
@@ -20,7 +21,6 @@ from ..db import (
     StorageNode,
     utcnow,
 )
-from ..scheduler import Task
 from . import ioutil
 from .base import BaseGroupIO, BaseNodeIO
 from .updownlock import UpDownLock

@@ -16,6 +16,7 @@ from collections.abc import Hashable, Iterable
 from typing import IO
 
 from ..daemon import UpdateableNode
+from ..daemon.scheduler import FairMultiFIFOQueue
 from ..db import (
     ArchiveFile,
     ArchiveFileCopy,
@@ -23,7 +24,6 @@ from ..db import (
     StorageGroup,
     StorageNode,
 )
-from ..scheduler import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
 

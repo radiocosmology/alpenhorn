@@ -11,7 +11,6 @@ Submodules
     daemon
     db
     io
-    scheduler
 """
 
 from importlib.metadata import PackageNotFoundError, version
