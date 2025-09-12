@@ -18,8 +18,8 @@ from collections.abc import Hashable
 
 from ..daemon.scheduler import FairMultiFIFOQueue
 from ..db import StorageNode
+from ._lfs import LFS
 from .default import DefaultNodeIO
-from .lfs import LFS
 
 log = logging.getLogger(__name__)
 

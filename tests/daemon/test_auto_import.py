@@ -12,7 +12,7 @@ from alpenhorn.daemon import auto_import
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
-from alpenhorn.io.lfs import HSMState
+from alpenhorn.io._lfs import HSMState
 
 
 def test_import_request_done(simpleimportrequest):

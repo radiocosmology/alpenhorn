@@ -277,7 +277,7 @@ def mock_rsync(xfs):
         return original_which(cmd, mode, path)
 
     def _mocked_rsync(from_path, to_dir, size_b, local):
-        """An ioutil.rsync mock."""
+        """A default.pull.rsync mock."""
 
         nonlocal xfs
 
@@ -289,7 +289,7 @@ def mock_rsync(xfs):
         return {"ret": 0, "stdout": "", "md5sum": True}
 
     with patch("shutil.which", _mocked_which):
-        with patch("alpenhorn.io.ioutil.rsync", _mocked_rsync):
+        with patch("alpenhorn.io.default.pull.rsync", _mocked_rsync):
             yield
 
 

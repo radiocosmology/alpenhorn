@@ -6,7 +6,7 @@ import pytest
 
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import ArchiveFileCopy, ArchiveFileCopyRequest
-from alpenhorn.io._default_asyncs import group_search_async
+from alpenhorn.io.default.group import group_search_async
 
 
 @pytest.fixture
@@ -282,9 +282,7 @@ def test_pull_search(transport_fleet, simplecopyrequest, queue):
 
     group, _ = transport_fleet
 
-    # The patch is done in io.default, where the pull_search method
-    # is actually defined.
-    with patch("alpenhorn.io.default.group_search_async") as mock:
+    with patch("alpenhorn.io.default.group.group_search_async") as mock:
         group.io.pull_search(simplecopyrequest)
 
         # Task is queued

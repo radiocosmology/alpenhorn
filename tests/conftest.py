@@ -43,7 +43,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "lfs_hsm_state(dict): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate the desired HSM State value(s) to return. "
         "The keys of dict are the paths; the values should be "
         "one of: 'missing', 'unarchived', 'released', 'restored'.",
@@ -51,21 +51,21 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "lfs_quota_remaining(quota): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate the desired quota that LFS.quota_remaining "
         "should return.",
     )
     config.addinivalue_line(
         "markers",
         "lfs_hsm_restore_result(result): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate the result of the hsm_restore call.  result "
         "may be 'fail', 'timeout', 'wait', or 'restore'",
     )
     config.addinivalue_line(
         "markers",
         "lfs_dont_mock(*method_names): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate which parts of LFS should _not_ be mocked.",
     )
     config.addinivalue_line(
@@ -220,7 +220,7 @@ def mock_lfs(have_lfs, request):
     Yields the LFS class.
     """
 
-    from alpenhorn.io.lfs import LFS, HSMState
+    from alpenhorn.io._lfs import LFS, HSMState
 
     marker = request.node.get_closest_marker("lfs_dont_mock")
     if marker is None:
@@ -316,18 +316,18 @@ def mock_lfs(have_lfs, request):
 
     patches = []
     if "hsm_state" not in lfs_dont_mock:
-        patches.append(patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state))
+        patches.append(patch("alpenhorn.io._lfs.LFS.hsm_state", _mocked_lfs_hsm_state))
     if "hsm_release" not in lfs_dont_mock:
         patches.append(
-            patch("alpenhorn.io.lfs.LFS.hsm_release", _mocked_lfs_hsm_release),
+            patch("alpenhorn.io._lfs.LFS.hsm_release", _mocked_lfs_hsm_release),
         )
     if "hsm_restore" not in lfs_dont_mock:
         patches.append(
-            patch("alpenhorn.io.lfs.LFS.hsm_restore", _mocked_lfs_hsm_restore),
+            patch("alpenhorn.io._lfs.LFS.hsm_restore", _mocked_lfs_hsm_restore),
         )
     if "quota_remaining" not in lfs_dont_mock:
         patches.append(
-            patch("alpenhorn.io.lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining),
+            patch("alpenhorn.io._lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining),
         )
 
     for p in patches:
