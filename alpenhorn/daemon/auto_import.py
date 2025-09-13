@@ -162,8 +162,6 @@ def _import_file(
         If not None, req will be marked as complete if the import isn't skipped.
     """
 
-    from .pullutil import post_add
-
     # Skip non-files
     fullpath = pathlib.Path(node.db.root).joinpath(path)
     if fullpath.is_symlink() or not fullpath.is_file():
@@ -322,7 +320,7 @@ def _import_file(
     import_request_done(req, "success")
 
     # Run post-add actions, if any
-    post_add(node.db, file_)
+    copy.trigger_autoactions()
 
     # Run the extension module's callback, if necessary
     if callable(callback):

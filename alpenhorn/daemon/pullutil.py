@@ -11,68 +11,14 @@ from .. import db
 from ..common import metrics, util
 from ..common.metrics import Metric
 from ..db import (
-    ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
-    StorageNode,
-    StorageTransferAction,
     utcfromtimestamp,
     utcnow,
 )
 from ..io.base import BaseNodeIO
 
 log = logging.getLogger(__name__)
-
-
-def post_add(node: StorageNode, file_: ArchiveFile) -> None:
-    """Run any actions after adding `file` to `node`.
-
-    Possible actions are autosync or autoclean.
-
-    Parameters
-    ----------
-    node : StorageNode
-        The node the file copy was added to.
-    file_ : ArchiveFile
-        The file added.
-    """
-
-    # Autosync: find all StorageTransferActions where we're the source node
-    for edge in StorageTransferAction.select().where(
-        StorageTransferAction.node_from == node,
-        StorageTransferAction.group_to != node.group,
-        StorageTransferAction.autosync == True,  # noqa: E712
-    ):
-        if edge.group_to.state_on_node(file_)[0] != "Y":
-            log.debug(
-                f"Autosyncing {file_.path} from node {node.name} "
-                f"to group {edge.group_to.name}"
-            )
-
-            ArchiveFileCopyRequest.create(
-                node_from=node, group_to=edge.group_to, file=file_
-            )
-
-    # Autoclean: find all the StorageTransferActions where we're in the
-    # destination group
-    for edge in StorageTransferAction.select().where(
-        StorageTransferAction.group_to == node.group,
-        StorageTransferAction.node_from != node,
-        StorageTransferAction.autoclean == True,  # noqa: E712
-    ):
-        count = (
-            ArchiveFileCopy.update(wants_file="N", last_update=utcnow())
-            .where(
-                ArchiveFileCopy.file == file_,
-                ArchiveFileCopy.node == edge.node_from,
-                ArchiveFileCopy.has_file == "Y",
-                ArchiveFileCopy.wants_file == "Y",
-            )
-            .execute()
-        )
-
-        if count > 0:
-            log.debug(f"Autocleaning {file_.path} from node {edge.node_from.name}")
 
 
 def copy_request_done(
@@ -170,7 +116,7 @@ def copy_request_done(
         # Upsert the FileCopy
         size = io.filesize(req.file.path, actual=True)
         try:
-            ArchiveFileCopy.insert(
+            copy = ArchiveFileCopy.create(
                 file=req.file,
                 node=io.node,
                 has_file="Y",
@@ -178,17 +124,15 @@ def copy_request_done(
                 ready=True,
                 size_b=size,
                 last_update=utcnow(),
-            ).execute()
+            )
         except pw.IntegrityError:
-            ArchiveFileCopy.update(
-                has_file="Y",
-                wants_file="Y",
-                ready=True,
-                size_b=size,
-                last_update=utcnow(),
-            ).where(
-                ArchiveFileCopy.file == req.file, ArchiveFileCopy.node == io.node
-            ).execute()
+            copy = ArchiveFileCopy.get(file=req.file, node=io.node)
+            copy.has_file = "Y"
+            copy.wants_file = "Y"
+            copy.ready = True
+            copy.size_b = size
+            copy.last_update = utcnow()
+            copy.save()
 
         # Mark AFCR as completed
         ArchiveFileCopyRequest.update(
@@ -215,6 +159,6 @@ def copy_request_done(
     ).add(req.file.size_b)
 
     # Run post-add actions, if any
-    post_add(io.node, req.file)
+    copy.trigger_autoactions()
 
     return True

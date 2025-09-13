@@ -6,7 +6,7 @@ import peewee as pw
 from ..common import metrics
 from ._base import EnumField, base_model
 from .acquisition import ArchiveFile
-from .storage import StorageGroup, StorageNode
+from .storage import StorageGroup, StorageNode, StorageTransferAction
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +89,53 @@ class ArchiveFileCopy(base_model):
 
         key = self.has_file + self.wants_file
         return states.get(key, "Corrupt")
+
+    def trigger_autoactions(self) -> None:
+        """Trigger auto actions for this file copy.
+
+        Possible actions are autosync or autoclean.  These
+        are triggered whenever this file copy is created on
+        the storage node (i.e. after an import or pull).
+        """
+
+        # Autosync: find all StorageTransferActions where we're the source node
+        for edge in StorageTransferAction.select().where(
+            StorageTransferAction.node_from == self.node,
+            StorageTransferAction.group_to != self.node.group,
+            StorageTransferAction.autosync == True,  # noqa: E712
+        ):
+            if edge.group_to.state_on_node(self.file)[0] != "Y":
+                log.debug(
+                    f"Autosyncing {self.file.path} from node {self.node.name} "
+                    f"to group {edge.group_to.name}"
+                )
+
+                ArchiveFileCopyRequest.create(
+                    node_from=self.node, group_to=edge.group_to, file=self.file
+                )
+
+        # Autoclean: find all the StorageTransferActions where we're in the
+        # destination group
+        for edge in StorageTransferAction.select().where(
+            StorageTransferAction.group_to == self.node.group,
+            StorageTransferAction.node_from != self.node,
+            StorageTransferAction.autoclean == True,  # noqa: E712
+        ):
+            count = (
+                ArchiveFileCopy.update(wants_file="N", last_update=pw.utcnow())
+                .where(
+                    ArchiveFileCopy.file == self.file,
+                    ArchiveFileCopy.node == edge.node_from,
+                    ArchiveFileCopy.has_file == "Y",
+                    ArchiveFileCopy.wants_file == "Y",
+                )
+                .execute()
+            )
+
+            if count > 0:
+                log.debug(
+                    f"Autocleaning {self.file.path} from node {edge.node_from.name}"
+                )
 
     class Meta:
         indexes = ((("file", "node"), True),)  # (file, node) is unique
