@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 
 import peewee as pw
 
@@ -13,17 +14,18 @@ from ..common.metrics import Metric
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
+    StorageNode,
     utcfromtimestamp,
     utcnow,
 )
-from ..io.base import BaseNodeIO
 
 log = logging.getLogger(__name__)
 
 
 def copy_request_done(
     req: ArchiveFileCopyRequest,
-    io: BaseNodeIO,
+    node_to: StorageNode,
+    size: Callable | int | None,
     success: bool,
     md5ok: bool | str,
     start_time: float,
@@ -36,8 +38,13 @@ def copy_request_done(
     ----------
     req : ArchiveFileCopyRequest
         The copy request that was attempted
-    io : Node I/O instance
-        The I/O instance of the destination node
+    node_to : StorageNode
+        The node receiving the copy request.  Must be in `req.group_to`.
+    size : Callable or int or None
+        If an int or None, the storage used in the new ArchiveFileCopy record.
+        If computing this would be an expensive I/O operation, this can instead be a
+        callable function which will be passed the file path and should return the same.
+        In that case, the call will only be made if needed.
     success : bool
         True unless the file transfer failed.
     md5ok : boolean or str
@@ -93,7 +100,7 @@ def copy_request_done(
         md5ok = md5ok == req.file.md5sum
     if not md5ok:
         log.error(
-            f"MD5 mismatch on node {io.node.name}; "
+            f"MD5 mismatch on node {node_to.name}; "
             f"Marking source file {req.file.name} on node {req.node_from} suspect."
         )
         ArchiveFileCopy.update(has_file="M", last_update=utcnow()).where(
@@ -113,12 +120,14 @@ def copy_request_done(
     )
 
     with db.database_proxy.atomic():
+        # Comput storage used if needed
+        if callable(size):
+            size = size(req.file.path)
         # Upsert the FileCopy
-        size = io.storage_used(req.file.path)
         try:
             copy = ArchiveFileCopy.create(
                 file=req.file,
-                node=io.node,
+                node=node_to,
                 has_file="Y",
                 wants_file="Y",
                 ready=True,
@@ -126,7 +135,7 @@ def copy_request_done(
                 last_update=utcnow(),
             )
         except pw.IntegrityError:
-            copy = ArchiveFileCopy.get(file=req.file, node=io.node)
+            copy = ArchiveFileCopy.get(file=req.file, node=node_to)
             copy.has_file = "Y"
             copy.wants_file = "Y"
             copy.ready = True

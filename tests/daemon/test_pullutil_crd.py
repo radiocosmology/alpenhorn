@@ -69,7 +69,8 @@ def test_fail_chksrc(db_setup):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=False,
             md5ok=False,
             start_time=start_time,
@@ -97,7 +98,8 @@ def test_fail_nochksrc(db_setup):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=False,
             md5ok=False,
             start_time=start_time,
@@ -125,7 +127,8 @@ def test_md5ok_false(db_setup):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=True,
             md5ok=False,
             start_time=start_time,
@@ -152,7 +155,8 @@ def test_md5ok_bad(db_setup):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=True,
             md5ok="incorrect-md5sum",
             start_time=start_time,
@@ -180,7 +184,8 @@ def test_md5ok_true(db_setup):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=True,
             md5ok=True,
             start_time=start_time,
@@ -222,7 +227,8 @@ def test_md5ok_str(db_setup):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=True,
             md5ok="d41d8cd98f00b204e9800998ecf8427e",
             start_time=start_time,
@@ -257,7 +263,8 @@ def test_dstcopy(db_setup_with_copy):
     assert (
         copy_request_done(
             req,
-            io,
+            io.node,
+            io.storage_used,
             success=True,
             md5ok=True,
             start_time=start_time,

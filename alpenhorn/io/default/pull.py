@@ -586,7 +586,8 @@ def pull_async(
 
     if not copy_request_done(
         req,
-        io,
+        io.node,
+        io.storage_used,
         check_src=ioresult.get("check_src", True),
         md5ok=ioresult.get("md5sum", None),
         start_time=start_time,
