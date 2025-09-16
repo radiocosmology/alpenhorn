@@ -114,7 +114,7 @@ def copy_request_done(
 
     with db.database_proxy.atomic():
         # Upsert the FileCopy
-        size = io.filesize(req.file.path, actual=True)
+        size = io.storage_used(req.file.path)
         try:
             copy = ArchiveFileCopy.create(
                 file=req.file,

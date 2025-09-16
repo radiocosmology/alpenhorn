@@ -300,7 +300,7 @@ def _import_file(
                 has_file="Y",
                 wants_file="Y",
                 ready=True,
-                size_b=node.io.filesize(path, actual=True),
+                size_b=node.io.storage_used(path),
                 last_update=utcnow(),
             )
             log.info(f'Imported file copy "{path}" on node "{node.name}".')

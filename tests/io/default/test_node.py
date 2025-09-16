@@ -60,8 +60,14 @@ def test_filesize(unode, xfs):
 
     assert unode.io.filesize("dir/file1") == 1000
     assert unode.io.filesize("/node/dir/file1") == 1000
-    assert unode.io.filesize("/node/dir/file1", actual=True) == 4096
-    assert unode.io.filesize("dir/file1", actual=True) == 4096
+
+
+def test_storage_used(unode, xfs):
+    """test DefaultNodeIO.storage_used()"""
+    xfs.create_file("/node/dir/file1", st_size=1000)
+
+    assert unode.io.storage_used("/node/dir/file1") == 4096
+    assert unode.io.storage_used("dir/file1") == 4096
 
 
 def test_file_walk(unode, xfs):

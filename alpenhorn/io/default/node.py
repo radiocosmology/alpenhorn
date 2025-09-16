@@ -229,7 +229,7 @@ class DefaultNodeIO(BaseNodeIO):
         """
         return pathlib.Path(self.node.root, path).is_file()
 
-    def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
+    def filesize(self, path: pathlib.Path) -> int:
         """Return size in bytes of the file given by `path`.
 
         Parameters
@@ -237,20 +237,40 @@ class DefaultNodeIO(BaseNodeIO):
         path: path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual: bool, optional
-            If True, return the amount of space the file actually takes
-            up on the storage system.  Otherwise return apparent size.
+
+        Returns
+        -------
+        int
+            The size, in bytes, of the file
+        """
+        path = pathlib.Path(path)
+        if not path.is_absolute():
+            path = pathlib.Path(self.node.root, path)
+        return path.stat().st_size
+
+    def storage_used(self, path: pathlib.Path) -> int:
+        """Return amount of storage space used by the file given by `path`.
+
+        This is just the number of filesystem blocks used by the file multiplied
+        by the block size.
+
+        Parameters
+        ----------
+        path: path-like
+            The filepath to check the size of.  May be absolute or relative
+            to `node.root`.
+
+        Returns
+        -------
+        int
+            The amount of space, in bytes, taken up by the file.
         """
         path = pathlib.Path(path)
         if not path.is_absolute():
             path = pathlib.Path(self.node.root, path)
 
-        if actual:
-            # Per POSIX, blocksize for st_blocks is always 512 bytes
-            return path.stat().st_blocks * 512
-
-        # Apparent size
-        return path.stat().st_size
+        # Per POSIX, blocksize for st_blocks is always 512 bytes
+        return path.stat().st_blocks * 512
 
     def file_walk(self, path) -> Iterable[pathlib.PurePath]:
         """An iterator over all regular files under `node.root/path`
