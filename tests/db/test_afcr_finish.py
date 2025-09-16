@@ -1,4 +1,4 @@
-"""Test alpenhorn.daemon.pullutil.copy_request_done()."""
+"""Test ArchiveFileCopyRequest.finish()."""
 
 import datetime
 import time
@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alpenhorn.daemon.pullutil import copy_request_done
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db import utcfromtimestamp, utcnow
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
@@ -32,7 +31,7 @@ def db_setup(
     archivefilecopy,
     archivefilecopyrequest,
 ):
-    """DB setup for copy_request_done checks with no pre-existing dest copy."""
+    """DB setup for checks with no pre-existing dest copy."""
 
     group_to = storagegroup(name="group_to")
     node_to = storagenode(name="node_to", group=group_to, root="/node_to")
@@ -51,7 +50,7 @@ def db_setup(
 
 @pytest.fixture
 def db_setup_with_copy(db_setup, archivefilecopy):
-    """DB setup for copy_request_done checks with pre-existing dest copy."""
+    """DB setup for checks with pre-existing dest copy."""
     node_to = db_setup[0].node
     req = db_setup[1]
 
@@ -67,8 +66,7 @@ def test_fail_chksrc(db_setup):
     io, copy, req, start_time, trigger_autoactions = db_setup
 
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=False,
@@ -96,8 +94,7 @@ def test_fail_nochksrc(db_setup):
     io, copy, req, start_time, trigger_autoactions = db_setup
 
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=False,
@@ -125,8 +122,7 @@ def test_md5ok_false(db_setup):
     io, copy, req, start_time, trigger_autoactions = db_setup
 
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=True,
@@ -153,8 +149,7 @@ def test_md5ok_bad(db_setup):
     io, copy, req, start_time, trigger_autoactions = db_setup
 
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=True,
@@ -182,8 +177,7 @@ def test_md5ok_true(db_setup):
 
     before = utcnow() - datetime.timedelta(seconds=2)
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=True,
@@ -225,8 +219,7 @@ def test_md5ok_str(db_setup):
     io, copy, req, start_time, trigger_autoactions = db_setup
 
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=True,
@@ -261,8 +254,7 @@ def test_dstcopy(db_setup_with_copy):
     io, _, req, start_time, trigger_autoactions, dstcopy = db_setup_with_copy
 
     assert (
-        copy_request_done(
-            req,
+        req.finish(
             io.node,
             io.storage_used,
             success=True,
