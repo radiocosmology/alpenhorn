@@ -170,13 +170,19 @@ def mock_run_command(request, set_config):
 
 @pytest.fixture
 def mock_filesize():
-    """Mocks DefaultNodeIO.filesize to return a fake file size."""
+    """Mocks DefaultNodeIO.filesize and DefaultNodeIO.storage_used."""
 
     def _mock_filesize(self, path, actual=False):
-        return 512 * 3 if actual else 1234
+        return 1234
+
+    def _mock_storage_used(self, path):
+        return 512 * 3
 
     with patch("alpenhorn.io.default.DefaultNodeIO.filesize", _mock_filesize):
-        yield
+        with patch(
+            "alpenhorn.io.default.DefaultNodeIO.storage_used", _mock_storage_used
+        ):
+            yield
 
 
 @pytest.fixture

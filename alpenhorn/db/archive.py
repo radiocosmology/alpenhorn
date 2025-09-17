@@ -1,12 +1,14 @@
 import logging
 import pathlib
+import time
+from collections.abc import Callable
 
 import peewee as pw
 
-from ..common import metrics
-from ._base import EnumField, base_model
+from ..common import metrics, util
+from ._base import EnumField, base_model, database_proxy
 from .acquisition import ArchiveFile
-from .storage import StorageGroup, StorageNode
+from .storage import StorageGroup, StorageNode, StorageTransferAction
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +91,53 @@ class ArchiveFileCopy(base_model):
 
         key = self.has_file + self.wants_file
         return states.get(key, "Corrupt")
+
+    def trigger_autoactions(self) -> None:
+        """Trigger auto actions for this file copy.
+
+        Possible actions are autosync or autoclean.  These
+        are triggered whenever this file copy is created on
+        the storage node (i.e. after an import or pull).
+        """
+
+        # Autosync: find all StorageTransferActions where we're the source node
+        for edge in StorageTransferAction.select().where(
+            StorageTransferAction.node_from == self.node,
+            StorageTransferAction.group_to != self.node.group,
+            StorageTransferAction.autosync == True,  # noqa: E712
+        ):
+            if edge.group_to.state_on_node(self.file)[0] != "Y":
+                log.debug(
+                    f"Autosyncing {self.file.path} from node {self.node.name} "
+                    f"to group {edge.group_to.name}"
+                )
+
+                ArchiveFileCopyRequest.create(
+                    node_from=self.node, group_to=edge.group_to, file=self.file
+                )
+
+        # Autoclean: find all the StorageTransferActions where we're in the
+        # destination group
+        for edge in StorageTransferAction.select().where(
+            StorageTransferAction.group_to == self.node.group,
+            StorageTransferAction.node_from != self.node,
+            StorageTransferAction.autoclean == True,  # noqa: E712
+        ):
+            count = (
+                ArchiveFileCopy.update(wants_file="N", last_update=pw.utcnow())
+                .where(
+                    ArchiveFileCopy.file == self.file,
+                    ArchiveFileCopy.node == edge.node_from,
+                    ArchiveFileCopy.has_file == "Y",
+                    ArchiveFileCopy.wants_file == "Y",
+                )
+                .execute()
+            )
+
+            if count > 0:
+                log.debug(
+                    f"Autocleaning {self.file.path} from node {edge.node_from.name}"
+                )
 
     class Meta:
         indexes = ((("file", "node"), True),)  # (file, node) is unique
@@ -242,6 +291,154 @@ class ArchiveFileCopyRequest(base_model):
             return node_to.check_pull_dest()
 
         # Otherwise, request can continue
+        return True
+
+    def finish(
+        self,
+        node_to: StorageNode,
+        size: Callable | int | None,
+        success: bool,
+        md5ok: bool | str,
+        start_time: float,
+        check_src: bool = True,
+        stderr: str | None = None,
+    ) -> bool:
+        """Update the database after attempting this copy request.
+
+        Parameters
+        ----------
+        node_to : StorageNode
+            The node receiving the copy request.  Must be in `self.group_to`.
+        size : Callable or int or None
+            If an int or None, the storage used in the new ArchiveFileCopy record.
+            If computing this would be an expensive I/O operation, this can instead be a
+            callable function which will be passed the file path and should return the
+            same.  In that case, the call will only be made if needed.
+        success : bool
+            True unless the file transfer failed.
+        md5ok : boolean or str
+            Either a boolean indicating if the MD5 sum was correct or
+            else a string MD5 sum which we need to verify.  Ignored if
+            success is not True.
+        start_time : float
+            time.time() when the transfer was started
+        check_src : boolean
+            if success is False, should the source file be marked suspect?
+        stderr : str or None
+            if success is False, this will be copied into the log
+
+        Returns
+        -------
+        good_transfer : bool
+            True if the parameters indicate the transfer was successful
+            or False if the transfer failed.
+        """
+
+        # The only label left unbound here is "result"
+        transf_metric = metrics.by_name("transfers").bind(
+            node_from=self.node_from.name,
+            group_to=self.group_to.name,
+        )
+
+        # Check the result
+        if not success:
+            if stderr is None:
+                stderr = "Unspecified error."
+                transf_metric.inc(result="failure")
+            if check_src:
+                # If the copy didn't work, then the remote file may be corrupted.
+                log.error("Copy failed.  Marking source file suspect.")
+                log.info(f"Output: {stderr}")
+                ArchiveFileCopy.update(has_file="M", last_update=pw.utcnow()).where(
+                    ArchiveFileCopy.file == self.file,
+                    ArchiveFileCopy.node == self.node_from,
+                ).execute()
+                transf_metric.inc(result="check_src")
+            else:
+                # An error occurred that can't be due to the source being corrupt
+                log.error("Copy failed")
+                log.info(f"Output: {stderr}")
+                transf_metric.inc(result="failure")
+            return False
+
+        # Otherwise, transfer was completed, remember end time
+        end_time = time.time()
+
+        # Check integrity.
+        if isinstance(md5ok, str):
+            md5ok = md5ok == self.file.md5sum
+        if not md5ok:
+            log.error(
+                f"MD5 mismatch on node {node_to.name}; "
+                f"Marking source file {self.file.name} "
+                f"on node {self.node_from} suspect."
+            )
+            ArchiveFileCopy.update(has_file="M", last_update=pw.utcnow()).where(
+                ArchiveFileCopy.file == self.file,
+                ArchiveFileCopy.node == self.node_from,
+            ).execute()
+            transf_metric.inc(result="integrity")
+            return False
+
+        # Transfer successful
+        trans_time = end_time - start_time
+        rate = self.file.size_b / trans_time
+        log.info(
+            f"Pull of {self.file.path} complete. "
+            f"Transferred {util.pretty_bytes(self.file.size_b)} "
+            f"in {util.pretty_deltat(trans_time)} [{util.pretty_bytes(rate)}/s]"
+        )
+
+        with database_proxy.atomic():
+            # Comput storage used if needed
+            if callable(size):
+                size = size(self.file.path)
+            # Upsert the FileCopy
+            try:
+                copy = ArchiveFileCopy.create(
+                    file=self.file,
+                    node=node_to,
+                    has_file="Y",
+                    wants_file="Y",
+                    ready=True,
+                    size_b=size,
+                    last_update=pw.utcnow(),
+                )
+            except pw.IntegrityError:
+                copy = ArchiveFileCopy.get(file=self.file, node=node_to)
+                copy.has_file = "Y"
+                copy.wants_file = "Y"
+                copy.ready = True
+                copy.size_b = size
+                copy.last_update = pw.utcnow()
+                copy.save()
+
+            # Mark ourselves as completed
+            self.completed = True
+            self.transfer_started = pw.utcfromtimestamp(start_time)
+            self.transfer_completed = pw.utcfromtimestamp(end_time)
+            self.save()
+
+        # Update metrics
+        metrics.by_name("requests_completed").inc(
+            type="copy",
+            node=self.node_from.name,
+            group=self.group_to.name,
+            result="success",
+        )
+        transf_metric.inc(result="success")
+
+        # This can be used to measure throughput
+        metrics.Metric(
+            "pulled_bytes",
+            "Count of bytes pulled",
+            counter=True,
+            bound={"node_from": self.node_from.name, "group_to": self.group_to.name},
+        ).add(self.file.size_b)
+
+        # Run post-add actions, if any
+        copy.trigger_autoactions()
+
         return True
 
 

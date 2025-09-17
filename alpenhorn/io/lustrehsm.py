@@ -477,25 +477,25 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         full_path = pathlib.PurePath(self.node.root).joinpath(path)
         return self._lfs.hsm_state(full_path) != self._lfs.HSM_MISSING
 
-    def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
-        """Return size in bytes of the file given by `path`.
+    def storage_used(self, path: pathlib.Path) -> None:
+        """Returns None.
 
-        This _always_ returns the apprent size, since the size on tape is
-        not known (or important), and the size on disk is usually that of the
-        the file stub.
+        This method is supposed to return, if possible, the amount of
+        space consumed by `path`.  But that's not a well defined value in
+        HSM, so this method just returns None to indicate that.
 
         Parameters
         ----------
         path: path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual: bool, optional
-            Ignored.
+
+        Returns
+        -------
+        None
+            None.
         """
-        path = pathlib.Path(path)
-        if not path.is_absolute():
-            path = pathlib.Path(self.node.root, path)
-        return path.stat().st_size
+        return None  # noqa: RET501
 
     def fits(self, size_b: int) -> bool:
         """Does `size_b` bytes fit on this node?

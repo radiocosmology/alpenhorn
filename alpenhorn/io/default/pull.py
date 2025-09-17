@@ -17,7 +17,6 @@ from tempfile import TemporaryDirectory
 from ...common import config, util
 from ...common.metrics import Metric
 from ...daemon import RemoteNode
-from ...daemon.pullutil import copy_request_done
 from ...daemon.scheduler import Task, threadlocal
 from ...db import (
     ArchiveFileCopyRequest,
@@ -584,9 +583,9 @@ def pull_async(
     # Delete the placeholder, if we created it
     placeholder.unlink(missing_ok=True)
 
-    if not copy_request_done(
-        req,
-        io,
+    if not req.finish(
+        io.node,
+        io.storage_used,
         check_src=ioresult.get("check_src", True),
         md5ok=ioresult.get("md5sum", None),
         start_time=start_time,

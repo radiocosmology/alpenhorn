@@ -48,7 +48,7 @@ def force_check_filecopy(file_: ArchiveFile, node: StorageNode, node_io: BaseNod
             has_file="M",
             wants_file="Y",
             ready=False,
-            size_b=node_io.filesize(file_.path, actual=True),
+            size_b=node_io.storage_used(file_.path),
         )
     except pw.IntegrityError:
         # Copy already exists, just update the existing
@@ -115,7 +115,7 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
             if md5sum == copy.file.md5sum:
                 log.info(f"File {copyname} on node {io.node.name} is A-OK!")
                 copy.has_file = "Y"
-                copy.size_b = io.filesize(fullpath, actual=True)
+                copy.size_b = io.storage_used(fullpath)
             else:
                 log.error(
                     f"File {copyname} on node {io.node.name} is corrupt! "
