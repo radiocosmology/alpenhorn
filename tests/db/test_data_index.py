@@ -100,9 +100,56 @@ def test_schema_version_missing(dbproxy, dbtables):
     with pytest.raises(click.ClickException):
         schema_version(check=True)
 
-    # This should also fail (can't match to zero)
-    with pytest.raises(click.ClickException):
-        schema_version(component="alpenhorn", component_version=0)
+
+def test_schema_return_check(dbproxy, dbtables):
+    """Test return_check==True in schema_version."""
+
+    assert schema_version(check=True, return_check=True) is True
+    assert (
+        schema_version(component_version=current_version + 1, return_check=True)
+        is False
+    )
+
+    # Can't set return_check to True if not checking
+    with pytest.raises(ValueError):
+        schema_version(return_check=True)
+
+
+def test_schema_version_compare(dbproxy, dbtables):
+    """Test rich comparison in schema_version."""
+
+    # Add something else to check against
+    DataIndexVersion.create(component="test", version=3)
+
+    # These should succeed
+    for comp in ["<4", "<=3", "3", ">=3", ">2", ">2,<4", "<=3,>=3"]:
+        assert schema_version(
+            component="test", component_version=comp, return_check=True
+        )
+
+    # These should fail
+    for comp in [">4", "<=2", "2", ">=4", "<2", ">4,<6", "<=2,>=2"]:
+        assert not schema_version(
+            component="test", component_version=comp, return_check=True
+        )
+
+    # These should all be errors
+    for comp in [
+        "3.0",
+        "=3",
+        "==3",
+        "",
+        "<Pi",
+        "Any",
+        "!=2",
+        ">2.5",
+        "<==3",
+        ">1,>2",
+        ">2,<4,<=3",
+        ">=3,>=3",
+    ]:
+        with pytest.raises(ValueError):
+            schema_version(component="test", component_version=comp)
 
 
 def test_schema_version_no_table(dbproxy):
