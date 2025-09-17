@@ -155,8 +155,11 @@ def start_alpenhorn(
     if not cli:
         logger.configure_logging()
 
-    # Load alpenhorn extensions
-    extload.load_extensions()
+    # Load alpenhorn extension modules
+    extensions = extload.find_extensions()
+
+    # Initialise stage-1 extensions
+    extload.init_extensions(extensions, stage=1)
 
     # Connect to the database
     db.connect()
@@ -164,6 +167,9 @@ def start_alpenhorn(
     # Run a schema check if requested.  This raises ClickException on error.
     if check_schema:
         db.schema_version(check=True)
+
+    # Initialise stage-2 extensions
+    extload.init_extensions(extensions, stage=2)
 
 
 def run_command(

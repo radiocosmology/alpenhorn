@@ -522,8 +522,8 @@ def dbproxy(set_config, reset_extensions):
 
     This fixture yields the database proxy after initialisation.
     """
-    # Load extensions
-    extload.load_extensions()
+    # Find and init early extensions to get the DB extension
+    extload.init_extensions(extload.find_extensions(), stage=1)
 
     # Set database.url if not already present
     config._config = config.merge_dict_tree(
