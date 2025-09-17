@@ -192,9 +192,10 @@ def _import_file(
 
     # Step through the detection extensions to find one that's willing
     # to handle this file
-    for detector in extload.import_detection():
-        acq_name, callback = detector(path, node)
+    for extension in extload.import_detection():
+        acq_name, callback = extension.detect(path, node)
         if acq_name is not None:
+            log.debug(f'import detect succeeded using "{extension.full_name}"')
             break
     else:
         # Detection failed, so we're done.

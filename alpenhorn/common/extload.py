@@ -1,120 +1,49 @@
 """Extension loading and registation.
 
-Extensions are simply python packages or modules providing extra functionality
-to alpenhorn. They should be specified in the `'extension'` section of the
-alpenhorn configuration as fully qualified python name. They must have a
-`'register_extension'` function that returns a `dict` specifying the extra
-functionality they provide. There are currently three supported keys:
-
-`database`
-    A dict providing capabilities of a database extension.  See the db module
-    for details.  At most one database extension is permitted.
-`import-detect`
-    A callable object providing a detection routine which will be called
-    when importing new files to determine if the file being considered is
-    a valid data file.  It will be passed a two positional parameters:
-
-      * `path`: a `pathlib.PurePath` giving the path relative to the node
-        root to the file being imported.
-      * `node`: a `UpdateableNode` instance of the node on which we're
-        importing the file.
-
-    The funciton should return a two-tuple.  If the detection fails, this
-    should be a pair of `None`s.  Otherwise, if detection succeeds:
-
-      * `acq_name`: The name of the acquisition, which does not already need
-        to exist.  This should be a string or `pathlib.Path` and be one of
-        the parents of the passed-in path.
-      * `callback`: Either a callable object, which can be used by the
-        extension to perform post-import actions, or else `None`, if no
-        callback is needed.
-
-    If the function returns a callable object, that object will be called after
-    creating the archive record(s) and passed three positional arguments:
-
-      * `filecopy`: the `ArchiveFileCopy` record for the newly imported file
-      * `new_file`: If this import created a new `ArchiveFile` record, this is
-        it (equivalent to `filecopy.file`).  If a new `ArchiveFile` was not created,
-        this is None.
-      * `new_acq`: If this import created a new `ArchiveAcq` record, this is
-        it (equivalent to `filecopy.file.acq`).  If a new `ArchiveAcq` was
-        not created, this is None.
-
-    The value returned from the call is ignored.
-
-    If multiple `import-detect` extensions are provided, they will be called in the
-    order given in the config file until one of them indicates a successful match.
-`io-modules`
-    A dict providing I/O modules to augment the default modules provided in
-    `alpenhorn.io`.  Each I/O module should have a node I/O or group I/O class
-    (or both).  I/O class names and dict keys must adhere to the following naming
-    conventions:
-      * For a StorageNode with `io_class` equal to "IOClassName", the node I/O class
-        implementing this I/O class must be called `IOClassNameNodeIO`.
-      * Similarly, a StorageGroup with `io_class == "IOClassName" must be named
-        `IOClassNameGroupIO`.
-      * In the `io-modules` dict, the key whose value is a module containing either
-        (or both) of the above classes must be "ioclassname" (i.e. equivalent to the
-        `io_class` of the group and/or node after conversion to lower case).  So,
-        the above example classes would both be in a module associated with the dict
-        key `ioclassname`.
-
-    Multiple `io-modules` extensions may be provided; no two extensions may provide
-    the same dict keys, nor may any extension provide a key which is the name of an
-    existing `alpenhorn.io` submodule.
-
-If other keys are present in the dictionary returned by `register_extension`, they
-are ignored.
+This module is responsible for loading third-party extensions listed in the
+alpenhorn config.  See the `alpenhorn.extensions` module for the Extension API,
+including a description of the various types of extensions.
 """
 
 from __future__ import annotations
 
 import importlib
 import logging
-import pathlib
-from collections.abc import Callable
 
 from click import ClickException
 
-from ..daemon import UpdateableNode
-from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, set_extension
+from .. import db
+from .. import extensions as extapi
+from ..extensions.base import Extension
 from ..io.base import InternalIO
 from . import config
 
-ImportCallback = Callable[
-    [ArchiveFileCopy, ArchiveFile | None, ArchiveAcq | None, UpdateableNode], None
-]
-ImportDetect = Callable[
-    [pathlib.Path, UpdateableNode],
-    tuple[pathlib.Path | str | None, ImportCallback | None],
-]
-
 log = logging.getLogger(__name__)
 
-# Internal variables for holding the extension references
+# All initialised ImportDetectExtensions, if any
 _id_ext = None
+
+# All IOClassExtensions, including internal ones
 _io_ext = None
 
 
-def load_extensions() -> None:
-    """Load any extension modules specified in the configuration.
+def find_extensions() -> list[Extension]:
+    """Collect all Extensions specified in the configuration.
 
     Inspects the `'extensions'` section in the configuration for full resolved
-    Python module names, and then registers any extension types and database
-    connections.
+    Python module names, attempts to import all of them, and creates a list of
+    extensions provided by these modules.
+
+    Returns
+    -------
+    list
+        The collected extensions.
 
     Raises
     ------
-    KeyError
-        Missing required key in model extension
-    ModuleNotFoundError
-        A extension module could not be found
-    RuntimeError
-        An extension module was missing the register_extension function.
-    TypeError
-        `register_extension` provided data of the wrong type.
-    ValueError
-        The data returned by register_extension was not usable.
+    click.ClickException:
+        An extension module listed in the configuration could not be imported,
+        or an extension module did not provide the `register_extensions` function.
     """
     from ..io import internal_io
 
@@ -124,83 +53,106 @@ def load_extensions() -> None:
     _id_ext = []
     _io_ext = internal_io.copy()
 
+    ext = {}
+
     for name in config.get("extensions", default=[], as_type=list):
-        log.info(f"Loading extension {name}")
+        log.info(f"Loading extension module: {name}")
+
+        ext_count = 0
 
         try:
             ext_module = importlib.import_module(name)
-        except ModuleNotFoundError:
-            raise ModuleNotFoundError(f"extension module {name} not found")
+        except ImportError as e:
+            raise ClickException(
+                f"unable to import extension module {name}: {e}"
+            ) from e
 
         try:
-            extension_dict = ext_module.register_extension()
-        except AttributeError:
-            raise RuntimeError(
-                f"extension {name} is not a valid alpenhorn extension "
-                "(no register_extension hook).",
-            )
+            extensions = ext_module.register_extensions()
+        except AttributeError as e:
+            raise ClickException(
+                f'module "{name}" is not a valid Alpenhorn extension module: '
+                'no "register_extensions" hook',
+            ) from e
 
-        extension_dict["name"] = name
-        extension_dict["module"] = ext_module
+        for extension in extensions:
+            # Make full name
+            ext_name = name + "." + extension.name
+            if ext_name in ext:
+                log.warning(f'Ignoring duplicate extension "{ext_name}"')
+                continue
+            ext[ext_name] = extension
+            extension.full_name = ext_name
+            ext_count += 1
 
-        # Does this extension provide something useful?
-        useful_extension = False
+        if not ext_count:
+            log.debug("No usable extensions in module")
 
-        if "database" in extension_dict:
-            useful_extension = True
+    # This list is in the order we found them because dicts preserve insertion
+    # order (since Python 3.7)
+    return list(ext.values())
 
-            # Check for database capability dict
-            if not isinstance(extension_dict["database"], dict):
-                raise TypeError(
-                    '"database" key returned by extension module '
-                    f"{name} must provide a dict."
-                )
 
+def init_extensions(extensions: list[Extension], stage: int) -> None:
+    """Initialise extensions of a givens stage.
+
+    Parameters
+    ----------
+    extensions : list
+        The list of Extensions returned by `find_extensions`.
+    stage : int
+        The current initialisation stage of the extensions.
+
+    Raises
+    ------
+    click.ClickException
+        An Extension was not usable.
+    """
+
+    for extension in extensions:
+        # Skip extensions from other stages
+        if stage != extension.stage:
+            continue
+
+        # Try init
+        if not extension.init_extension():
+            # Init failed
+            continue
+
+        # What kind of extension is this?
+        if isinstance(extension, extapi.DatabaseExtension):
             # Pass this to the database module.  If we already did
             # this, this returns the name of the previous extension
-            last_ext = set_extension(extension_dict)
+            last_ext = db.set_extension(extension)
             if last_ext:
-                raise ValueError(
+                raise ClickException(
                     "more than one database extension in config "
-                    f"({last_ext} and {name})"
+                    f"({last_ext} and {extension.full_name})"
+                )
+        elif isinstance(extension, extapi.ImportDetectExtension):
+            _id_ext.append(extension)
+        elif isinstance(extension, extapi.IOClassExtension):
+            # Check if this I/O Class is already known
+            if extension.io_class_name in _io_ext:
+                raise ClickException(
+                    f'I/O class "{extension.io_class_name}" from '
+                    f'Extension "{extension.full_name}" already provided by '
+                    + _io_ext[extension.io_class_name].full_name
+                    + "."
                 )
 
-        if "import-detect" in extension_dict:
-            useful_extension = True
-
-            if not callable(extension_dict["import-detect"]):
-                raise ValueError(
-                    f"Import detect routine from extension {name} not callable"
-                )
-
-            _id_ext.append(extension_dict["import-detect"])
-
-        if "io-modules" in extension_dict:
-            useful_extension = True
-
-            for modname, extmod in extension_dict["io-modules"].items():
-                if modname in _io_ext:
-                    raise ClickException(
-                        f'I/O class "{modname}" from '
-                        f'Extension "{name}" already provided by '
-                        + _io_ext[modname].full_name
-                        + "."
-                    )
-
-                # Otherwise, add it to the list
-                _io_ext[modname] = extmod
-
-        if not useful_extension:
-            log.warning(f"Ignoring extension {name} with no useable functionality!")
+            _io_ext[extension.io_class_name] = extension
+        else:
+            log.warning("Ignoring Extension with unknown type: " + extension.full_name)
 
 
-def import_detection() -> list[ImportDetect]:
-    """Returns the list of registered import-detect callables.
+def import_detection() -> list[extapi.ImportDetectExtension]:
+    """Returns the list of registered import-detect extensions.
 
     Returns
     -------
-    import_detectors
-        The list of import detection functions.  May be empty, if no
+    list of ImportDetectExtension
+        The list of import detection extensions.  May be empty, if no
         import-detect extensions have been loaded.
     """
 
@@ -213,7 +165,7 @@ def import_detection() -> list[ImportDetect]:
     return _id_ext
 
 
-def io_extension(name: str) -> InternalIO | None:
+def io_extension(name: str) -> extapi.IOClassExtension | InternalIO | None:
     """Returns the Extension providing the I/O class named `name`.
 
     Parameters
@@ -224,8 +176,11 @@ def io_extension(name: str) -> InternalIO | None:
 
     Returns
     -------
-    iomod : InternalIO or None
+    IOClassExtension or InternalIO or None
         The I/O extension providing the implementation of the named I/O class.
+        Either an internal extension provided by `alpenhorn.io`, or else
+        a third-party IOClassExtension.
+
         This will be None if no I/O module could be found.
     """
 

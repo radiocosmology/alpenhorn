@@ -11,12 +11,13 @@ configuration data for matching the acq/file name against one or
 more patterns, and AcqData and FileData which contain additional
 metadata for ArchiveAcq and ArchiveFile entries.
 
-The detection function is `detect`.  This function is provided to
-alpenhorn via `register_extension`.  The `detect` function loops
-through the AcqTypes and FileTypes to try to match the path
-supplied by alpenhorn to the patterns listed in the tables.
+The detection function is `detect`, which is packaged into an
+`alpenhorn.extensions.ImportDetectExtension`.  This extension is
+then provided to alpenhorn via the `register_extensions` function.
 
-On a successful match, the import callback function `register_file`
+The `detect` function loops through the AcqTypes and FileTypes to try
+to match the path supplied by alpenhorn to the patterns listed in the
+tables.  On a successful match, the import callback function `register_file`
 will be called by alpenhorn, which then stores the matched AcqType
 in the AcqData table and the matched FileType in the FileData table.
 """
@@ -32,7 +33,6 @@ from functools import partial
 import peewee as pw
 
 from alpenhorn.common import config as alpenconf
-from alpenhorn.common.extload import ImportCallback
 from alpenhorn.daemon import UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,
@@ -42,6 +42,7 @@ from alpenhorn.db import (
     connect,
     database_proxy,
 )
+from alpenhorn.extensions.import_detect import ImportCallback
 
 
 class TypeBase(base_model):
@@ -325,10 +326,19 @@ def demo_init() -> None:
     print("Plugin init complete.")
 
 
-def register_extension() -> dict:
+def register_extensions() -> list:
     """Extension registration function.
 
-    Called by alpenhorn during start-up to determine this extension's
-    capabilities.
+    Called by alpenhorn during start-up to retrieve the list of
+    Alpenhorn extensions provided by this extension module.
     """
-    return {"import-detect": detect}
+    # A word of clarification: We use the alpenhorn version here for the extension
+    # version because this extension module is packaged with alpenhorn itself.
+    #
+    # You shouldn't use the alpenhorn version for your own extension.  Instead,
+    # typically you would use the version of the Python package providing the
+    # extension.
+    from alpenhorn import __version__ as alpenversion
+    from alpenhorn.extensions import ImportDetectExtension
+
+    return [ImportDetectExtension("PatternImporter", alpenversion, detect=detect)]
