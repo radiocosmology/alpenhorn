@@ -70,12 +70,6 @@ def entry(ctx, conf, once, test_isolation):
     # Initialise alpenhorn
     start_alpenhorn(conf, cli=False)
 
-    # Connect to the database
-    db.connect()
-
-    # Check the data index schema.  This doesn't return on mismatch
-    db.schema_version(check=True)
-
     # Start the prometheus client, if appropriate.
     if not once:
         metrics.start_promclient()

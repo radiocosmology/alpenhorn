@@ -7,22 +7,6 @@ from collections.abc import Callable
 import click
 
 from ..common.logger import echo
-from ..db import connect, schema_version
-
-
-def dbconnect(check: bool = True) -> None:
-    """Connect to the database, with schema checking.
-
-    Parameters
-    ----------
-    check:
-        If True (the default), raises ClickException if the
-        database doesn't conform to the current schema version.
-    """
-
-    connect()
-    if check:
-        schema_version(check=True)
 
 
 def check_then_update(

@@ -123,7 +123,10 @@ SOFTWARE.
 
 
 def start_alpenhorn(
-    cli_conf: str | None, cli: bool, verbosity: int | None = None
+    cli_conf: str | None,
+    cli: bool = True,
+    verbosity: int | None = None,
+    check_schema: bool = True,
 ) -> None:
     """Initialise alpenhorn
 
@@ -131,11 +134,15 @@ def start_alpenhorn(
     ----------
     cli_conf : str or None
         The config file given on the command line, if any.
-    cli : bool
-        Is the alpenhorn cli being initialised?
+    cli : bool, optional
+        Is the alpenhorn cli being initialised?  Defaults to True.
     verbosity : int, optional
         For the cli, the initial verbosity level.  Ignored for daemons.
+    check_schema : bool, optional
+        If True (the default) check that the data index schema is the
+        current version.
     """
+    from .. import db
     from . import extload, logger
 
     # Initialise logging
@@ -150,6 +157,13 @@ def start_alpenhorn(
 
     # Load alpenhorn extensions
     extload.load_extensions()
+
+    # Connect to the database
+    db.connect()
+
+    # Run a schema check if requested.  This raises ClickException on error.
+    if check_schema:
+        db.schema_version(check=True)
 
 
 def run_command(
