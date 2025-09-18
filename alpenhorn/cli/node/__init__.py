@@ -2,7 +2,7 @@
 
 import click
 
-from ..cli import dbconnect
+from ...db import schema_version
 from .activate import activate
 from .autoclean import autoclean
 from .clean import clean
@@ -23,7 +23,7 @@ from .verify import verify
 def cli():
     """Manage Storage Nodes."""
 
-    dbconnect()
+    schema_version(check=True)
 
 
 cli.add_command(activate, "activate")
