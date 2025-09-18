@@ -15,7 +15,7 @@ from collections.abc import Generator
 import peewee as pw
 from watchdog.events import FileSystemEventHandler
 
-from ..common import config, extensions, metrics
+from ..common import config, extload, metrics
 from ..common.util import invalid_import_path
 from ..db import (
     ArchiveAcq,
@@ -192,7 +192,7 @@ def _import_file(
 
     # Step through the detection extensions to find one that's willing
     # to handle this file
-    for detector in extensions.import_detection():
+    for detector in extload.import_detection():
         acq_name, callback = detector(path, node)
         if acq_name is not None:
             break
