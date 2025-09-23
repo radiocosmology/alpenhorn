@@ -107,9 +107,7 @@ def test_import_file_no_ext(dbtables, unode):
 def test_import_file_no_detect(dbtables, unode):
     """Test no detection from import_detect."""
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext", [lambda path, node: (None, None)]
-    ):
+    with patch("alpenhorn.common.extload._id_ext", [lambda path, node: (None, None)]):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -125,9 +123,7 @@ def test_import_file_no_detect(dbtables, unode):
 def test_import_file_invalid_acqname(dbtables, unode):
     """Test invalid acq_name from import_detect."""
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext", [lambda path, node: ("acq/", None)]
-    ):
+    with patch("alpenhorn.common.extload._id_ext", [lambda path, node: ("acq/", None)]):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -151,7 +147,7 @@ def test_import_dotfile(xfs, dbtables, unode):
     xfs.create_file("/node/acq/.file")
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -174,7 +170,7 @@ def test_import_file_locked(xfs, dbtables, unode):
     xfs.create_file("/node/acq/file")
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -197,7 +193,7 @@ def test_import_file_create(xfs, dbtables, unode):
     before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("simplefile_acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -259,7 +255,7 @@ def test_import_file_no_register(xfs, dbtables, unode):
     xfs.create_file("/node/acq/file")
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -278,7 +274,7 @@ def test_import_file_no_register(xfs, dbtables, unode):
     acq = ArchiveAcq.create(name="acq")
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -295,7 +291,7 @@ def test_import_file_no_register(xfs, dbtables, unode):
     ArchiveFile.create(name="file", acq=acq)
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -323,7 +319,7 @@ def test_import_file_callback(xfs, dbtables, unode):
         callback_args = [copy, file_, acq, node]
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("simplefile_acq", callback)],
     ):
         with pytest.raises(StopIteration):
@@ -364,7 +360,7 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
     before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("simplefile_acq", None)],
     ):
         with pytest.raises(StopIteration):
@@ -422,7 +418,7 @@ def test_import_file_missing(xfs, dbtables, unode, simplefile, archivefilecopy):
     before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
     with patch(
-        "alpenhorn.common.extensions._id_ext",
+        "alpenhorn.common.extload._id_ext",
         [lambda path, node: ("simplefile_acq", None)],
     ):
         with pytest.raises(StopIteration):

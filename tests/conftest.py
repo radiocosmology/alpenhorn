@@ -15,7 +15,7 @@ from peewee import SqliteDatabase
 
 import alpenhorn.common.logger
 from alpenhorn import db
-from alpenhorn.common import config, extensions
+from alpenhorn.common import config, extload
 from alpenhorn.daemon.scheduler import FairMultiFIFOQueue
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import (
@@ -125,9 +125,9 @@ def set_config(request, logger):
 
     # Reset globals
     config._config = None
-    extensions._db_ext = None
-    extensions._id_ext = None
-    extensions._io_ext = {}
+    extload._db_ext = None
+    extload._id_ext = None
+    extload._io_ext = {}
 
 
 @pytest.fixture
@@ -472,7 +472,7 @@ def dbproxy(set_config):
     This fixture yields the database proxy after initialisation.
     """
     # Load extensions
-    extensions.load_extensions()
+    extload.load_extensions()
 
     # Set database.url if not already present
     config._config = config.merge_dict_tree(
@@ -569,7 +569,7 @@ def mockio():
     MockIO.group = group
 
     # Patch extensions._io_ext so alpenhorn can find our module
-    with patch.dict("alpenhorn.common.extensions._io_ext", mock=MockIO):
+    with patch.dict("alpenhorn.common.extload._io_ext", mock=MockIO):
         yield MockIO
 
 

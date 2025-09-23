@@ -1,10 +1,10 @@
-"""test alpenhorn.common.extensions."""
+"""test alpenhorn.common.extload."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alpenhorn.common import extensions
+from alpenhorn.common import extload
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -13,16 +13,16 @@ def test_no_module(set_config):
     ModuleNotFoundError."""
 
     with pytest.raises(ModuleNotFoundError):
-        extensions.load_extensions()
+        extload.load_extensions()
 
 
-@pytest.mark.alpenhorn_config({"extensions": ["alpenhorn.common.extensions"]})
+@pytest.mark.alpenhorn_config({"extensions": ["alpenhorn.common.extload"]})
 def test_bad_extensions(set_config):
     """Test that trying to extend with a module lacking a register_extension
     function returns RuntimeError."""
 
     with pytest.raises(RuntimeError):
-        extensions.load_extensions()
+        extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -36,7 +36,7 @@ def test_bad_db(set_config):
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
         with pytest.raises(TypeError):
-            extensions.load_extensions()
+            extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -49,7 +49,7 @@ def test_good_db(set_config):
 
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
-        extensions.load_extensions()
+        extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["db1", "db2"]})
@@ -66,7 +66,7 @@ def test_two_dbs(set_config):
     # Patch sys.modules so import can find them.
     with patch.dict("sys.modules", db1=db1, db2=db2):
         with pytest.raises(ValueError):
-            extensions.load_extensions()
+            extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -80,7 +80,7 @@ def test_importdetect_not_callalbe(set_config):
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
         with pytest.raises(ValueError):
-            extensions.load_extensions()
+            extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -94,9 +94,9 @@ def test_importdetect_good(set_config):
 
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
-        extensions.load_extensions()
+        extload.load_extensions()
 
-    assert extensions._id_ext == [func]
+    assert extload._id_ext == [func]
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["id1", "id2", "id3", "id4"]})
@@ -122,9 +122,9 @@ def test_importdetect_multi(set_config):
 
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", id1=id1, id2=id2, id3=id3, id4=id4):
-        extensions.load_extensions()
+        extload.load_extensions()
 
-    assert extensions._id_ext == [func1, func2, func3, func4]
+    assert extload._id_ext == [func1, func2, func3, func4]
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -137,7 +137,7 @@ def test_io_module_internal_name(set_config):
 
     with patch.dict("sys.modules", test_module=test_module):
         with pytest.raises(ValueError):
-            extensions.load_extensions()
+            extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["mod1", "mod2"]})
@@ -150,7 +150,7 @@ def test_io_module_duplicate(set_config):
 
     with patch.dict("sys.modules", mod1=test_module, mod2=test_module):
         with pytest.raises(ValueError):
-            extensions.load_extensions()
+            extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -167,26 +167,26 @@ def test_io_module_external(set_config):
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
         # Load the extension
-        extensions.load_extensions()
+        extload.load_extensions()
 
     # Module should be returned
-    assert iomod is extensions.io_module("IOMod")
+    assert iomod is extload.io_module("IOMod")
 
 
 def test_io_module_internal():
     """Test io_module() returning an internal io module."""
     import alpenhorn.io.default
 
-    assert alpenhorn.io.default is extensions.io_module("Default")
+    assert alpenhorn.io.default is extload.io_module("Default")
 
 
 def test_io_module_missing():
     """Test a failed load in io_module()."""
 
-    assert extensions.io_module("Missing") is None
+    assert extload.io_module("Missing") is None
 
 
 def test_io_module_base():
     """Loading the I/O base in io_module() is not allowed."""
 
-    assert extensions.io_module("base") is None
+    assert extload.io_module("base") is None

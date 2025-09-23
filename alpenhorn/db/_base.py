@@ -73,11 +73,11 @@ def connect() -> None:
     This must be called once, after extensions are loaded, before
     threads are created.
     """
-    from ..common import config, extensions
+    from ..common import config, extload
 
     # attempt to load a database extension
     global _db_ext
-    _db_ext = extensions.database_extension()
+    _db_ext = extload.database_extension()
     if _db_ext is None:
         # The fallback gets implemented via the default_cap
         # dict defined in _capability()

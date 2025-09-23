@@ -32,7 +32,7 @@ from functools import partial
 import peewee as pw
 
 from alpenhorn.common import config as alpenconf
-from alpenhorn.common.extensions import ImportCallback
+from alpenhorn.common.extload import ImportCallback
 from alpenhorn.daemon import UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,

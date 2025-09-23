@@ -136,7 +136,7 @@ def start_alpenhorn(
     verbosity : int, optional
         For the cli, the initial verbosity level.  Ignored for daemons.
     """
-    from . import extensions, logger
+    from . import extload, logger
 
     # Initialise logging
     logger.init_logging(cli=cli, verbosity=verbosity)
@@ -149,7 +149,7 @@ def start_alpenhorn(
         logger.configure_logging()
 
     # Load alpenhorn extensions
-    extensions.load_extensions()
+    extload.load_extensions()
 
 
 def run_command(

@@ -113,7 +113,7 @@ class updateable_base:
     def _get_io_class(self):
         """Return the I/O class for our Storage object."""
 
-        from ..common.extensions import io_module
+        from ..common.extload import io_module
 
         # If no io_class is specified, the Default I/O classes are used
         io_name = "Default" if self.db.io_class is None else self.db.io_class
