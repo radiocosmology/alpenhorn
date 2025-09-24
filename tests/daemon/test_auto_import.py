@@ -6,13 +6,11 @@ from unittest.mock import call, patch
 
 import peewee as pw
 import pytest
-from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn.daemon import auto_import
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
-from alpenhorn.io._lfs import HSMState
 
 
 def test_import_request_done(simpleimportrequest):
@@ -64,6 +62,8 @@ def test_import_file_queue(queue, unode):
 )
 def test_import_file_not_ready(dbtables, xfs, queue, simplenode, mock_lfs):
     """Test _import_file() on unready file."""
+
+    from alpenhorn.io._lfs import HSMState
 
     # Set up node for LustreHSMIO
     simplenode.io_class = "LustreHSM"
@@ -471,6 +471,8 @@ def test_empty_stop_observers():
 
 def test_update_observers_start(xfs, dbtables, unode, queue):
     """Test starting an observer via update_observers()."""
+
+    from watchdog.observers.api import BaseObserver, ObservedWatch
 
     xfs.create_file("/node/acq/file", contents="")
     unode.db.auto_import = True
