@@ -28,7 +28,7 @@ from ..daemon import UpdateableGroup, UpdateableNode
 from ..daemon.querywalker import QueryWalker
 from ..daemon.scheduler import FairMultiFIFOQueue, Task
 from ..db import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
-from .base import BaseNodeRemote
+from .base import BaseNodeRemote, InternalIO
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO
 
@@ -768,3 +768,6 @@ class LustreHSMGroupIO(DefaultGroupIO):
             self._smallfile.io.pull(req, did_search)
         else:
             self._hsm.io.pull(req, did_search)
+
+
+LustreHSMIO = InternalIO(__name__, LustreHSMNodeIO, LustreHSMGroupIO)
