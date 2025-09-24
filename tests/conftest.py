@@ -104,7 +104,22 @@ def logger():
 
 
 @pytest.fixture
-def set_config(request, logger):
+def reset_extensions():
+    """Extension clean-up.
+
+    De-initialises common.extload after a test
+    """
+
+    yield
+
+    # Reset globals
+    db._base._db_ext = None
+    extload._id_ext = None
+    extload._io_ext = None
+
+
+@pytest.fixture
+def set_config(request, logger, reset_extensions):
     """Set alpenhorn.common.config._config for testing.
 
     Any value given in the alpenhorn_config mark is merged into the
@@ -123,11 +138,8 @@ def set_config(request, logger):
 
     yield config._config
 
-    # Reset globals
+    # Reset config
     config._config = None
-    db._base._db_ext = None
-    extload._id_ext = None
-    extload._io_ext = {}
 
 
 @pytest.fixture
@@ -466,7 +478,7 @@ def use_chimedb(set_config):
 
 
 @pytest.fixture
-def dbproxy(set_config):
+def dbproxy(set_config, reset_extensions):
     """Database init and teardown.
 
     This fixture yields the database proxy after initialisation.
@@ -527,7 +539,7 @@ def unode(dbtables, simplenode, queue):
 
 
 @pytest.fixture
-def mockio():
+def mockio(reset_extensions):
     """A mocked I/O module.
 
     Access the mocks via mockio.group and mockio.node.
@@ -541,35 +553,38 @@ def mockio():
     group = MagicMock()
     group.fifo = "g:mockio"
 
-    # This is our mock I/O module
-    class MockIO:
-        # The I/O "classes"
-        def MockNodeRemote(*args, **kwargs):
-            nonlocal remote
-            remote._instance_args = args
-            remote._instance_kwargs = kwargs
-            return remote
+    # The I/O "classes"
+    def MockNodeRemote(*args, **kwargs):
+        nonlocal remote
+        remote._instance_args = args
+        remote._instance_kwargs = kwargs
+        return remote
 
-        def MockNodeIO(*args, **kwargs):
-            nonlocal node
-            node._instance_args = args
-            node._instance_kwargs = kwargs
-            return node
+    def MockNodeIO(*args, **kwargs):
+        nonlocal node
+        node._instance_args = args
+        node._instance_kwargs = kwargs
+        return node
 
-        MockNodeIO.remote_class = MockNodeRemote
+    MockNodeIO.remote_class = MockNodeRemote
 
-        def MockGroupIO(*args, **kwargs):
-            nonlocal group
-            group._instance_args = args
-            node._instance_kwargs = kwargs
-            return group
+    def MockGroupIO(*args, **kwargs):
+        nonlocal group
+        group._instance_args = args
+        group._instance_kwargs = kwargs
+        return group
 
-    MockIO.remote = remote
+    # This is our mock I/O extension
+    MockIO = MagicMock()
+    MockIO.full_name = "MockIO"
     MockIO.node = node
     MockIO.group = group
+    MockIO.remote = remote
+    MockIO.node_class = MockNodeIO
+    MockIO.group_class = MockGroupIO
 
     # Patch extensions._io_ext so alpenhorn can find our module
-    with patch.dict("alpenhorn.common.extload._io_ext", mock=MockIO):
+    with patch.dict("alpenhorn.common.extload._io_ext", Mock=MockIO):
         yield MockIO
 
 

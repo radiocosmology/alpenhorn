@@ -19,6 +19,7 @@ from collections.abc import Hashable
 from ..daemon.scheduler import FairMultiFIFOQueue
 from ..db import StorageNode
 from ._lfs import LFS
+from .base import InternalIO
 from .default import DefaultNodeIO
 
 log = logging.getLogger(__name__)
@@ -109,3 +110,6 @@ class LustreQuotaNodeIO(DefaultNodeIO):
             return None
 
         return self._lfs.quota_remaining(self.node.root)
+
+
+LustreQuotaIO = InternalIO(__name__, LustreQuotaNodeIO, None)
