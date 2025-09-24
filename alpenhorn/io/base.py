@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
+from collections import namedtuple
 from collections.abc import Hashable, Iterable
 from typing import IO
 
@@ -26,6 +27,9 @@ from ..db import (
 )
 
 log = logging.getLogger(__name__)
+
+# This named tuple stands in for IOClassExtension for internal I/O classes
+InternalIO = namedtuple("InternalIO", ["full_name", "node_class", "group_class"])
 
 
 # Comment from DVW:
