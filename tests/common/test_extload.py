@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 
 from alpenhorn.common import extload
@@ -128,41 +129,45 @@ def test_importdetect_multi(set_config):
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
-def test_io_module_internal_name(set_config):
+def test_io_extension_internal_name(set_config):
     """io-module with an internal name must be rejected."""
 
     # Also a fake extension module
     test_module = MagicMock()
-    test_module.register_extension.return_value = {"io-modules": {"default": None}}
+    test_module.register_extension.return_value = {"io-modules": {"Default": None}}
 
     with patch.dict("sys.modules", test_module=test_module):
-        with pytest.raises(ValueError):
+        with pytest.raises(click.ClickException):
             extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["mod1", "mod2"]})
-def test_io_module_duplicate(set_config):
+def test_io_extension_duplicate(set_config):
     """Reject duplicated I/O modules."""
 
-    # Also a fake extension module
+    # This the fake I/O class extension
+    ext = MagicMock()
+    ext.full_name = "Test"
+
+    # Also a fake extension module.  It will get loaded twice
     test_module = MagicMock()
-    test_module.register_extension.return_value = {"io-modules": {"iomod": None}}
+    test_module.register_extension.return_value = {"io-modules": {"IOMod": ext}}
 
     with patch.dict("sys.modules", mod1=test_module, mod2=test_module):
-        with pytest.raises(ValueError):
+        with pytest.raises(click.ClickException):
             extload.load_extensions()
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
-def test_io_module_external(set_config):
-    """Test io_module() returning an external io module."""
+def test_io_extension_external(set_config):
+    """Test io_extension() returning an external io module."""
 
     # This is our fake IO module
     iomod = MagicMock()
 
     # Also a fake extension module
     test_module = MagicMock()
-    test_module.register_extension.return_value = {"io-modules": {"iomod": iomod}}
+    test_module.register_extension.return_value = {"io-modules": {"IOMod": iomod}}
 
     # Patch sys.modules so import can find it.
     with patch.dict("sys.modules", test_module=test_module):
@@ -170,23 +175,21 @@ def test_io_module_external(set_config):
         extload.load_extensions()
 
     # Module should be returned
-    assert iomod is extload.io_module("IOMod")
+    assert iomod is extload.io_extension("IOMod")
 
 
-def test_io_module_internal():
-    """Test io_module() returning an internal io module."""
-    import alpenhorn.io.default
+def test_io_extension_internal(reset_extensions):
+    """Test io_extension() returning an internal io module."""
+    from alpenhorn.io.default import DefaultIO
 
-    assert alpenhorn.io.default is extload.io_module("Default")
+    extload.load_extensions()
 
-
-def test_io_module_missing():
-    """Test a failed load in io_module()."""
-
-    assert extload.io_module("Missing") is None
+    assert DefaultIO is extload.io_extension("Default")
 
 
-def test_io_module_base():
-    """Loading the I/O base in io_module() is not allowed."""
+def test_io_extension_missing(reset_extensions):
+    """Test a failed load in io_extension()."""
 
-    assert extload.io_module("base") is None
+    extload.load_extensions()
+
+    assert extload.io_extension("Missing") is None
