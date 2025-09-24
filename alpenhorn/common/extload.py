@@ -76,7 +76,7 @@ from collections.abc import Callable
 from types import ModuleType
 
 from ..daemon import UpdateableNode
-from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy
+from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, set_extension
 from . import config
 
 ImportCallback = Callable[
@@ -90,7 +90,6 @@ ImportDetect = Callable[
 log = logging.getLogger(__name__)
 
 # Internal variables for holding the extension references
-_db_ext = None
 _id_ext = None
 _io_ext = {}
 
@@ -117,7 +116,7 @@ def load_extensions() -> None:
     """
 
     # Initialise globals
-    global _db_ext, _id_ext
+    global _id_ext
 
     _id_ext = []
 
@@ -153,13 +152,13 @@ def load_extensions() -> None:
                     f"{name} must provide a dict."
                 )
 
-            # Don't allow more than one database extension
-            if _db_ext is None:
-                _db_ext = extension_dict
-            else:
+            # Pass this to the database module.  If we already did
+            # this, this returns the name of the previous extension
+            last_ext = set_extension(extension_dict)
+            if last_ext:
                 raise ValueError(
                     "more than one database extension in config "
-                    f"({_db_ext['name']} and {name})"
+                    f"({last_ext} and {name})"
                 )
 
         if "import-detect" in extension_dict:
@@ -200,22 +199,6 @@ def load_extensions() -> None:
 
         if not useful_extension:
             log.warning(f"Ignoring extension {name} with no useable functionality!")
-
-
-def database_extension() -> dict:
-    """Find and return a database extension capability dict.
-
-    Returns
-    -------
-    capabilities : dict or None
-        A dict providing the capabilites of the database module, or None,
-        if there was no database extension specified in the config.
-    """
-    if _db_ext is None:
-        return None
-
-    log.info(f"Using database extension {_db_ext['name']}")
-    return _db_ext["database"]
 
 
 def import_detection() -> list[ImportDetect]:

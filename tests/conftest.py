@@ -125,7 +125,7 @@ def set_config(request, logger):
 
     # Reset globals
     config._config = None
-    extload._db_ext = None
+    db._base._db_ext = None
     extload._id_ext = None
     extload._io_ext = {}
 
