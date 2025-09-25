@@ -413,11 +413,50 @@ def mock_exists(fs):
 
 
 @pytest.fixture
-def mock_observer():
-    """Mocks the DefaultIO observer so its always the PollingObserver"""
-    from watchdog.observers.polling import PollingObserver
+def mock_observer(fs):
+    """Creates a watchdog observer to monitor the fake filesystem.
 
-    with patch("alpenhorn.io.default.DefaultNodeIO.observer", PollingObserver):
+    This is essentially a PollingObserver, but rejiggered to
+    explicitly use the fake filesystem.
+    """
+    # This is the fakefs `os` module, which is the important bit here
+    import os
+
+    from watchdog.observers.api import (
+        DEFAULT_EMITTER_TIMEOUT,
+        DEFAULT_OBSERVER_TIMEOUT,
+        BaseObserver,
+    )
+    from watchdog.observers.polling import PollingEmitter
+
+    # This is essentially the PollingEmitter, but we need to re-implement
+    # __init__ to rebind the defaults using the (fake) os module.
+    class FakeFSEmitter(PollingEmitter):
+        def __init__(
+            self,
+            event_queue,
+            watch,
+            timeout=DEFAULT_EMITTER_TIMEOUT,
+            event_filter=None,
+            # These last two are ignored
+            stat=None,
+            listdir=None,
+        ):
+            super().__init__(
+                event_queue,
+                watch,
+                timeout=timeout,
+                event_filter=event_filter,
+                stat=os.stat,
+                listdir=os.scandir,
+            )
+
+    # The fake observer is just made up out of the fake emitter
+    class FakeFSObserver(BaseObserver):
+        def __init__(self, timeout=DEFAULT_OBSERVER_TIMEOUT):
+            BaseObserver.__init__(self, emitter_class=FakeFSEmitter, timeout=timeout)
+
+    with patch("alpenhorn.io.default.DefaultNodeIO.observer", FakeFSObserver):
         yield
 
 
