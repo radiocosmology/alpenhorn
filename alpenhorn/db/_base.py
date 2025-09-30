@@ -19,6 +19,37 @@ _db_ext = None
 database_proxy = pw.Proxy()
 
 
+def set_extension(ext: dict) -> str | None:
+    """Set the database extension in use.
+
+    This is called by the extension loader to set
+    the in-use database extension.  If an extension is
+    already in use, the new extension is _not_ used.
+
+    Parameters
+    ----------
+    ext : dict
+        The database extension to use
+
+    Returns
+    -------
+    str or None:
+        If a database extension is already in-use, probably
+        due to a prior call to this function, this returns
+        the name of the in-use extension.  Otherwise, it
+        returns None.
+    """
+    global _db_ext
+    if _db_ext:
+        return _db_ext["name"]
+
+    # This module doesn't want the same kind of extension dictionary
+    # that extload provides, so we massage it a bit.
+    _db_ext = ext["database"]
+    _db_ext["name"] = ext["name"]
+    return None
+
+
 def _capability(key: str) -> Any:
     """Access function for database capabilities.
 
@@ -73,16 +104,17 @@ def connect() -> None:
     This must be called once, after extensions are loaded, before
     threads are created.
     """
-    from ..common import config, extload
+    from ..common import config
 
     # attempt to load a database extension
     global _db_ext
-    _db_ext = extload.database_extension()
-    if _db_ext is None:
+    if not _db_ext:
         # The fallback gets implemented via the default_cap
         # dict defined in _capability()
         log.debug("Using internal database module.")
         _db_ext = {}
+    else:
+        log.info(f"Using database extension {_db_ext['name']}")
 
     # If fetch the database config, if present
     database_config = config.get("database", default={}, as_type=dict)

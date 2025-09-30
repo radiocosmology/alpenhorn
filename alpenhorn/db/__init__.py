@@ -42,7 +42,7 @@ from .archive import ArchiveFileCopy, ArchiveFileCopyRequest, ArchiveFileImportR
 from .storage import StorageGroup, StorageNode, StorageTransferAction
 
 # Basic functionality
-from ._base import connect, close, database_proxy, threadsafe
+from ._base import connect, close, database_proxy, set_extension, threadsafe
 
 # Prototypes
 from ._base import EnumField, base_model
