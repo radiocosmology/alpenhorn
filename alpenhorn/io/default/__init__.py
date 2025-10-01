@@ -10,10 +10,10 @@ The Default Group I/O class provides support for a
 StorageGroup containing a single StorageNode.
 """
 
-# These must be imported here to make this a valid Alpenhorn I/O module.
 from .group import DefaultGroupIO
 from .node import DefaultNodeIO
 from .remote import DefaultNodeRemote
+from ..base import InternalIO
 
 # The rest of these import simplify other I/O classes re-using
 # Default I/O methods
@@ -21,3 +21,6 @@ from .check import check_async
 from .delete import delete_async, remove_filedir
 from .pull import pull_async
 from .updownlock import UpDownLock
+
+# This is the set-up for the internal Default I/O module
+DefaultIO = InternalIO(__name__, DefaultNodeIO, DefaultGroupIO)

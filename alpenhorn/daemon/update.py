@@ -113,40 +113,37 @@ class updateable_base:
     def _get_io_class(self):
         """Return the I/O class for our Storage object."""
 
-        from ..common.extload import io_module
+        from ..common.extload import io_extension
 
         # If no io_class is specified, the Default I/O classes are used
-        io_name = "Default" if self.db.io_class is None else self.db.io_class
+        io_class = "Default" if self.db.io_class is None else self.db.io_class
 
         # We assume StorageNode if not StorageGroup
         if self.is_group:
             obj_type = "StorageGroup"
-            io_suffix = "GroupIO"
+            key = "group_class"
         else:
             obj_type = "StorageNode"
-            io_suffix = "NodeIO"
+            key = "node_class"
 
-        # Load the module
-        module = io_module(io_name)
-        if module is None:
+        # Get the I/O extension
+        extension = io_extension(io_class)
+        if extension is None:
             log.error(
-                f'No module for I/O class "{io_name}".  '
+                f'Unknown I/O class: "{io_class}".  '
                 f"Ignoring {obj_type} {self.name}."
             )
             return None
 
-        io_name += io_suffix
+        # Get the class from the extension
+        class_ = getattr(extension, key, None)
+        if not class_:
+            log.error(
+                f'No implementation of I/O class "{io_class}" in extension '
+                f'"{extension.full_name}" for {obj_type} {self.name}.'
+            )
 
-        # Within the module, find the class
-        try:
-            class_ = getattr(module, io_name)
-        except AttributeError as e:
-            raise ImportError(
-                f'I/O class "{io_name}" not found in module "{module}". '
-                f"Required for {obj_type} {self.name}."
-            ) from e
-
-        # return the class
+        # return the class (or None)
         return class_
 
     def stop(self) -> None:
@@ -205,7 +202,7 @@ class updateable_base:
             self.io_class = self._get_io_class()
 
             if self.io_class is None:
-                # Error locating I/O module
+                # Error locating I/O class
                 self.io = None
                 return False
 

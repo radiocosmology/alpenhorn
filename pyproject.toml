@@ -32,10 +32,11 @@ requires-python = ">=3.11"
 dependencies = [
   "Click >= 6.0",
   "concurrent-log-handler",
+  "packaging",
   "peewee >= 3.17.1",
   "PyYAML",
   "tabulate",
-  "watchdog"
+  "watchdog >= 4"
 ]
 
 [project.optional-dependencies]
@@ -45,10 +46,8 @@ prometheus = [
 dist = [
   "build",
   "twine",
-  "packaging"
 ]
 doc = [
-  "packaging",
   "Sphinx >= 5.0",
   "sphinx_rtd_theme"
 ]

@@ -104,6 +104,21 @@ def logger():
 
 
 @pytest.fixture
+def reset_extensions():
+    """Extension clean-up.
+
+    De-initialises common.extload after a test
+    """
+
+    yield
+
+    # Reset globals
+    db._base._db_ext = None
+    extload._id_ext = None
+    extload._io_ext = None
+
+
+@pytest.fixture
 def set_config(request, logger):
     """Set alpenhorn.common.config._config for testing.
 
@@ -123,11 +138,8 @@ def set_config(request, logger):
 
     yield config._config
 
-    # Reset globals
+    # Reset config
     config._config = None
-    db._base._db_ext = None
-    extload._id_ext = None
-    extload._io_ext = {}
 
 
 @pytest.fixture
@@ -401,11 +413,50 @@ def mock_exists(fs):
 
 
 @pytest.fixture
-def mock_observer():
-    """Mocks the DefaultIO observer so its always the PollingObserver"""
-    from watchdog.observers.polling import PollingObserver
+def mock_observer(fs):
+    """Creates a watchdog observer to monitor the fake filesystem.
 
-    with patch("alpenhorn.io.default.DefaultNodeIO.observer", PollingObserver):
+    This is essentially a PollingObserver, but rejiggered to
+    explicitly use the fake filesystem.
+    """
+    # This is the fakefs `os` module, which is the important bit here
+    import os
+
+    from watchdog.observers.api import (
+        DEFAULT_EMITTER_TIMEOUT,
+        DEFAULT_OBSERVER_TIMEOUT,
+        BaseObserver,
+    )
+    from watchdog.observers.polling import PollingEmitter
+
+    # This is essentially the PollingEmitter, but we need to re-implement
+    # __init__ to rebind the defaults using the (fake) os module.
+    class FakeFSEmitter(PollingEmitter):
+        def __init__(
+            self,
+            event_queue,
+            watch,
+            timeout=DEFAULT_EMITTER_TIMEOUT,
+            event_filter=None,
+            # These last two are ignored
+            stat=None,
+            listdir=None,
+        ):
+            super().__init__(
+                event_queue,
+                watch,
+                timeout=timeout,
+                event_filter=event_filter,
+                stat=os.stat,
+                listdir=os.scandir,
+            )
+
+    # The fake observer is just made up out of the fake emitter
+    class FakeFSObserver(BaseObserver):
+        def __init__(self, timeout=DEFAULT_OBSERVER_TIMEOUT):
+            BaseObserver.__init__(self, emitter_class=FakeFSEmitter, timeout=timeout)
+
+    with patch("alpenhorn.io.default.DefaultNodeIO.observer", FakeFSObserver):
         yield
 
 
@@ -466,13 +517,13 @@ def use_chimedb(set_config):
 
 
 @pytest.fixture
-def dbproxy(set_config):
+def dbproxy(set_config, reset_extensions):
     """Database init and teardown.
 
     This fixture yields the database proxy after initialisation.
     """
-    # Load extensions
-    extload.load_extensions()
+    # Find and init early extensions to get the DB extension
+    extload.init_extensions(extload.find_extensions(), stage=1)
 
     # Set database.url if not already present
     config._config = config.merge_dict_tree(
@@ -527,7 +578,7 @@ def unode(dbtables, simplenode, queue):
 
 
 @pytest.fixture
-def mockio():
+def mockio(reset_extensions):
     """A mocked I/O module.
 
     Access the mocks via mockio.group and mockio.node.
@@ -541,35 +592,38 @@ def mockio():
     group = MagicMock()
     group.fifo = "g:mockio"
 
-    # This is our mock I/O module
-    class MockIO:
-        # The I/O "classes"
-        def MockNodeRemote(*args, **kwargs):
-            nonlocal remote
-            remote._instance_args = args
-            remote._instance_kwargs = kwargs
-            return remote
+    # The I/O "classes"
+    def MockNodeRemote(*args, **kwargs):
+        nonlocal remote
+        remote._instance_args = args
+        remote._instance_kwargs = kwargs
+        return remote
 
-        def MockNodeIO(*args, **kwargs):
-            nonlocal node
-            node._instance_args = args
-            node._instance_kwargs = kwargs
-            return node
+    def MockNodeIO(*args, **kwargs):
+        nonlocal node
+        node._instance_args = args
+        node._instance_kwargs = kwargs
+        return node
 
-        MockNodeIO.remote_class = MockNodeRemote
+    MockNodeIO.remote_class = MockNodeRemote
 
-        def MockGroupIO(*args, **kwargs):
-            nonlocal group
-            group._instance_args = args
-            node._instance_kwargs = kwargs
-            return group
+    def MockGroupIO(*args, **kwargs):
+        nonlocal group
+        group._instance_args = args
+        group._instance_kwargs = kwargs
+        return group
 
-    MockIO.remote = remote
+    # This is our mock I/O extension
+    MockIO = MagicMock()
+    MockIO.full_name = "MockIO"
     MockIO.node = node
     MockIO.group = group
+    MockIO.remote = remote
+    MockIO.node_class = MockNodeIO
+    MockIO.group_class = MockGroupIO
 
     # Patch extensions._io_ext so alpenhorn can find our module
-    with patch.dict("alpenhorn.common.extload._io_ext", mock=MockIO):
+    with patch.dict("alpenhorn.common.extload._io_ext", Mock=MockIO):
         yield MockIO
 
 

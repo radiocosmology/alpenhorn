@@ -84,7 +84,7 @@ def entry(conf, quiet, test_isolation, verbose, debug):
 
     # Initialise alpenhorn
     start_alpenhorn(
-        conf, cli=True, verbosity=_verbosity_from_cli(verbose, debug, quiet)
+        conf, verbosity=_verbosity_from_cli(verbose, debug, quiet), check_schema=False
     )
 
 
