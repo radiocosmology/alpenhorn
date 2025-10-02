@@ -2,7 +2,7 @@
 
 import click
 
-from ..cli import dbconnect
+from ...db import schema_version
 from .autosync import autosync
 from .create import create
 from .list import list_
@@ -16,7 +16,7 @@ from .sync import sync
 def cli():
     """Manage Storage Groups."""
 
-    dbconnect()
+    schema_version(check=True)
 
 
 cli.add_command(autosync, "autosync")
