@@ -73,10 +73,12 @@ import importlib
 import logging
 import pathlib
 from collections.abc import Callable
-from types import ModuleType
+
+from click import ClickException
 
 from ..daemon import UpdateableNode
 from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, set_extension
+from ..io.base import InternalIO
 from . import config
 
 ImportCallback = Callable[
@@ -91,7 +93,7 @@ log = logging.getLogger(__name__)
 
 # Internal variables for holding the extension references
 _id_ext = None
-_io_ext = {}
+_io_ext = None
 
 
 def load_extensions() -> None:
@@ -114,11 +116,13 @@ def load_extensions() -> None:
     ValueError
         The data returned by register_extension was not usable.
     """
+    from ..io import internal_io
 
     # Initialise globals
-    global _id_ext
+    global _id_ext, _io_ext
 
     _id_ext = []
+    _io_ext = internal_io.copy()
 
     for name in config.get("extensions", default=[], as_type=list):
         log.info(f"Loading extension {name}")
@@ -175,24 +179,13 @@ def load_extensions() -> None:
             useful_extension = True
 
             for modname, extmod in extension_dict["io-modules"].items():
-                # Check if this module is present in a previously imported
-                # extension.  This test is easier to do then the alpenhorn.io
-                # check, so we do it first
                 if modname in _io_ext:
-                    raise ValueError(
-                        f'I/O module "{modname}" in extension {name} already '
-                        "imported from an earlier extension module."
+                    raise ClickException(
+                        f'I/O class "{modname}" from '
+                        f'Extension "{name}" already provided by '
+                        + _io_ext[modname].full_name
+                        + "."
                     )
-
-                # Second, check if this module already exists in alpenhorn.io
-                try:
-                    importlib.import_module("alpenhorn.io." + modname)
-                    raise ValueError(
-                        f'I/O module "{modname}" in extension {name} duplicates '
-                        f'existing module "alpenhorn.io.{modname}"'
-                    )
-                except ImportError:
-                    pass
 
                 # Otherwise, add it to the list
                 _io_ext[modname] = extmod
@@ -220,36 +213,20 @@ def import_detection() -> list[ImportDetect]:
     return _id_ext
 
 
-def io_module(name: str) -> ModuleType | None:
-    """Returns the module supporting I/O class named `name`.
+def io_extension(name: str) -> InternalIO | None:
+    """Returns the Extension providing the I/O class named `name`.
 
     Parameters
     ----------
     name : str
         The I/O class to find the module for.  Usually the value of
-        `StorageNode.io_class` or `StorageGroup.io_class`.  This may
-        not be "base", ignoring case.
+        `StorageNode.io_class` or `StorageGroup.io_class`.
 
     Returns
     -------
-    iomod : module or None
-        The Python module providing the implementation of the named I/O class.
-        It is either a submodule of `alpenhorn.io` or else a module
-        provided by one of the io-module extensions.
-
+    iomod : InternalIO or None
+        The I/O extension providing the implementation of the named I/O class.
         This will be None if no I/O module could be found.
     """
 
-    # Module names are always lower case
-    name = name.lower()
-
-    # Loading the I/O base is not allowed
-    if name == "base":
-        return None
-
-    # Try to load the module from alpenhorn.io
-    try:
-        return importlib.import_module("alpenhorn.io." + name)
-    except ImportError:
-        # No alpenhorn.io module, maybe it's an extension module
-        return _io_ext.get(name)
+    return _io_ext.get(name, None)

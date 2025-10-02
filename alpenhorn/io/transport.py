@@ -7,6 +7,7 @@ import pathlib
 
 from ..daemon import UpdateableNode
 from ..db import ArchiveFileCopyRequest
+from .base import InternalIO
 from .default import DefaultGroupIO
 
 log = logging.getLogger(__name__)
@@ -167,3 +168,6 @@ class TransportGroupIO(DefaultGroupIO):
         # If we got here, we couldn't find a disk
         log.debug(f'Unable to find a transport node for "{req.file.path}"')
         return
+
+
+TransportIO = InternalIO(__name__, None, TransportGroupIO)
