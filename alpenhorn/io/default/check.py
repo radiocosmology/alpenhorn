@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import pathlib
 
 import peewee as pw
 
@@ -63,7 +64,9 @@ def force_check_filecopy(file_: ArchiveFile, node: StorageNode, node_io: BaseNod
         ).execute()
 
 
-def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
+def check_async(
+    task: Task, io: BaseNodeIO, copy: ArchiveFileCopy, path: pathlib.Path | None = None
+) -> None:
     """Check a file copy.  This is asynchronous.
 
     First checks for a size mismatch.  If that's okay, then will
@@ -82,10 +85,15 @@ def check_async(task: Task, io: BaseNodeIO, copy: ArchiveFileCopy) -> None:
         The I/O instance on which the file copy lives
     copy : ArchiveFileCopy
         The copy to check
+    path : pathlib.Path, optional
+        If not None, this is the absolute path to the file.  This parameter is
+        not used by Default I/O but is provided as a convenience to other I/O
+        Classes which wish to re-use this I/O async.  If not given,
+        `copy.path` is used.
     """
 
     copyname = copy.file.path
-    fullpath = copy.path
+    fullpath = path if path else copy.path
 
     Metric(
         "verification_checks",

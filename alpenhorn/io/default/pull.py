@@ -283,42 +283,37 @@ def rsync(
     return ioresult
 
 
-def hardlink(
-    from_path: str | os.PathLike, to_dir: str | os.PathLike, filename: str
-) -> dict | None:
-    """Hard link `from_path` as `to_dir/filename`
+def hardlink(from_path: str | os.PathLike, to_path: str | os.PathLike) -> dict | None:
+    """Hard link `from_path` as `to_path`.
 
-    Atomically overwrites an existing `to_dir/filename`.
-
-    If hardlinking fails, this funciton assumes it's because src and dest
-    aren't on the same filesystem (i.e., failure is probably not for an
-    interesting reason).
+    Atomically overwrites an existing `to_path`.  If hardlinking fails, this
+    funciton assumes it's because src and dest aren't on the same filesystem
+    (i.e., failure is probably not for an interesting reason).
 
     Parameters
     ----------
     from_path : path-like
         Source location
-    to_dir : path-like
-        Destination directory
-    filename : str
-        Destination filename
+    to_path : path-like
+        Destination location
 
     Returns
     -------
-    ioresult : dict or None
+    dict or None
         `{"ret": 1}` if the attempt timed out;
         None if hardlinking failed; otherwise, the dict
         `{"ret": 0, "md5sum": True}`
     """
 
     from_path = pathlib.Path(from_path)
-    dest_path = pathlib.Path(to_dir, filename)
+    to_path = pathlib.Path(to_path)
+    filename = to_path.name
 
     # Neither POSIX nor libc have any facilities to atomically overwite
     # an existing file with a hardlink, so we have to do this ridiculousness:
     try:
         # Create a temporary directory as a subdirectory of the destination dir
-        with TemporaryDirectory(dir=to_dir, prefix=".alpentemp") as tmpdir:
+        with TemporaryDirectory(dir=to_path.parent, prefix=".alpentemp") as tmpdir:
             # We can be certain that we can create anything we want in here
             tmp_path = pathlib.Path(tmpdir, filename)
 
@@ -326,13 +321,13 @@ def hardlink(
             util.timeout_call(tmp_path.hardlink_to, 600, from_path)
 
             # Hardlink succeeded!  Overwrite any existing file atomically
-            tmp_path.rename(dest_path)
+            tmp_path.rename(to_path)
     except OSError as e:
         # Link creation failed for some reason
         log.debug(f"hardlink failed: {e}")
         return None
     except TimeoutError:
-        log.warning(f'Timeout trying to hardlink "{dest_path}".')
+        log.warning(f'Timeout trying to hardlink "{to_path}".')
         return {"ret": 1}
 
     # md5sum is obviously correct
@@ -340,31 +335,26 @@ def hardlink(
 
 
 def local_copy(
-    from_path: str | os.PathLike, to_dir: str | os.PathLike, filename: str, size_b: int
+    from_path: str | os.PathLike, to_path: str | os.PathLike, size_b: int
 ) -> dict:
-    """Copy `from_path` to `to_dir/filename` using `shutil`
+    """Copy `from_path` to `to_path` using `shutil`
 
-    Atomically overwrites an existing `to_dir/filename`.
-
-    Copy attempt times out after `_pull_timeout(size_b)` seconds have elapsed.
-
-    After a successful copy, `common.util.md5sum_file` will be called to verify
-    the transfer was successful.
+    Atomically overwrites an existing `to_path`.  Copy attempt times out after
+    `_pull_timeout(size_b)` seconds have elapsed.  After a successful copy,
+    `common.util.md5sum_file` will be called to verify the transfer was successful.
 
     Parameters
     ----------
     from_path : path-like
         Source location
-    to_dir : path-like
-        Destination directory
-    filename : str
-        Destination filename
+    to_path : path-like
+        Destination location
     size_b : int
         Size in bytes of file
 
     Returns
     -------
-    ioresult : dict
+    dict
         Result of the transfer, with keys:
         "ret": int
             0 if copy succeeded; 1 if it failed
@@ -379,13 +369,13 @@ def local_copy(
     """
 
     from_path = pathlib.Path(from_path)
-    dest_path = pathlib.Path(to_dir, filename)
+    to_path = pathlib.Path(to_path)
 
     # We create the copy in a temporary place so that the destination filename
     # never points to a partially transferred file.
     try:
         # Create a temporary directory as a subdirectory of the destination dir
-        with TemporaryDirectory(dir=to_dir, prefix=".alpentemp") as tmpdir:
+        with TemporaryDirectory(dir=to_path.parent, prefix=".alpentemp") as tmpdir:
             # Timeout for the pull
             timeout = _pull_timeout(size_b)
 
@@ -398,11 +388,11 @@ def local_copy(
                 tmp_path = util.timeout_call(shutil.copy2, timeout, from_path, tmpdir)
 
             # Copy succeeded!  Overwrite any existing file atomically
-            pathlib.Path(tmp_path).rename(dest_path)
+            pathlib.Path(tmp_path).rename(to_path)
 
         # Now MD5 the file to verify it.
-        log.info(f'verifying "{dest_path}" after local copy')
-        md5 = util.md5sum_file(dest_path)
+        log.info(f'verifying "{to_path}" after local copy')
+        md5 = util.md5sum_file(to_path)
     except (OSError, TimeoutError) as e:
         # Copy failed for some reason
         log.warning(f"local copy failed: {e}")
@@ -418,6 +408,7 @@ def pull_async(
     tree_lock: UpDownLock,
     req: ArchiveFileCopyRequest,
     did_search: bool,
+    path: pathlib.path | None = None,
 ) -> None:
     """Fulfill `req` by pulling a file onto the local node.
 
@@ -440,6 +431,11 @@ def pull_async(
     did_search : bool
         True if a search for an existing unregistered copy was
         already performed.
+    path : pathlib.Path, optional
+        If not None, this is the absolute destination path.  This parameter is
+        not used by Default I/O but is provided as a convenience to other I/O
+        Classes which wish to re-use this I/O async.  If not given, the file is
+        created as `req.file.path` under the node root.
     """
 
     # Before we were queued, NodeIO reserved space for this file.
@@ -476,7 +472,7 @@ def pull_async(
             )
             return
 
-    to_file = pathlib.Path(io.node.root, req.file.path)
+    to_file = path if path else pathlib.Path(io.node.root, req.file.path)
     to_dir = to_file.parent
 
     # Check for existing file, if not done already
@@ -567,7 +563,7 @@ def pull_async(
         # a non-archive node
         if req.node_from.archive == io.node.archive:
             pullrun_metric.inc(method="link", remote="0")
-            ioresult = hardlink(from_path, to_dir, req.file.name)
+            ioresult = hardlink(from_path, to_file)
             pullrun_metric.dec(method="link", remote="0")
             if ioresult is not None:
                 log.info(f"Hardlinked local file {req.file.path}")
@@ -585,7 +581,7 @@ def pull_async(
                 # No rsync?  Just use shutil.copy, I guess
                 log.warning("Falling back on shutil.copy to complete local pull.")
                 pullrun_metric.inc(method="internal", remote="0")
-                ioresult = local_copy(from_path, to_dir, req.file.name, req.file.size_b)
+                ioresult = local_copy(from_path, to_file, req.file.size_b)
                 pullrun_metric.dec(method="internal", remote="0")
 
     # Delete the placeholder, if we created it
@@ -603,6 +599,7 @@ def pull_async(
         start_time=start_time,
         stderr=ioresult.get("stderr", None),
         success=(ioresult["ret"] == 0),
+        path=path,
     ):
         # Remove file, on error
         try:

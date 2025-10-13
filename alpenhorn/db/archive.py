@@ -302,6 +302,7 @@ class ArchiveFileCopyRequest(base_model):
         start_time: float,
         check_src: bool = True,
         stderr: str | None = None,
+        path: pathlib.Path | None = None,
     ) -> bool:
         """Update the database after attempting this copy request.
 
@@ -326,6 +327,11 @@ class ArchiveFileCopyRequest(base_model):
             if success is False, should the source file be marked suspect?
         stderr : str or None
             if success is False, this will be copied into the log
+        path : pathlib.Path or None
+            If not None, this is the path passed to the `size` function (if
+            it's callable).  If None, which is the default, the `size` function
+            will be passed `self.file.path` instead.  If `size` is not callable,
+            this parameter is ignored.
 
         Returns
         -------
@@ -392,7 +398,7 @@ class ArchiveFileCopyRequest(base_model):
         with database_proxy.atomic():
             # Comput storage used if needed
             if callable(size):
-                size = size(self.file.path)
+                size = size(path if path else self.file.path)
             # Upsert the FileCopy
             try:
                 copy = ArchiveFileCopy.create(
