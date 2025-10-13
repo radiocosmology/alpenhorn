@@ -116,6 +116,26 @@ class BaseNodeRemote:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
+    def remote_pull_ok(self, host: str) -> bool:
+        """Check if a remote pull to `host` is possible.
+
+        Returns True if the daemon on `host` may attempt a remote pull
+        out of this node, or False if it cannot.
+
+        Parameters
+        ----------
+        host : str
+            The host on which the pulling daemon is running.
+
+        Returns
+        -------
+        bool
+            True if a remote pull should be attempted, or False
+            if a remote pull should be cancelled.
+        """
+        # By default, we return True
+        return True
+
 
 class BaseNodeIO:
     """Base class for StorageNode I/O modules in alpenhorn.

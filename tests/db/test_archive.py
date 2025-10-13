@@ -136,6 +136,38 @@ def test_archivefilecopyrequest_model(
     archivefilecopyrequest(file=simplefile, node_from=minnode, group_to=simplegroup)
 
 
+def test_archivefilecopy_cancel(simplecopyrequest):
+    """Test ArchiveFileCopyRequest.cancel."""
+
+    assert not simplecopyrequest.cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).completed
+
+    simplecopyrequest.cancel("test")
+
+    assert simplecopyrequest.cancelled
+    assert ArchiveFileCopyRequest.get(id=simplecopyrequest.id).cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).completed
+
+
+def test_archivefilecopy_cancel_bad(simplecopyrequest):
+    """Test passing bad reason to ArchiveFileCopyRequest.cancel."""
+
+    assert not simplecopyrequest.cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).completed
+
+    with pytest.raises(ValueError):
+        simplecopyrequest.cancel("")
+
+    with pytest.raises(ValueError):
+        simplecopyrequest.cancel("success")
+
+    assert not simplecopyrequest.cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).cancelled
+    assert not ArchiveFileCopyRequest.get(id=simplecopyrequest.id).completed
+
+
 def test_copy_path(simplefile, simplenode, archivefilecopy):
     """Test ArchiveFileCopy.path."""
 
@@ -198,3 +230,28 @@ def test_archivefileimportrequest_model(
 
     # Not unique
     archivefileimportrequest(path="min_path", node=minnode)
+
+
+def test_archivefileimportrequest_complete(simpleimportrequest):
+    """Test ArchiveFileImportRequest.complete()."""
+
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 0
+
+    simpleimportrequest.complete("success")
+
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
+
+    # Can be called multiple times
+    simpleimportrequest.complete("success")
+
+    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
+
+
+def test_archivefileimportrequest_complete_no_result(simpleimportrequest):
+    """Test ArchiveFileImportRequest.complete()."""
+
+    with pytest.raises(ValueError):
+        simpleimportrequest.complete("")
+
+    with pytest.raises(ValueError):
+        simpleimportrequest.complete(None)
