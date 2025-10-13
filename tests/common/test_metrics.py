@@ -329,16 +329,6 @@ def test_remove(cleanup, hostname):
     mock.remove.assert_called_with(4, 5, 6, "e", hostname, "g")
 
 
-def test_by_name(cleanup):
-    """Test by_name."""
-
-    metric = metrics.by_name("transfers")
-    assert isinstance(metric, metrics.Metric)
-
-    with pytest.raises(ValueError):
-        metrics.by_name("no_such_metric")
-
-
 def test_start_promclient_off(set_config):
     """Test start_promclient with no port."""
 

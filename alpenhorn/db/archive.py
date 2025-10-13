@@ -5,12 +5,29 @@ from collections.abc import Callable
 
 import peewee as pw
 
-from ..common import metrics, util
+from ..common import util
+from ..common.metrics import Metric
 from ._base import EnumField, base_model, database_proxy
 from .acquisition import ArchiveFile
 from .storage import StorageGroup, StorageNode, StorageTransferAction
 
 log = logging.getLogger(__name__)
+
+
+def _inc_reqcomp(
+    type: str, result: str, node: StorageNode, group: StorageGroup
+) -> None:
+    """Increment the "requests_completed" metric.
+
+    Used by both ArchiveFileCopyRequests (type="copy") and
+    ArchiveFileImportRequests (type="import").
+    """
+    Metric(
+        "requests_completed",
+        "Count of completed requests",
+        counter=True,
+        bound={"type": type, "result": result, "node": node.name, "group": group.name},
+    ).inc()
 
 
 class ArchiveFileCopy(base_model):
@@ -178,6 +195,54 @@ class ArchiveFileCopyRequest(base_model):
     class Meta:
         indexes = ((("file", "group_to", "node_from"), False),)  # non-unique index
 
+    def cancel(self, reason: str) -> None:
+        """Cancel this request because of `reason`.
+
+        Parameters
+        ----------
+        reason : str
+            This is the reason used in the "result" label of the
+            "requests_completed" metric.  Can be any non-empty
+            string except for "success" (which is used to mark completed
+            requests, instead of cancelled ones), but preferably
+            should be one of the standard alpenhorn values, when appropriate:
+
+            * "duplicate": the destination file already exists.
+            * "missing": the source file is missing.
+            * "non-local": this was a remote pull but the source node does not
+                support remote access.
+        """
+        if not reason or reason == "success":
+            raise ValueError("invalid reason")
+
+        # Standard logging.  By default, it's a warning
+        log_func = log.warning
+        if reason == "duplicate":
+            log_func = log.info  # this doesn't warrant a warning.
+            why = f"already present in group {self.group_to.name}"
+        elif reason == "missing":
+            why = f" not available on node {self.node_from.name}"
+        elif reason == "non-local":
+            why = f" remote pull from node {self.node_from.name} not possible"
+        else:
+            # The generic log message
+            why = f' result="{reason}"'
+
+        # Log cancellation
+        log_func(
+            f"Cancelling pull request for {self.file.path}: {why}"
+            + (f" [file_id={self.file.id}]" if log_func is log.warning else "")
+        )
+
+        # Update ourself
+        self.cancelled = True
+        self.save(only=[ArchiveFileCopyRequest.cancelled])
+
+        # Increment the metric
+        _inc_reqcomp(
+            type="copy", result=reason, node=self.node_from, group=self.group_to
+        )
+
     def check(self, node_to: StorageNode | None = None) -> bool:
         """Check whether this pull request should proceed.
 
@@ -204,27 +269,13 @@ class ArchiveFileCopyRequest(base_model):
         """
         from ..daemon import RemoteNode
 
-        # The only label left unbound here is "result"
-        comp_metric = metrics.by_name("requests_completed").bind(
-            type="copy",
-            node=self.node_from.name,
-            group=self.group_to.name,
-        )
-
         # What's the current situation on the destination?
         copy_state = self.group_to.state_on_node(self.file)[0]
         if copy_state == "Y":
             # We mark the AFCR cancelled rather than complete becase
             # _this_ AFCR clearly hasn't been responsible for creating
             # the file copy.
-            log.info(
-                f"Cancelling pull request for "
-                f"{self.file.acq.name}/{self.file.name}: "
-                f"already present in group {self.group_to.name}."
-            )
-            self.cancelled = True
-            self.save(only=[ArchiveFileCopyRequest.cancelled])
-            comp_metric.inc(result="duplicate")
+            self.cancel("duplicate")
             return False
         if copy_state == "M":
             log.warning(
@@ -260,14 +311,7 @@ class ArchiveFileCopyRequest(base_model):
         # source is suspect, skip the request.
         state = self.node_from.filecopy_state(self.file)
         if state == "N" or state == "X":
-            log.warning(
-                f"Cancelling request for {self.file.acq.name}/{self.file.name}:"
-                f" not available on node {self.node_from.name}."
-                f" [file_id={self.file.id}]"
-            )
-            self.cancelled = True
-            self.save(only=[ArchiveFileCopyRequest.cancelled])
-            comp_metric.inc(result="missing")
+            self.cancel("missing")
             return False
         if state == "M":
             log.info(
@@ -340,10 +384,12 @@ class ArchiveFileCopyRequest(base_model):
             or False if the transfer failed.
         """
 
-        # The only label left unbound here is "result"
-        transf_metric = metrics.by_name("transfers").bind(
-            node_from=self.node_from.name,
-            group_to=self.group_to.name,
+        transf_metric = Metric(
+            "transfers",
+            "Count of transfer attempts",
+            counter=True,
+            unbound=("result",),
+            bound={"node_from": self.node_from.name, "group_to": self.group_to.name},
         )
 
         # Check the result
@@ -396,7 +442,7 @@ class ArchiveFileCopyRequest(base_model):
         )
 
         with database_proxy.atomic():
-            # Comput storage used if needed
+            # Compute storage used if needed
             if callable(size):
                 size = size(path if path else self.file.path)
             # Upsert the FileCopy
@@ -426,16 +472,13 @@ class ArchiveFileCopyRequest(base_model):
             self.save()
 
         # Update metrics
-        metrics.by_name("requests_completed").inc(
-            type="copy",
-            node=self.node_from.name,
-            group=self.group_to.name,
-            result="success",
+        _inc_reqcomp(
+            type="copy", result="success", node=self.node_from, group=self.group_to
         )
         transf_metric.inc(result="success")
 
         # This can be used to measure throughput
-        metrics.Metric(
+        Metric(
             "pulled_bytes",
             "Count of bytes pulled",
             counter=True,
@@ -484,3 +527,40 @@ class ArchiveFileImportRequest(base_model):
     register = pw.BooleanField(default=False)
     completed = pw.BooleanField(default=False)
     timestamp = pw.DateTimeField(default=pw.utcnow, null=True)
+
+    def complete(self, result: str) -> None:
+        """Complete this request with "result".
+
+        Parameters
+        ----------
+        result : str
+            This is the value used in the "result" label of the
+            "requests_completed" metric.  Successfully completed requests should
+            use "success".  For failure, this can be any non-empty string, but
+            preferably should be one of the standard alpenhorn values, when
+            appropriate:
+
+            * "bad acq": the name of the ArchiveAcq provided by the Import
+                Detect Extension was invalid
+            * "bad name": `self.path` had an invalid filename
+            * "duplicate": `self.path` is already imported
+            * "ignored": `self.path` cannot be imported
+            * "no detection": no Import-Detect Extension recognised the file
+            * "non-file": `self.path` pointed to something other than a regular
+                file
+            * "unregistered": `self.path` wasn't previously known and
+                `self.register` was `False`
+        """
+        if not result:
+            raise ValueError("invalid result")
+
+        # We only do this if we're not already complete
+        if not self.completed:
+            log.info(f"Completed import request #{self.id}.")
+            _inc_reqcomp(
+                type="import", result=result, node=self.node, group=self.node.group
+            )
+
+            # Update ourself
+            self.completed = True
+            self.save(only=[ArchiveFileImportRequest.completed])
