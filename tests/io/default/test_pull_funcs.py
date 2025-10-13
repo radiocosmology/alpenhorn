@@ -208,11 +208,10 @@ def test_hardlink(xfs):
     # Create src and dest
     file = "/src/file"
     xfs.create_file(file, contents="data")
-    dstdir = pathlib.Path("/dest")
-    xfs.create_dir(dstdir)
-    destfile = dstdir.joinpath("file")
+    destfile = pathlib.Path("/dest/file")
+    xfs.create_dir(destfile.parent)
 
-    assert pull.hardlink(file, dstdir, "file") == {"ret": 0, "md5sum": True}
+    assert pull.hardlink(file, destfile) == {"ret": 0, "md5sum": True}
     assert destfile.read_text() == "data"
 
 
@@ -222,12 +221,11 @@ def test_hardlink_clobber(xfs):
     # Create src and dest
     file = "/src/file"
     xfs.create_file(file, contents="data")
-    dstdir = pathlib.Path("/dest")
-    destfile = dstdir.joinpath("file")
+    destfile = pathlib.Path("/dest/file")
     xfs.create_file(destfile, contents="other_data")
 
     assert destfile.read_text() == "other_data"
-    assert pull.hardlink(file, dstdir, "file") == {"ret": 0, "md5sum": True}
+    assert pull.hardlink(file, destfile) == {"ret": 0, "md5sum": True}
     assert destfile.read_text() == "data"
 
 
@@ -237,18 +235,17 @@ def test_hardlink_fail(xfs):
     # Create src but not destdir
     file = "/src/file"
     xfs.create_file(file, contents="data")
-    dstdir = pathlib.Path("/dest")
-    destfile = dstdir.joinpath("file")
+    destfile = pathlib.Path("/dest/file")
 
-    assert pull.hardlink(file, dstdir, "file") is None
+    assert pull.hardlink(file, destfile) is None
     with pytest.raises(FileNotFoundError):
         destfile.read_text()
 
     # Try with access error instead.
     xfs.create_file(destfile, contents="other_data")
-    xfs.chmod(dstdir, 0o400)
+    xfs.chmod(destfile.parent, 0o400)
 
-    assert pull.hardlink(file, dstdir, "file") is None
+    assert pull.hardlink(file, destfile) is None
     with pytest.raises(PermissionError):
         destfile.read_text()
 
@@ -259,11 +256,10 @@ def test_local_copy(xfs, set_config):
     # Create src and dest
     file = "/src/file"
     xfs.create_file(file, contents="data")
-    dstdir = pathlib.Path("/dest")
-    xfs.create_dir(dstdir)
-    destfile = dstdir.joinpath("file")
+    destfile = pathlib.Path("/dest/file")
+    xfs.create_dir(destfile.parent)
 
-    assert pull.local_copy(file, dstdir, "file", 4) == {
+    assert pull.local_copy(file, destfile, 4) == {
         "ret": 0,
         "md5sum": "8d777f385d3dfec8815d20f7496026dc",
     }
@@ -276,12 +272,11 @@ def test_local_copy_clobber(xfs, set_config):
     # Create src and dest
     file = "/src/file"
     xfs.create_file(file, contents="data")
-    dstdir = pathlib.Path("/dest")
-    destfile = dstdir.joinpath("file")
+    destfile = pathlib.Path("/dest/file")
     xfs.create_file(destfile, contents="other_data")
 
     assert destfile.read_text() == "other_data"
-    assert pull.local_copy(file, dstdir, "file", 4) == {
+    assert pull.local_copy(file, destfile, 4) == {
         "ret": 0,
         "md5sum": "8d777f385d3dfec8815d20f7496026dc",
     }
@@ -294,10 +289,9 @@ def test_local_copy_fail(xfs, set_config):
     # Create src but not destdir
     file = "/src/file"
     xfs.create_file(file, contents="data")
-    dstdir = pathlib.Path("/dest")
-    destfile = dstdir.joinpath("file")
+    destfile = pathlib.Path("/dest/file")
 
-    result = pull.local_copy(file, dstdir, "file", 4)
+    result = pull.local_copy(file, destfile, 4)
     assert result["ret"] != 0
     assert "stderr" in result
 
@@ -306,9 +300,9 @@ def test_local_copy_fail(xfs, set_config):
 
     # Try with access error instead.
     xfs.create_file(destfile, contents="other_data")
-    xfs.chmod(dstdir, 0o400)
+    xfs.chmod(destfile.parent, 0o400)
 
-    result = pull.local_copy(file, dstdir, "file", 4)
+    result = pull.local_copy(file, destfile, 4)
     assert result["ret"] != 0
     assert "stderr" in result
 
