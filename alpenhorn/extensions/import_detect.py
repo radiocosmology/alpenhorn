@@ -37,7 +37,7 @@ class ImportDetectExtension(Extension):
       * `node`: a `UpdateableNode` instance of the node on which we're
         importing the file.
 
-    The funciton should return a two-tuple.  If the detection fails, this
+    The function should return a two-tuple.  If the detection fails, this
     should be a pair of `None`s.  Otherwise, if detection succeeds:
 
       * `acq_name`: The name of the acquisition, which does not already need
