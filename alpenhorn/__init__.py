@@ -10,6 +10,7 @@ Submodules
     common
     daemon
     db
+    extensions
     io
 """
 

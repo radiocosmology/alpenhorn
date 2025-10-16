@@ -3,10 +3,8 @@
 This module abstracts the database connection, providing a minimally
 functional fallback if no external database module has been provided.
 
-More capable database connectors may be provided by a database extension
-module.  The dict returned by the register_extension() call to a database
-extension module must contain a "database" key whose value is a second dict
-with keys providing the database extensions capabilities.
+More capable database connectors may be provided by a DatabaseExtension.
+See the Extension API in `alpenhorn.extensions`.
 
 The following keys are allowed in the "database" dict, all of which are
 optional:
