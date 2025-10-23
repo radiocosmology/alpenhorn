@@ -14,13 +14,13 @@ import shutil
 import time
 from tempfile import TemporaryDirectory
 
+import peewee as pw
+
 from ...common import config, util
 from ...common.metrics import Metric
 from ...daemon import RemoteNode
 from ...daemon.scheduler import Task, threadlocal
-from ...db import (
-    ArchiveFileCopyRequest,
-)
+from ...db import ArchiveFileCopy, ArchiveFileCopyRequest
 from ..base import BaseNodeIO
 from .check import force_check_filecopy
 from .updownlock import UpDownLock
@@ -481,8 +481,16 @@ def pull_async(
 
     # Check for existing file, if not done already
     if not did_search:
+        # If this is a known corrupt file, there's no need to do an existence check.
+        # (because in that case we'd want to clobber an existing file anyways).
         try:
-            if io.exists(req.file.path):
+            copy = ArchiveFileCopy.get(node=io.node, file=req.file)
+            known_corrupt = copy.has_file == "X"
+        except pw.DoesNotExist:
+            known_corrupt = False
+
+        try:
+            if not known_corrupt and io.exists(req.file.path):
                 log.warning(
                     "Skipping pull request for "
                     f"{req.file.acq.name}/{req.file.name}: "

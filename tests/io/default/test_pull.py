@@ -97,6 +97,7 @@ def test_req(
         host=hostname,  # By default the transfer is local
         username="user",
         address="addr",
+        active=True,
     )
 
     copy = archivefilecopy(file=simplefile, node=node_from, has_file="Y")
@@ -503,7 +504,7 @@ def test_pull_already_done(xfs, queue, pull_async_true, archivefilecopy):
     assert afcr.cancelled is True
 
 
-def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy, skip_db_checks):
+def test_pull_exists(xfs, queue, pull_async_false, skip_db_checks):
     """Test pulling a file that's unknowingly on the node."""
 
     node, req = pull_async_false
@@ -528,3 +529,32 @@ def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy, skip_db_chec
     filecopy = ArchiveFileCopy.get(node=node.db, file=req.file)
     assert filecopy.has_file == "M"
     assert filecopy.wants_file == "Y"
+
+
+def test_pull_corrupt(xfs, queue, pull_async_false, archivefilecopy):
+    """Test pulling to overwrite a known corrupt file."""
+
+    node, req = pull_async_false
+
+    # Destination path
+    path = pathlib.Path(node.db.root, req.file.path)
+
+    # Create destination file
+    xfs.create_file(path)
+
+    # File is known to be corrupt on destination
+    archivefilecopy(node=node.db, file=req.file, has_file="X", wants_file="Y")
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Pull resolved
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is True
+    assert afcr.cancelled is False
+
+    # File copy is now good.
+    filecopy = ArchiveFileCopy.get(node=node.db, file=req.file)
+    assert filecopy.has_file == "Y"
