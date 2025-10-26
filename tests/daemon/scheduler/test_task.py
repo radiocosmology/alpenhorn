@@ -1,5 +1,9 @@
 """Test Tasks"""
 
+from unittest.mock import patch
+
+import peewee as pw
+
 from alpenhorn.daemon.scheduler.task import Task
 
 
@@ -263,3 +267,62 @@ def test_deferred_closed(queue):
     # task is neither queued nor deferred
     assert queue.qsize == 0
     assert queue.deferred_size == 0
+
+
+def test_db_check(queue):
+    """Test calling db_check from within a task."""
+
+    results = None
+
+    def _task(task, queue):
+        from alpenhorn.db import database_proxy as db
+
+        local_results = []
+
+        # DB should initially be open (i.e. "not is_closed" is True)
+        local_results.append(not db.is_closed())
+
+        # Running db_check on an open DB should be fine
+        task.db_check()
+        local_results.append(not db.is_closed())
+
+        # Close the DB connection
+        db.close()
+
+        # Check that DB is closed
+        local_results.append(db.is_closed())
+
+        # Run db_check to re-open
+        task.db_check()
+        local_results.append(not db.is_closed())
+
+        # Close it again
+        db.close()
+        local_results.append(db.is_closed())
+
+        # Mock DB's execute_sql to raise OperationalError
+        def _mock_execute(*args, **kwargs):
+            raise pw.OperationalError("Test")
+
+        # Note: "db" is the database proxy; we have to patch the underlying DB instance
+        # stored in the "obj" attribute
+        with patch.object(db.obj, "execute_sql", _mock_execute):
+            # Also mock is_closed to return False, so the execute_sql check will happen
+            with patch.object(db.obj, "is_closed", lambda: False):
+                task.db_check()
+
+        # Should be open again
+        local_results.append(not db.is_closed())
+
+        nonlocal results
+        results = local_results
+
+    Task(_task, queue, "fifo", args=(queue,))
+
+    # Run the task
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Check results.  Everything should be True
+    assert results == [True] * len(results)

@@ -5,6 +5,8 @@ from collections import deque
 from collections.abc import Callable, Hashable
 from inspect import isgenerator
 
+import peewee as pw
+
 from .queue import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
@@ -112,6 +114,9 @@ class Task:
         Returns True if the task is finished.
         """
 
+        # Ensure the database connection is healthy
+        self.db_check()
+
         # If we have no generator, run _func and check whether it yielded
         if self._generator is None:
             result = self._func(self, *self._args, **self._kwargs)
@@ -150,6 +155,33 @@ class Task:
             self._generator = None
             self.do_cleanup()
             return True
+
+    def db_check(self) -> None:
+        """Check for a healthy database connection.
+
+        If the database connection is not healthy, an attempt will
+        be made to reconnect.
+
+        Raises
+        ======
+        peewee.OperationalError:
+            The database connection could not be re-established.
+        """
+
+        from ...db import database_proxy as proxy
+
+        # First do the obvious check
+        if proxy.is_closed():
+            log.info("Re-opening closed DB connection")
+            proxy.connect()
+            return
+
+        # Otherwise, probe the connection directly
+        try:
+            proxy.execute_sql("SELECT 1")
+        except pw.OperationalError as e:
+            log.info(f"Re-opening DB connection after error: {e}")
+            proxy.connect(reuse_if_open=True)
 
     def do_cleanup(self) -> None:
         """Run through the cleanup stack."""

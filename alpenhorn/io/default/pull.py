@@ -591,6 +591,10 @@ def pull_async(
     # Delete the placeholder, if we created it
     placeholder.unlink(missing_ok=True)
 
+    # How long did that take?  Let's recheck the database connection, just in case,
+    # before trying to do the update
+    task.db_check()
+
     if not req.finish(
         io.node,
         io.storage_used,

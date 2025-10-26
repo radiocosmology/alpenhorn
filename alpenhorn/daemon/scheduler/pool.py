@@ -65,8 +65,12 @@ class Worker(threading.Thread):
         global_abort event which will result in a clean-as-possible exit of
         all of alpenhornd.
         """
+        from ...db import database_proxy
 
         log.info("Started.")
+
+        # Connect to the database, if necessary
+        database_proxy.connect(reuse_if_open=True)
 
         # Put the worker id in `threadlocal`, so tasks can access it
         global threadlocal
