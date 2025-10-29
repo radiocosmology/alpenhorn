@@ -198,7 +198,7 @@ def mock_filesize():
 
 
 @pytest.fixture
-def queue():
+def queue(dbproxy):
     """A test queue."""
     yield FairMultiFIFOQueue()
 
