@@ -43,35 +43,39 @@ def test_show_full(clidb, cli):
 
     now = utcnow()
 
-    group = StorageGroup.create(name="Group")
+    group = StorageGroup.create(name="SN-Group")
     StorageNode.create(
-        name="Node",
+        name="SN-Node",
         group=group,
-        notes="Comment",
-        io_class="IOClass",
+        notes="SN-Comment",
+        io_class="SN-IOClass",
         active=True,
         auto_import=1,
         auto_verify=11,
-        host="Host",
-        address="Addr",
-        username="User",
+        host="SN-Host",
+        address="SN-Addr",
+        username="SN-User",
+        root="/root",
         max_total_gb=10.5,
         min_avail_gb=0.25,
         avail_gb=3.333,
         avail_gb_last_checked=now,
     )
 
-    result = cli(0, ["node", "show", "Node"])
+    result = cli(0, ["node", "show", "SN-Node"])
 
-    assert "Comment" in result.output
-    assert "IOClass" in result.output
+    assert "SN-Node" in result.output
+    assert "SN-Group" in result.output
+    assert "SN-Comment" in result.output
+    assert "SN-IOClass" in result.output
     assert "Active: Yes" in result.output
     assert "Auto-Import: On" in result.output
     assert "Auto-Verify: On" in result.output
     assert "11" in result.output
-    assert "Host" in result.output
-    assert "Addr" in result.output
-    assert "User" in result.output
+    assert "SN-Host" in result.output
+    assert "SN-Addr" in result.output
+    assert "SN-User" in result.output
+    assert "/root" in result.output
     assert "10.50 GiB" in result.output
     assert "3.333 GiB" in result.output
     assert "256.0 MiB" in result.output
