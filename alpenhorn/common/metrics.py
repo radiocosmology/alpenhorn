@@ -312,44 +312,6 @@ class Metric:
             self._metric.clear()
 
 
-def by_name(name: str) -> Metric:
-    """Retrieve the pre-made Metric called `name`.
-
-    This function returns several pre-made Metric instances for use in cases
-    where there is no other natural place to define the metric.
-
-    Metrics returned by this function have no bound labels.  You may call
-    `.bind()` on the returned metric if you wish to bind some of them.
-
-    Parameters
-    ----------
-    name:
-        The name of the Metric to return
-
-    Raises
-    ------
-    ValueError:
-        No such Metric was found with the requested name.
-    """
-
-    if name == "requests_completed":
-        return Metric(
-            name,
-            "Count of completed requests",
-            counter=True,
-            unbound=("type", "result", "node", "group"),
-        )
-    if name == "transfers":
-        return Metric(
-            name,
-            "Count of transfer attempts",
-            counter=True,
-            unbound=("result", "node_from", "group_to"),
-        )
-
-    raise ValueError(f"no such metric: {name}")
-
-
 def start_promclient() -> None:
     """Start the prometheus client
 

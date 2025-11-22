@@ -362,18 +362,16 @@ class UpdateableNode(updateable_base):
             Completes `req` only if initialisation succeeds.
             """
 
-            from . import auto_import
-
             # recheck
             if node.io.check_init():
                 log.info(f'Node "{node.name}" already initialised.')
-                auto_import.import_request_done(req, "duplicate")
+                req.complete("duplicate")
                 return
 
             # Run the init and check result
             if node.io.init() and node.io.check_init():
                 log.info(f'Node "{node.name}" initialised.')
-                auto_import.import_request_done(req, "success")
+                req.complete("success")
                 return
 
             # Otherwise, fail, and don't complete req
@@ -579,7 +577,7 @@ class UpdateableNode(updateable_base):
             path = pathlib.Path(req.path)
             if path.is_absolute():
                 log.info(f'Not importing to "{self.name}" absolute path: {path}')
-                auto_import.import_request_done(req, "invalid")
+                req.complete("invalid")
                 continue
 
             if req.path == "ALPENHORN_NODE":
@@ -589,7 +587,7 @@ class UpdateableNode(updateable_base):
                     f'Ignoring node init request for "{self.name}": '
                     "already initialised."
                 )
-                auto_import.import_request_done(req, "duplicate")
+                req.complete("duplicate")
                 continue
 
             if req.recurse:
@@ -602,7 +600,7 @@ class UpdateableNode(updateable_base):
                         "Ignoring import request of unresolvable scan path: "
                         f"{fullpath}: {e}"
                     )
-                    auto_import.import_request_done(req, "invalid")
+                    req.complete("invalid")
                     continue
 
                 # Recompute the relative path after resolution, or skip scan if we're
@@ -613,7 +611,7 @@ class UpdateableNode(updateable_base):
                     log.warning(
                         f"Ignoring import request of out-of-tree scan path: {fullpath}"
                     )
-                    auto_import.import_request_done(req, "invalid")
+                    req.complete("invalid")
                     continue
 
                 # Run scan
@@ -632,7 +630,7 @@ class UpdateableNode(updateable_base):
                         f'Ignoring request for import of invalid path "{req.path}": '
                         + rejection_reason
                     )
-                    auto_import.import_request_done(req, "invalid")
+                    req.complete("invalid")
                     continue
 
                 # Try to directly import the path
@@ -842,6 +840,15 @@ class UpdateableGroup(updateable_base):
         # Run early checks on the request
         if not req.check():
             return
+
+        # If this is a non-local pull, check that the remote source node
+        # support remote access.  This is not done in `req.check` because
+        # req.check doesn't know about RemoteNode.
+        if not req.node_from.local:
+            remote = RemoteNode(req.node_from)
+            if not remote.io.remote_pull_ok(util.get_hostname()):
+                req.cancel("non-local")
+                return
 
         # Early checks passed: dispatch this request to the Group I/O layer
         if self.io.do_pull_search:
