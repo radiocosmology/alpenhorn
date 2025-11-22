@@ -107,9 +107,13 @@ def bbcp(source: str | os.PathLike, target: str | os.PathLike, size_b: int) -> d
     """
 
     # Set port number, which is different for each worker
-    # We use 4200 for the main thread and increase by ten
-    # for each worker.
-    port = 4200 + getattr(threadlocal, "worker_id", 0) * 10
+    # We use 4200 for the main thread, and the first worker,
+    # and increase by ten for each subsequent worker.
+    worker_id = getattr(threadlocal, "worker_id", 0)
+    if worker_id < 1:
+        port = 4200
+    else:
+        port = 4200 + (worker_id - 1) * 10
 
     ret, stdout, stderr = util.run_command(
         [  # See: https://www.slac.stanford.edu/~abh/bbcp/

@@ -91,14 +91,14 @@ def test_bbcp_port(mock_run_command):
 
     pull.bbcp("from/path", "to/dir", 1e8)
     args = mock_run_command()
-    assert "4210" in args["cmd"]
+    assert "4200" in args["cmd"]
 
     # Set worker id
     threadlocal.worker_id = 2
 
     pull.bbcp("from/path", "to/dir", 1e8)
     args = mock_run_command()
-    assert "4220" in args["cmd"]
+    assert "4210" in args["cmd"]
 
 
 @pytest.mark.run_command_result(0, "", "")
