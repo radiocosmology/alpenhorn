@@ -130,8 +130,7 @@ class updateable_base:
         extension = io_extension(io_class)
         if extension is None:
             log.error(
-                f'Unknown I/O class: "{io_class}".  '
-                f"Ignoring {obj_type} {self.name}."
+                f'Unknown I/O class: "{io_class}".  Ignoring {obj_type} {self.name}.'
             )
             return None
 

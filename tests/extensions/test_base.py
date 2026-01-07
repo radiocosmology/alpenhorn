@@ -1,7 +1,8 @@
 """Tests of the base Extension."""
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 
 from alpenhorn import __version__
@@ -48,24 +49,24 @@ def test_init_too_old():
     """Init doesn't happen if we're too old."""
 
     ext = Extension("test", "1", min_version="1" + __version__)
-    assert not ext.init_extension()
+    assert not ext.init_extension(True, None)
 
 
 def test_init_too_new():
     """Init doesn't happen if we're too new."""
 
     ext = Extension("test", "1", max_version="0")
-    assert not ext.init_extension()
+    assert not ext.init_extension(True, None)
 
 
 def test_init_good_version():
     """Check version checking."""
 
     ext = Extension("test", "1", min_version=__version__, max_version=__version__)
-    assert ext.init_extension()
+    assert ext.init_extension(True, None)
 
     ext = Extension("test", "1", min_version="0", max_version="1" + __version__)
-    assert ext.init_extension()
+    assert ext.init_extension(True, None)
 
 
 def test_init_schema_skip():
@@ -77,7 +78,7 @@ def test_init_schema_skip():
     mock = MagicMock()
     mock.return_value = False
     with patch("alpenhorn.db.schema_version", mock):
-        assert ext.init_extension()
+        assert ext.init_extension(True, None)
 
     mock.assert_not_called()
 
@@ -86,14 +87,11 @@ def test_init_schema_bad():
     """Check schema check failure."""
 
     ext = Extension("test", "1", require_schema={"alpenhorn": 1, "other_thing": 2})
-    ext.stage = 2
+    ext.full_name = "test.test"
+    ext.stage = 3
 
-    mock = MagicMock()
-    mock.return_value = False
-    with patch("alpenhorn.db.schema_version", mock):
-        assert not ext.init_extension()
-
-    mock.assert_called()
+    with pytest.raises(click.ClickException):
+        ext.init_extension(True, schema_versions={"alpenhorn": 1})
 
 
 def test_init_schema_good():
@@ -102,15 +100,7 @@ def test_init_schema_good():
     required_schema = {"alpenhorn": 1, "other_thing": 2}
 
     ext = Extension("test", "1", require_schema=required_schema)
-    ext.stage = 2
+    ext.full_name = "test.test"
+    ext.stage = 3
 
-    mock = MagicMock()
-    mock.return_value = True
-    with patch("alpenhorn.db.schema_version", mock):
-        assert ext.init_extension()
-
-    calls = [
-        call(component=key, component_version=val, return_check=True)
-        for key, val in required_schema.items()
-    ]
-    mock.assert_has_calls(calls, any_order=True)
+    assert ext.init_extension(True, schema_versions={"alpenhorn": 1, "other_thing": 2})

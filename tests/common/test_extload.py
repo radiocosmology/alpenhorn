@@ -81,7 +81,7 @@ def test_importdetect_good(set_config):
     with patch.dict("sys.modules", test_module=test_module):
         ext = extload.find_extensions()
 
-    extload.init_extensions(ext, stage=2)
+    extload.init_extensions(ext, stage=3)
 
     assert extload.import_detection() == [idext]
 
@@ -109,7 +109,7 @@ def test_importdetect_multi(set_config):
     with patch.dict("sys.modules", id1=id1, id2=id2, id3=id3):
         ext = extload.find_extensions()
 
-    extload.init_extensions(ext, stage=2)
+    extload.init_extensions(ext, stage=3)
 
     # We don't know the order of initialisation, so we convert to a
     # set
@@ -131,7 +131,7 @@ def test_io_extension_internal_name(set_config):
         ext = extload.find_extensions()
 
     with pytest.raises(click.ClickException):
-        extload.init_extensions(ext, stage=2)
+        extload.init_extensions(ext, stage=3)
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["mod1", "mod2"]})
@@ -150,7 +150,7 @@ def test_io_extension_duplicate(set_config):
         ext = extload.find_extensions()
 
     with pytest.raises(click.ClickException):
-        extload.init_extensions(ext, stage=2)
+        extload.init_extensions(ext, stage=3)
 
 
 @pytest.mark.alpenhorn_config({"extensions": ["test_module"]})
@@ -172,7 +172,7 @@ def test_io_extension_external(set_config):
         ext = extload.find_extensions()
 
     # Initialise
-    extload.init_extensions(ext, stage=2)
+    extload.init_extensions(ext, stage=3)
 
     # Module should be returned
     assert ioext is extload.io_extension("IOMod")

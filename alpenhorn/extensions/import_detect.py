@@ -90,8 +90,8 @@ class ImportDetectExtension(Extension):
         `alpenhorn.db.schema_version` for the specification of the requirements.
     """
 
-    # Initialised after database connection
-    stage = 2
+    # Initialised after everything else
+    stage = 3
 
     def __init__(
         self,

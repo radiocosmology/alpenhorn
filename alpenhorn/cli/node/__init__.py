@@ -23,8 +23,6 @@ from .verify import verify
 def cli():
     """Manage Storage Nodes."""
 
-    schema_version(check=True)
-
 
 cli.add_command(activate, "activate")
 cli.add_command(autoclean, "autoclean")

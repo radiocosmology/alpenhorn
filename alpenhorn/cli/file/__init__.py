@@ -19,8 +19,6 @@ from .verify import verify
 def cli():
     """Manage Files."""
 
-    schema_version(check=True)
-
 
 cli.add_command(clean, "clean")
 cli.add_command(create, "create")

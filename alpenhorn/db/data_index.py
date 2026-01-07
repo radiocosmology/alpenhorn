@@ -8,11 +8,23 @@ from __future__ import annotations
 
 import logging
 import operator
+from collections import namedtuple
+from typing import TYPE_CHECKING
 
 import click
 import peewee as pw
 
 from ._base import base_model, database_proxy
+
+if TYPE_CHECKING:
+    from ..extensions.data_index import DataIndexExtension
+del TYPE_CHECKING
+
+# A pseudo-Data Index Extension for the Data Index itself
+DataIndexProper = namedtuple(
+    "DataIndexProper", ["component", "schema_version", "tables", "post_init"]
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +57,152 @@ class DataIndexVersion(base_model):
     version = pw.IntegerField()
 
 
+# Dict of data index extensions.  Keys are the component names.
+_di_ext = {}
+
+
+def extend(ext: DataIndexExtension) -> str | None:
+    """Extend the data index with a new component.
+
+    This will fail if `ext` defines a component already defined by
+    a previously activated extension.
+
+    Parameters
+    ----------
+    ext : DataIndexExtension
+        The Alpenhorn Extension implementing a data index component.
+
+    Returns
+    -------
+    str | None:
+        This is None if the data index was successfully extended.
+        Otherwise, if a previous extension has already defined the component
+        provided by `ext`, this is the full name of the other extension.
+    """
+    # Check for duplication
+    try:
+        return _di_ext[ext.component].full_name
+    except KeyError:
+        pass
+
+    # Add the new extension
+    _di_ext[ext.component] = ext
+    return None
+
+
+def all_components() -> dict[str, DataIndexExtension | DataIndexProper]:
+    """Create a dict of all data index extensions.
+
+    Extensions are keyed by component name.  Includes
+    a pseudo-extension for the "alpenhorn" component.
+    """
+
+    # First the alpenhorn pseudo-extension
+    all_comp = {"alpenhorn": extension_for_component("alpenhorn")}
+
+    # Then merge in the third-party extensions
+    all_comp.update(_di_ext)
+
+    return all_comp
+
+
+def check_pending_schema() -> dict[str, int]:
+    """Run required schema checks for pending schema.
+
+    This function is invoked after loading all the DataIndexExtension, but only
+    in the case where a pending data index init might be happening, i.e. when the
+    "db" CLI group is invoked.
+
+    In all other cases, these checks happen as a natural part of extension
+    initialisation.
+
+    Returns
+    -------
+    dict
+        A dict containing all effective schema versions
+        assuming all pending components were to be initialised.
+    """
+
+    # First do a check of the data index.  The only constraint
+    # here is that the data index isn't newer than what we can support
+    vers = schema_version(component_version=f"<={current_version}")
+
+    # This is the list of component schema versions which we will return at
+    # the end
+    schema_versions = {"alpenhorn": vers}
+
+    # Get the current schema versions for all components from the database
+    #
+    # If the current data index version is less than 2, we can't retrieve
+    # the schema versions from the database
+    if vers >= 2:
+        for row in DataIndexVersion.select():
+            schema_versions[row.component] = row.version
+
+    # Now run through the extensions and add/update versions from those
+    for ext in _di_ext.values():
+        if (
+            ext.component not in schema_versions
+            or ext.schema_version > schema_versions[ext.component]
+        ):
+            schema_versions[ext.component] = ext.schema_version
+
+    # Second pass: now that the effective schema versions have been
+    # calculate, run required schema checks on all DataIndexExtensions
+    for ext in _di_ext.values():
+        # Raises click.ClickException if checks fail
+        ext.check_required_schema(version_overrides=schema_versions)
+
+    # Return the effective schema versions so later checks can use it
+    return schema_versions
+
+
+def gamut() -> list:
+    """List all tables in the Data Index."""
+
+    from .. import db
+
+    return [
+        db.ArchiveAcq,
+        db.ArchiveFile,
+        db.ArchiveFileCopy,
+        db.ArchiveFileCopyRequest,
+        db.ArchiveFileImportRequest,
+        db.DataIndexVersion,
+        db.StorageGroup,
+        db.StorageNode,
+        db.StorageTransferAction,
+    ]
+
+
+def extension_for_component(comp: str) -> DataIndexExtension | DataIndexProper | None:
+    """Return the extension supporting a Data Index component.
+
+    Parameters
+    ----------
+    comp : str
+        The component to return the extension for
+
+    Returns
+    -------
+    DataIndexExtension | DataIndexProper | None:
+        If `comp` is "alpenhorn", a pseudo-extension for the
+        Data Index iteslf is returned.  If no extension supports
+        `comp`, None is returned.  Otherwise, the DataIndexExtension
+        supporting `comp` is returned.
+    """
+
+    # Handle alpenhorn itself
+    if comp == "alpenhorn":
+        return DataIndexProper("alpenhorn", current_version, gamut(), None)
+
+    # Otherwise, try to return the extension for the requested component
+    try:
+        return _di_ext[comp]
+    except KeyError:
+        return None
+
+
 def _op_and_vers(comp: str):
     """Decompose a string of the form <op><int>.
 
@@ -68,7 +226,9 @@ def schema_version(
     check: bool = False,
     component: str | None = None,
     component_version: str | int | None = None,
+    check_for: str | None = None,
     return_check: bool = False,
+    version_overrides: dict | None = None,
 ) -> int | bool:
     """Report and optionally check Data Index schema version
 
@@ -102,11 +262,17 @@ def schema_version(
         "<", or "<=".  In the two operator case, one operator must indicate
         a minimum version and the other must indicate a maximum version, e.g.
         e.g.  "<8,>=2" or ">2,<5"
+    check_for : str or None, optional
+        The name of the extension for which the check is being performed.  Printed
+        in the failure message if given.
     return_check : bool, optional
         If True, and a check is requested, return the boolean result of the
         check, instead of the version of the indicated component.  If this
         is True but no check has been requested, `ValueError` is raised.
         The defalt is False.
+    version_overrides : dict | None, optional
+        If this is a dict, the values here will be used for component schema
+        versions, rather than consulting the database.
 
     Returns
     -------
@@ -137,34 +303,42 @@ def schema_version(
     if return_check and not component_version:
         raise ValueError("return_check is True, but no check has been requested")
 
-    # Fetch version for component
-    try:
-        schema = DataIndexVersion.get_or_none(component=component)
-    except (pw.OperationalError, pw.ProgrammingError, pw.ImproperlyConfigured) as e1:
-        # This may be because the table doesn't exist.  Look for it.
+    # Use the override, if given
+    if version_overrides:
+        schema_vers = version_overrides.get(component, 0)
+    else:
+        # Fetch version for component
         try:
-            tables = database_proxy.get_tables()
+            schema = DataIndexVersion.get_or_none(component=component)
         except (
             pw.OperationalError,
             pw.ProgrammingError,
             pw.ImproperlyConfigured,
-        ) as e2:
-            # Database read error
-            raise click.ClickException(f"Database read error: {e2}") from e2
+        ) as e1:
+            # This may be because the table doesn't exist.  Look for it.
+            try:
+                tables = database_proxy.get_tables()
+            except (
+                pw.OperationalError,
+                pw.ProgrammingError,
+                pw.ImproperlyConfigured,
+            ) as e2:
+                # Database read error
+                raise click.ClickException(f"Database read error: {e2}") from e2
 
-        if DataIndexVersion._meta.table_name in tables:
-            # Table exists, must be some sort of other error
-            raise click.ClickException(
-                f"Unable to determine schema version: {e1}"
-            ) from e1
+            if DataIndexVersion._meta.table_name in tables:
+                # Table exists, must be some sort of other error
+                raise click.ClickException(
+                    f"Unable to determine schema version: {e1}"
+                ) from e1
 
-        # Otherwise, no table
-        schema = None
+            # Otherwise, no table
+            schema = None
 
-    if schema:
-        schema_vers = schema.version
-    else:
-        schema_vers = 0
+        if schema:
+            schema_vers = schema.version
+        else:
+            schema_vers = 0
 
     # If no check, we're done
     if component_version is None:
@@ -228,14 +402,19 @@ def schema_version(
         else:
             lead = f'Schema version mismatch for Data Index component "{component}"'
 
+        if check_for:
+            check_for = f" (required by {check_for})"
+        else:
+            check_for = ""
+
         wanted = f"wanted version {component_version}"
 
-        if schema:
+        if schema_vers:
             found = f"found version {schema_vers}"
         else:
             found = "no schema found"
 
-        raise click.ClickException(f"{lead}:  {wanted}; {found}")
+        raise click.ClickException(f"{lead}{check_for}:  {wanted}; {found}")
 
     # Finally, return the schema version
     return schema_vers

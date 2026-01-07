@@ -32,17 +32,18 @@ from functools import partial
 
 import peewee as pw
 
-from alpenhorn.common import config as alpenconf
 from alpenhorn.daemon import UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     base_model,
-    connect,
-    database_proxy,
 )
 from alpenhorn.extensions.import_detect import ImportCallback
+
+# The schema version for the tables defined here.  Every time
+# the table metadata changes, this should be incremented.
+schema_version = 2
 
 
 class TypeBase(base_model):
@@ -339,6 +340,21 @@ def register_extensions() -> list:
     # typically you would use the version of the Python package providing the
     # extension.
     from alpenhorn import __version__ as alpenversion
-    from alpenhorn.extensions import ImportDetectExtension
+    from alpenhorn.extensions import DataIndexExtension, ImportDetectExtension
 
-    return [ImportDetectExtension("PatternImporter", alpenversion, detect=detect)]
+    return [
+        DataIndexExtension(
+            "PatternImporterDB",
+            alpenversion,
+            component="pattern_importer",
+            schema_version=schema_version,
+            tables=[AcqType, FileType, AcqData, FileData],
+            post_init=demo_init,
+        ),
+        ImportDetectExtension(
+            "PatternImporterDetect",
+            alpenversion,
+            detect=detect,
+            require_schema={"pattern_importer": schema_version},
+        ),
+    ]

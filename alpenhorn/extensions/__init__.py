@@ -21,6 +21,7 @@ provided by this module:
         or StorageGroup I/O classes.
 """
 
+from .data_index import DataIndexExtension
 from .database import DatabaseExtension
 from .import_detect import ImportDetectExtension
 from .io_class import IOClassExtension

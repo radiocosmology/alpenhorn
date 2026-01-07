@@ -13,8 +13,6 @@ from .show import show
 def cli():
     """Manage Acquisitions."""
 
-    schema_version(check=True)
-
 
 cli.add_command(create, "create")
 cli.add_command(files, "files")
