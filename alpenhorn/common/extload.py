@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import importlib
 import logging
+import sys
 
 from click import ClickException
 
 from .. import db
 from .. import extensions as extapi
+from ..db import data_index
 from ..extensions.base import Extension
 from ..io.base import InternalIO
 from . import config
@@ -64,7 +66,8 @@ def find_extensions() -> list[Extension]:
             ext_module = importlib.import_module(name)
         except ImportError as e:
             raise ClickException(
-                f"unable to import extension module {name}: {e}"
+                f"unable to import extension module {name}: {e}\n"
+                f"Search path: {sys.path}"
             ) from e
 
         try:
@@ -93,8 +96,13 @@ def find_extensions() -> list[Extension]:
     return list(ext.values())
 
 
-def init_extensions(extensions: list[Extension], stage: int) -> None:
-    """Initialise extensions of a givens stage.
+def init_extensions(
+    extensions: list[Extension],
+    stage: int,
+    check_schema: bool = True,
+    schema_versions: dict | None = None,
+) -> None:
+    """Initialise extensions of a given stage.
 
     Parameters
     ----------
@@ -102,6 +110,11 @@ def init_extensions(extensions: list[Extension], stage: int) -> None:
         The list of Extensions returned by `find_extensions`.
     stage : int
         The current initialisation stage of the extensions.
+    check_schema : bool, optional
+        If False, `required_schema` checks will be skipped.  Defaults to True.
+    schema_versions : dict | None, optional
+        If given, overrides the schema versions used for the
+        `required_schema` checks.  Only used when `stage==3`.
 
     Raises
     ------
@@ -109,13 +122,17 @@ def init_extensions(extensions: list[Extension], stage: int) -> None:
         An Extension was not usable.
     """
 
+    # Ignore schema_versions if not stage 3
+    if stage != 3:
+        schema_versions = None
+
     for extension in extensions:
         # Skip extensions from other stages
         if stage != extension.stage:
             continue
 
         # Try init
-        if not extension.init_extension():
+        if not extension.init_extension(check_schema, schema_versions):
             # Init failed
             continue
 
@@ -128,6 +145,13 @@ def init_extensions(extensions: list[Extension], stage: int) -> None:
                 raise ClickException(
                     "more than one database extension in config "
                     f"({last_ext} and {extension.full_name})"
+                )
+        elif isinstance(extension, extapi.DataIndexExtension):
+            last_ext = data_index.extend(extension)
+            if last_ext:
+                raise ClickException(
+                    f'data index component "{extension.component}" provided by '
+                    f"multiple extensions: {last_ext} and {extension.full_name}"
                 )
         elif isinstance(extension, extapi.ImportDetectExtension):
             _id_ext.append(extension)

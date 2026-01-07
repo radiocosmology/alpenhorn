@@ -16,8 +16,6 @@ from .sync import sync
 def cli():
     """Manage Storage Groups."""
 
-    schema_version(check=True)
-
 
 cli.add_command(autosync, "autosync")
 cli.add_command(create, "create")

@@ -30,12 +30,14 @@ class Extension:
         The initialisation stage for this extension.  The initialisation stage
         for an extension indicates when in the Alpenhorn start-up the extension
         is initialised.  An extension's stage is solely determined by the
-        extension's type.  It is never necessary to specify this when instantiating
-        Extensions.  There are two initialisation stages:
+        extension's type.  It is never necessary to explicitly specify this when
+        instantiating Extensions.  There are three initialisation stages:
             * 1: initialised before the database connection occurs (used by
-                database extensions)
-            * 2: initialised after the database connection occurs (used by
-                all other extension types)
+                DatabaseExtensions)
+            * 2: initialised immediately after the database connection occurs
+                (used by DataIndexExtensions)
+            * 3: initialised after the data index extensions are available
+                (used by all other extension types)
     name : str
         The name of this Extension.  The name of an Extension should
         be unique within the extension module defining it, but does
@@ -60,7 +62,8 @@ class Extension:
         If given, a dict of Data Index schema components and the required
         component schema version needed by this extension.  See
         `alpenhorn.db.schema_version` for the specification of the requirements.
-        This is ignored by stage-1 Extensions.
+        This is ignored by stage-1 Extensions.  DataIndexExtensions (q.v.) have
+        an implicit requirement on their own schema.
     """
 
     # This is the initialisation stage.  Set by sublass.  Initialisation stage 0
@@ -93,20 +96,34 @@ class Extension:
 
         self.require_schema = require_schema
 
-    def init_extension(self) -> bool:
+    def init_extension(self, check_schema: bool, schema_versions: dict | None) -> bool:
         """Initialise this extension.
 
         This method is called by alpenhorn when initialising the extension.
         When initialisation occurs for an extension is determined by its stage.
 
+        Parameters
+        ----------
+        check_schema : bool
+            If True, run checks on `required_schema`, if given.  Otherwise,
+            these checks are skipped.
+        schema_versions : dict | None
+            If not None, this is a dict of schema components and
+            versions which will be used to override their normal
+            values during require_schema checks.
+
         Returns
         -------
         bool
             Whether or not the extension was initialised.
+
+        Raises
+        ------
+        click.ClickException:
+            A required schema check failed.
         """
 
         from .. import __version__
-        from ..db import schema_version
 
         # The alpenhorn version
         alpenversion = Version(__version__)
@@ -128,29 +145,38 @@ class Extension:
             )
             return False
 
-        # Check schema version(s) if requested.  This only happens with late-type
-        # extensions
-        if self.require_schema and self.stage > 1:
-            for component, component_version in self.require_schema.items():
-                try:
-                    if not schema_version(
-                        component=component,
-                        component_version=component_version,
-                        return_check=True,
-                    ):
-                        log.debug(
-                            f"Skipping init of Extension {self.full_name}: "
-                            f'Schema requirement "{component_version}" '
-                            f'for "{component}" failed.'
-                        )
-                        return False
-                except ValueError as e:
-                    log.warning(
-                        f"Ignoring Extension {self.full_name}: "
-                        f'bad requires_schema value for "{component}": {e}'
-                    )
-                    return False
+        # Check schema version(s) if requested.  This only happens with stage 2
+        # and 3 extensions
+        if check_schema and self.require_schema and self.stage > 1:
+            # Raises click.ClickException on failure
+            self.check_required_schema(version_overrides=schema_versions)
 
         # Extension initialised
         log.info(f"Initialised Extension {self.full_name} v{self.version}")
         return True
+
+    def check_required_schema(self, version_overrides: dict[str, int]) -> None:
+        """Perform the require_schema checks.
+
+        Parameters
+        ----------
+        version_overrides : dict | None
+            If not None, this is a dict of schema versions for all components
+            which will be used to perform the checks.  If None, component
+            schema versions will be read from the database.
+
+        Raises
+        ------
+        click.ClickException
+            The checks failed.
+        """
+        from ..db import schema_version
+
+        for component, component_version in self.require_schema.items():
+            # Raises click.ClickException on failure
+            schema_version(
+                component=component,
+                component_version=component_version,
+                check_for=self.full_name,
+                version_overrides=version_overrides,
+            )

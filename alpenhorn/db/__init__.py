@@ -48,16 +48,3 @@ from ._base import EnumField, base_model
 # Naive-UTC stuff courtesy peewee.  These were originally in datetime
 # but were deprecated in 3.12 as too confusing.
 from peewee import utcnow, utcfromtimestamp
-
-# This contains all tables in the Data Index
-gamut = (
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    ArchiveFileCopyRequest,
-    ArchiveFileImportRequest,
-    DataIndexVersion,
-    StorageGroup,
-    StorageNode,
-    StorageTransferAction,
-)

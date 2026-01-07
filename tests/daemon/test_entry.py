@@ -37,8 +37,8 @@ from alpenhorn.db import (
     StorageNode,
     StorageTransferAction,
     current_version,
-    gamut,
 )
+from alpenhorn.db.data_index import gamut
 
 # Import pattern_importer from the examples directory
 sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))
@@ -54,7 +54,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
     # Create tables
     db.create_tables(
         [
-            *gamut,
+            *gamut(),
             pattern_importer.AcqType,
             pattern_importer.FileType,
             pattern_importer.AcqData,
@@ -66,6 +66,9 @@ def e2e_db(xfs, clidb_noinit, hostname):
     # ---------------
 
     DataIndexVersion.create(component="alpenhorn", version=current_version)
+    DataIndexVersion.create(
+        component="pattern_importer", version=pattern_importer.schema_version
+    )
 
     # A Default-IO group with one node
     dftgrp = StorageGroup.create(name="dftgroup")

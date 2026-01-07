@@ -28,7 +28,9 @@ from alpenhorn.db import (
     StorageGroup,
     StorageNode,
     StorageTransferAction,
+    data_index,
 )
+from alpenhorn.db.data_index import gamut
 
 
 def pytest_configure(config):
@@ -113,6 +115,7 @@ def reset_extensions():
     yield
 
     # Reset globals
+    data_index._di_ext = {}
     db._base._db_ext = None
     extload._id_ext = None
     extload._io_ext = None
@@ -542,7 +545,7 @@ def dbproxy(set_config, reset_extensions):
 def dbtables(dbproxy):
     """Create all the usual tables in the database."""
 
-    dbproxy.create_tables(db.gamut)
+    dbproxy.create_tables(gamut())
 
     # Set schema
     DataIndexVersion.create(component="alpenhorn", version=db.current_version)
@@ -724,7 +727,7 @@ def clidb(clidb_noinit):
 
     Yields the connector."""
 
-    clidb_noinit.create_tables(db.gamut)
+    clidb_noinit.create_tables(gamut())
 
     # Set schema
     DataIndexVersion.create(component="alpenhorn", version=db.current_version)
@@ -733,7 +736,7 @@ def clidb(clidb_noinit):
 
 
 @pytest.fixture
-def clidb_noinit(clidb_uri):
+def clidb_noinit(clidb_uri, dbproxy):
     """Initialise a peewee connector to the empty CLI DB.
 
     Yields the connector."""
@@ -747,8 +750,8 @@ def clidb_noinit(clidb_uri):
     yield connector
 
     # Drop all the tables after the test
-    for table in db.gamut:
-        connector.execute_sql(f"DROP TABLE IF EXISTS {table._meta.table_name};")
+    for table in dbproxy.get_tables():
+        connector.execute_sql(f"DROP TABLE IF EXISTS {table};")
     connector.close()
 
 
