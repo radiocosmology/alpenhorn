@@ -395,49 +395,26 @@ populating it.
    You can log out of this ``alpenshell`` container at any time during the demo.  To later re-enter it,
    simply run the ``docker compose run --rm alpenshell`` command again.
 
-Setting up the data index
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Creating the data index is simple, and can be accomplished by running the following
-command with the ``alpenhorn`` CLI utility:
-
-.. code:: console
-   :class: demoshell
-
-   alpenhorn db init
-
-.. hint::
-   Remember that all these ``alpenhorn`` commands need to be run inside the
-   ``alpenshell`` container that we started in the last section.
-
-On successful completion, the ``db init`` command will report the version of the
-database schema used to create the Data Index:
-
-.. code:: console
-   :class: demoshell
-
-   root@alpenshell:/# alpenhorn db init
-   Data Index version 2 initialised.
-
-.. tip::
-   It's worth pointing out at this point that the ``alpenhorn`` CLI can be run from
-   anywhere that has access to the alpenhorn database.  It's explicitly not necessary
-   to run the CLI on a host which contains a StorageNode (or is running the daemon),
-   even when using the CLI to run commands which affect that StorageNode or daemon.
-
-Setting up the import extension
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Alpenhorn extensions
+~~~~~~~~~~~~~~~~~~~~
 
 Because alpenhorn is data agnostic, it doesn't have any facilities
-out-of-the-box to import files. To be able to import files, alpenhorn
-needs one or more "import-detect extensions" to be loaded. For the
-purposes of this demo, we'll use the simple ``pattern_importer`` example
-extension provided in the ``/examples`` directory. This extension has
-already been incorporated into the alpenhorn container image that we're
-running, and alpenhorn has been set up to use it.
+out-of-the-box to import files. To be able to import files, alpenhorn needs one
+or more "import-detect extensions" to be loaded. For the purposes of this demo,
+we'll use the simple ``pattern_importer`` example extension module provided in
+the ``/examples`` directory. This extension module has already been incorporated
+into the alpenhorn container image that we're running, and alpenhorn has been
+set up to use it.  The extension module registers two alpenhorn extensions when
+loaded by alpenhorn:
+
+* An `alpenhorn.extensions.ImportDetectExtension`, which provides the import
+  detection logic which allows alpenhorn to identify files which should be
+  imported.
+* An `alpenhorn.extensions.DataIndexExtension`, which extends the alpenhorn
+  database to accomodate data needed by the `ImportDetectExtension`.
 
 .. hint::
-   The reason alpenhorn is aware of the ``pattern_importer`` extension is
+   The reason alpenhorn is aware of the ``pattern_importer`` extension module is
    because it is listed as an extension to load in the alpenhorn config file,
    which is available in the ``alpenshell`` at ``/etc/alpenhorn/alpenhorn.conf``.
 
@@ -451,25 +428,41 @@ Index is permitted, but caution must be used to prevent name clashes with
 alpenhorn's own tables, and tables from other potential extensions.
 Fortunately, for the simple case in this demo, we don't have to worry about that.
 
-To initialise the database for the extension, run the ``demo_init``
-function provided by the extension:
+The tables are provided to alpenhorn in the `DataIndexExtension`.  Doing this
+provides enough information to alpenhorn that we will be able to use the
+alpenhorn CLI to initialise these tables needed by this extension.  This will be
+done in the next section.
+
+Initialising the data index
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Creating the data index is simple, and can be accomplished by running the
+following command with the ``alpenhorn`` CLI utility:
 
 .. code:: console
    :class: demoshell
 
-   python -c 'import pattern_importer; pattern_importer.demo_init()'
+   alpenhorn db init
 
-If you get a ``ModuleNotFoundError: No module named 'pattern_importer'``
-error, you're probably not executing this command in the root-shell in
-the ``alpenshell`` container.
+.. hint::
+   Remember that all these ``alpenhorn`` commands need to be run inside the
+   ``alpenshell`` container that we started in the last section.
 
-You should see a success message:
+On successful completion, the ``db init`` command will report the version of the
+database schema used to create the Data Index and the pattern importer's tables:
 
 .. code:: console
    :class: demoshell
 
-   root@alpenshell:/# python -c 'import pattern_importer; pattern_importer.demo_init()'
-   Plugin init complete.
+   root@alpenshell:/# alpenhorn db init
+   Data Index version 2 initialised.
+   Component "pattern_importer" version 1 initialised.
+
+.. tip::
+   It's worth pointing out at this point that the ``alpenhorn`` CLI can be run from
+   anywhere that has access to the alpenhorn database.  It's explicitly not necessary
+   to run the CLI on a host which contains a StorageNode (or is running the daemon),
+   even when using the CLI to run commands which affect that StorageNode or daemon.
 
 Create the first StorageNode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

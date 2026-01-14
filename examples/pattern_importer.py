@@ -1,21 +1,21 @@
 """A pattern-based example import-detect extension.
 
-This is an example of a third-party "import detect" extension.
-Such extensions are required to permit alpenhorn to find
+This module proves an example of a third-party "ImportDetectExtension".
+Such an extensions is required to permit alpenhorn to find
 new data files which need import, both as part of the auto-import
 functionality, but also when requesting manual imports with the
 alpenhorn CLI.
 
-This creates four tables: AcqType and FileType which provide
-configuration data for matching the acq/file name against one or
-more patterns, and AcqData and FileData which contain additional
-metadata for ArchiveAcq and ArchiveFile entries.
+The functionality here needs four tables: AcqType and FileType, which
+provide configuration data for matching the acq/file name against one
+or more patterns, and AcqData and FileData, which contain additional
+metadata for ArchiveAcq and ArchiveFile entries.  These tables
+are provided to alpenhorn in a "DataIndexExtension", which allows
+users to use the standard "alpenhorn db init" CLI command to
+initialise these tables for the ImportDetectExtension's use.
 
-The detection function is `detect`, which is packaged into an
-`alpenhorn.extensions.ImportDetectExtension`.  This extension is
-then provided to alpenhorn via the `register_extensions` function.
-
-The `detect` function loops through the AcqTypes and FileTypes to try
+The ImportDetectExtension's callback function is `detect`.  The
+`detect` function loops through the AcqTypes and FileTypes to try
 to match the path supplied by alpenhorn to the patterns listed in the
 tables.  On a successful match, the import callback function `register_file`
 will be called by alpenhorn, which then stores the matched AcqType
@@ -286,23 +286,15 @@ def detect(
 def demo_init() -> None:
     """Extension init for alpenhorn demo
 
-    This function initialises the alpenhorn data index to support this extension
-    when used in the the alpenhorn demo (see
-    https://alpenhorn.readthedocs.io/en/latest/demo.html)
+    This function will be called by the alpenhorn CLI during the execution of the
+    "alpenhorn db init" command, after the extension's four tables have been created,
+    when used in the alpenhorn demo.  See:
 
-    It creates the AcqType, FileType, AcqData, and FileData tables and
-    then populates the AcqType and FileType tables to allow the demo
-    alpenhorn instances to find the demo data.
+      https://alpenhorn.readthedocs.io/en/latest/demo.html
+
+    This function populates the AcqType and FileType tables with the metadata needed to
+    allow the demo alpenhorn instances to find the demo data.
     """
-
-    # Load the alpenhorn config to find the database connection details
-    alpenconf.load_config(None, True)
-
-    # Connect to the database
-    connect()
-
-    # Create the tables, if necessary
-    database_proxy.create_tables([AcqType, FileType, AcqData, FileData], safe=True)
 
     # Populate AcqType.  There is only acq type in the demo
     AcqType.create(
@@ -322,9 +314,6 @@ def demo_init() -> None:
         patterns=json.dumps([r"meta.txt$"]),
         notes="Metadata file for alpenhorn demo",
     )
-
-    # Indicate success
-    print("Plugin init complete.")
 
 
 def register_extensions() -> list:
