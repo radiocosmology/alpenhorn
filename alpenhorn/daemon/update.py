@@ -972,6 +972,11 @@ def update_loop(
         description="Group is available (active and initialized)",
         unbound={"name"},
     )
+    worker_count_metric = Metric(
+        "worker_count",
+        description="Number of worker threads",
+        bound={"pool_type": type(pool).__name__},
+    )
 
     while not global_abort.is_set():
         loop_start = time.time()
@@ -1114,8 +1119,10 @@ def update_loop(
         loop_time = time.time() - loop_start
         log.info(f"Main loop execution was {util.pretty_deltat(loop_time)}.")
 
+        # Update metrics
         loop_time_metric.set(loop_time)
         loop_count_metric.inc()
+        worker_count_metric.set(len(pool))
 
         # Pool and queue info
         log.info(
