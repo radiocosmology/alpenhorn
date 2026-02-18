@@ -21,20 +21,16 @@ class StorageGroup(base_model):
     Attributes
     ----------
     name : string
-        The group that this node belongs to (Scinet, DRAO hut, . . .).
+        The name of this group.
     io_class : string
-        The I/O class for this node.  See below.  If this is NULL,
-        the value "Default" is used.
+        The I/O class for this group.  If not NULL, this should be the name of
+        an internal or external I/O class providing StorageGroup support.  If
+        this is NULL, the "Default" Group I/O class is assumed.
     notes : string
         Any notes about this storage group.
     io_config : string
         An optional JSON blob of configuration data interpreted by the
         I/O class.  If given, must be a JSON object literal.
-
-    If `io_class` is, say, "IOClassName" then there must be a group I/O
-    class called `IOClassNameGroupIO` in either:
-     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
-     * an I/O module named "ioclassname" provided by an "io-module" extension.
     """
 
     name = pw.CharField(max_length=64, unique=True)
@@ -111,8 +107,9 @@ class StorageNode(base_model):
     address : string
         The internet address for the host (e.g., mistaya.phas.ubc.ca)
     io_class : string
-        The I/O class for this node.  See below.  If this is NULL,
-        the value "Default" is used.
+        The I/O class for this node.  If not NULL, this should be the name of
+        an internal or external I/O class providing StorageNode support.  If
+        this is NULL, the "Default" Node I/O class is assumed.
     group : foreign key
         The group to which this node belongs.
     active : bool
@@ -142,11 +139,6 @@ class StorageNode(base_model):
     io_config : string
         An optional JSON blob of configuration data interpreted by the
         I/O class.  If given, must be a JSON object literal.
-
-    If `io_class` is, say, "IOClassName" then there must be a node I/O
-    class called `IOClassNameNodeIO` in either:
-     * the internal alpenhorn submodule `alpenhorn.io.ioclassname`, or else
-     * an I/O module named "ioclassname" provided by an "io-module" extension.
     """
 
     name = pw.CharField(max_length=64, unique=True)
