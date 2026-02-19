@@ -1,22 +1,23 @@
 """A pattern-based example import-detect extension.
 
-This is an example of a third-party "import detect" extension.
-Such extensions are required to permit alpenhorn to find
+This module proves an example of a third-party "ImportDetectExtension".
+Such an extensions is required to permit alpenhorn to find
 new data files which need import, both as part of the auto-import
 functionality, but also when requesting manual imports with the
 alpenhorn CLI.
 
-This creates four tables: AcqType and FileType which provide
-configuration data for matching the acq/file name against one or
-more patterns, and AcqData and FileData which contain additional
-metadata for ArchiveAcq and ArchiveFile entries.
+The functionality here needs four tables: AcqType and FileType, which
+provide configuration data for matching the acq/file name against one
+or more patterns, and AcqData and FileData, which contain additional
+metadata for ArchiveAcq and ArchiveFile entries.  These tables
+are provided to alpenhorn in a "DataIndexExtension", which allows
+users to use the standard "alpenhorn db init" CLI command to
+initialise these tables for the ImportDetectExtension's use.
 
-The detection function is `detect`.  This function is provided to
-alpenhorn via `register_extension`.  The `detect` function loops
-through the AcqTypes and FileTypes to try to match the path
-supplied by alpenhorn to the patterns listed in the tables.
-
-On a successful match, the import callback function `register_file`
+The ImportDetectExtension's callback function is `detect`.  The
+`detect` function loops through the AcqTypes and FileTypes to try
+to match the path supplied by alpenhorn to the patterns listed in the
+tables.  On a successful match, the import callback function `register_file`
 will be called by alpenhorn, which then stores the matched AcqType
 in the AcqData table and the matched FileType in the FileData table.
 """
@@ -31,17 +32,18 @@ from functools import partial
 
 import peewee as pw
 
-from alpenhorn.common import config as alpenconf
-from alpenhorn.common.extensions import ImportCallback
 from alpenhorn.daemon import UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     base_model,
-    connect,
-    database_proxy,
 )
+from alpenhorn.extensions.import_detect import ImportCallback
+
+# The schema version for the tables defined here.  Every time
+# the table metadata changes, this should be incremented.
+schema_version = 2
 
 
 class TypeBase(base_model):
@@ -284,23 +286,15 @@ def detect(
 def demo_init() -> None:
     """Extension init for alpenhorn demo
 
-    This function initialises the alpenhorn data index to support this extension
-    when used in the the alpenhorn demo (see
-    https://alpenhorn.readthedocs.io/en/latest/demo.html)
+    This function will be called by the alpenhorn CLI during the execution of the
+    "alpenhorn db init" command, after the extension's four tables have been created,
+    when used in the alpenhorn demo.  See:
 
-    It creates the AcqType, FileType, AcqData, and FileData tables and
-    then populates the AcqType and FileType tables to allow the demo
-    alpenhorn instances to find the demo data.
+      https://alpenhorn.readthedocs.io/en/latest/demo.html
+
+    This function populates the AcqType and FileType tables with the metadata needed to
+    allow the demo alpenhorn instances to find the demo data.
     """
-
-    # Load the alpenhorn config to find the database connection details
-    alpenconf.load_config(None, True)
-
-    # Connect to the database
-    connect()
-
-    # Create the tables, if necessary
-    database_proxy.create_tables([AcqType, FileType, AcqData, FileData], safe=True)
 
     # Populate AcqType.  There is only acq type in the demo
     AcqType.create(
@@ -321,14 +315,35 @@ def demo_init() -> None:
         notes="Metadata file for alpenhorn demo",
     )
 
-    # Indicate success
-    print("Plugin init complete.")
 
-
-def register_extension() -> dict:
+def register_extensions() -> list:
     """Extension registration function.
 
-    Called by alpenhorn during start-up to determine this extension's
-    capabilities.
+    Called by alpenhorn during start-up to retrieve the list of
+    Alpenhorn extensions provided by this extension module.
     """
-    return {"import-detect": detect}
+    # A word of clarification: We use the alpenhorn version here for the extension
+    # version because this extension module is packaged with alpenhorn itself.
+    #
+    # You shouldn't use the alpenhorn version for your own extension.  Instead,
+    # typically you would use the version of the Python package providing the
+    # extension.
+    from alpenhorn import __version__ as alpenversion
+    from alpenhorn.extensions import DataIndexExtension, ImportDetectExtension
+
+    return [
+        DataIndexExtension(
+            "PatternImporterDB",
+            alpenversion,
+            component="pattern_importer",
+            schema_version=schema_version,
+            tables=[AcqType, FileType, AcqData, FileData],
+            post_init=demo_init,
+        ),
+        ImportDetectExtension(
+            "PatternImporterDetect",
+            alpenversion,
+            detect=detect,
+            require_schema={"pattern_importer": schema_version},
+        ),
+    ]

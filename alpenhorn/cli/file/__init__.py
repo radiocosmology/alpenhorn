@@ -2,7 +2,7 @@
 
 import click
 
-from ..cli import dbconnect
+from ...db import schema_version
 from .clean import clean
 from .create import create
 from .find import find
@@ -18,8 +18,6 @@ from .verify import verify
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Manage Files."""
-
-    dbconnect()
 
 
 cli.add_command(clean, "clean")

@@ -8,7 +8,7 @@ import click
 from .. import db
 from ..common import config, metrics
 from ..common.util import help_config_option, start_alpenhorn, version_option
-from ..scheduler import FairMultiFIFOQueue, pool
+from .scheduler import FairMultiFIFOQueue, pool
 
 log = logging.getLogger(__name__)
 
@@ -69,12 +69,6 @@ def entry(ctx, conf, once, test_isolation):
 
     # Initialise alpenhorn
     start_alpenhorn(conf, cli=False)
-
-    # Connect to the database
-    db.connect()
-
-    # Check the data index schema.  This doesn't return on mismatch
-    db.schema_version(check=True)
 
     # Start the prometheus client, if appropriate.
     if not once:

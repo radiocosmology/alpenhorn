@@ -7,11 +7,16 @@ via `alpenhorn.db`.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections import namedtuple
+from typing import TYPE_CHECKING
 
 import click
 import peewee as pw
 from playhouse import db_url
+
+if TYPE_CHECKING:
+    from ..extensions.database import DatabaseExtension
+del TYPE_CHECKING
 
 # All peewee-generated logs are logged to this namespace.
 log = logging.getLogger(__name__)
@@ -22,48 +27,53 @@ _db_ext = None
 # Initialised by connect()
 database_proxy = pw.Proxy()
 
+# Internal database pseduo-extension
+InternalDB = namedtuple("InternalDB", ["full_name", "connect", "close", "reentrant"])
 
-def _capability(key: str) -> Any:
-    """Access function for database capabilities.
 
-    This function returns the value of the capability called
-    `key` from the dictionary returned by the registered
-    database extension.
+def set_extension(ext: DatabaseExtension) -> str | None:
+    """Set the DatabaseExtension in use.
 
-    If `key` is missing from the database extension dictionary,
-    or if there is no database extension registered, then a
-    suitable default is returned instead.
+    This is called by the extension loader to set
+    the in-use database extension.  If an extension is
+    already in use, the new extension is _not_ used.
 
     Parameters
     ----------
-    key : {"connect", "close", "reentrant"}
-        The name of the capability being accessed.
+    ext : DatabaseExtension
+        The DatabaseExtension to use
 
-    Raises
+    Returns
     -------
-    KeyError
-        If `key` is not one of the values listed above.
-    RuntimeError
-        If this function is used before `connect()` has been called.
+    str or None:
+        If a database extension is already in-use, probably
+        due to a prior call to this function, this returns
+        the name of the in-use extension.  Otherwise, it
+        returns None.
     """
-    # capability defaults (these implement the fallback database
-    # module).
-    default_cap = {
-        "connect": None,
-        "close": None,
-        "reentrant": True,
-    }
+    global _db_ext
+    if _db_ext:
+        return _db_ext.full_name
 
-    try:
-        return _db_ext[key]
-    except TypeError:
-        # happens when _db_ext is None because connect() wasn't called
-        raise RuntimeError("database not initialised")
-    except KeyError:
-        try:
-            return default_cap[key]
-        except KeyError:
-            raise KeyError(f"unknown database capability: {key}")
+    _db_ext = ext
+    return None
+
+
+def _extension() -> DatabaseExtension | namedtuple:
+    """Return the DatabaseExtension in use.
+
+    If there is no extension in use, this returns instead
+    a namedtuple emulating a DatabaseExtension for the internal
+    database module.
+    """
+
+    # If a database extension was set, return that.
+    if _db_ext:
+        return _db_ext
+
+    # Otherwise, we return a pseudo-extension representing the internall
+    # fallback DB code
+    return InternalDB(__name__, _connect, None, True)
 
 
 def threadsafe() -> bool:
@@ -74,7 +84,7 @@ def threadsafe() -> bool:
     bool
         ``True`` if the database is threadsafe.  ``False`` otherwise.
     """
-    return _capability("reentrant")
+    return _extension().reentrant
 
 
 def connect() -> None:
@@ -83,28 +93,24 @@ def connect() -> None:
     This must be called once, after extensions are loaded, before
     threads are created.
     """
-    from ..common import config, extensions
+    from ..common import config
 
     # attempt to load a database extension
-    global _db_ext
-    _db_ext = extensions.database_extension()
-    if _db_ext is None:
-        # The fallback gets implemented via the default_cap
-        # dict defined in _capability()
+    ext = _extension()
+
+    if ext.full_name == __name__:
+        # This is the fallback database connection
         log.debug("Using internal database module.")
-        _db_ext = {}
+    else:
+        log.info(f"Using database extension {ext.full_name}.")
 
     # If fetch the database config, if present
     database_config = config.get("database", default={}, as_type=dict)
 
     # Call the connect function from the database extension (or fallback)
-    func = _capability("connect")
-    if func is None:
-        func = _connect
-
     # On connection error, raise click.ClickException
     try:
-        db = func(config=database_config)
+        db = ext.connect(config=database_config)
     except (pw.OperationalError, pw.ProgrammingError, pw.ImproperlyConfigured) as e:
         raise click.ClickException(
             f"Unable to connect to the database: {e}.\n"
@@ -152,8 +158,8 @@ def _connect(config: dict) -> pw.Database:
 def close() -> None:
     """Close a database connection if it is open."""
 
-    func = _capability("close")
-    if func is None:
+    func = _extension().close
+    if not func:
         if database_proxy.obj is not None:
             database_proxy.close()
     else:

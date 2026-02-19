@@ -8,7 +8,12 @@ from time import sleep
 import peewee
 import pytest
 
-from alpenhorn.scheduler.pool import EmptyPool, WorkerPool, global_abort, setsignals
+from alpenhorn.daemon.scheduler.pool import (
+    EmptyPool,
+    WorkerPool,
+    global_abort,
+    setsignals,
+)
 
 # Event to indicate that the worker that consumed the opperr_task
 # is exiting
@@ -199,7 +204,7 @@ def test_worker_id(queue, pool):
     def task():
         """A task that reports its worker ID."""
 
-        from alpenhorn.scheduler.pool import threadlocal
+        from alpenhorn.daemon.scheduler import threadlocal
 
         nonlocal ids, barrier
         ids[threadlocal.worker_id] = 1 + ids.get(threadlocal.worker_id, 0)

@@ -73,7 +73,8 @@ def _verbosity_from_cli(verbose: int, debug: bool, quiet: int) -> int:
     default=False,
 )
 @help_config_option
-def entry(conf, quiet, test_isolation, verbose, debug):
+@click.pass_context
+def entry(ctx, conf, quiet, test_isolation, verbose, debug):
     """Alpenhorn data management system.
 
     This is the command-line interface to the alpenhorn data index.
@@ -82,9 +83,15 @@ def entry(conf, quiet, test_isolation, verbose, debug):
     # Turn on test isolation, if requested
     config.test_isolation(enable=test_isolation)
 
-    # Initialise alpenhorn
+    # Initialise alpenhorn.  The "db_init_pending" thing skips some of the
+    # schema checks when the user is invoking the "db" group so they'll be
+    # able to, say, create the database without alpenhorn comaining that the
+    # database doesn't exist first.
     start_alpenhorn(
-        conf, cli=True, verbosity=_verbosity_from_cli(verbose, debug, quiet)
+        conf,
+        verbosity=_verbosity_from_cli(verbose, debug, quiet),
+        check_schema=True,
+        db_init_pending=(ctx.invoked_subcommand == "db"),
     )
 
 

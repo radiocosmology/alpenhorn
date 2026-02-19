@@ -10,8 +10,8 @@ Submodules
     common
     daemon
     db
+    extensions
     io
-    scheduler
 """
 
 from importlib.metadata import PackageNotFoundError, version

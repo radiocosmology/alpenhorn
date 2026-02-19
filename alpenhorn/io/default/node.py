@@ -1,11 +1,7 @@
-"""Alpenhorn Default I/O classes.
+"""Alpenhorn Default Node I/O class.
 
-The Alpenhorn Default I/O classes largely re-create the legacy I/O behaviour
-of previous versions of Alpenhorn.
-
-These I/O classes are used by StorageNodes and StorageGroups which do not
-explicitly specify `io_class` (as well as being used explicitly when `io_class`
-has the value "Default").
+This is the DefaultNodeIO class which implements the I/O framework for
+a StorageNode backed by a normal POSIX filesystem.
 """
 
 from __future__ import annotations
@@ -19,19 +15,20 @@ from typing import IO
 
 from watchdog.observers import Observer
 
-from ..common import util
-from ..daemon import UpdateableNode
-from ..db import (
+from ...common import util
+from ...daemon.scheduler import FairMultiFIFOQueue, Task
+from ...db import (
     ArchiveAcq,
     ArchiveFile,
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     StorageNode,
 )
-from ..scheduler import FairMultiFIFOQueue, Task
-from . import ioutil
-from ._default_asyncs import check_async, delete_async, group_search_async, pull_async
-from .base import BaseGroupIO, BaseNodeIO, BaseNodeRemote
+from ..base import BaseNodeIO
+from .check import check_async
+from .delete import delete_async, remove_filedir
+from .pull import pull_async
+from .remote import DefaultNodeRemote
 from .updownlock import UpDownLock
 
 log = logging.getLogger(__name__)
@@ -44,27 +41,6 @@ _reserved_bytes = {}
 # This sets how often we run the clean-up idle task.  What
 # we're counting here is number of not-idle -> idle transitions
 _IDLE_CLEANUP_PERIOD = 400  # (i.e. once every 400 opportunities)
-
-
-class DefaultNodeRemote(BaseNodeRemote):
-    """I/O class for a remote DefaultIO StorageNode."""
-
-    def pull_ready(self, file: ArchiveFile) -> bool:
-        """Return True.
-
-        Files on a Default I/O node are always ready.
-
-        Parameters
-        ----------
-        file : ArchiveFile
-            Unused.
-
-        Returns
-        -------
-        bool
-            ``True``.
-        """
-        return True
 
 
 class DefaultNodeIO(BaseNodeIO):
@@ -143,7 +119,7 @@ class DefaultNodeIO(BaseNodeIO):
                             log.warning(f"Removing stale placeholder {placeholder!s}")
                             placeholder.unlink()
                     # Attempt to remove acqpath.  If it isn't empty, this does nothing
-                    ioutil.remove_filedir(
+                    remove_filedir(
                         node,
                         pathlib.Path(node.root, acq.name),
                         tree_lock,
@@ -282,7 +258,7 @@ class DefaultNodeIO(BaseNodeIO):
         """
         return pathlib.Path(self.node.root, path).is_file()
 
-    def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
+    def filesize(self, path: pathlib.Path) -> int:
         """Return size in bytes of the file given by `path`.
 
         Parameters
@@ -290,25 +266,40 @@ class DefaultNodeIO(BaseNodeIO):
         path : path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual : bool, optional
-            If ``True``, return the amount of space the file actually takes
-            up on the storage system.  Otherwise return apparent size.
 
         Returns
         -------
         int
-            The absolute or apparent size, in bytes, of the file.
+            The size, in bytes, of the file
+        """
+        path = pathlib.Path(path)
+        if not path.is_absolute():
+            path = pathlib.Path(self.node.root, path)
+        return path.stat().st_size
+
+    def storage_used(self, path: pathlib.Path) -> int:
+        """Return amount of storage space used by the file given by `path`.
+
+        This is just the number of filesystem blocks used by the file multiplied
+        by the block size.
+
+        Parameters
+        ----------
+        path: path-like
+            The filepath to check the size of.  May be absolute or relative
+            to `node.root`.
+
+        Returns
+        -------
+        int
+            The amount of space, in bytes, taken up by the file.
         """
         path = pathlib.Path(path)
         if not path.is_absolute():
             path = pathlib.Path(self.node.root, path)
 
-        if actual:
-            # Per POSIX, blocksize for st_blocks is always 512 bytes
-            return path.stat().st_blocks * 512
-
-        # Apparent size
-        return path.stat().st_size
+        # Per POSIX, blocksize for st_blocks is always 512 bytes
+        return path.stat().st_blocks * 512
 
     def file_walk(self, path: str | os.PathLike) -> Iterable[pathlib.PurePath]:
         """An iterator over all regular files under `path`.
@@ -597,147 +588,3 @@ class DefaultNodeIO(BaseNodeIO):
             Unused.
         """
         pass
-
-
-class DefaultGroupIO(BaseGroupIO):
-    """Default Group I/O.
-
-    The Default I/O group may only have a single active Storage node.
-
-    Parameters
-    ----------
-    group : StorageGroup
-        The group we're performing I/O on.
-    config : dict
-        The I/O config.
-    queue : FairMultiFIFIOQueue
-        The task scheduler.
-    fifo : Hashable
-        The queue FIFO key to use.
-    """
-
-    # Because Default groups allow only a single node, they don't need to do
-    # group-level pull searches.  So we set this to False.
-    #
-    # Note, however, that the DefaultGroupIO still fully implements a "normal"
-    # pre-pull search to make it easier for subclasses that use this as a parent
-    # to enable the group search by simply setting this back to True.
-    do_pull_search = False
-
-    # SETUP
-
-    def __init__(
-        self,
-        group: StorageGroup,
-        config: dict,
-        queue: FairMultiFIFOQueue,
-        fifo: Hashable,
-    ) -> None:
-        super().__init__(group, config, queue, fifo)
-        self._node = None
-
-    @property
-    def nodes(self) -> list[UpdateableNode]:  # numpydoc ignore=RT01
-        """The list of nodes in this group.
-
-        This is a single element list containing the node assigned to this I/O
-        instance, or the empty list if no node has been assigned.
-        """
-        if self._node:
-            return [self._node]
-        return []
-
-    @nodes.setter
-    def nodes(self, nodes: list[UpdateableNode]) -> None:
-        """Set the node in this group.
-
-        DefaultGroupIO only accepts a single node to operate on.
-
-        Parameters
-        ----------
-        nodes : list of UpdateableNodes
-            This will always be a single-element list containing the
-            group's `StorageNode`.
-
-        Raises
-        ------
-        ValueError
-            Whenever `len(nodes) != 1`
-        """
-
-        if len(nodes) != 1:
-            # The nodes list passed in is never empty, so this message is reasonable.
-            raise ValueError(f"Too many active nodes in group {self.group.name}.")
-
-        self._node = nodes[0]
-
-    # I/O METHODS
-
-    def exists(self, path: pathlib.PurePath) -> UpdateableNode | None:
-        """Check whether the file `path` exists in this group.
-
-        Parameters
-        ----------
-        path : pathlib.PurePath
-            The path, relative to node `root` of the file to
-            search for.
-
-        Returns
-        -------
-        UpdateableNode or None
-            If the file exists, returns the node in the group.
-            If the file doesn't exist in the group, this is ``None``.
-        """
-        if self._node.io.exists(path):
-            return self._node
-
-        return None
-
-    def pull(self, req: ArchiveFileCopyRequest, did_search: bool) -> None:
-        """Handle ArchiveFileCopyRequest `req` by pulling to this group.
-
-        Simply passes the `req` on to the node in the group.
-
-        Parameters
-        ----------
-        req : ArchiveFileCopyRequest
-            The request to fulfill.  We are the destination group (i.e.
-            ``req.group_to == self.group``).
-        did_search : bool
-            ``True`` if a group-level pre-pull search for an existing file was
-            performed.  ``False`` otherwise.
-        """
-        self._node.io.pull(req, did_search)
-
-    def pull_search(self, req: ArchiveFileCopyRequest) -> None:
-        """Search for an existing copy of a file in a group.
-
-        Before the pull is dispached to the group, we first check
-        whether an existing unregistered file exists in the group.
-
-        If there is, the file is schedule for check and the request
-        is skipped.  Otherwise, `pull` will be called to actually
-        pull the file.
-
-        .. hint::
-            The DefaultGroupIO class itself sets `do_pull_search` to False
-            because it's not needed by the DefaultIO, but this method is
-            implemented to dispatch the search task anyways so that other
-            I/O classes which derive from DefaultIO can set `do_pull_search`
-            back to True and not have to re-implement this method themselves.
-
-        Parameters
-        ----------
-        req : ArchiveFileCopyRequest
-            The request to fulfill.  We are the destination group (i.e.
-            ``req.group_to == self.group``).
-        """
-
-        # The existing file search needs to happen in a Task.
-        Task(
-            func=group_search_async,
-            queue=self._queue,
-            key=self.fifo,
-            args=(self, req),
-            name=f"Pre-pull search for {req.file.path} in {self.group.name}",
-        )

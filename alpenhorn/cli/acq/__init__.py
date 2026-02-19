@@ -2,7 +2,7 @@
 
 import click
 
-from ..cli import dbconnect
+from ...db import schema_version
 from .create import create
 from .files import files
 from .list import list_
@@ -12,8 +12,6 @@ from .show import show
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Manage Acquisitions."""
-
-    dbconnect()
 
 
 cli.add_command(create, "create")

@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+title: alpenhorn
+type: software
+repository-code: 'https://github.com/radiocosmology/alpenhorn'
+url: 'https://alpenhorn.readthedocs.io/en/latest/'
+repository-artifact: 'https://pypi.org/project/alpenhorn/'
+abstract: >-
+  Alpenhorn is a high-performance system for tracking and
+  managing a distributed archive of scientific data.
+license: MIT
+authors:
+  - given-names: Donald V.
+    family-names: Wiebe
+    email: dvw@phas.ubc.ca
+    affiliation: University of British Columbia
+    orcid: 'https://orcid.org/0000-0002-6669-3159'
+  - given-names: Davor
+    family-names: Cubranic
+    affiliation: University of British Columbia
+    orcid: 'https://orcid.org/0000-0003-2319-9676'
+  - given-names: Liam
+    family-names: Gray
+    affiliation: University of British Columbia
+    orcid: 'https://orcid.org/0000-0003-3986-954X'
+  - given-names: Adam D.
+    family-names: Hincks
+    affiliation: University of Toronto
+    orcid: 'https://orcid.org/0000-0003-1690-6678'
+  - given-names: Tristan
+    family-names: Pinsonneault-Marotte
+    affiliation: >-
+      Kavli Institute for Particle Astrophysics and
+      Cosmology / SLAC National Accelerator Laboratory
+    orcid: 'https://orcid.org/0000-0002-9516-3245'
+  - given-names: J. Richard
+    family-names: Shaw
+    affiliation: University of British Columbia
+    orcid: 'https://orcid.org/0000-0002-4543-4588'

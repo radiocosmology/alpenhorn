@@ -12,10 +12,12 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
+from collections import namedtuple
 from collections.abc import Hashable, Iterable
 from typing import IO
 
 from ..daemon import UpdateableNode
+from ..daemon.scheduler import FairMultiFIFOQueue
 from ..db import (
     ArchiveFile,
     ArchiveFileCopy,
@@ -23,9 +25,11 @@ from ..db import (
     StorageGroup,
     StorageNode,
 )
-from ..scheduler import FairMultiFIFOQueue
 
 log = logging.getLogger(__name__)
+
+# This named tuple stands in for IOClassExtension for internal I/O classes
+InternalIO = namedtuple("InternalIO", ["full_name", "node_class", "group_class"])
 
 
 # Comment from DVW:
@@ -111,6 +115,26 @@ class BaseNodeRemote:
             ``True`` if `file` is ready on the node; ``False`` otherwise.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def remote_pull_ok(self, host: str) -> bool:
+        """Check if a remote pull to `host` is possible.
+
+        Returns True if the daemon on `host` may attempt a remote pull
+        out of this node, or False if it cannot.
+
+        Parameters
+        ----------
+        host : str
+            The host on which the pulling daemon is running.
+
+        Returns
+        -------
+        bool
+            True if a remote pull should be attempted, or False
+            if a remote pull should be cancelled.
+        """
+        # By default, we return True
+        return True
 
 
 class BaseNodeIO:
@@ -301,17 +325,48 @@ class BaseNodeIO:
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 
-    def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
-        """Return size, in bytes, of the file given by `path`.
+    def filesize(self, path: pathlib.Path) -> int:
+        """Return size in bytes of the file given by `path`.
+
+        This should be the actual size of the file, not the amount of space
+        it takes up in the storage system.  For the latter, see the
+        `storage_used` method.
 
         Parameters
         ----------
         path : path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual : bool, optional
-            If ``True``, return the amount of space the file actually takes
-            up on the storage system.  Otherwise return apparent size.
+
+        Returns
+        -------
+        int
+            The size, in bytes, of the file
+        """
+        raise NotImplementedError("method must be re-implemented in subclass.")
+
+    def storage_used(self, path: pathlib.Path) -> int | None:
+        """Return amount of storage space used by the file given by `path`.
+
+        In general, the value returned here should be roughly the amount
+        `bytes_avail` would increase by if this file were to be removed (though
+        there's no assumption that this would be exact).
+
+        For a normal filesystem, this is the number of blocks used by the file
+        times the size of a filesystem block.  If this can't be determined, or is
+        not a reasonable thing to compute for a given node, this may be None.
+
+        Parameters
+        ----------
+        path: path-like
+            The filepath to check the size of.  May be absolute or relative
+            to `node.root`.
+
+        Returns
+        -------
+        int or None
+            The amount of space, in bytes, taken up by the file, or None if no
+            such value can be provided.
         """
         raise NotImplementedError("method must be re-implemented in subclass.")
 

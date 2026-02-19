@@ -60,8 +60,14 @@ def test_filesize(unode, xfs):
 
     assert unode.io.filesize("dir/file1") == 1000
     assert unode.io.filesize("/node/dir/file1") == 1000
-    assert unode.io.filesize("/node/dir/file1", actual=True) == 4096
-    assert unode.io.filesize("dir/file1", actual=True) == 4096
+
+
+def test_storage_used(unode, xfs):
+    """test DefaultNodeIO.storage_used()"""
+    xfs.create_file("/node/dir/file1", st_size=1000)
+
+    assert unode.io.storage_used("/node/dir/file1") == 4096
+    assert unode.io.storage_used("dir/file1") == 4096
 
 
 def test_file_walk(unode, xfs):
@@ -284,7 +290,7 @@ def test_idle_cleanup_rate(unode, queue):
     """Test rate limiting of the cleanup task."""
 
     # This is how often the task should be queued
-    from alpenhorn.io.default import _IDLE_CLEANUP_PERIOD
+    from alpenhorn.io.default.node import _IDLE_CLEANUP_PERIOD
 
     # Run the idle update a few times with newly_idle true
     # The task is queued the first time, and then once

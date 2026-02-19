@@ -15,7 +15,7 @@ from collections.abc import Generator
 import peewee as pw
 from watchdog.events import FileSystemEventHandler
 
-from ..common import config, extensions, metrics
+from ..common import config, extload
 from ..common.util import invalid_import_path
 from ..db import (
     ArchiveAcq,
@@ -24,45 +24,10 @@ from ..db import (
     ArchiveFileImportRequest,
     utcnow,
 )
-from ..scheduler import FairMultiFIFOQueue, Task
+from .scheduler import FairMultiFIFOQueue, Task
 from .update import UpdateableNode
 
 log = logging.getLogger(__name__)
-
-
-def import_request_done(req: ArchiveFileImportRequest | None, result: str) -> None:
-    """Record a completed import request.
-
-    Including updating metrics.
-
-    Parameters
-    ----------
-    req : ArchiveFileImportRequest or None
-        Request that has been completed.  If None, this function does nothing.
-    result : str
-        The result of the import request.  Used in the metric.
-    """
-
-    if not req:
-        return
-
-    count = (
-        ArchiveFileImportRequest.update(completed=1)
-        .where(ArchiveFileImportRequest.id == req.id)
-        .execute()
-    )
-
-    # Only update metrics if this actually completed the request
-    if not count:
-        return
-
-    log.info(f"Completed import request #{req.id}.")
-    metrics.by_name("requests_completed").inc(
-        type="import",
-        result=result,
-        node=req.node.name,
-        group=req.node.group.name,
-    )
 
 
 def import_file(
@@ -99,7 +64,8 @@ def import_file(
     # Skip these.
     if path == pathlib.PurePath(node.db.root):
         log.debug("Skipping import request of node root")
-        import_request_done(req, "ignored")
+        if req:
+            req.complete("ignored")
         return
 
     # Strip node root, if path is absolute
@@ -111,7 +77,8 @@ def import_file(
             log.warning(
                 f"Ignoring import of {path}: not rooted under node {node.db.root}"
             )
-            import_request_done(req, "ignored")
+            if req:
+                req.complete("ignored")
             return
 
     # Ignore the node info file.  NB: this happens even on nodes which
@@ -121,7 +88,8 @@ def import_file(
         node.db.root
     ).joinpath("ALPENHORN_NODE"):
         log.debug("ignoring ALPENHORN_NODE file during import")
-        import_request_done(req, "ignored")
+        if req:
+            req.complete("ignored")
         return
 
     # New import task.
@@ -162,13 +130,12 @@ def _import_file(
         If not None, req will be marked as complete if the import isn't skipped.
     """
 
-    from ..io import ioutil
-
     # Skip non-files
     fullpath = pathlib.Path(node.db.root).joinpath(path)
     if fullpath.is_symlink() or not fullpath.is_file():
         log.info(f'Not importing "{path}": not a file.')
-        import_request_done(req, "invalid")
+        if req:
+            req.complete("non-file")
         return
 
     log.debug(f'Considering "{path}" for import to node {node.name}.')
@@ -176,7 +143,8 @@ def _import_file(
     # Skip files with a leading dot
     if path.name[0] == ".":
         log.info(f'Not importing "{path}": filename starts with a dot.')
-        import_request_done(req, "bad_name")
+        if req:
+            req.complete("bad name")
         return
 
     # Wait for file to become ready
@@ -194,21 +162,24 @@ def _import_file(
 
     # Step through the detection extensions to find one that's willing
     # to handle this file
-    for detector in extensions.import_detection():
-        acq_name, callback = detector(path, node)
+    for extension in extload.import_detection():
+        acq_name, callback = extension.detect(path, node)
         if acq_name is not None:
+            log.debug(f'import detect succeeded using "{extension.full_name}"')
             break
     else:
         # Detection failed, so we're done.
         log.info(f"Not importing non-acquisition path: {path}")
-        import_request_done(req, "no_detection")
+        if req:
+            req.complete("no detection")
         return
 
     # Vet acq_name from extension
     rejection_reason = invalid_import_path(str(acq_name))
     if rejection_reason:
         log.warning(f'Rejecting invalid acq path "{acq_name}": {rejection_reason}')
-        import_request_done(req, "bad_acq")
+        if req:
+            req.complete("bad acq")
         return
 
     file_name = path.relative_to(acq_name)
@@ -216,7 +187,8 @@ def _import_file(
     # If a copy already exists, we're done
     if node.db.named_copy_tracked(acq_name, file_name):
         log.debug(f"Not importing {path}: already known")
-        import_request_done(req, "duplicate")
+        if req:
+            req.complete("duplicate")
         return
 
     # Add the acqusition, if necessary
@@ -238,7 +210,8 @@ def _import_file(
                 log.debug(f'Acquisition "{acq_name}" already in DB.')
         else:
             log.info(f'Not importing unregistered acquistion: "{acq_name}".')
-            import_request_done(req, "unregistered")
+            if req:
+                req.complete("unregistered")
             return
 
     # Add the file, if necessary.
@@ -272,7 +245,8 @@ def _import_file(
                 log.debug(f'File "{path}" already in DB.')
         else:
             log.info(f'Not importing unregistered file: "{path}".')
-            import_request_done(req, "unregistered")
+            if req:
+                req.complete("unregistered")
             return
 
     try:
@@ -302,7 +276,7 @@ def _import_file(
                 has_file="Y",
                 wants_file="Y",
                 ready=True,
-                size_b=node.io.filesize(path, actual=True),
+                size_b=node.io.storage_used(path),
                 last_update=utcnow(),
             )
             log.info(f'Imported file copy "{path}" on node "{node.name}".')
@@ -316,13 +290,15 @@ def _import_file(
             # import requests, so just mark the request we're working on as
             # completed and let the other worker deal with fixing up the
             # copy and doing all the post-import stuff
-            import_request_done(req, "duplicate")
+            if req:
+                req.complete("duplicate")
             return
 
-    import_request_done(req, "success")
+    if req:
+        req.complete("success")
 
     # Run post-add actions, if any
-    ioutil.post_add(node.db, file_)
+    copy.trigger_autoactions()
 
     # Run the extension module's callback, if necessary
     if callable(callback):
@@ -539,7 +515,8 @@ def scan(
 
     # This is successful because we've successfully scanned the
     # tree, whether or not that resulted in any imports.
-    import_request_done(req, "success")
+    if req:
+        req.complete("success")
 
 
 def stop_observers() -> None:

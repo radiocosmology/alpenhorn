@@ -6,28 +6,33 @@ from unittest.mock import call, patch
 
 import peewee as pw
 import pytest
-from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from alpenhorn.daemon import auto_import
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.acquisition import ArchiveAcq, ArchiveFile
-from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileImportRequest
-from alpenhorn.io.lfs import HSMState
+from alpenhorn.db.archive import ArchiveFileCopy
 
 
-def test_import_request_done(simpleimportrequest):
-    """Test import_request_done()."""
+@pytest.fixture
+def patch_import_detect():
+    """Factory fixture for creating ImportDetectExtensions.
 
-    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 0
+    Yields a context manager that patches alpenhorn.common.extload._id_ext
+    so that the extension is returned by extload.import_detection()
+    """
+    from alpenhorn.extensions import ImportDetectExtension
 
-    auto_import.import_request_done(simpleimportrequest, True)
+    def _patch(acqname, callback):
+        return patch(
+            "alpenhorn.common.extload._id_ext",
+            [
+                ImportDetectExtension(
+                    "Test", "0", detect=lambda path, node: (acqname, callback)
+                )
+            ],
+        )
 
-    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
-
-    # Can be called multiple times
-    auto_import.import_request_done(simpleimportrequest, True)
-
-    assert ArchiveFileImportRequest.get(id=simpleimportrequest.id).completed == 1
+    return _patch
 
 
 def test_import_file_bad_paths(queue, unode):
@@ -64,6 +69,8 @@ def test_import_file_queue(queue, unode):
 )
 def test_import_file_not_ready(dbtables, xfs, queue, simplenode, mock_lfs):
     """Test _import_file() on unready file."""
+
+    from alpenhorn.io._lfs import HSMState
 
     # Set up node for LustreHSMIO
     simplenode.io_class = "LustreHSM"
@@ -104,12 +111,10 @@ def test_import_file_no_ext(dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_file_no_detect(dbtables, unode):
+def test_import_file_no_detect(dbtables, unode, patch_import_detect):
     """Test no detection from import_detect."""
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext", [lambda path, node: (None, None)]
-    ):
+    with patch_import_detect(None, None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -122,12 +127,10 @@ def test_import_file_no_detect(dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_file_invalid_acqname(dbtables, unode):
+def test_import_file_invalid_acqname(dbtables, unode, patch_import_detect):
     """Test invalid acq_name from import_detect."""
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext", [lambda path, node: ("acq/", None)]
-    ):
+    with patch_import_detect("acq/", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -140,7 +143,7 @@ def test_import_file_invalid_acqname(dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_dotfile(xfs, dbtables, unode):
+def test_import_dotfile(xfs, dbtables, unode, patch_import_detect):
     """Test importing a file with a leading dot.
 
     Such files shouldn't be imported because alpenhorn
@@ -150,10 +153,7 @@ def test_import_dotfile(xfs, dbtables, unode):
     # Create file
     xfs.create_file("/node/acq/.file")
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("acq", None)],
-    ):
+    with patch_import_detect("acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -166,17 +166,14 @@ def test_import_dotfile(xfs, dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_file_locked(xfs, dbtables, unode):
+def test_import_file_locked(xfs, dbtables, unode, patch_import_detect):
     """Test locked file in _import_file()"""
 
     # Create file and lock
     xfs.create_file("/node/acq/.file.lock")
     xfs.create_file("/node/acq/file")
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("acq", None)],
-    ):
+    with patch_import_detect("acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -189,17 +186,14 @@ def test_import_file_locked(xfs, dbtables, unode):
         ArchiveAcq.get(name="acq")
 
 
-def test_import_file_create(xfs, dbtables, unode):
+def test_import_file_create(xfs, dbtables, unode, patch_import_detect):
     """Test acq, file, copy creation in _import_file()"""
 
     xfs.create_file("/node/simplefile_acq/simplefile")
 
     before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("simplefile_acq", None)],
-    ):
+    with patch_import_detect("simplefile_acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -253,15 +247,12 @@ def test_import_file_create(xfs, dbtables, unode):
     }
 
 
-def test_import_file_no_register(xfs, dbtables, unode):
+def test_import_file_no_register(xfs, dbtables, unode, patch_import_detect):
     """Test _import_file() without registration"""
 
     xfs.create_file("/node/acq/file")
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("acq", None)],
-    ):
+    with patch_import_detect("acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -277,10 +268,7 @@ def test_import_file_no_register(xfs, dbtables, unode):
     # Now create the ArchiveAcq and try again
     acq = ArchiveAcq.create(name="acq")
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("acq", None)],
-    ):
+    with patch_import_detect("acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -291,13 +279,10 @@ def test_import_file_no_register(xfs, dbtables, unode):
     assert ArchiveFile.select().count() == 0
     assert ArchiveFileCopy.select().count() == 0
 
-    # Now create the ArchiveAcq and try again
+    # Now create the ArchiveFile, too, and try again
     ArchiveFile.create(name="file", acq=acq)
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("acq", None)],
-    ):
+    with patch_import_detect("acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -309,7 +294,7 @@ def test_import_file_no_register(xfs, dbtables, unode):
     assert ArchiveFileCopy.select().count() == 1
 
 
-def test_import_file_callback(xfs, dbtables, unode):
+def test_import_file_callback(xfs, dbtables, unode, patch_import_detect):
     """Test _import_file() with callback"""
 
     xfs.create_file("/node/simplefile_acq/simplefile")
@@ -322,10 +307,7 @@ def test_import_file_callback(xfs, dbtables, unode):
         callback_executed = True
         callback_args = [copy, file_, acq, node]
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("simplefile_acq", callback)],
-    ):
+    with patch_import_detect("simplefile_acq", callback):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -347,7 +329,9 @@ def test_import_file_callback(xfs, dbtables, unode):
     assert callback_args == [copy, file, acq, unode]
 
 
-def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
+def test_import_file_exists(
+    xfs, dbtables, unode, simplefile, archivefilecopy, patch_import_detect
+):
     """Test _import_file() with pre-existing acq, file, copy"""
 
     # Create the file copy
@@ -363,10 +347,7 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
 
     before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("simplefile_acq", None)],
-    ):
+    with patch_import_detect("simplefile_acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -405,7 +386,9 @@ def test_import_file_exists(xfs, dbtables, unode, simplefile, archivefilecopy):
     }
 
 
-def test_import_file_missing(xfs, dbtables, unode, simplefile, archivefilecopy):
+def test_import_file_missing(
+    xfs, dbtables, unode, simplefile, archivefilecopy, patch_import_detect
+):
     """Test _import_file() with known missing file."""
 
     # Create the file copy.  "Missing" means has_file="N", wants_file="Y"
@@ -421,10 +404,7 @@ def test_import_file_missing(xfs, dbtables, unode, simplefile, archivefilecopy):
 
     before = (pw.utcnow() - datetime.timedelta(seconds=1)).replace(microsecond=0)
 
-    with patch(
-        "alpenhorn.common.extensions._id_ext",
-        [lambda path, node: ("simplefile_acq", None)],
-    ):
+    with patch_import_detect("simplefile_acq", None):
         with pytest.raises(StopIteration):
             next(
                 auto_import._import_file(
@@ -475,6 +455,8 @@ def test_empty_stop_observers():
 
 def test_update_observers_start(xfs, dbtables, unode, queue):
     """Test starting an observer via update_observers()."""
+
+    from watchdog.observers.api import BaseObserver, ObservedWatch
 
     xfs.create_file("/node/acq/file", contents="")
     unode.db.auto_import = True

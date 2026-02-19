@@ -1,0 +1,33 @@
+"""Alpenhorn Default Remote I/O class.
+
+This is the I/O class used to interface with StorageNodes using the
+"Default" I/O class (perhaps implcitly due to not explicitly specifying
+an I/O class) which are the source-side of a pull requets (meaning they're
+not expected to be locally available).
+"""
+
+from __future__ import annotations
+
+from ...db import ArchiveFile
+from ..base import BaseNodeRemote
+
+
+class DefaultNodeRemote(BaseNodeRemote):
+    """I/O class for a remote DefaultIO StorageNode."""
+
+    def pull_ready(self, file: ArchiveFile) -> bool:
+        """Return ``True``.
+
+        Files on a Default I/O node are always ready.
+
+        Parameters
+        ----------
+        file : ArchiveFile
+            Unused.
+
+        Returns
+        -------
+        bool
+            ``True``
+        """
+        return True

@@ -5,10 +5,8 @@ This module defines the Alpenhorn data index.
 It also abstracts the database connection logic, providing a minimally
 functional fallback if no external database module has been provided.
 
-More capable database connectors may be provided by a database extension
-module.  The dict returned by the register_extension() call to a database
-extension module must contain a "database" key whose value is a second dict
-with keys providing the database extensions capabilities.
+More capable database connectors may be provided by a DatabaseExtension.
+See the Extension API in `alpenhorn.extensions`.
 
 The following keys are allowed in the "database" dict, all of which are
 optional:
@@ -42,7 +40,7 @@ from .archive import ArchiveFileCopy, ArchiveFileCopyRequest, ArchiveFileImportR
 from .storage import StorageGroup, StorageNode, StorageTransferAction
 
 # Basic functionality
-from ._base import connect, close, database_proxy, threadsafe
+from ._base import connect, close, database_proxy, set_extension, threadsafe
 
 # Prototypes
 from ._base import EnumField, base_model
@@ -50,16 +48,3 @@ from ._base import EnumField, base_model
 # Naive-UTC stuff courtesy peewee.  These were originally in datetime
 # but were deprecated in 3.12 as too confusing.
 from peewee import utcnow, utcfromtimestamp
-
-# This contains all tables in the Data Index
-gamut = (
-    ArchiveAcq,
-    ArchiveFile,
-    ArchiveFileCopy,
-    ArchiveFileCopyRequest,
-    ArchiveFileImportRequest,
-    DataIndexVersion,
-    StorageGroup,
-    StorageNode,
-    StorageTransferAction,
-)

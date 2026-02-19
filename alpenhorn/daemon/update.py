@@ -19,8 +19,8 @@ from ..db import (
     StorageNode,
     utcnow,
 )
-from ..scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 from .querywalker import QueryWalker
+from .scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 
 log = logging.getLogger(__name__)
 
@@ -119,40 +119,36 @@ class updateable_base:
     def _get_io_class(self):
         """Return the I/O class for our Storage object."""
 
-        from ..common.extensions import io_module
+        from ..common.extload import io_extension
 
         # If no io_class is specified, the Default I/O classes are used
-        io_name = "Default" if self.db.io_class is None else self.db.io_class
+        io_class = "Default" if self.db.io_class is None else self.db.io_class
 
         # We assume StorageNode if not StorageGroup
         if self.is_group:
             obj_type = "StorageGroup"
-            io_suffix = "GroupIO"
+            key = "group_class"
         else:
             obj_type = "StorageNode"
-            io_suffix = "NodeIO"
+            key = "node_class"
 
-        # Load the module
-        module = io_module(io_name)
-        if module is None:
+        # Get the I/O extension
+        extension = io_extension(io_class)
+        if extension is None:
             log.error(
-                f'No module for I/O class "{io_name}".  '
-                f"Ignoring {obj_type} {self.name}."
+                f'Unknown I/O class: "{io_class}".  Ignoring {obj_type} {self.name}.'
             )
             return None
 
-        io_name += io_suffix
+        # Get the class from the extension
+        class_ = getattr(extension, key, None)
+        if not class_:
+            log.error(
+                f'No implementation of I/O class "{io_class}" in extension '
+                f'"{extension.full_name}" for {obj_type} {self.name}.'
+            )
 
-        # Within the module, find the class
-        try:
-            class_ = getattr(module, io_name)
-        except AttributeError as e:
-            raise ImportError(
-                f'I/O class "{io_name}" not found in module "{module}". '
-                f"Required for {obj_type} {self.name}."
-            ) from e
-
-        # return the class
+        # return the class (or None)
         return class_
 
     def stop(self) -> None:
@@ -211,7 +207,7 @@ class updateable_base:
             self.io_class = self._get_io_class()
 
             if self.io_class is None:
-                # Error locating I/O module
+                # Error locating I/O class
                 self.io = None
                 return False
 
@@ -375,18 +371,16 @@ class UpdateableNode(updateable_base):
             Completes `req` only if initialisation succeeds.
             """
 
-            from . import auto_import
-
             # recheck
             if node.io.check_init():
                 log.info(f'Node "{node.name}" already initialised.')
-                auto_import.import_request_done(req, "duplicate")
+                req.complete("duplicate")
                 return
 
             # Run the init and check result
             if node.io.init() and node.io.check_init():
                 log.info(f'Node "{node.name}" initialised.')
-                auto_import.import_request_done(req, "success")
+                req.complete("success")
                 return
 
             # Otherwise, fail, and don't complete req
@@ -592,7 +586,7 @@ class UpdateableNode(updateable_base):
             path = pathlib.Path(req.path)
             if path.is_absolute():
                 log.info(f'Not importing to "{self.name}" absolute path: {path}')
-                auto_import.import_request_done(req, "invalid")
+                req.complete("invalid")
                 continue
 
             if req.path == "ALPENHORN_NODE":
@@ -602,7 +596,7 @@ class UpdateableNode(updateable_base):
                     f'Ignoring node init request for "{self.name}": '
                     "already initialised."
                 )
-                auto_import.import_request_done(req, "duplicate")
+                req.complete("duplicate")
                 continue
 
             if req.recurse:
@@ -615,7 +609,7 @@ class UpdateableNode(updateable_base):
                         "Ignoring import request of unresolvable scan path: "
                         f"{fullpath}: {e}"
                     )
-                    auto_import.import_request_done(req, "invalid")
+                    req.complete("invalid")
                     continue
 
                 # Recompute the relative path after resolution, or skip scan if we're
@@ -626,7 +620,7 @@ class UpdateableNode(updateable_base):
                     log.warning(
                         f"Ignoring import request of out-of-tree scan path: {fullpath}"
                     )
-                    auto_import.import_request_done(req, "invalid")
+                    req.complete("invalid")
                     continue
 
                 # Run scan
@@ -645,7 +639,7 @@ class UpdateableNode(updateable_base):
                         f'Ignoring request for import of invalid path "{req.path}": '
                         + rejection_reason
                     )
-                    auto_import.import_request_done(req, "invalid")
+                    req.complete("invalid")
                     continue
 
                 # Try to directly import the path
@@ -861,6 +855,15 @@ class UpdateableGroup(updateable_base):
         if not req.check():
             return
 
+        # If this is a non-local pull, check that the remote source node
+        # support remote access.  This is not done in `req.check` because
+        # req.check doesn't know about RemoteNode.
+        if not req.node_from.local:
+            remote = RemoteNode(req.node_from)
+            if not remote.io.remote_pull_ok(util.get_hostname()):
+                req.cancel("non-local")
+                return
+
         # Early checks passed: dispatch this request to the Group I/O layer
         if self.io.do_pull_search:
             self.io.pull_search(req)
@@ -988,6 +991,11 @@ def update_loop(
         "group_available",
         description="Group is available (active and initialized)",
         unbound={"name"},
+    )
+    worker_count_metric = Metric(
+        "worker_count",
+        description="Number of worker threads",
+        bound={"pool_type": type(pool).__name__},
     )
 
     while not global_abort.is_set():
@@ -1131,8 +1139,10 @@ def update_loop(
         loop_time = time.time() - loop_start
         log.info(f"Main loop execution was {util.pretty_deltat(loop_time)}.")
 
+        # Update metrics
         loop_time_metric.set(loop_time)
         loop_count_metric.inc()
+        worker_count_metric.set(len(pool))
 
         # Pool and queue info
         log.info(

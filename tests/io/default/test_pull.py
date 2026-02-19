@@ -8,6 +8,7 @@ import pytest
 
 from alpenhorn.daemon.update import UpdateableNode
 from alpenhorn.db.archive import ArchiveFileCopy, ArchiveFileCopyRequest
+from alpenhorn.io.default import pull_async
 
 
 @pytest.fixture
@@ -97,6 +98,7 @@ def test_req(
         host=hostname,  # By default the transfer is local
         username="user",
         address="addr",
+        active=True,
     )
 
     copy = archivefilecopy(file=simplefile, node=node_from, has_file="Y")
@@ -384,7 +386,7 @@ def test_pull_async_link_arccontam(queue, pull_async_true, skip_db_checks):
     # Mock local_copy.  We'll end up falling back on this
     # due to no other copy method working
     mock = MagicMock()
-    with patch("alpenhorn.io.ioutil.local_copy", mock):
+    with patch("alpenhorn.io.default.pull.local_copy", mock):
         task()
     queue.task_done(key)
 
@@ -503,7 +505,7 @@ def test_pull_already_done(xfs, queue, pull_async_true, archivefilecopy):
     assert afcr.cancelled is True
 
 
-def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy, skip_db_checks):
+def test_pull_exists(xfs, queue, pull_async_false, skip_db_checks):
     """Test pulling a file that's unknowingly on the node."""
 
     node, req = pull_async_false
@@ -528,3 +530,133 @@ def test_pull_exists(xfs, queue, pull_async_false, archivefilecopy, skip_db_chec
     filecopy = ArchiveFileCopy.get(node=node.db, file=req.file)
     assert filecopy.has_file == "M"
     assert filecopy.wants_file == "Y"
+
+
+def test_pull_corrupt(xfs, queue, pull_async_false, archivefilecopy):
+    """Test pulling to overwrite a known corrupt file."""
+
+    node, req = pull_async_false
+
+    # Destination path
+    path = pathlib.Path(node.db.root, req.file.path)
+
+    # Create destination file
+    xfs.create_file(path)
+
+    # File is known to be corrupt on destination
+    archivefilecopy(node=node.db, file=req.file, has_file="X", wants_file="Y")
+
+    # Call the async
+    task, key = queue.get()
+    task()
+    queue.task_done(key)
+
+    # Pull resolved
+    afcr = ArchiveFileCopyRequest.get(id=req.id)
+    assert afcr.completed is True
+    assert afcr.cancelled is False
+
+    # File copy is now good.
+    filecopy = ArchiveFileCopy.get(node=node.db, file=req.file)
+    assert filecopy.has_file == "Y"
+
+
+def test_pull_async_path_hardlink(xfs, dbtables, test_req, queue, skip_db_checks):
+    """Test hardlinking via pull_async with a path."""
+
+    unode, req = test_req
+
+    # Destination path
+    dest = pathlib.Path("/dest/path")
+
+    # Call the async directly
+    pull_async(MagicMock(), unode.io, unode.io.tree_lock, req, True, path=dest)
+
+    # The file now exists
+
+
+def test_pull_async_path_local_copy(xfs, dbtables, test_req, queue, skip_db_checks):
+    """Test internal copy via pull_async with a path."""
+
+    unode, req = test_req
+
+    # Make one node non-archival to avoid hardlinking
+    unode.db.storage_type = "F"
+
+    # Destination path
+    dest = pathlib.Path("/dest/path")
+
+    # Call the async directly
+    pull_async(MagicMock(), unode.io, unode.io.tree_lock, req, True, path=dest)
+
+    # The file now exists
+    assert dest.exists()
+
+
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_pull_async_path_rsync(
+    xfs, dbtables, have_rsync, mock_filesize, test_req, queue, skip_db_checks
+):
+    """Test rsync-ing via pull_async with a path."""
+
+    unode, req = test_req
+
+    # Make one node non-archival to avoid hardlinking
+    unode.db.storage_type = "F"
+
+    # Destination path
+    dest = pathlib.Path("/dest/path")
+
+    # Call the async directly
+    pull_async(MagicMock(), unode.io, unode.io.tree_lock, req, True, path=dest)
+
+    # rsync ran with the non-standard path
+    cmd = have_rsync()["cmd"]
+    assert "rsync" in cmd
+    assert str(dest) in cmd
+
+
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_pull_async_path_rsync_remote(
+    xfs, dbtables, have_rsync, mock_filesize, test_req, queue, skip_db_checks
+):
+    """Test remote rsync-ing via pull_async with a path."""
+
+    unode, req = test_req
+
+    # Make the request non-local
+    req.node_from.host = "other-host"
+
+    # Destination path
+    dest = pathlib.Path("/dest/path")
+
+    # Call the async directly
+    pull_async(MagicMock(), unode.io, unode.io.tree_lock, req, True, path=dest)
+
+    # rsync ran with the non-standard path
+    cmd = have_rsync()["cmd"]
+    assert "rsync" in cmd
+    assert str(dest) in cmd
+
+
+@pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
+def test_pull_async_path_bbcp(
+    xfs, dbtables, have_bbcp, mock_filesize, test_req, queue, skip_db_checks
+):
+    """Test bbcp-ing via pull_async with a path."""
+
+    unode, req = test_req
+
+    # Make the request non-local
+    req.node_from.host = "other-host"
+
+    # Destination path
+    dest = pathlib.Path("/dest/path")
+
+    # Call the async directly
+    pull_async(MagicMock(), unode.io, unode.io.tree_lock, req, True, path=dest)
+
+    # bbcp ran with the non-standard path
+    cmd = have_bbcp()["cmd"]
+    assert "bbcp" in cmd
+    assert str(dest) in cmd

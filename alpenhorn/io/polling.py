@@ -9,6 +9,7 @@ Use in situations where normal filesystem activity detection won't work
 
 from watchdog.observers.polling import PollingObserver
 
+from .base import InternalIO
 from .default import DefaultNodeIO
 
 
@@ -25,3 +26,6 @@ class PollingNodeIO(DefaultNodeIO):
     """
 
     observer = PollingObserver
+
+
+PollingIO = InternalIO(__name__, PollingNodeIO, None)

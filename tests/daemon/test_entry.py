@@ -37,8 +37,8 @@ from alpenhorn.db import (
     StorageNode,
     StorageTransferAction,
     current_version,
-    gamut,
 )
+from alpenhorn.db.data_index import gamut
 
 # Import pattern_importer from the examples directory
 sys.path.append(str(pathlib.Path(__file__).parent.joinpath("..", "..", "examples")))
@@ -54,7 +54,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
     # Create tables
     db.create_tables(
         [
-            *gamut,
+            *gamut(),
             pattern_importer.AcqType,
             pattern_importer.FileType,
             pattern_importer.AcqData,
@@ -66,6 +66,9 @@ def e2e_db(xfs, clidb_noinit, hostname):
     # ---------------
 
     DataIndexVersion.create(component="alpenhorn", version=current_version)
+    DataIndexVersion.create(
+        component="pattern_importer", version=pattern_importer.schema_version
+    )
 
     # A Default-IO group with one node
     dftgrp = StorageGroup.create(name="dftgroup")
@@ -277,7 +280,7 @@ def mock_rsync(xfs):
         return original_which(cmd, mode, path)
 
     def _mocked_rsync(from_path, to_dir, size_b, local):
-        """An ioutil.rsync mock."""
+        """A default.pull.rsync mock."""
 
         nonlocal xfs
 
@@ -289,7 +292,7 @@ def mock_rsync(xfs):
         return {"ret": 0, "stdout": "", "md5sum": True}
 
     with patch("shutil.which", _mocked_which):
-        with patch("alpenhorn.io.ioutil.rsync", _mocked_rsync):
+        with patch("alpenhorn.io.default.pull.rsync", _mocked_rsync):
             yield
 
 

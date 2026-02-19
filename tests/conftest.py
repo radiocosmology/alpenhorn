@@ -15,7 +15,8 @@ from peewee import SqliteDatabase
 
 import alpenhorn.common.logger
 from alpenhorn import db
-from alpenhorn.common import config, extensions
+from alpenhorn.common import config, extload
+from alpenhorn.daemon.scheduler import FairMultiFIFOQueue
 from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import (
     ArchiveAcq,
@@ -27,8 +28,9 @@ from alpenhorn.db import (
     StorageGroup,
     StorageNode,
     StorageTransferAction,
+    data_index,
 )
-from alpenhorn.scheduler import FairMultiFIFOQueue
+from alpenhorn.db.data_index import gamut
 
 
 def pytest_configure(config):
@@ -43,7 +45,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "lfs_hsm_state(dict): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate the desired HSM State value(s) to return. "
         "The keys of dict are the paths; the values should be "
         "one of: 'missing', 'unarchived', 'released', 'restored'.",
@@ -51,21 +53,21 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "lfs_quota_remaining(quota): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate the desired quota that LFS.quota_remaining "
         "should return.",
     )
     config.addinivalue_line(
         "markers",
         "lfs_hsm_restore_result(result): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate the result of the hsm_restore call.  result "
         "may be 'fail', 'timeout', 'wait', or 'restore'",
     )
     config.addinivalue_line(
         "markers",
         "lfs_dont_mock(*method_names): "
-        "used on tests which mock alpenhorn.io.lfs.LFS "
+        "used on tests which mock alpenhorn.io._lfs.LFS "
         "to indicate which parts of LFS should _not_ be mocked.",
     )
     config.addinivalue_line(
@@ -104,7 +106,23 @@ def logger():
 
 
 @pytest.fixture
-def set_config(request, logger):
+def reset_extensions():
+    """Extension clean-up.
+
+    De-initialises common.extload after a test
+    """
+
+    yield
+
+    # Reset globals
+    data_index._di_ext = {}
+    db._base._db_ext = None
+    extload._id_ext = None
+    extload._io_ext = None
+
+
+@pytest.fixture
+def set_config(request, logger, reset_extensions):
     """Set alpenhorn.common.config._config for testing.
 
     Any value given in the alpenhorn_config mark is merged into the
@@ -123,11 +141,8 @@ def set_config(request, logger):
 
     yield config._config
 
-    # Reset globals
+    # Reset config
     config._config = None
-    extensions._db_ext = None
-    extensions._id_ext = None
-    extensions._io_ext = {}
 
 
 @pytest.fixture
@@ -170,17 +185,23 @@ def mock_run_command(request, set_config):
 
 @pytest.fixture
 def mock_filesize():
-    """Mocks DefaultNodeIO.filesize to return a fake file size."""
+    """Mocks DefaultNodeIO.filesize and DefaultNodeIO.storage_used."""
 
     def _mock_filesize(self, path, actual=False):
-        return 512 * 3 if actual else 1234
+        return 1234
+
+    def _mock_storage_used(self, path):
+        return 512 * 3
 
     with patch("alpenhorn.io.default.DefaultNodeIO.filesize", _mock_filesize):
-        yield
+        with patch(
+            "alpenhorn.io.default.DefaultNodeIO.storage_used", _mock_storage_used
+        ):
+            yield
 
 
 @pytest.fixture
-def queue():
+def queue(dbproxy):
     """A test queue."""
     yield FairMultiFIFOQueue()
 
@@ -220,7 +241,7 @@ def mock_lfs(have_lfs, request):
     Yields the LFS class.
     """
 
-    from alpenhorn.io.lfs import LFS, HSMState
+    from alpenhorn.io._lfs import LFS, HSMState
 
     marker = request.node.get_closest_marker("lfs_dont_mock")
     if marker is None:
@@ -316,18 +337,18 @@ def mock_lfs(have_lfs, request):
 
     patches = []
     if "hsm_state" not in lfs_dont_mock:
-        patches.append(patch("alpenhorn.io.lfs.LFS.hsm_state", _mocked_lfs_hsm_state))
+        patches.append(patch("alpenhorn.io._lfs.LFS.hsm_state", _mocked_lfs_hsm_state))
     if "hsm_release" not in lfs_dont_mock:
         patches.append(
-            patch("alpenhorn.io.lfs.LFS.hsm_release", _mocked_lfs_hsm_release),
+            patch("alpenhorn.io._lfs.LFS.hsm_release", _mocked_lfs_hsm_release),
         )
     if "hsm_restore" not in lfs_dont_mock:
         patches.append(
-            patch("alpenhorn.io.lfs.LFS.hsm_restore", _mocked_lfs_hsm_restore),
+            patch("alpenhorn.io._lfs.LFS.hsm_restore", _mocked_lfs_hsm_restore),
         )
     if "quota_remaining" not in lfs_dont_mock:
         patches.append(
-            patch("alpenhorn.io.lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining),
+            patch("alpenhorn.io._lfs.LFS.quota_remaining", _mocked_lfs_quota_remaining),
         )
 
     for p in patches:
@@ -395,11 +416,50 @@ def mock_exists(fs):
 
 
 @pytest.fixture
-def mock_observer():
-    """Mocks the DefaultIO observer so its always the PollingObserver"""
-    from watchdog.observers.polling import PollingObserver
+def mock_observer(fs):
+    """Creates a watchdog observer to monitor the fake filesystem.
 
-    with patch("alpenhorn.io.default.DefaultNodeIO.observer", PollingObserver):
+    This is essentially a PollingObserver, but rejiggered to
+    explicitly use the fake filesystem.
+    """
+    # This is the fakefs `os` module, which is the important bit here
+    import os
+
+    from watchdog.observers.api import (
+        DEFAULT_EMITTER_TIMEOUT,
+        DEFAULT_OBSERVER_TIMEOUT,
+        BaseObserver,
+    )
+    from watchdog.observers.polling import PollingEmitter
+
+    # This is essentially the PollingEmitter, but we need to re-implement
+    # __init__ to rebind the defaults using the (fake) os module.
+    class FakeFSEmitter(PollingEmitter):
+        def __init__(
+            self,
+            event_queue,
+            watch,
+            timeout=DEFAULT_EMITTER_TIMEOUT,
+            event_filter=None,
+            # These last two are ignored
+            stat=None,
+            listdir=None,
+        ):
+            super().__init__(
+                event_queue,
+                watch,
+                timeout=timeout,
+                event_filter=event_filter,
+                stat=os.stat,
+                listdir=os.scandir,
+            )
+
+    # The fake observer is just made up out of the fake emitter
+    class FakeFSObserver(BaseObserver):
+        def __init__(self, timeout=DEFAULT_OBSERVER_TIMEOUT):
+            BaseObserver.__init__(self, emitter_class=FakeFSEmitter, timeout=timeout)
+
+    with patch("alpenhorn.io.default.DefaultNodeIO.observer", FakeFSObserver):
         yield
 
 
@@ -460,13 +520,13 @@ def use_chimedb(set_config):
 
 
 @pytest.fixture
-def dbproxy(set_config):
+def dbproxy(set_config, reset_extensions):
     """Database init and teardown.
 
     This fixture yields the database proxy after initialisation.
     """
-    # Load extensions
-    extensions.load_extensions()
+    # Find and init early extensions to get the DB extension
+    extload.init_extensions(extload.find_extensions(), stage=1)
 
     # Set database.url if not already present
     config._config = config.merge_dict_tree(
@@ -485,7 +545,7 @@ def dbproxy(set_config):
 def dbtables(dbproxy):
     """Create all the usual tables in the database."""
 
-    dbproxy.create_tables(db.gamut)
+    dbproxy.create_tables(gamut())
 
     # Set schema
     DataIndexVersion.create(component="alpenhorn", version=db.current_version)
@@ -521,7 +581,7 @@ def unode(dbtables, simplenode, queue):
 
 
 @pytest.fixture
-def mockio():
+def mockio(reset_extensions):
     """A mocked I/O module.
 
     Access the mocks via mockio.group and mockio.node.
@@ -535,35 +595,38 @@ def mockio():
     group = MagicMock()
     group.fifo = "g:mockio"
 
-    # This is our mock I/O module
-    class MockIO:
-        # The I/O "classes"
-        def MockNodeRemote(*args, **kwargs):
-            nonlocal remote
-            remote._instance_args = args
-            remote._instance_kwargs = kwargs
-            return remote
+    # The I/O "classes"
+    def MockNodeRemote(*args, **kwargs):
+        nonlocal remote
+        remote._instance_args = args
+        remote._instance_kwargs = kwargs
+        return remote
 
-        def MockNodeIO(*args, **kwargs):
-            nonlocal node
-            node._instance_args = args
-            node._instance_kwargs = kwargs
-            return node
+    def MockNodeIO(*args, **kwargs):
+        nonlocal node
+        node._instance_args = args
+        node._instance_kwargs = kwargs
+        return node
 
-        MockNodeIO.remote_class = MockNodeRemote
+    MockNodeIO.remote_class = MockNodeRemote
 
-        def MockGroupIO(*args, **kwargs):
-            nonlocal group
-            group._instance_args = args
-            node._instance_kwargs = kwargs
-            return group
+    def MockGroupIO(*args, **kwargs):
+        nonlocal group
+        group._instance_args = args
+        group._instance_kwargs = kwargs
+        return group
 
-    MockIO.remote = remote
+    # This is our mock I/O extension
+    MockIO = MagicMock()
+    MockIO.full_name = "MockIO"
     MockIO.node = node
     MockIO.group = group
+    MockIO.remote = remote
+    MockIO.node_class = MockNodeIO
+    MockIO.group_class = MockGroupIO
 
     # Patch extensions._io_ext so alpenhorn can find our module
-    with patch.dict("alpenhorn.common.extensions._io_ext", mock=MockIO):
+    with patch.dict("alpenhorn.common.extload._io_ext", Mock=MockIO):
         yield MockIO
 
 
@@ -664,7 +727,7 @@ def clidb(clidb_noinit):
 
     Yields the connector."""
 
-    clidb_noinit.create_tables(db.gamut)
+    clidb_noinit.create_tables(gamut())
 
     # Set schema
     DataIndexVersion.create(component="alpenhorn", version=db.current_version)
@@ -673,7 +736,7 @@ def clidb(clidb_noinit):
 
 
 @pytest.fixture
-def clidb_noinit(clidb_uri):
+def clidb_noinit(clidb_uri, dbproxy):
     """Initialise a peewee connector to the empty CLI DB.
 
     Yields the connector."""
@@ -687,8 +750,8 @@ def clidb_noinit(clidb_uri):
     yield connector
 
     # Drop all the tables after the test
-    for table in db.gamut:
-        connector.execute_sql(f"DROP TABLE IF EXISTS {table._meta.table_name};")
+    for table in dbproxy.get_tables():
+        connector.execute_sql(f"DROP TABLE IF EXISTS {table};")
     connector.close()
 
 

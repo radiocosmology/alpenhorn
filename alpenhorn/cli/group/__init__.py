@@ -2,7 +2,7 @@
 
 import click
 
-from ..cli import dbconnect
+from ...db import schema_version
 from .autosync import autosync
 from .create import create
 from .list import list_
@@ -15,8 +15,6 @@ from .sync import sync
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
     """Manage Storage Groups."""
-
-    dbconnect()
 
 
 cli.add_command(autosync, "autosync")

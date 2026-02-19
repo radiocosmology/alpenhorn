@@ -81,6 +81,7 @@ def show(name, actions, all_, imports, stats, transfers):
     echo("    Daemon Host: " + (node.host if node.host else ""))
     echo(" Log-in Address: " + (node.address if node.address else ""))
     echo("Log-in Username: " + (node.username if node.username else ""))
+    echo("Filesystem Root: " + (node.root if node.root else ""))
     echo()
     echo("    Auto-Import: " + ("On" if node.auto_import else "Off"))
     echo(

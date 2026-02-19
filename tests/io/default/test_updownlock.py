@@ -5,7 +5,7 @@ from time import sleep
 
 import pytest
 
-from alpenhorn.io.updownlock import UpDownLock
+from alpenhorn.io.default.updownlock import UpDownLock
 
 
 @pytest.fixture

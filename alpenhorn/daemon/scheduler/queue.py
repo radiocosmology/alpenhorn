@@ -20,7 +20,7 @@ from collections.abc import Hashable
 from time import monotonic, sleep
 from typing import Any
 
-from ..common.metrics import Metric
+from ...common.metrics import Metric
 
 
 class FairMultiFIFOQueue:
@@ -57,11 +57,14 @@ class FairMultiFIFOQueue:
         self._total_inprogress = 0
         # Counts of in-progress tasks by FIFO
         self._inprogress_counts = {}
-        # A list of sets of FIFO keys, indexed by number of in-progress tasks
+        # A list of deques of FIFO keys, indexed by number of in-progress tasks.
+        # FIFO keys are added to the end (right-side) of the deques, but searching
+        # happens from the left, meaning FIFOs which have been accessed least
+        # recently are prioritised.
         #
-        # We initialise element 0 to the empty set to simplify creating new
-        # FIFOs, which will always get added to that set.
-        self._keys_by_inprogress = [set()]
+        # We initialise element 0 to an empty deque to simplify creating new
+        # FIFOs, which will always get added to that FIFO.
+        self._keys_by_inprogress = [deque()]
         # The set of locked FIFOs
         self._fifo_locks = set()
         # The set of retired FIFOs
@@ -336,7 +339,7 @@ class FairMultiFIFOQueue:
             fifo = deque()
             self._fifos[key] = fifo
             self._inprogress_counts[key] = 0
-            self._keys_by_inprogress[0].add(key)
+            self._keys_by_inprogress[0].append(key)
         else:
             fifo = self._fifos[key]
 
@@ -479,7 +482,7 @@ class FairMultiFIFOQueue:
             # However, in our particular case (alpenhornd), the maximum number
             # of FIFOs is total number of nodes ever active on this host, which is
             # generally small and static enough not to have to worry about it.
-            self._keys_by_inprogress[count].add(key)
+            self._keys_by_inprogress[count].append(key)
 
             # XXX Could trim _keys_by_inprogress here.
             #
@@ -554,7 +557,7 @@ class FairMultiFIFOQueue:
         # Otherwise, get the next item from the queue:
 
         # Choose a FIFO by walking _keys_by_inprogress: find the lowest
-        # non-empty set that has a non-empty FIFO in it.
+        # non-empty deque that has a non-empty FIFO in it.
         key = None
         for count, key_set in enumerate(self._keys_by_inprogress):
             # If the key_set is empty, try the next one
@@ -625,9 +628,9 @@ class FairMultiFIFOQueue:
         self._inprogress_counts[key] = count
         # Extend _keys_by_inprogress if necessary
         if len(self._keys_by_inprogress) == count:
-            self._keys_by_inprogress.append({key})
+            self._keys_by_inprogress.append(deque([key]))
         else:
-            self._keys_by_inprogress[count].add(key)
+            self._keys_by_inprogress[count].append(key)
 
         return (item, key)
 

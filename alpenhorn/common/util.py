@@ -42,8 +42,7 @@ def help_config_option(func: Callable) -> Callable:
         if not value or ctx.resilient_parsing:
             return
 
-        click.echo(
-            """
+        click.echo("""
 In order to operate, alpenhorn needs to be configured to point it to the
 SQL database containing its Data Index.  This is done through one or more
 alpenhorn config files.
@@ -76,8 +75,7 @@ extensions:
 The database connection is the only thing that can be configured for the
 alpenhorn CLI.  But further configuration of the daemon is possible.
 Consult the alpenhorn documentation for more information.
-"""
-        )
+""")
         ctx.exit(0)
 
     return click.option(
@@ -130,8 +128,7 @@ def print_version(ctx, param, value):
         return
 
     click.echo(f"alpenhorn {__version__} (Python {sys.version})")
-    click.echo(
-        """
+    click.echo("""
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -149,13 +146,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-"""
-    )
+""")
     ctx.exit(0)
 
 
 def start_alpenhorn(
-    cli_conf: str | None, cli: bool, verbosity: int | None = None
+    cli_conf: str | None,
+    cli: bool = True,
+    verbosity: int | None = None,
+    check_schema: bool = True,
+    db_init_pending: bool = False,
 ) -> None:
     """Initialise alpenhorn.
 
@@ -163,12 +163,24 @@ def start_alpenhorn(
     ----------
     cli_conf : str or None
         The config file given on the command line, if any.
-    cli : bool
-        ``False`` if being called from the alpenhorn daemon.  ``True`` otherwise.
+    cli : bool, optional
+        Is the alpenhorn CLI being initialised?  Defaults to True.
     verbosity : int, optional
-        For the cli, the initial verbosity level.  Ignored for daemons.
+        For the CLI, the initial verbosity level.  Ignored for daemons.
+    check_schema : bool, optional
+        If True (the default) check that the data index schema is the
+        current version.
+    db_init_pending : bool, optional
+        If `check_schema` is True, with this True as well, schema checks
+        will succeed even if the schema doesn't exist in the database, so
+        long as alpenhorn or an extension is capable of creating the
+        requirement.  If False, the default, only what's in the database
+        is considered for these checks.  If `check_schema` is False, this
+        parameter is ignored.
     """
-    from . import extensions, logger
+    from .. import db
+    from ..db import data_index
+    from . import extload, logger
 
     # Initialise logging
     logger.init_logging(cli=cli, verbosity=verbosity)
@@ -180,8 +192,42 @@ def start_alpenhorn(
     if not cli:
         logger.configure_logging()
 
-    # Load alpenhorn extensions
-    extensions.load_extensions()
+    # Load alpenhorn extension modules
+    extensions = extload.find_extensions()
+
+    # Initialise stage-1 extensions (database extensions)
+    extload.init_extensions(extensions, stage=1)
+
+    # Connect to the database
+    db.connect()
+
+    # This is True when we can do the normal schema checking which happens
+    # only against the database.
+    simple_schema_check = check_schema and not db_init_pending
+
+    # Run a schema check if requested.  This raises ClickException on error.
+    # When db_init_pending is True, this check will be handled later.
+    if simple_schema_check:
+        db.schema_version(check=True)
+
+    # Initialise stage-2 extensions (data index extensions)
+    extload.init_extensions(extensions, stage=2, check_schema=simple_schema_check)
+
+    # Now that all data index extensions have been loaded, we can do the schema
+    # checks on an uninitialised (or partially initialised) data index.
+    # This returns effective schema versions for all known components, which will
+    # be passed to the third-stage extension init to simplify schema checks there.
+    #
+    # On a failed check, ClickException is raised.
+    if db_init_pending:
+        schema_versions = data_index.check_pending_schema()
+    else:
+        schema_versions = None
+
+    # Initialise stage-3 extensions (everything else)
+    extload.init_extensions(
+        extensions, stage=3, check_schema=check_schema, schema_versions=schema_versions
+    )
 
 
 def run_command(

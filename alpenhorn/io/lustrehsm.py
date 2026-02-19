@@ -27,9 +27,9 @@ import peewee as pw
 from ..common.util import pretty_bytes, pretty_deltat
 from ..daemon import UpdateableGroup, UpdateableNode
 from ..daemon.querywalker import QueryWalker
+from ..daemon.scheduler import FairMultiFIFOQueue, Task
 from ..db import ArchiveFile, ArchiveFileCopy, ArchiveFileCopyRequest, utcnow
-from ..scheduler import FairMultiFIFOQueue, Task
-from .base import BaseNodeRemote
+from .base import BaseNodeRemote, InternalIO
 from .default import DefaultGroupIO
 from .lustrequota import LustreQuotaNodeIO
 
@@ -457,7 +457,7 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
                 return
 
             # Do the check by inlining the Default-I/O function
-            from ._default_asyncs import check_async
+            from .default import check_async
 
             check_async(task, node_io, copy)
 
@@ -506,30 +506,25 @@ class LustreHSMNodeIO(LustreQuotaNodeIO):
         full_path = pathlib.PurePath(self.node.root).joinpath(path)
         return self._lfs.hsm_state(full_path) != self._lfs.HSM_MISSING
 
-    def filesize(self, path: pathlib.Path, actual: bool = False) -> int:
-        """Return size in bytes of the file given by `path`.
+    def storage_used(self, path: pathlib.Path) -> None:
+        """Returns None.
 
-        This *always* returns the apparent size, since the size on tape is
-        not known (or important), and the size on disk is usually that of the
-        the file stub.
+        This method is supposed to return, if possible, the amount of
+        space consumed by `path`.  But that's not a well defined value in
+        HSM, so this method just returns None to indicate that.
 
         Parameters
         ----------
         path : path-like
             The filepath to check the size of.  May be absolute or relative
             to `node.root`.
-        actual : bool, optional
-            Ignored.
 
         Returns
         -------
-        int
-            The size, in bytes, of the file.
+        None
+            None.
         """
-        path = pathlib.Path(path)
-        if not path.is_absolute():
-            path = pathlib.Path(self.node.root, path)
-        return path.stat().st_size
+        return None  # noqa: RET501
 
     def fits(self, size_b: int) -> bool:
         """Check that `size_b` bytes fit on this node.
@@ -856,3 +851,6 @@ class LustreHSMGroupIO(DefaultGroupIO):
             self._smallfile.io.pull(req, did_search)
         else:
             self._hsm.io.pull(req, did_search)
+
+
+LustreHSMIO = InternalIO(__name__, LustreHSMNodeIO, LustreHSMGroupIO)
