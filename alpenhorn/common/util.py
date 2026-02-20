@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import logging
 import os
-import socket
 import subprocess
 from collections.abc import Callable
 from typing import Any
@@ -366,16 +365,6 @@ def md5sum_file(filename: str | os.PathLike) -> str | None:
     metric.dec()
 
     return result
-
-
-def get_hostname() -> str:
-    """Returns the hostname for the machine we're running on.
-
-    If there is a host name specified in the config, that is returned
-    otherwise the local hostname up to the first '.' is returned"""
-
-    hostname = config.get("base.hostname", default=None, as_type=str)
-    return hostname if hostname else socket.gethostname().split(".")[0]
 
 
 def pretty_bytes(num: int | None) -> str:

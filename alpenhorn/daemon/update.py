@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
+import socket
 import time
 
+import click
 import peewee as pw
 
 from ..common import config, util
@@ -835,7 +837,6 @@ class UpdateableGroup(updateable_base):
         req : ArchiveFileCopyRequest
             The pull request to process.
         """
-
         # Run early checks on the request
         if not req.check():
             return
@@ -845,7 +846,7 @@ class UpdateableGroup(updateable_base):
         # req.check doesn't know about RemoteNode.
         if not req.node_from.local:
             remote = RemoteNode(req.node_from)
-            if not remote.io.remote_pull_ok(util.get_hostname()):
+            if not remote.io.remote_pull_ok(host()):
                 req.cancel("non-local")
                 return
 
@@ -911,6 +912,45 @@ class UpdateableGroup(updateable_base):
             self.io.idle_update()
 
 
+# This stores the daemon's host.
+_host = None
+
+
+def host() -> str | None:
+    """Return the current daemon host.
+
+    If not called from within the daemon, or called before the start
+    of the daemon main loop, this will be None.
+
+    Returns
+    -------
+    str or None
+        The daemon host, or None, if not called from within a running
+        daemon.
+    """
+    global _host
+    return _host
+
+
+def _set_host() -> None:
+    """Set the daemon host.
+
+    If there is a host name specified in the config, that is used.
+    otherwise the local hostname up to the first '.' is used.
+
+    Returns
+    -------
+    str
+        The daemon host.
+    """
+    global _host
+
+    hostname = config.get("base.hostname", default=None, as_type=str)
+
+    _host = hostname if hostname else socket.gethostname().split(".")[0]
+    return _host
+
+
 def update_loop(
     queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool, once: bool
 ) -> int:
@@ -946,9 +986,6 @@ def update_loop(
         0 if exiting after running once.  1 otherwise.
     """
 
-    # Get the name of this host
-    host = util.get_hostname()
-
     # The nodes and groups we're working on.  These will be updated
     # each time through the main loop, whenever the underlying storage objects
     # change.  These are stored as dicts with keys being the name of the node
@@ -980,6 +1017,12 @@ def update_loop(
 
     while not global_abort.is_set():
         loop_start = time.time()
+
+        # Update/set the name of this host.  We do this once
+        # per update loop
+        host = _set_host()
+        if not host:
+            raise click.ClickException("Unable to determine hostname.")
 
         # Nodes are re-queried every loop iteration so we can
         # detect changes in available storage media

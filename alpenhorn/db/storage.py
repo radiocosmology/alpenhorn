@@ -161,10 +161,11 @@ class StorageNode(base_model):
 
     @property
     def local(self) -> bool:
-        from ..common import util
-
         """Is this node local to where we are running?"""
-        return self.host == util.get_hostname()
+        from ..daemon import host
+
+        # If daemon.host is None, this always returns False.
+        return host and self.host == host()
 
     @property
     def archive(self) -> bool:
