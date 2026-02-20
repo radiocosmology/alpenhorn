@@ -484,11 +484,19 @@ def hostname(set_config):
 
     Returns the hostname."""
 
+    import alpenhorn.daemon.update
+
     config._config = config.merge_dict_tree(
         config._config, {"base": {"hostname": "alpenhost"}}
     )
 
-    return "alpenhost"
+    # Set the daemon hostname, too
+    alpenhorn.daemon.update._host = "alpenhost"
+
+    yield "alpenhost"
+
+    # Reset global
+    alpenhorn.daemon.update._host = None
 
 
 @pytest.fixture

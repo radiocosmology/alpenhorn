@@ -52,19 +52,6 @@ def test_md5sum_file(tmp_path):
     assert util.md5sum_file(file) == "9e107d9d372bb6826bd81d3542a419d6"
 
 
-def test_gethostname_config(hostname):
-    """Test util.get_hostname with config"""
-
-    assert util.get_hostname() == hostname
-
-
-def test_gethostname_default():
-    """Test util.get_hostname with no config"""
-    host = util.get_hostname()
-    assert "." not in host
-    assert len(host) > 0
-
-
 def test_pretty_bytes():
     """Test util.pretty_bytes."""
     with pytest.raises(TypeError):
