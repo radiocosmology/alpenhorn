@@ -87,7 +87,7 @@ def init(only):
                 )
 
         # This component doesn't exist, so try to create it:
-        with database_proxy.atomic():
+        with database_proxy.atomic() as transaction:
             database_proxy.create_tables(ext.tables)
 
             # Set schema version
@@ -101,7 +101,7 @@ def init(only):
                     ext.post_init()
                 except RuntimeError as e:
                     click.echo(f"Error: post-init for {name} failed: {e}")
-                    database_proxy.rollback()
+                    transaction.rollback()
                     saw_error = True
                     continue
 
