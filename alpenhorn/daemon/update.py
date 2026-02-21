@@ -422,7 +422,6 @@ class UpdateableNode(updateable_base):
             last_update_check = StorageNode.get_by_id(
                 self.db.id
             ).avail_gb_last_checked.timestamp()
-            log.warning(f"LUC: {last_update_check}")
 
             # We allow for a little slop just to hedge against DB storage
             # oddities

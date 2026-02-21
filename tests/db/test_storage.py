@@ -374,12 +374,11 @@ def test_update_avail_gb(simplenode):
     simplenode.update_avail_gb(10000, update_timestamp=True)
     # Now the value is set
     node = StorageNode.get(id=simplenode.id)
-    after = pw.utcnow()
 
     avail = node.avail_gb
     assert avail == pytest.approx(10000.0 / 2.0**30)
-    assert node.avail_gb_last_checked >= before
-    assert node.avail_gb_last_checked <= after
+    tdelta = node.avail_gb_last_checked - before
+    assert abs(tdelta.total_seconds()) <= 10
 
     # Reset time
     StorageNode.update(avail_gb_last_checked=0).where(
@@ -399,7 +398,8 @@ def test_update_avail_gb(simplenode):
     simplenode.update_avail_gb(None, update_timestamp=True)
     node = StorageNode.get(id=simplenode.id)
     assert node.avail_gb == avail
-    assert node.avail_gb_last_checked >= after
+    tdelta = node.avail_gb_last_checked - before
+    assert abs(tdelta.total_seconds()) <= 10
 
     # Reset time
     StorageNode.update(avail_gb_last_checked=0).where(

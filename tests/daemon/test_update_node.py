@@ -214,7 +214,8 @@ def test_update_free_space(unode):
     # Node has been updated.
     node = StorageNode.get(id=unode.db.id)
     assert node.avail_gb == 4
-    assert node.avail_gb_last_checked >= now
+    tdelta = now - node.avail_gb_last_checked
+    assert abs(tdelta.total_seconds()) <= 10
 
 
 def test_detect_multiple_daemons(unode):

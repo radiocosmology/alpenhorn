@@ -3,8 +3,10 @@
 # Type annotation shennanigans
 from __future__ import annotations
 
+import datetime
 import logging
 import pathlib
+import random
 
 import peewee as pw
 from peewee import fn
@@ -434,7 +436,11 @@ class StorageNode(base_model):
 
         # Record check time, even if we failed to update
         if update_timestamp:
-            self.avail_gb_last_checked = pw.utcnow()
+            # We introduce some small amount of random jitter here to better detect
+            # multiple daemons updating this node simultaneously.
+            self.avail_gb_last_checked = pw.utcnow() - datetime.timedelta(
+                seconds=random.randrange(10)
+            )
             update_fields.append(StorageNode.avail_gb_last_checked)
 
         # Update the DB with only fields that have changed
