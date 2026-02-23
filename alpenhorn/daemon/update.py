@@ -975,7 +975,7 @@ def host() -> str | None:
 def _set_host() -> None:
     """Set the daemon host.
 
-    If there is a host name specified in the config, that is used.
+    If there is a ``daemon.host`` specified in the config, that is used.
     otherwise the local hostname up to the first '.' is used.
 
     Returns
@@ -985,7 +985,7 @@ def _set_host() -> None:
     """
     global _host
 
-    hostname = config.get("base.hostname", default=None, as_type=str)
+    hostname = config.get("daemon.host", default=None, as_type=str)
 
     _host = hostname if hostname else socket.gethostname().split(".")[0]
     return _host

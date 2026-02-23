@@ -308,13 +308,12 @@ def e2e_config(xfs, hostname, clidb_uri):
     # it as a parameter, which WILL get urldecoded and supercede the empty
     # netloc.
     config = {
-        "base": {"hostname": hostname},
         "extensions": [
             "pattern_importer",
         ],
         "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
         "logging": {"level": "debug"},
-        "daemon": {"num_workers": 0, "update_interval": 1},
+        "daemon": {"host": hostname, "num_workers": 0, "update_interval": 1},
     }
 
     # Put it in a file
