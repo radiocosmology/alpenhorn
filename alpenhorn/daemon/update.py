@@ -283,6 +283,10 @@ class UpdateableNode(updateable_base):
         self.db = None
         self.reinit(node)
 
+        # These two are for the multiple daemon detection
+        self.last_time = None
+        self.last_time_failures = 0
+
         # Metrics that we want to delete when this node goes away
         self._idle_metric = Metric(
             "node_idle", "Node is idle", bound={"name": self.name}
@@ -410,17 +414,53 @@ class UpdateableNode(updateable_base):
 
         The free space is found by calling `self.io.bytes_avail()`
         and saved to the database via `self.db.update_avail_gb()`
+
+        This function is also responsible for detecting other daemons
+        managing this node at the same time as us.
         """
+        if self.last_time is not None:
+            # Check for an unexpected node update
+            last_update_check = StorageNode.get_by_id(
+                self.db.id
+            ).avail_gb_last_checked.timestamp()
+
+            # We allow for a little slop just to hedge against DB storage
+            # oddities
+            if abs(self.last_time - last_update_check) > 2:
+                # Increment the failed check count
+                self.last_time_failures += 1
+
+                # By default, we permit an occasional failure, and only decide
+                # there's a problem if the check fails multiple times in a row.
+                threshold = config.get_int(
+                    "daemon.update_skew_threshold", default=4, min=0
+                )
+
+                # If the threshold is zero, the check is disabled
+                if threshold and self.last_time_failures >= threshold:
+                    message = (
+                        "FATAL: Multiple simultaneous updates of node "
+                        f'"{self.db.name}"!'
+                    )
+                    log.error(message)
+                    raise click.ClickException(message)
+            else:
+                # If the time is good, reset the failure count
+                self.last_time_failures = 0
+
         # This is always a slow call
         bytes_avail = self.io.bytes_avail(fast=False)
 
-        self.db.update_avail_gb(bytes_avail)
+        self.db.update_avail_gb(bytes_avail, update_timestamp=True)
 
         if self.db.avail_gb is not None:
             log.info(
                 f"Node {self.name}: "
                 f"{util.pretty_bytes(self.db.avail_gb * 2**30)} available."
             )
+
+        # Record the last update time, so we can check against it next time.
+        self.last_time = self.db.avail_gb_last_checked.timestamp()
 
     def run_auto_verify(self) -> None:
         """Run auto-verification on this node.
