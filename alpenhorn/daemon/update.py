@@ -430,9 +430,14 @@ class UpdateableNode(updateable_base):
                 # Increment the failed check count
                 self.last_time_failures += 1
 
-                # We permit an occasional failure, and only decide there's a problem
-                # if the check fails multiple times in a row
-                if self.last_time_failures > 3:
+                # By default, we permit an occasional failure, and only decide
+                # there's a problem if the check fails multiple times in a row.
+                threshold = config.get_int(
+                    "daemon.update_skew_threshold", default=4, min=0
+                )
+
+                # If the threshold is zero, the check is disabled
+                if threshold and self.last_time_failures >= threshold:
                     message = (
                         "FATAL: Multiple simultaneous updates of node "
                         f'"{self.db.name}"!'

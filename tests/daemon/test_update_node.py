@@ -218,12 +218,8 @@ def test_update_free_space(unode):
     assert abs(tdelta.total_seconds()) <= 10
 
 
-def test_detect_multiple_daemons(unode):
+def test_update_skew(unode):
     """Test detection of multiple daemons updating the same node."""
-
-    # Set the avail_gb to something
-    unode.db.avail_gb = 3
-    unode.db.save()
 
     zero_time = datetime.datetime.fromtimestamp(0)
 
@@ -264,6 +260,82 @@ def test_detect_multiple_daemons(unode):
         # Fourth failure.  This is when the exception fires.
         unode.db.avail_gb_last_checked = zero_time
         unode.db.save()
+        with pytest.raises(click.ClickException):
+            unode.update_free_space()
+
+
+@pytest.mark.alpenhorn_config({"daemon": {"update_skew_threshold": 1}})
+def test_update_skew_config(unode, set_config):
+    """Test using daemon.update_skew_threshold."""
+
+    zero_time = datetime.datetime.fromtimestamp(0)
+
+    # The check now fails on the first error
+    with patch.object(unode.io, "bytes_avail", lambda fast: None):
+        unode.update_free_space()
+
+        # Set the time to something wrong
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+
+        # First failure
+        with pytest.raises(click.ClickException):
+            unode.update_free_space()
+
+
+@pytest.mark.alpenhorn_config({"daemon": {"update_skew_threshold": 0}})
+def test_update_skew_disabled(unode, set_config):
+    """Test disabling the update-skew check."""
+
+    zero_time = datetime.datetime.fromtimestamp(0)
+
+    # We'll just run this four times (which is the default) and check
+    # that nothing fails.
+    with patch.object(unode.io, "bytes_avail", lambda fast: None):
+        unode.update_free_space()
+
+        # Set the time to something wrong
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+
+        # First failure
+        unode.update_free_space()
+
+        # Second failure
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+        unode.update_free_space()
+
+        # Second failure
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+        unode.update_free_space()
+
+        # Third failure
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+        unode.update_free_space()
+
+        # Fourth failure
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+        unode.update_free_space()
+
+
+@pytest.mark.alpenhorn_config({"daemon": {"update_skew_threshold": -1}})
+def test_update_skew_bad_threshold(unode, set_config):
+    """Test an invalid daemon.update_skew_threshold."""
+
+    zero_time = datetime.datetime.fromtimestamp(0)
+
+    with patch.object(unode.io, "bytes_avail", lambda fast: None):
+        # Set things up for failure
+        unode.update_free_space()
+        unode.db.avail_gb_last_checked = zero_time
+        unode.db.save()
+
+        # An exception is raised the first time we try to access the
+        # config value, which is the first time the check fails
         with pytest.raises(click.ClickException):
             unode.update_free_space()
 
