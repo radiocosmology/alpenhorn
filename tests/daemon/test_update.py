@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from alpenhorn.daemon import host as daemon_host
 from alpenhorn.daemon import update
 from alpenhorn.daemon.scheduler import FairMultiFIFOQueue, Task, pool
 from alpenhorn.db import StorageGroup, StorageNode
@@ -42,6 +43,33 @@ def mock_serial_io(dbtables):
     mock = MagicMock()
     with patch("alpenhorn.daemon.update.serial_io", mock):
         yield mock
+
+
+def test_sethost_config(hostname):
+    """Test setting daemon host with config"""
+
+    # The "hostname" fixture has already set the host in daemon.update
+    # let's temporarily undo that
+    update._host = None
+
+    # Check that resetting worked
+    assert daemon_host() is None
+
+    # Now set it again via the normal daemon method.
+    result = update._set_host()
+    assert result == hostname
+
+    assert daemon_host() == hostname
+
+
+def test_sethost_default():
+    """Test setting daemon host with no config"""
+    result = update._set_host()
+
+    assert "." not in result
+    assert len(result) > 0
+
+    assert daemon_host() == result
 
 
 def test_update_abort():
