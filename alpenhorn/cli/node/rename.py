@@ -38,4 +38,4 @@ def rename(node_name, new_name):
     if not count:
         raise click.ClickException("no such node: " + node_name)
 
-    echo(f'Storage node "{node_name}" renamed to "new_name".')
+    echo(f'Storage node "{node_name}" renamed to "{new_name}".')
