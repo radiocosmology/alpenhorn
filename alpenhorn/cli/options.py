@@ -41,11 +41,10 @@ def cli_option(option: str, **extra_kwargs):
         args = ("all_", "--all", "-a")
         kwargs = {"is_flag": True}
     elif option == "archive":
-        args = ("--archive",)
+        args = ("--archive/--no-archive",)
         kwargs = {
             "is_flag": True,
-            "help": "Make node an archive node.  Incompatible with --field "
-            "or --transport.",
+            "help": "Make node an archive node / or (the default) not an archive node.",
         }
     elif option == "archive_ok":
         args = ("--archive-ok",)
@@ -68,13 +67,6 @@ def cli_option(option: str, **extra_kwargs):
             "-x",
         )
         kwargs = {"is_flag": True, "help": "Cancel the operation"}
-    elif option == "field":
-        args = ("--field",)
-        kwargs = {
-            "is_flag": True,
-            "help": "Make node a field node (i.e. neither an archive node "
-            "nor a transport node).  Incompatible with --archive or --transport.",
-        }
     elif option == "file_list":
         args = ("-F", "--file-list")
         kwargs = {
@@ -186,13 +178,6 @@ def cli_option(option: str, **extra_kwargs):
         kwargs = {
             "metavar": "DEST_GROUP",
             "help": "Destination Group for the transfer.",
-        }
-    elif option == "transport":
-        args = ("--transport",)
-        kwargs = {
-            "is_flag": True,
-            "help": "Make node a transport node.  Incompatible with --archive "
-            "or --field.",
         }
     elif option == "username":
         args = ("--username",)
@@ -533,37 +518,6 @@ def files_in_groups(
                 break
 
     return group_files
-
-
-def set_storage_type(
-    archive: bool, field: bool, transport: bool, none_ok: bool = False
-) -> str | None:
-    """Set node storage_type.
-
-    Processes the --archive, --field, --transport options.
-
-    Returns one of 'A', 'F', 'T', depending on which of the options is set.
-
-    If none of the options are set, None is returned if `none_ok` is True, otherwise
-    the default 'F' is returned.
-
-    Raises a click.UsageError if more than one flag is set.
-    """
-
-    # Usage checks
-    not_both(archive, "archive", field, "field")
-    not_both(archive, "archive", transport, "transport")
-    not_both(field, "field", transport, "transport")
-
-    if archive:
-        return "A"
-    if transport:
-        return "T"
-    if not field and none_ok:
-        return None
-
-    # Default
-    return "F"
 
 
 def set_io_config(
