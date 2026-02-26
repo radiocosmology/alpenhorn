@@ -52,6 +52,7 @@ def test_storage_model(storagegroup, storagenode):
         group=group,
         active=True,
         address="addr.addr",
+        archive=True,
         auto_import=True,
         auto_verify=1,
         avail_gb=2.2,
@@ -63,7 +64,6 @@ def test_storage_model(storagegroup, storagenode):
         min_avail_gb=5.5,
         notes="Notes",
         root="/root",
-        storage_type="T",
         username="user",
     )
 
@@ -78,6 +78,7 @@ def test_storage_model(storagegroup, storagenode):
         "group": group.id,
         "active": False,
         "address": None,
+        "archive": False,
         "auto_import": False,
         "auto_verify": 0,
         "avail_gb": None,
@@ -89,7 +90,6 @@ def test_storage_model(storagegroup, storagenode):
         "min_avail_gb": 0,
         "notes": None,
         "root": None,
-        "storage_type": "A",
         "username": None,
     }
 
@@ -99,6 +99,7 @@ def test_storage_model(storagegroup, storagenode):
         "group": group.id,
         "active": True,
         "address": "addr.addr",
+        "archive": True,
         "auto_import": True,
         "auto_verify": 1,
         "avail_gb": 2.2,
@@ -110,7 +111,6 @@ def test_storage_model(storagegroup, storagenode):
         "min_avail_gb": 5.5,
         "notes": "Notes",
         "root": "/root",
-        "storage_type": "T",
         "username": "user",
     }
 
@@ -186,18 +186,6 @@ def test_copy_state_multi(
     archivefilecopy(file=fileYMXN, node=nodeY, has_file="Y")
 
     assert simplegroup.state_on_node(fileYMXN) == ("Y", nodeY)
-
-
-def test_archive_property(simplegroup, storagenode):
-    """Test the StorageNode.archive boolean."""
-    node = storagenode(name="a", group=simplegroup, storage_type="A")
-    assert node.archive is True
-
-    node = storagenode(name="f", group=simplegroup, storage_type="F")
-    assert node.archive is False
-
-    node = storagenode(name="t", group=simplegroup, storage_type="T")
-    assert node.archive is False
 
 
 def test_undermin(simplegroup, storagenode):

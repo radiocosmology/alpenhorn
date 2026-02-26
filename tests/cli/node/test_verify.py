@@ -19,7 +19,7 @@ def file_gamut(clidb):
         (has_file, wants_file, ArchiveFileCopy)
     """
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    node = StorageNode.create(name="NODE", group=group, archive=False)
     acq = ArchiveAcq.create(name="Acq")
     files = []
     for has in ["Y", "M", "X", "N"]:
@@ -41,7 +41,7 @@ def test_check_force(clidb, cli):
     """Test --check --force fails."""
 
     group = StorageGroup.create(name="Group")
-    StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, archive=False)
 
     cli(2, ["node", "verify", "NODE", "--check", "--force"])
 
@@ -50,7 +50,7 @@ def test_cancel_multistatus(clidb, cli):
     """Test --cancel with multiple statuses chosen."""
 
     group = StorageGroup.create(name="Group")
-    StorageNode.create(name="NODE", group=group, storage_type="F")
+    StorageNode.create(name="NODE", group=group, archive=False)
 
     cli(2, ["node", "verify", "NODE", "--cancel", "--corrupt", "--healthy"])
     cli(2, ["node", "verify", "NODE", "--cancel", "--corrupt", "--missing"])
@@ -343,7 +343,7 @@ def test_verify_acq(clidb, cli):
     """Test verify with some --acq constraints."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F")
+    node = StorageNode.create(name="NODE", group=group, archive=False)
     acq = ArchiveAcq.create(name="Acq1")
     file1 = ArchiveFile.create(name="File", acq=acq)
     ArchiveFileCopy.create(node=node, file=file1, has_file="X", wants_file="Y")
@@ -366,7 +366,7 @@ def test_file_list(clidb, cli, xfs):
     """Test verify with --file-list."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="NODE", group=group, storage_type="F", root="/NODE")
+    node = StorageNode.create(name="NODE", group=group, archive=False, root="/NODE")
     acq = ArchiveAcq.create(name="Acq")
     file1 = ArchiveFile.create(name="File1", acq=acq)
     ArchiveFileCopy.create(node=node, file=file1, has_file="X", wants_file="Y")

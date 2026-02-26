@@ -10,11 +10,11 @@ def some_nodes(clidb):
     """Define some nodes to list"""
 
     group = StorageGroup.create(name="Group1")
-    StorageNode.create(name="Node1", group=group, storage_type="F")
+    StorageNode.create(name="Node1", group=group, archive=False)
     StorageNode.create(
         name="Node2",
         group=group,
-        storage_type="A",
+        archive=True,
         io_class="Class2",
         notes="Note2",
         active=True,
@@ -25,7 +25,7 @@ def some_nodes(clidb):
     StorageNode.create(
         name="Node3",
         group=group,
-        storage_type="T",
+        archive=False,
         active=False,
         host="Host2",
         root="/Node3",
@@ -51,12 +51,12 @@ def test_list(some_nodes, cli, assert_row_present):
     """Test listing nodes."""
 
     result = cli(0, ["node", "list"])
-    assert_row_present(result.output, "Node1", "Group1", "-", "", "", "No", "", "")
+    assert_row_present(result.output, "Node1", "Group1", "No", "", "", "No", "", "")
     assert_row_present(
         result.output,
         "Node2",
         "Group1",
-        "archive",
+        "Yes",
         "Class2",
         "Host2",
         "Yes",
@@ -64,7 +64,7 @@ def test_list(some_nodes, cli, assert_row_present):
         "Note2",
     )
     assert_row_present(
-        result.output, "Node3", "Group2", "transport", "", "Host2", "No", "/Node3", ""
+        result.output, "Node3", "Group2", "No", "", "Host2", "No", "/Node3", ""
     )
 
 
@@ -77,7 +77,7 @@ def test_active(some_nodes, cli, assert_row_present):
         result.output,
         "Node2",
         "Group1",
-        "archive",
+        "Yes",
         "Class2",
         "Host2",
         "Yes",
@@ -91,10 +91,10 @@ def test_inactive(some_nodes, cli, assert_row_present):
     """Test limit --inactive."""
 
     result = cli(0, ["node", "list", "--inactive"])
-    assert_row_present(result.output, "Node1", "Group1", "-", "", "", "No", "", "")
+    assert_row_present(result.output, "Node1", "Group1", "No", "", "", "No", "", "")
     assert "Node2" not in result.output
     assert_row_present(
-        result.output, "Node3", "Group2", "transport", "", "Host2", "No", "/Node3", ""
+        result.output, "Node3", "Group2", "No", "", "Host2", "No", "/Node3", ""
     )
 
 
@@ -107,7 +107,7 @@ def test_host(some_nodes, cli, assert_row_present):
         result.output,
         "Node2",
         "Group1",
-        "archive",
+        "Yes",
         "Class2",
         "Host2",
         "Yes",
@@ -115,7 +115,7 @@ def test_host(some_nodes, cli, assert_row_present):
         "Note2",
     )
     assert_row_present(
-        result.output, "Node3", "Group2", "transport", "", "Host2", "No", "/Node3", ""
+        result.output, "Node3", "Group2", "No", "", "Host2", "No", "/Node3", ""
     )
 
 
@@ -123,12 +123,12 @@ def test_group(some_nodes, cli, assert_row_present):
     """Test limit --group."""
 
     result = cli(0, ["node", "list", "--group=Group1"])
-    assert_row_present(result.output, "Node1", "Group1", "-", "", "", "No", "", "")
+    assert_row_present(result.output, "Node1", "Group1", "No", "", "No", "", "")
     assert_row_present(
         result.output,
         "Node2",
         "Group1",
-        "archive",
+        "Yes",
         "Class2",
         "Host2",
         "Yes",

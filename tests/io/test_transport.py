@@ -38,10 +38,10 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
             storagenode(
                 name="node1",
                 group=stgroup,
-                storage_type="T",
                 avail_gb=10,
                 root="/node1",
                 host=hostname,
+                archive=False,
             ),
         ),
         UpdateableNode(
@@ -49,10 +49,10 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
             storagenode(
                 name="node2",
                 group=stgroup,
-                storage_type="T",
                 avail_gb=20,
                 root="/node2",
                 host=hostname,
+                archive=False,
             ),
         ),
         UpdateableNode(
@@ -60,10 +60,10 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
             storagenode(
                 name="node3",
                 group=stgroup,
-                storage_type="T",
                 avail_gb=40,
                 root="/node3",
                 host=hostname,
+                archive=False,
             ),
         ),
         UpdateableNode(
@@ -71,10 +71,10 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
             storagenode(
                 name="node4",
                 group=stgroup,
-                storage_type="T",
                 avail_gb=None,
                 root="/node4",
                 host=hostname,
+                archive=False,
             ),
         ),
     ]
@@ -135,7 +135,7 @@ def test_group_init_bad(transport_fleet_no_init, queue):
 
     # Change all the nodes to not be transport nodes.
     for node in nodes:
-        node.db.storage_type = "F"
+        node.db.archive = True
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
     assert group.io.nodes == []
@@ -146,8 +146,8 @@ def test_group_init_mixed(transport_fleet_no_init, queue):
     stgroup, nodes = transport_fleet_no_init
 
     # Change _some_ of the nodes to non-transport
-    nodes[0].db.storage_type = "A"
-    nodes[3].db.storage_type = "F"
+    nodes[0].db.archive = True
+    nodes[3].db.archive = True
 
     group = UpdateableGroup(queue=queue, group=stgroup, nodes=nodes, idle=True)
     assert group.io.nodes == nodes[1:3]

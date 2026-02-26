@@ -22,9 +22,8 @@ class TransportGroupIO(DefaultGroupIO):
     storage.
 
     Features of a Transport StorageGroup:
-        - it may have any number of nodes.  All node must have
-            node.db.storage_type == 'T', but no restrictions are put on the
-            io_class of nodes
+        - it may have any number of non-archival nodes.  No restrictions are put
+            on the io_class of nodes
         - all pulls to the StorageGroup must be local: non-local pull
             requests will be ignored
         - when handling pull requests, transport nodes are prioritised by
@@ -61,8 +60,7 @@ class TransportGroupIO(DefaultGroupIO):
     def nodes(self, nodes: list[UpdateableNode]) -> None:
         """nodes setter
 
-        This checks that nodes in group are transport nodes
-        (storage_type == "T").
+        This checks that nodes in group are not archive nodes.
 
         Parameters
         ----------
@@ -72,13 +70,13 @@ class TransportGroupIO(DefaultGroupIO):
         Raises
         ------
         ValueError
-            none of the supplied `nodes` were Transport nodes.
+            all of the supplied `nodes` were rejected for being archive nodes.
         """
         self._nodes = []
         for node in nodes:
-            if node.db.storage_type != "T":
+            if node.db.archive:
                 log.warning(
-                    f'Ignoring non-transport node "{node.name}" '
+                    f'Ignoring archive node "{node.name}" '
                     f'in Transport Group "{self.group.name}"'
                 )
             else:

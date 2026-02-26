@@ -538,7 +538,7 @@ def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy)
     # Force under min and not archive
     unode.db.avail_gb = 5
     unode.db.min_avail_gb = 10
-    unode.db.storage_type = "F"
+    unode.db.archive = False
     assert unode.db.under_min
     assert not unode.db.archive
 

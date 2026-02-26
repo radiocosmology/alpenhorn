@@ -189,9 +189,6 @@ def test_update_group_copy_state(
     mockio.group.exists.return_value = None
 
     # Dest is a transport group
-    node.db.storage_type = "T"
-    node.db.save()
-
     group.db.io_class = "Transport"
     group.db.save()
 

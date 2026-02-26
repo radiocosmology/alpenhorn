@@ -13,7 +13,7 @@ def test_no_cancel_node(clidb, cli):
     """Must have at least one of --cancel or --node"""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -26,7 +26,7 @@ def test_cancel_now(clidb, cli):
     """Can't use --now and --cancel together"""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -39,7 +39,7 @@ def test_missing_file(clidb, cli):
     """Test a bad path."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -52,7 +52,7 @@ def test_missing_node(clidb, cli):
     """Test a bad node name."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -65,8 +65,8 @@ def test_clean(clidb, cli):
     """Test M-cleaning."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
-    node2 = StorageNode.create(name="Node2", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
+    node2 = StorageNode.create(name="Node2", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -83,7 +83,7 @@ def test_no_change(clidb, cli):
     """Test no change."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -98,7 +98,7 @@ def test_now(clidb, cli):
     """Test --now."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -113,7 +113,7 @@ def test_archive(clidb, cli):
     """Test archive node."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="A")
+    node = StorageNode.create(name="Node", group=group, archive=True)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -129,7 +129,7 @@ def test_archive_ok(clidb, cli):
     """Test archive node forcing."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="A")
+    node = StorageNode.create(name="Node", group=group, archive=True)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -144,7 +144,7 @@ def test_cancel(clidb, cli):
     """Test archive node forcing."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -159,8 +159,8 @@ def test_cancel_no_node(clidb, cli):
     """Test archive node forcing."""
 
     group = StorageGroup.create(name="Group")
-    node = StorageNode.create(name="Node", group=group, storage_type="F")
-    node2 = StorageNode.create(name="Node2", group=group, storage_type="F")
+    node = StorageNode.create(name="Node", group=group, archive=False)
+    node2 = StorageNode.create(name="Node2", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -177,8 +177,8 @@ def test_absent(clidb, cli):
     """Test file absent from node."""
 
     group = StorageGroup.create(name="Group")
-    StorageNode.create(name="Node", group=group, storage_type="F")
-    node2 = StorageNode.create(name="Node2", group=group, storage_type="F")
+    StorageNode.create(name="Node", group=group, archive=False)
+    node2 = StorageNode.create(name="Node2", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)
@@ -193,8 +193,8 @@ def test_cancel_absent(clidb, cli):
     """Test cancel with file absent from node."""
 
     group = StorageGroup.create(name="Group")
-    StorageNode.create(name="Node", group=group, storage_type="F")
-    node2 = StorageNode.create(name="Node2", group=group, storage_type="F")
+    StorageNode.create(name="Node", group=group, archive=False)
+    node2 = StorageNode.create(name="Node2", group=group, archive=False)
 
     acq = ArchiveAcq.create(name="Acq")
     file_ = ArchiveFile.create(name="File", acq=acq)

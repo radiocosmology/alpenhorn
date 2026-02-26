@@ -965,7 +965,7 @@ node by checking its metadata after the ``modify`` command:
       Storage Node: demo_storage1
      Storage Group: demo_storage1
             Active: Yes
-              Type: -
+           Archive: Yes
              Notes:
          I/O Class: Default
 
@@ -1146,7 +1146,7 @@ alpenhorn CLI:
       Storage Node: demo_storage2
      Storage Group: demo_storage2
             Active: No
-              Type: -
+           Archive: Yes
              Notes:
          I/O Class: Default
 
@@ -1725,7 +1725,7 @@ whether it can delete that file.
 Archive nodes
 ~~~~~~~~~~~~~
 
-An archive node is any storage node with the "archive" storage type.
+An archive node is any storage node with the "archive" flag set.
 Let's change ``demo_storage2`` into an archive node. We do that by
 modifying it's metadata:
 
@@ -1735,7 +1735,7 @@ modifying it's metadata:
    alpenhorn node modify --archive demo_storage2
 
 After running this command, you can look at the node metadata to see
-that it now has the "archive" storage type:
+that it now has the "archive" flag set:
 
 .. code:: console
    :class: demoshell
@@ -1746,7 +1746,7 @@ that it now has the "archive" storage type:
       Storage Node: demo_storage2
      Storage Group: demo_storage2
             Active: Yes
-              Type: Archive
+           Archive: Yes
              Notes:
          I/O Class: Default
 
@@ -2114,7 +2114,7 @@ Auto-clean actions can be seen in the metadata for the node or group:
       Storage Node: demo_storage1
      Storage Group: demo_storage1
             Active: Yes
-              Type: -
+           Archive: No
              Notes:
          I/O Class: Default
 
@@ -2298,13 +2298,8 @@ available on ``alpenhost3``:
 .. code:: console
    :class: demoshell
 
-   alpenhorn node create transport1 --transport --group transport_group --host=alpenhost3 \
+   alpenhorn node create transport1 --group transport_group --host=alpenhost3 \
                                     --root=/mnt/transport --init --activate
-
-Note the use of the ``--transport`` flag to set the node's storage type
-to "transport". The "Transport" Group I/O class allows StorageNodes of
-any class to be added to the group, but requires all such nodes to have
-the "transport" storage type.
 
 The filesystem has already been made available in the ``alpenhost3``
 container, so wait for the daemon on ``alpenhost3`` to initialise the node:
