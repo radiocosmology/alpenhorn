@@ -26,7 +26,7 @@ def transport_fleet(transport_fleet_no_init, queue):
 
 
 @pytest.fixture
-def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
+def transport_fleet_no_init(xfs, daemon_host, queue, storagegroup, storagenode):
     """Like transport_fleet, but initialisation of the group
     is not done (so it can be tested)."""
 
@@ -41,7 +41,7 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
                 storage_type="T",
                 avail_gb=10,
                 root="/node1",
-                host=hostname,
+                host=daemon_host,
             ),
         ),
         UpdateableNode(
@@ -52,7 +52,7 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
                 storage_type="T",
                 avail_gb=20,
                 root="/node2",
-                host=hostname,
+                host=daemon_host,
             ),
         ),
         UpdateableNode(
@@ -63,7 +63,7 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
                 storage_type="T",
                 avail_gb=40,
                 root="/node3",
-                host=hostname,
+                host=daemon_host,
             ),
         ),
         UpdateableNode(
@@ -74,7 +74,7 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
                 storage_type="T",
                 avail_gb=None,
                 root="/node4",
-                host=hostname,
+                host=daemon_host,
             ),
         ),
     ]
@@ -98,24 +98,26 @@ def transport_fleet_no_init(xfs, hostname, queue, storagegroup, storagenode):
 def remote_req(
     transport_fleet,
     simplegroup,
+    storagehost,
     storagenode,
     simplefile,
     archivefilecopyrequest,
 ):
     """Create a non-local ArchiveFileCopyRequest targetting the transport group."""
     group_to, _ = transport_fleet
-    node_from = storagenode(name="src", group=simplegroup, host="other-host")
+    other_host = storagehost(name="other-host")
+    node_from = storagenode(name="src", group=simplegroup, host=other_host)
     return archivefilecopyrequest(
         file=simplefile, node_from=node_from, group_to=group_to.db
     )
 
 
 @pytest.fixture
-def req(hostname, remote_req):
+def req(daemon_host, remote_req):
     """Create a local ArchiveFileCopyRequest targetting the transport group."""
 
     # Fix src node to be local
-    remote_req.node_from.host = hostname
+    remote_req.node_from.host = daemon_host
 
     return remote_req
 

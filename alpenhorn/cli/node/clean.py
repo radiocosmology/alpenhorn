@@ -282,13 +282,7 @@ def _run_query(
 @cli_option("acq")
 @cli_option("archive_ok")
 @cli_option("cancel", help="Cancel existing cleaning requests.")
-@click.option(
-    "--check",
-    "-c",
-    help="Only check (and print) what would be cleaned, don't actually do anything."
-    "  Incompatible with --force",
-    is_flag=True,
-)
+@cli_option("check")
 @click.option(
     "--days",
     "-d",
@@ -297,11 +291,7 @@ def _run_query(
     help="Only clean files registered more than COUNT days ago.",
 )
 @cli_option("file_list")
-@click.option(
-    "--force",
-    help="Force cleaning (skips confirmation).  Incompatible with --check",
-    is_flag=True,
-)
+@cli_option("force")
 @click.option(
     "--include-bad",
     help="Include suspect and corrupt files in the operation.",

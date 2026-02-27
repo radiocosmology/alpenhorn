@@ -95,7 +95,9 @@ class Metric:
             from ..daemon import host
 
             daemon_host = host()
-            self._bound_labels["daemon"] = daemon_host if daemon_host else "(unknown)"
+            self._bound_labels["daemon"] = (
+                daemon_host.name if daemon_host else "(unknown)"
+            )
 
         # keys in "bound" can't also appear in "unbound"
         for key in self._bound_labels.keys():

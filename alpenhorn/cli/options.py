@@ -10,7 +10,14 @@ import pathlib
 import click
 import peewee as pw
 
-from ..db import ArchiveAcq, ArchiveFile, ArchiveFileCopy, StorageGroup, StorageNode
+from ..db import (
+    ArchiveAcq,
+    ArchiveFile,
+    ArchiveFileCopy,
+    StorageGroup,
+    StorageHost,
+    StorageNode,
+)
 
 
 def cli_option(option: str, **extra_kwargs):
@@ -34,7 +41,7 @@ def cli_option(option: str, **extra_kwargs):
         args = ("--address",)
         kwargs = {
             "metavar": "ADDR",
-            "help": "Domain name or IP address to use for remote access to the node.",
+            "help": "Domain name or IP address to use for remote access to the host.",
         }
     elif option == "all_":
         # Has no help; must be provided when used
@@ -68,6 +75,17 @@ def cli_option(option: str, **extra_kwargs):
             "-x",
         )
         kwargs = {"is_flag": True, "help": "Cancel the operation"}
+    elif option == "check":
+        args = (
+            "--check",
+            "-c",
+        )
+        kwargs = {
+            "is_flag": True,
+            "help": "Only check (and print) what would be done, don't actually do "
+            "anything."
+            "  Incompatible with --force",
+        }
     elif option == "field":
         args = ("--field",)
         kwargs = {
@@ -88,6 +106,12 @@ def cli_option(option: str, **extra_kwargs):
                 "assumed if --force isn't used."
             ),
         }
+    elif option == "force":
+        args = ("--force",)
+        kwargs = {
+            "is_flag": True,
+            "help": "Force update (skips confirmation).  Incompatible with --check",
+        }
     elif option == "from_":
         args = ("from_", "--from")
         kwargs = {"metavar": "SOURCE_NODE", "help": "Source Node for the transfer."}
@@ -99,7 +123,10 @@ def cli_option(option: str, **extra_kwargs):
         }
     elif option == "host":
         args = ("--host",)
-        kwargs = {"metavar": "HOST", "help": "The host managing this node."}
+        kwargs = {
+            "metavar": "HOST",
+            "help": "The Storage Host where this node is present.",
+        }
     elif option == "io_class":
         args = (
             "io_class",
@@ -198,7 +225,7 @@ def cli_option(option: str, **extra_kwargs):
         args = ("--username",)
         kwargs = {
             "metavar": "USER",
-            "help": "Username to use for remote access to the node.",
+            "help": "Username to use for remote access to the host.",
         }
     else:
         raise ValueError(f"Unknown option: {option}")
@@ -320,6 +347,19 @@ def resolve_node(node: str | list[str]) -> StorageNode | set[StorageNode]:
     if one_node:
         return nodes.pop()
     return nodes
+
+
+def resolve_host(hostname: str) -> StorageHost:
+    """Convert a hostname into a StorageHost.
+
+    If the host cannot be found, raises ClickException.
+    """
+    try:
+        host = StorageHost.get(name=hostname)
+    except pw.DoesNotExist:
+        raise click.ClickException("no such host: " + hostname)
+
+    return host
 
 
 def resolve_acq(acq: str | list[str]) -> ArchiveAcq | set[ArchiveAcq]:
