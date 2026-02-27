@@ -11,13 +11,13 @@ from ..options import (
     cli_option,
     exactly_one,
     resolve_group,
+    resolve_host,
     set_io_config,
 )
 
 
 @click.command()
 @click.argument("node_name", metavar="NAME")
-@cli_option("address")
 @click.option(
     "--activate",
     help="Activate the node immediately upon creation.",
@@ -60,10 +60,8 @@ from ..options import (
 @cli_option("min_avail", default=0, show_default=True)
 @cli_option("notes")
 @cli_option("root")
-@cli_option("username")
 def create(
     node_name,
-    address,
     activate,
     archive,
     auto_import,
@@ -79,7 +77,6 @@ def create(
     min_avail,
     notes,
     root,
-    username,
 ):
     """Create a new Storage Node.
 
@@ -88,10 +85,6 @@ def create(
     All node must be part of a Storage Group.  Specify an existing Storage
     Group with --group, or else create a single-node group called NAME for
     this node with --create-group.
-
-    A note on the distinction between HOST and ADDR: the host specifies which
-    alpenhorn server instance is responsible for managing the node.  the address
-    (and username) are used by remote servers when pulling files off this node.
     """
 
     # usage checks.
@@ -123,11 +116,16 @@ def create(
         else:
             group = resolve_group(group)
 
+        # Get host
+        if host:
+            host = resolve_host(host)
+        else:
+            host = None
+
         node = StorageNode.create(
             name=node_name,
             root=root,
             host=host,
-            address=address,
             io_class=io_class,
             group=group,
             active=activate,
@@ -137,7 +135,6 @@ def create(
             max_total_gb=max_total,
             min_avail_gb=min_avail,
             notes=notes,
-            username=username,
             io_config=json.dumps(io_config) if io_config else None,
         )
 

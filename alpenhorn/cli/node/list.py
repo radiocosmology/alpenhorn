@@ -5,7 +5,7 @@ from tabulate import tabulate
 
 from ...db import StorageGroup, StorageNode
 from ..cli import echo
-from ..options import cli_option, resolve_group
+from ..options import cli_option, resolve_group, resolve_host
 
 
 @click.command()
@@ -29,7 +29,7 @@ def list_(active, group, host):
     if group:
         nodes = nodes.where(StorageNode.group == resolve_group(group))
     if host:
-        nodes = nodes.where(StorageNode.host == host)
+        nodes = nodes.where(StorageNode.host == resolve_host(host))
 
     # Format rows
     for node in nodes:
@@ -39,7 +39,7 @@ def list_(active, group, host):
                 node.group.name,
                 "Yes" if node.archive else "No",
                 node.io_class,
-                node.host,
+                node.host.name if node.host else "-",
                 "Yes" if node.active else "No",
                 node.root,
                 node.notes,

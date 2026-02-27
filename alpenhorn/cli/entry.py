@@ -6,7 +6,7 @@ import click
 
 from ..common import config
 from ..common.util import help_config_option, start_alpenhorn, version_option
-from . import acq, db, file, group, node
+from . import acq, db, file, group, host, node
 from .options import not_both
 
 
@@ -99,4 +99,5 @@ entry.add_command(acq.cli, "acq")
 entry.add_command(db.cli, "db")
 entry.add_command(file.cli, "file")
 entry.add_command(group.cli, "group")
+entry.add_command(host.cli, "host")
 entry.add_command(node.cli, "node")

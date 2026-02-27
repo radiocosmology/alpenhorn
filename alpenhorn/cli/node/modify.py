@@ -1,4 +1,4 @@
-"""alpenhorn node create command"""
+"""alpenhorn node modify command"""
 
 import json
 
@@ -10,6 +10,7 @@ from ..options import (
     cli_option,
     not_both,
     resolve_group,
+    resolve_host,
     resolve_node,
     set_io_config,
 )
@@ -17,7 +18,6 @@ from ..options import (
 
 @click.command()
 @click.argument("name", metavar="NAME")
-@cli_option("address")
 @cli_option("archive", default=None)
 @click.option(
     "--auto-import/--no-auto-import",
@@ -38,10 +38,8 @@ from ..options import (
 @cli_option("min_avail")
 @cli_option("notes")
 @cli_option("root")
-@cli_option("username")
 def modify(
     name,
-    address,
     archive,
     auto_import,
     auto_verify,
@@ -55,7 +53,6 @@ def modify(
     min_avail,
     notes,
     root,
-    username,
 ):
     """Modify a Storage Node.
 
@@ -68,10 +65,6 @@ def modify(
     * To activate a node, use:            node activate
     * To deactivate a node, use:          node deactivate
     * To change the name of a node, use:  node rename
-
-    A note on the distinction between HOST and ADDR: the host specifies which
-    alpenhorn server instance is responsible for managing the node.  the address
-    (and username) are used by remote servers when pulling files off this node.
     """
 
     # usage checks.
@@ -86,6 +79,10 @@ def modify(
     with database_proxy.atomic():
         node = resolve_node(name)
 
+        # Get host
+        if host:
+            host = resolve_host(host)
+
         # Get group
         if group:
             group = resolve_group(group)
@@ -97,12 +94,15 @@ def modify(
         updates = {}
 
         # Find updated fields
-        updates |= update_or_remove("address", address, node.address)
-        updates |= update_or_remove("host", host, node.host)
         updates |= update_or_remove("io_class", io_class, node.io_class)
         updates |= update_or_remove("notes", notes, node.notes)
         updates |= update_or_remove("root", root, node.root)
-        updates |= update_or_remove("username", username, node.username)
+
+        if host is not None:
+            if not host and node.host is not None:
+                updates["host"] = None
+            elif host and node.host != host:
+                updates["host"] = host
 
         if no_max_total and node.max_total_gb is not None:
             updates["max_total_gb"] = None
