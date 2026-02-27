@@ -445,19 +445,9 @@ def run_query(
     "is used.",
 )
 @cli_option("cancel", help="Cancel pending transfers into GROUP.")
-@click.option(
-    "--check",
-    "-c",
-    help="Only check (and print) what would be synced, don't actually do anything."
-    "  Incompatible with --force",
-    is_flag=True,
-)
+@cli_option("check")
 @cli_option("file_list")
-@click.option(
-    "--force",
-    help="Force update (skips confirmation).  Incompatible with --check",
-    is_flag=True,
-)
+@cli_option("force")
 @click.option("--show-acqs", help="List acquisitions to be copied.", is_flag=True)
 @click.option("--show-files", help="List files to be copied.", is_flag=True)
 @cli_option(

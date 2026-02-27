@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from alpenhorn.db import StorageGroup, StorageNode
+from alpenhorn.db import StorageGroup, StorageHost, StorageNode
 
 
 def test_no_node(clidb, cli):
@@ -23,10 +23,7 @@ def test_modify_nothing(clidb, cli):
         name="TEST",
         group=group,
         active=False,
-        address="ADDR",
-        host="HOST",
         root="ROOT",
-        username="USER",
     )
 
     # Re-get so defaults are set.
@@ -45,19 +42,19 @@ def test_modify_all(clidb, cli):
     Well, most of the things..."""
 
     group = StorageGroup.create(name="GROUP")
+    host = StorageHost.create(name="HOST")
     StorageNode.create(
         name="TEST",
         group=group,
-        address="ADDR",
-        host="HOST",
+        host=host,
         io_class="IOCLASS",
         max_total_gb=1.0,
         min_avail_gb=2.0,
         notes="NOTES",
         root="ROOT",
-        username="USER",
     )
     newgroup = StorageGroup.create(name="NEWGROUP")
+    StorageHost.create(name="NEWHOST")
 
     cli(
         0,
@@ -66,44 +63,42 @@ def test_modify_all(clidb, cli):
             "modify",
             "TEST",
             "--group=NEWGROUP",
-            "--address=NEWADDR",
             "--host=NEWHOST",
             "--class=NEWIOCLASS",
             "--max-total=4",
             "--min-avail=3",
             "--notes=NEWNOTES",
             "--root=NEWROOT",
-            "--username=NEWUSER",
         ],
     )
 
     # Check
     node = StorageNode.get(name="TEST")
     assert node.group == newgroup
-    assert node.address == "NEWADDR"
-    assert node.host == "NEWHOST"
+    assert node.host.name == "NEWHOST"
     assert node.io_class == "NEWIOCLASS"
     assert node.max_total_gb == 4
     assert node.min_avail_gb == 3
     assert node.notes == "NEWNOTES"
     assert node.root == "NEWROOT"
-    assert node.username == "NEWUSER"
 
 
-def test_clear_all(clidb, cli):
-    """Test clearing everything."""
+def test_modify_one(clidb, cli):
+    """Test modifying everything.
+
+    The idea here is to make sure nothing else changes."""
 
     group = StorageGroup.create(name="GROUP")
+    host = StorageHost.create(name="HOST")
     StorageNode.create(
         name="TEST",
         group=group,
-        address="ADDR",
-        host="HOST",
+        host=host,
         io_class="IOCLASS",
         max_total_gb=1.0,
+        min_avail_gb=2.0,
         notes="NOTES",
         root="ROOT",
-        username="USER",
     )
 
     cli(
@@ -112,25 +107,123 @@ def test_clear_all(clidb, cli):
             "node",
             "modify",
             "TEST",
-            "--address=",
-            "--host=",
-            "--class=",
-            "--no-max-total",
-            "--notes=",
-            "--root=",
-            "--username=",
+            "--auto-import",
         ],
     )
 
     # Check
     node = StorageNode.get(name="TEST")
-    assert node.address is None
+    assert node.group == group
+    assert node.host == host
+    assert node.io_class == "IOCLASS"
+    assert node.auto_import
+    assert node.max_total_gb == 1
+    assert node.min_avail_gb == 2
+    assert node.notes == "NOTES"
+    assert node.root == "ROOT"
+
+
+def test_modify_host(clidb, cli):
+    """Test modifying node.host."""
+
+    host1 = StorageHost.create(name="HOST1")
+    host2 = StorageHost.create(name="HOST2")
+    StorageNode.create(name="TEST", group=StorageGroup.create(name="GROUP"), host=host1)
+
+    # Change
+    cli(
+        0,
+        [
+            "node",
+            "modify",
+            "TEST",
+            "--host=HOST2",
+        ],
+    )
+    assert StorageNode.get(name="TEST").host == host2
+
+    # No change
+    cli(
+        0,
+        [
+            "node",
+            "modify",
+            "TEST",
+            "--auto-import",
+        ],
+    )
+    assert StorageNode.get(name="TEST").host == host2
+
+    # Remove
+    cli(
+        0,
+        [
+            "node",
+            "modify",
+            "TEST",
+            "--host=",
+        ],
+    )
+    assert StorageNode.get(name="TEST").host is None
+
+    # Add
+    cli(
+        0,
+        [
+            "node",
+            "modify",
+            "TEST",
+            "--host=HOST1",
+        ],
+    )
+    assert StorageNode.get(name="TEST").host == host1
+
+
+def test_clear_all(clidb, cli):
+    """Test clearing everything."""
+
+    group = StorageGroup.create(name="GROUP")
+    host = StorageHost.create(name="HOST")
+    StorageNode.create(
+        name="TEST",
+        group=group,
+        host=host,
+        io_class="IOCLASS",
+        max_total_gb=1.0,
+        notes="NOTES",
+        root="ROOT",
+    )
+
+    cli(
+        0,
+        [
+            "node",
+            "modify",
+            "TEST",
+            "--host=",
+            "--class=",
+            "--no-max-total",
+            "--notes=",
+            "--root=",
+        ],
+    )
+
+    # Check
+    node = StorageNode.get(name="TEST")
     assert node.host is None
     assert node.io_class is None
     assert node.max_total_gb is None
     assert node.notes is None
     assert node.root is None
-    assert node.username is None
+
+
+def test_bad_host(clidb, cli):
+    """Test a missing --host"""
+
+    group = StorageGroup.create(name="GROUP")
+    StorageNode.create(name="TEST", group=group)
+
+    cli(1, ["node", "modify", "TEST", "--host=MISSING"])
 
 
 def test_modify_ioconfig(clidb, cli):
