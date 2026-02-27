@@ -1,6 +1,6 @@
 """Test CLI: alpenhorn node activate"""
 
-from alpenhorn.db import StorageGroup, StorageNode
+from alpenhorn.db import StorageGroup, StorageHost, StorageNode
 
 
 def test_no_node(clidb, cli):
@@ -13,14 +13,13 @@ def test_activate_default(clidb, cli):
     """Test activating a node without changing other parameters."""
 
     group = StorageGroup.create(name="GROUP")
+    host = StorageHost.create(name="HOST")
     StorageNode.create(
         name="TEST",
         group=group,
         active=False,
-        address="ADDR",
-        host="HOST",
+        host=host,
         root="ROOT",
-        username="USER",
     )
 
     cli(0, ["node", "activate", "TEST"])
@@ -28,24 +27,38 @@ def test_activate_default(clidb, cli):
     # Check
     node = StorageNode.get(name="TEST")
     assert node.active
-    assert node.host == "HOST"
+    assert node.host == host
     assert node.root == "ROOT"
-    assert node.address == "ADDR"
-    assert node.username == "USER"
+
+
+def test_activate_no_host(clidb, cli):
+    """Test trying to use a non-existent host."""
+
+    group = StorageGroup.create(name="GROUP")
+    host = StorageHost.create(name="HOST")
+    StorageNode.create(
+        name="TEST",
+        group=group,
+        active=False,
+        host=host,
+        root="ROOT",
+    )
+
+    cli(1, ["node", "activate", "TEST", "--host=NEWHOST"])
 
 
 def test_activate_set(clidb, cli):
     """Test activating a node and setting other parameters."""
 
     group = StorageGroup.create(name="GROUP")
+    host = StorageHost.create(name="HOST")
+    StorageHost.create(name="NEWHOST")
     StorageNode.create(
         name="TEST",
         group=group,
         active=False,
-        address="ADDR",
-        host="HOST",
+        host=host,
         root="ROOT",
-        username="USER",
     )
 
     cli(
@@ -54,34 +67,29 @@ def test_activate_set(clidb, cli):
             "node",
             "activate",
             "TEST",
-            "--address=NEWADDR",
             "--host=NEWHOST",
             "--root=NEWROOT",
-            "--username=NEWUSER",
         ],
     )
 
     # Check
     node = StorageNode.get(name="TEST")
     assert node.active
-    assert node.host == "NEWHOST"
+    assert node.host.name == "NEWHOST"
     assert node.root == "NEWROOT"
-    assert node.address == "NEWADDR"
-    assert node.username == "NEWUSER"
 
 
 def test_activate_clear(clidb, cli):
     """Test activating a node and clearing other parameters."""
 
+    host = StorageHost.create(name="HOST")
     group = StorageGroup.create(name="GROUP")
     StorageNode.create(
         name="TEST",
         group=group,
         active=False,
-        address="ADDR",
-        host="HOST",
+        host=host,
         root="ROOT",
-        username="USER",
     )
 
     cli(
@@ -90,10 +98,8 @@ def test_activate_clear(clidb, cli):
             "node",
             "activate",
             "TEST",
-            "--address=",
             "--host=",
             "--root=",
-            "--username=",
         ],
     )
 
@@ -102,22 +108,20 @@ def test_activate_clear(clidb, cli):
     assert node.active
     assert node.host is None
     assert node.root is None
-    assert node.address is None
-    assert node.username is None
 
 
 def test_already_active(clidb, cli):
     """Test activating a node that is already active."""
 
+    host = StorageHost.create(name="HOST")
+    StorageHost.create(name="NEWHOST")
     group = StorageGroup.create(name="GROUP")
     StorageNode.create(
         name="TEST",
         group=group,
         active=True,
-        address="ADDR",
-        host="HOST",
+        host=host,
         root="ROOT",
-        username="USER",
     )
 
     cli(
@@ -126,17 +130,13 @@ def test_already_active(clidb, cli):
             "node",
             "activate",
             "TEST",
-            "--address=NEWADDR",
             "--host=NEWHOST",
             "--root=NEWROOT",
-            "--username=NEWUSER",
         ],
     )
 
     # None of the parameters were updated
     node = StorageNode.get(name="TEST")
     assert node.active
-    assert node.host == "HOST"
+    assert node.host == host
     assert node.root == "ROOT"
-    assert node.address == "ADDR"
-    assert node.username == "USER"

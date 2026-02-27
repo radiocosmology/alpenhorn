@@ -73,7 +73,7 @@ def show(group_name, actions, all_, node_details, node_stats, transfers):
                 details = {
                     node.id: (
                         node.name,
-                        node.host,
+                        node.host.name if node.host else "-",
                         "Yes" if node.active else "No",
                         node.io_class if node.io_class else "Default",
                     )

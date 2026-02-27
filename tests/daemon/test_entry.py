@@ -34,6 +34,7 @@ from alpenhorn.db import (
     ArchiveFileCopyRequest,
     DataIndexVersion,
     StorageGroup,
+    StorageHost,
     StorageNode,
     StorageTransferAction,
     current_version,
@@ -70,13 +71,15 @@ def e2e_db(xfs, clidb_noinit, hostname):
         component="pattern_importer", version=pattern_importer.schema_version
     )
 
+    host = StorageHost.create(name=hostname)
+
     # A Default-IO group with one node
     dftgrp = StorageGroup.create(name="dftgroup")
     dftnode = StorageNode.create(
         name="dftnode",
         group=dftgrp,
         root="/dft",
-        host=hostname,
+        host=host,
         active=True,
         auto_import=True,
     )
@@ -92,7 +95,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         storage_type="T",
         group=fleet,
         root="/tp/one",
-        host=hostname,
+        host=host,
         active=True,
     )
     tp2 = StorageNode.create(
@@ -100,7 +103,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         storage_type="T",
         group=fleet,
         root="/tp/two",
-        host=hostname,
+        host=host,
         active=True,
         auto_verify=1,
     )
@@ -116,7 +119,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         group=nlgrp,
         io_class="LustreHSM",
         root="/nl1",
-        host=hostname,
+        host=host,
         active=True,
         avail_gb=2000.0 / 2**30,
         io_config=(
@@ -125,7 +128,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         ),
     )
     sf1 = StorageNode.create(
-        name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True
+        name="sf1", group=nlgrp, root="/sf1", host=host, active=True
     )
     xfs.create_file("/sf1/ALPENHORN_NODE", contents="sf1")
 
@@ -137,7 +140,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         group=nlgrp,
         io_class="LustreHSM",
         root="/nl2",
-        host=hostname,
+        host=host,
         active=True,
         io_config=(
             '{"quota_id": "qid", "quota_type": "project", '
@@ -145,7 +148,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         ),
         avail_gb=2000.0 / 2**30,
     )
-    StorageNode.create(name="sf2", group=nlgrp, root="/sf2", host=hostname, active=True)
+    StorageNode.create(name="sf2", group=nlgrp, root="/sf2", host=host, active=True)
     xfs.create_file("/sf2/ALPENHORN_NODE", contents="sf2")
 
     # The only acqtype

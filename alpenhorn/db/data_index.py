@@ -170,6 +170,7 @@ def gamut() -> list:
         db.ArchiveFileImportRequest,
         db.DataIndexVersion,
         db.StorageGroup,
+        db.StorageHost,
         db.StorageNode,
         db.StorageTransferAction,
     ]

@@ -2,7 +2,7 @@
 
 import pytest
 
-from alpenhorn.db import StorageGroup, StorageNode
+from alpenhorn.db import StorageGroup, StorageHost, StorageNode
 
 
 @pytest.fixture
@@ -11,6 +11,7 @@ def some_nodes(clidb):
 
     group = StorageGroup.create(name="Group1")
     StorageNode.create(name="Node1", group=group, storage_type="F")
+    host2 = StorageHost.create(name="Host2")
     StorageNode.create(
         name="Node2",
         group=group,
@@ -18,7 +19,7 @@ def some_nodes(clidb):
         io_class="Class2",
         notes="Note2",
         active=True,
-        host="Host2",
+        host=host2,
         root="/Node2",
     )
     group = StorageGroup.create(name="Group2", notes="Note2", io_class="Class2")
@@ -27,7 +28,7 @@ def some_nodes(clidb):
         group=group,
         storage_type="T",
         active=False,
-        host="Host2",
+        host=host2,
         root="/Node3",
     )
 
@@ -51,7 +52,7 @@ def test_list(some_nodes, cli, assert_row_present):
     """Test listing nodes."""
 
     result = cli(0, ["node", "list"])
-    assert_row_present(result.output, "Node1", "Group1", "-", "", "", "No", "", "")
+    assert_row_present(result.output, "Node1", "Group1", "-", "", "-", "No", "", "")
     assert_row_present(
         result.output,
         "Node2",
@@ -91,7 +92,7 @@ def test_inactive(some_nodes, cli, assert_row_present):
     """Test limit --inactive."""
 
     result = cli(0, ["node", "list", "--inactive"])
-    assert_row_present(result.output, "Node1", "Group1", "-", "", "", "No", "", "")
+    assert_row_present(result.output, "Node1", "Group1", "-", "", "-", "No", "", "")
     assert "Node2" not in result.output
     assert_row_present(
         result.output, "Node3", "Group2", "transport", "", "Host2", "No", "/Node3", ""
@@ -119,11 +120,17 @@ def test_host(some_nodes, cli, assert_row_present):
     )
 
 
+def test_bad_host(some_nodes, cli):
+    """Test a non-existent --host."""
+
+    cli(1, ["node", "list", "--host=MISSING"])
+
+
 def test_group(some_nodes, cli, assert_row_present):
     """Test limit --group."""
 
     result = cli(0, ["node", "list", "--group=Group1"])
-    assert_row_present(result.output, "Node1", "Group1", "-", "", "", "No", "", "")
+    assert_row_present(result.output, "Node1", "Group1", "-", "", "-", "No", "", "")
     assert_row_present(
         result.output,
         "Node2",
@@ -152,6 +159,8 @@ def test_limit_bad_group(some_nodes, cli):
 
 def test_limit_nothing(some_nodes, cli):
     """Test limit matching nothing."""
+
+    StorageHost.create(name="Host3")
 
     result = cli(0, ["node", "list", "--host=Host3"])
 

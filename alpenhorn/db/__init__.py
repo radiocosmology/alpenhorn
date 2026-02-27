@@ -37,7 +37,7 @@ thread, typically via the peewee table models provided by this module.
 from .acquisition import ArchiveAcq, ArchiveFile
 from .data_index import DataIndexVersion, current_version, schema_version
 from .archive import ArchiveFileCopy, ArchiveFileCopyRequest, ArchiveFileImportRequest
-from .storage import StorageGroup, StorageNode, StorageTransferAction
+from .storage import StorageGroup, StorageHost, StorageNode, StorageTransferAction
 
 # Basic functionality
 from ._base import connect, close, database_proxy, set_extension, threadsafe

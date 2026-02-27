@@ -17,6 +17,27 @@ from .acquisition import ArchiveFile
 log = logging.getLogger(__name__)
 
 
+class StorageHost(base_model):
+    """Storage host for the archive.
+
+    Attributes
+    ----------
+    name : string
+        The name of this host.
+    username : string
+        The log-in username for remote access to this host
+    address : string
+        The internet address for the host (e.g., archive.example.com)
+    notes : string
+        Notes about this host
+    """
+
+    name = pw.CharField(max_length=64, unique=True)
+    username = pw.CharField(max_length=64, null=True)
+    address = pw.CharField(max_length=255, null=True)
+    notes = pw.TextField(null=True)
+
+
 class StorageGroup(base_model):
     """Storage group for the archive.
 
@@ -104,10 +125,8 @@ class StorageNode(base_model):
         The name of this node.
     root : string
         The root directory for data in this node.
-    host : string
-        The hostname that this node lives on.
-    address : string
-        The internet address for the host (e.g., mistaya.phas.ubc.ca)
+    host : foreign key
+        The host, if any, that this node is present on.
     io_class : string
         The I/O class for this node.  If not NULL, this should be the name of
         an internal or external I/O class providing StorageNode support.  If
@@ -145,9 +164,7 @@ class StorageNode(base_model):
 
     name = pw.CharField(max_length=64, unique=True)
     root = pw.CharField(max_length=255, null=True)
-    host = pw.CharField(max_length=64, null=True)
-    username = pw.CharField(max_length=64, null=True)
-    address = pw.CharField(max_length=255, null=True)
+    host = pw.ForeignKeyField(StorageHost, null=True, backref="nodes")
     io_class = pw.CharField(max_length=255, null=True)
     group = pw.ForeignKeyField(StorageGroup, backref="nodes")
     active = pw.BooleanField(default=False)
@@ -167,7 +184,8 @@ class StorageNode(base_model):
         from ..daemon import host
 
         # If daemon.host is None, this always returns False.
-        return host and self.host == host()
+        daemon_host = host()
+        return daemon_host and self.host == daemon_host
 
     @property
     def archive(self) -> bool:
