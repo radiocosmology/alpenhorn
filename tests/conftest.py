@@ -487,7 +487,7 @@ def hostname(set_config):
     import alpenhorn.daemon.update
 
     config._config = config.merge_dict_tree(
-        config._config, {"base": {"hostname": "alpenhost"}}
+        config._config, {"daemon": {"host": "alpenhost"}}
     )
 
     # Set the daemon hostname, too

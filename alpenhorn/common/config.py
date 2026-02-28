@@ -16,10 +16,6 @@ Example config:
 
 .. codeblock:: yaml
 
-    # Base configuration
-    base:
-        hostname: alpenhost
-
     # Configure the database connection with a peewee db_url.  If using a database
     # extension, that may require different data in this section.
     database:
@@ -107,6 +103,10 @@ Example config:
 
     # Configure the operation of the local daemon
     daemon:
+        # The daemon host name.  This value is matched against the "host" entries
+        # of StorageNodes to determine which nodes are local to this daemon.
+        host: alpenhost
+
         # Default number of worker threads
         num_workers: 4
 
