@@ -15,7 +15,7 @@ from typing import IO
 
 from watchdog.observers import Observer
 
-from ...common import util
+from ...daemon.proc import md5sum_file
 from ...daemon.scheduler import FairMultiFIFOQueue, Task
 from ...db import (
     ArchiveAcq,
@@ -396,7 +396,7 @@ class DefaultNodeIO(BaseNodeIO):
         """
         path = pathlib.Path(self.node.root, path, *segments)
         try:
-            return util.md5sum_file(path)
+            return md5sum_file(path)
         except FileNotFoundError:
             log.warning(f"MD5 sum check for {path} failed: file not found.")
         except PermissionError:

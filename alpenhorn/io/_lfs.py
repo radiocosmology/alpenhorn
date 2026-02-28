@@ -36,7 +36,7 @@ import os
 import shutil
 from enum import Enum
 
-from alpenhorn.common import util
+from ..daemon import proc
 
 log = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ class LFS:
         # Stringify args
         args = [str(arg) for arg in args]
 
-        ret, stdout, stderr = util.run_command(
+        ret, stdout, stderr = proc.run_command(
             [self._lfs, *args], timeout=self._timeout
         )
 
