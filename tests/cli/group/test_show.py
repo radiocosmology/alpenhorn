@@ -6,6 +6,7 @@ from alpenhorn.db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     StorageGroup,
+    StorageHost,
     StorageNode,
     StorageTransferAction,
 )
@@ -92,15 +93,19 @@ def test_show_node_details(clidb, cli, assert_row_present):
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup", io_class="IOClass")
-    StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    over_here = StorageHost.create(name="over_here")
+    StorageNode.create(name="Node1", group=group, active=True, host=over_here)
+    over_there = StorageHost.create(name="over_there")
     StorageNode.create(
-        name="Node2", group=group, active=False, host="over_there", io_class="NodeClass"
+        name="Node2", group=group, active=False, host=over_there, io_class="NodeClass"
     )
+    StorageNode.create(name="Node3", group=group, active=True, host=None)
 
     result = cli(0, ["group", "show", "SGroup", "--node-details"])
 
     assert_row_present(result.output, "Node1", "over_here", "Yes", "Default")
     assert_row_present(result.output, "Node2", "over_there", "No", "NodeClass")
+    assert_row_present(result.output, "Node3", "-", "Yes", "Default")
 
 
 def test_show_node_stats(clidb, cli, assert_row_present):
@@ -108,12 +113,14 @@ def test_show_node_stats(clidb, cli, assert_row_present):
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup", io_class="IOClass")
-    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    over_here = StorageHost.create(name="over_here")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host=over_here)
+    over_there = StorageHost.create(name="over_there")
     node2 = StorageNode.create(
         name="Node2",
         group=group,
         active=False,
-        host="over_there",
+        host=over_there,
         io_class="NodeClass",
         max_total_gb=1,
     )
@@ -143,15 +150,18 @@ def test_show_node_details_stats(clidb, cli, assert_row_present):
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup", io_class="IOClass")
-    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    over_here = StorageHost.create(name="over_here")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host=over_here)
+    over_there = StorageHost.create(name="over_there")
     node2 = StorageNode.create(
         name="Node2",
         group=group,
         active=False,
-        host="over_there",
+        host=over_there,
         io_class="NodeClass",
         max_total_gb=1,
     )
+    StorageNode.create(name="Node3", group=group, active=True, host=None)
 
     # And some files
     acq = ArchiveAcq.create(name="acq")
@@ -175,6 +185,7 @@ def test_show_node_details_stats(clidb, cli, assert_row_present):
     assert_row_present(
         result.output, "Node2", "over_there", "No", "NodeClass", 2, "5.665 kiB", "0.00"
     )
+    assert_row_present(result.output, "Node3", "-", "Yes", "Default", 0, "-", "-")
 
 
 def test_show_actions(clidb, cli, assert_row_present):
@@ -227,12 +238,14 @@ def test_show_transfers(clidb, cli, assert_row_present):
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup", io_class="IOClass")
-    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    over_here = StorageHost.create(name="over_here")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host=over_here)
+    over_there = StorageHost.create(name="over_there")
     node2 = StorageNode.create(
         name="Node2",
         group=group,
         active=False,
-        host="over_there",
+        host=over_there,
         io_class="NodeClass",
         max_total_gb=1,
     )
@@ -278,12 +291,14 @@ def test_show_all(clidb, cli, assert_row_present):
 
     # Make a StorageGroup with some nodes in it.
     group = StorageGroup.create(name="SGroup", io_class="IOClass")
-    node1 = StorageNode.create(name="Node1", group=group, active=True, host="over_here")
+    over_here = StorageHost.create(name="over_here")
+    node1 = StorageNode.create(name="Node1", group=group, active=True, host=over_here)
+    over_there = StorageHost.create(name="over_there")
     node2 = StorageNode.create(
         name="Node2",
         group=group,
         active=False,
-        host="over_there",
+        host=over_there,
         io_class="NodeClass",
         max_total_gb=1,
     )

@@ -74,7 +74,7 @@ def have_rsync(mock_run_command):
 @pytest.fixture
 def test_req(
     xfs,
-    hostname,
+    daemon_host,
     queue,
     storagegroup,
     storagenode,
@@ -86,18 +86,20 @@ def test_req(
 
     Returns a two-element tuple: (node_to, copy_request)"""
 
+    daemon_host.address = "addr"
+    daemon_host.username = "user"
+    daemon_host.save()
+
     group_to = storagegroup(name="group_to")
     node_to = UpdateableNode(
         queue,
-        storagenode(name="node_to", group=group_to, host=hostname, root="/node_to"),
+        storagenode(name="node_to", group=group_to, host=daemon_host, root="/node_to"),
     )
     node_from = storagenode(
         name="node_from",
         group=storagegroup(name="group_from"),
         root="/node_from",
-        host=hostname,  # By default the transfer is local
-        username="user",
-        address="addr",
+        host=daemon_host,  # By default the transfer is local
         active=True,
     )
 
@@ -187,13 +189,13 @@ def test_pull_sync_fit(xfs, queue, test_req):
     assert afcr.cancelled is False
 
 
-def test_pull_async_noroute(queue, pull_async_true):
+def test_pull_async_noroute(queue, pull_async_true, storagehost):
     """Test no route for remote pull."""
 
     _, req = pull_async_true
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Call the async
     task, key = queue.get()
@@ -210,13 +212,15 @@ def test_pull_async_noroute(queue, pull_async_true):
 
 
 @pytest.mark.run_command_result(1, "", "bbcp_stderr")
-def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true, skip_db_checks):
+def test_pull_async_bbcp_fail(
+    queue, have_bbcp, pull_async_true, skip_db_checks, storagehost
+):
     """Test an unsuccessful bbcp remote pull."""
 
     _, req = pull_async_true
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Call the async
     task, key = queue.get()
@@ -237,14 +241,14 @@ def test_pull_async_bbcp_fail(queue, have_bbcp, pull_async_true, skip_db_checks)
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
 def test_pull_async_bbcp_succeed(
-    queue, have_bbcp, mock_filesize, pull_async_true, skip_db_checks
+    queue, have_bbcp, mock_filesize, pull_async_true, skip_db_checks, storagehost
 ):
     """Test a successful bbcp remote pull."""
 
     node, req = pull_async_true
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Call the async
     task, key = queue.get()
@@ -269,14 +273,14 @@ def test_pull_async_bbcp_succeed(
 
 @pytest.mark.run_command_result(1, "", "rsync_stderr")
 def test_pull_async_remote_rsync_fail(
-    queue, have_rsync, pull_async_true, skip_db_checks
+    queue, have_rsync, pull_async_true, skip_db_checks, storagehost
 ):
     """Test an unsuccessful rsync remote pull."""
 
     _, req = pull_async_true
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Call the async
     task, key = queue.get()
@@ -297,14 +301,14 @@ def test_pull_async_remote_rsync_fail(
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
 def test_pull_async_remote_rsync_succeed(
-    queue, have_rsync, mock_filesize, pull_async_true, skip_db_checks
+    queue, have_rsync, mock_filesize, pull_async_true, skip_db_checks, storagehost
 ):
     """Test a successful rsync remote pull."""
 
     node, req = pull_async_true
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Call the async
     task, key = queue.get()
@@ -327,13 +331,13 @@ def test_pull_async_remote_rsync_succeed(
     assert ArchiveFileCopy.get(node=req.node_from, file=req.file).has_file != "M"
 
 
-def test_pull_async_remote_nomethod(queue, pull_async_true):
+def test_pull_async_remote_nomethod(queue, pull_async_true, storagehost):
     """Test remote pull with no command available."""
 
     _, req = pull_async_true
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Call the async
     task, key = queue.get()
@@ -618,14 +622,21 @@ def test_pull_async_path_rsync(
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
 def test_pull_async_path_rsync_remote(
-    xfs, dbtables, have_rsync, mock_filesize, test_req, queue, skip_db_checks
+    xfs,
+    dbtables,
+    have_rsync,
+    mock_filesize,
+    test_req,
+    queue,
+    skip_db_checks,
+    storagehost,
 ):
     """Test remote rsync-ing via pull_async with a path."""
 
     unode, req = test_req
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Destination path
     dest = pathlib.Path("/dest/path")
@@ -641,14 +652,21 @@ def test_pull_async_path_rsync_remote(
 
 @pytest.mark.run_command_result(0, "", "md5 d41d8cd98f00b204e9800998ecf8427e")
 def test_pull_async_path_bbcp(
-    xfs, dbtables, have_bbcp, mock_filesize, test_req, queue, skip_db_checks
+    xfs,
+    dbtables,
+    have_bbcp,
+    mock_filesize,
+    test_req,
+    queue,
+    skip_db_checks,
+    storagehost,
 ):
     """Test bbcp-ing via pull_async with a path."""
 
     unode, req = test_req
 
     # Make the request non-local
-    req.node_from.host = "other-host"
+    req.node_from.host = storagehost(name="other-host", address="addr", username="user")
 
     # Destination path
     dest = pathlib.Path("/dest/path")

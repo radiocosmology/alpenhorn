@@ -9,6 +9,7 @@ from alpenhorn.db import (
     ArchiveFileCopyRequest,
     ArchiveFileImportRequest,
     StorageGroup,
+    StorageHost,
     StorageNode,
     StorageTransferAction,
     utcnow,
@@ -44,6 +45,7 @@ def test_show_full(clidb, cli):
     now = utcnow()
 
     group = StorageGroup.create(name="SN-Group")
+    host = StorageHost.create(name="SN-Host")
     StorageNode.create(
         name="SN-Node",
         group=group,
@@ -52,9 +54,7 @@ def test_show_full(clidb, cli):
         active=True,
         auto_import=1,
         auto_verify=11,
-        host="SN-Host",
-        address="SN-Addr",
-        username="SN-User",
+        host=host,
         root="/root",
         max_total_gb=10.5,
         min_avail_gb=0.25,
@@ -73,8 +73,6 @@ def test_show_full(clidb, cli):
     assert "Auto-Verify: On" in result.output
     assert "11" in result.output
     assert "SN-Host" in result.output
-    assert "SN-Addr" in result.output
-    assert "SN-User" in result.output
     assert "/root" in result.output
     assert "10.50 GiB" in result.output
     assert "3.333 GiB" in result.output

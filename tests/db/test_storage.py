@@ -8,12 +8,14 @@ import pytest
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
 
 
-def test_schema(dbproxy, simplenode, storagetransferaction):
+def test_schema(dbproxy, simplenode, storagehost, storagetransferaction):
     # Force table creation
+    storagehost(name="host")
     storagetransferaction(node_from=simplenode, group_to=simplenode.group)
 
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
+        "storagehost",
         "storagenode",
         "storagetransferaction",
     }
@@ -44,19 +46,19 @@ def test_group_model(storagegroup):
     }
 
 
-def test_storage_model(storagegroup, storagenode):
+def test_node_model(storagegroup, storagehost, storagenode):
     group = storagegroup(name="group")
+    host = storagehost(name="host")
     storagenode(name="min", group=group)
     storagenode(
         name="max",
         group=group,
         active=True,
-        address="addr.addr",
         auto_import=True,
         auto_verify=1,
         avail_gb=2.2,
         avail_gb_last_checked=3.3,
-        host="host.host",
+        host=host,
         io_class="IOClass",
         io_config="{ioconfig}",
         max_total_gb=4.4,
@@ -64,7 +66,6 @@ def test_storage_model(storagegroup, storagenode):
         notes="Notes",
         root="/root",
         storage_type="T",
-        username="user",
     )
 
     # name is unique
@@ -77,7 +78,6 @@ def test_storage_model(storagegroup, storagenode):
         "name": "min",
         "group": group.id,
         "active": False,
-        "address": None,
         "auto_import": False,
         "auto_verify": 0,
         "avail_gb": None,
@@ -90,7 +90,6 @@ def test_storage_model(storagegroup, storagenode):
         "notes": None,
         "root": None,
         "storage_type": "A",
-        "username": None,
     }
 
     assert StorageNode.select().where(StorageNode.name == "max").dicts().get() == {
@@ -98,12 +97,11 @@ def test_storage_model(storagegroup, storagenode):
         "name": "max",
         "group": group.id,
         "active": True,
-        "address": "addr.addr",
         "auto_import": True,
         "auto_verify": 1,
         "avail_gb": 2.2,
         "avail_gb_last_checked": 3.3,
-        "host": "host.host",
+        "host": host.id,
         "io_class": "IOClass",
         "io_config": "{ioconfig}",
         "max_total_gb": 4.4,
@@ -111,17 +109,17 @@ def test_storage_model(storagegroup, storagenode):
         "notes": "Notes",
         "root": "/root",
         "storage_type": "T",
-        "username": "user",
     }
 
 
-def test_local(simplenode, hostname):
+def test_local(simplenode, daemon_host, storagehost):
     """Test StorageNode.local"""
 
-    simplenode.host = hostname
+    simplenode.host = daemon_host
     assert simplenode.local
 
-    simplenode.host = "other-host"
+    other_host = storagehost(name="other-host")
+    simplenode.host = other_host
     assert not simplenode.local
 
 

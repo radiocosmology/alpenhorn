@@ -103,8 +103,7 @@ Example config:
 
     # Configure the operation of the local daemon
     daemon:
-        # The daemon host name.  This value is matched against the "host" entries
-        # of StorageNodes to determine which nodes are local to this daemon.
+        # The daemon host name.  There must be a Storage Host with this name.
         host: alpenhost
 
         # Default number of worker threads

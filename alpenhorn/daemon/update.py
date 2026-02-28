@@ -18,6 +18,7 @@ from ..db import (
     ArchiveFileCopyRequest,
     ArchiveFileImportRequest,
     StorageGroup,
+    StorageHost,
     StorageNode,
     utcnow,
 )
@@ -952,11 +953,11 @@ class UpdateableGroup(updateable_base):
             self.io.idle_update()
 
 
-# This stores the daemon's host.
+# This stores the daemon's StorageHost.
 _host = None
 
 
-def host() -> str | None:
+def host() -> StorageHost | None:
     """Return the current daemon host.
 
     If not called from within the daemon, or called before the start
@@ -964,7 +965,7 @@ def host() -> str | None:
 
     Returns
     -------
-    str or None
+    StorageHost or None
         The daemon host, or None, if not called from within a running
         daemon.
     """
@@ -986,8 +987,15 @@ def _set_host() -> None:
     global _host
 
     hostname = config.get("daemon.host", default=None, as_type=str)
+    if hostname is None:
+        hostname = socket.gethostname().split(".")[0]
 
-    _host = hostname if hostname else socket.gethostname().split(".")[0]
+    # Try to find a StorageHost with this name
+    try:
+        _host = StorageHost.get(name=hostname)
+    except pw.DoesNotExist:
+        raise click.ClickException(f"No host record for this host ({hostname}).")
+
     return _host
 
 
@@ -1058,11 +1066,9 @@ def update_loop(
     while not global_abort.is_set():
         loop_start = time.time()
 
-        # Update/set the name of this host.  We do this once
-        # per update loop
+        # Find the StorageHost record for this host.  We do this once
+        # per update loop.  Raises ClickException if no host is found.
         host = _set_host()
-        if not host:
-            raise click.ClickException("Unable to determine hostname.")
 
         # Nodes are re-queried every loop iteration so we can
         # detect changes in available storage media
@@ -1082,7 +1088,7 @@ def update_loop(
             new_nodes = {}
 
         if len(new_nodes) == 0:
-            log.warning(f"No active nodes on host ({host})!")
+            log.warning(f"No active nodes on host ({host.name})!")
 
         # Drop any nodes that have gone away
         vetted_nodes = {}

@@ -2,7 +2,12 @@
 
 import json
 
-from alpenhorn.db import ArchiveFileImportRequest, StorageGroup, StorageNode
+from alpenhorn.db import (
+    ArchiveFileImportRequest,
+    StorageGroup,
+    StorageHost,
+    StorageNode,
+)
 
 
 def test_no_group(clidb, cli):
@@ -65,8 +70,6 @@ def test_create_default(clidb, cli):
     assert node.group == group
     assert node.host is None
     assert node.root is None
-    assert node.address is None
-    assert node.username is None
     assert node.io_class is None
     assert node.io_config is None
     assert node.max_total_gb is None
@@ -209,6 +212,8 @@ def test_set_all(clidb, cli):
 
     Well, not io_config.  That's tested elsewhere."""
 
+    StorageHost.create(name="HOSTNAME")
+
     cli(
         0,
         [
@@ -217,7 +222,6 @@ def test_set_all(clidb, cli):
             "TEST",
             "--create-group",
             "--activate",
-            "--address=ADDRESS",
             "--auto-import",
             "--activate",
             "--auto-verify=2",
@@ -227,22 +231,25 @@ def test_set_all(clidb, cli):
             "--min-avail=4.5",
             "--notes=NOTES",
             "--root=PATH",
-            "--username=USERNAME",
         ],
     )
 
     node = StorageNode.get(name="TEST")
     assert node.active
-    assert node.address == "ADDRESS"
     assert node.auto_import
     assert node.auto_verify == 2
     assert node.io_class == "IOCLASS"
-    assert node.host == "HOSTNAME"
+    assert node.host.name == "HOSTNAME"
     assert node.max_total_gb == 3.0
     assert node.min_avail_gb == 4.5
     assert node.notes == "NOTES"
     assert node.root == "PATH"
-    assert node.username == "USERNAME"
+
+
+def test_bad_host(clidb, cli):
+    """Test non-exsistent --host."""
+
+    cli(1, ["node", "create", "TEST", "--create-group", "--host=MISSING"])
 
 
 def test_bad_auto_verify(clidb, cli):

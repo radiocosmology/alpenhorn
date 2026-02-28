@@ -26,6 +26,7 @@ from alpenhorn.db import (
     ArchiveFileImportRequest,
     DataIndexVersion,
     StorageGroup,
+    StorageHost,
     StorageNode,
     StorageTransferAction,
     data_index,
@@ -479,24 +480,33 @@ def xfs(monkeypatch, fs, mock_observer, mock_statvfs, mock_exists):
 
 
 @pytest.fixture
+def daemon_host(hostname, storagehost):
+    """Ensure the daemon has a host record to work with.
+
+    Returns the StorageHost instance."""
+    storagehost(name=hostname)
+
+    # Pre-emptively set the host in the daemon
+    host = StorageHost.get(name=hostname)
+    alpenhorn.daemon.update._host = host
+
+    yield host
+
+    # Reset global
+    alpenhorn.daemon.update._host = None
+
+
+@pytest.fixture
 def hostname(set_config):
     """Ensure our hostname is set.
 
     Returns the hostname."""
 
-    import alpenhorn.daemon.update
-
     config._config = config.merge_dict_tree(
         config._config, {"daemon": {"host": "alpenhost"}}
     )
 
-    # Set the daemon hostname, too
-    alpenhorn.daemon.update._host = "alpenhost"
-
     yield "alpenhost"
-
-    # Reset global
-    alpenhorn.daemon.update._host = None
 
 
 @pytest.fixture
@@ -639,18 +649,19 @@ def mockio(reset_extensions):
 
 
 @pytest.fixture
-def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
+def mockgroupandnode(hostname, queue, storagenode, storagehost, storagegroup, mockio):
     """An UpdateableGroup and Updateablenode with mocked I/O classes.
 
     Yields the group and node.
     """
 
     stgroup = storagegroup(name="mockgroup", io_class="Mock")
+    host = storagehost(name=hostname)
     stnode = storagenode(
         name="mocknode",
         group=stgroup,
         root="/mocknode",
-        host=hostname,
+        host=host,
         active=True,
         io_class="Mock",
     )
@@ -816,6 +827,11 @@ def storagegroup(factory_factory):
 
 
 @pytest.fixture
+def storagehost(factory_factory):
+    return factory_factory(StorageHost)
+
+
+@pytest.fixture
 def storagenode(factory_factory):
     return factory_factory(StorageNode)
 
@@ -858,6 +874,12 @@ def archivefileimportrequest(factory_factory):
 def simplegroup(storagegroup):
     """Create a simple StorageGroup record."""
     return storagegroup(name="simplegroup")
+
+
+@pytest.fixture
+def simplehost(storagehost):
+    """Create a simple StorageHost record."""
+    return storagehost(name="simplehost")
 
 
 @pytest.fixture
