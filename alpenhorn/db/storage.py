@@ -11,7 +11,7 @@ import random
 import peewee as pw
 from peewee import fn
 
-from ._base import EnumField, base_model
+from ._base import base_model
 from .acquisition import ArchiveFile
 
 log = logging.getLogger(__name__)
@@ -122,11 +122,8 @@ class StorageNode(base_model):
         If greater than zero, automatically re-verify file copies on this
         node during times of no other activity.  The value is the maximum
         number of files that will be re-verified per update loop.
-    storage_type : enum
-        What is the type of storage?
-        - 'A': archival storage
-        - 'T': transiting storage
-        - 'F': all other storage (i.e acquisition machines)
+    archive : boolenum
+        Is this an archive node?
     max_total_gb : float
         The maximum amout of storage we should use.
     min_avail_gb : float
@@ -153,7 +150,7 @@ class StorageNode(base_model):
     active = pw.BooleanField(default=False)
     auto_import = pw.BooleanField(default=False)
     auto_verify = pw.IntegerField(default=0)
-    storage_type = EnumField(["A", "T", "F"], default="A")
+    archive = pw.BooleanField(default=False)
     max_total_gb = pw.FloatField(null=True)
     min_avail_gb = pw.FloatField(default=0)
     avail_gb = pw.FloatField(null=True)
@@ -168,11 +165,6 @@ class StorageNode(base_model):
 
         # If daemon.host is None, this always returns False.
         return host and self.host == host()
-
-    @property
-    def archive(self) -> bool:
-        """Is this node an archival node?"""
-        return self.storage_type == "A"
 
     @property
     def under_min(self) -> bool:

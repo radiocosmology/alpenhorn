@@ -48,13 +48,6 @@ def show(name, actions, all_, imports, stats, transfers):
 
     node = resolve_node(name)
 
-    if node.storage_type == "A":
-        type_name = "Archive"
-    elif node.storage_type == "T":
-        type_name = "Transport"
-    else:
-        type_name = "-"
-
     if node.max_total_gb and node.max_total_gb > 0:
         max_total = pretty_bytes(node.max_total_gb * 2**30)
     else:
@@ -74,7 +67,7 @@ def show(name, actions, all_, imports, stats, transfers):
     echo("   Storage Node: " + node.name)
     echo("  Storage Group: " + node.group.name)
     echo("         Active: " + ("Yes" if node.active else "No"))
-    echo("           Type: " + type_name)
+    echo("        Archive: " + ("Yes" if node.archive else "No"))
     echo("          Notes: " + (node.notes if node.notes else ""))
     echo("      I/O Class: " + (node.io_class if node.io_class else "Default"))
     echo()

@@ -20,8 +20,6 @@ from ..options import cli_option, resolve_group
 def list_(active, group, host):
     """List Storage Nodes."""
 
-    roles = {"A": "archive", "F": "-", "T": "transport"}
-
     data = []
     nodes = StorageNode.select().join(StorageGroup)
 
@@ -39,7 +37,7 @@ def list_(active, group, host):
             (
                 node.name,
                 node.group.name,
-                roles.get(node.storage_type, "???"),
+                "Yes" if node.archive else "No",
                 node.io_class,
                 node.host,
                 "Yes" if node.active else "No",
@@ -52,7 +50,7 @@ def list_(active, group, host):
         headers = [
             "Name",
             "Group",
-            "Role",
+            "Archive",
             "I/O Class",
             "Host",
             "Active",

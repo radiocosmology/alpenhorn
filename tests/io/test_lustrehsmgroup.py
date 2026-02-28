@@ -19,7 +19,7 @@ def group(xfs, mock_lfs, hostname, queue, storagegroup, storagenode):
             name="hsm",
             io_class="LustreHSM",
             group=stgroup,
-            storage_type="A",
+            archive=True,
             root="/hsm",
             host=hostname,
             io_config='{"quota_id": "qid", "quota_type": "group", "headroom": 10250}',
@@ -30,7 +30,7 @@ def group(xfs, mock_lfs, hostname, queue, storagegroup, storagenode):
         storagenode(
             name="smallfile",
             group=stgroup,
-            storage_type="A",
+            archive=True,
             root="/smallfile",
             host=hostname,
         ),

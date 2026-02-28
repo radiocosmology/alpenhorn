@@ -74,7 +74,7 @@ def test_create_default(clidb, cli):
     assert not node.auto_import
     assert node.auto_verify == 0
     assert node.min_avail_gb == 0
-    assert node.storage_type == "F"
+    assert not node.archive
 
 
 def test_with_group(clidb, cli):
@@ -163,45 +163,16 @@ def test_archive(clidb, cli):
     cli(0, ["node", "create", "TEST", "--archive", "--create-group"])
 
     node = StorageNode.get(name="TEST")
-    assert node.storage_type == "A"
+    assert node.archive
 
 
-def test_field(clidb, cli):
-    """Test creating a field node with explicit --field"""
+def test_no_archive(clidb, cli):
+    """Test creating a field node with explicit --no-archive"""
 
-    cli(0, ["node", "create", "TEST", "--field", "--create-group"])
-
-    node = StorageNode.get(name="TEST")
-    assert node.storage_type == "F"
-
-
-def test_transport(clidb, cli):
-    """Test creating a transport node"""
-
-    cli(0, ["node", "create", "TEST", "--transport", "--create-group"])
+    cli(0, ["node", "create", "TEST", "--no-archive", "--create-group"])
 
     node = StorageNode.get(name="TEST")
-    assert node.storage_type == "T"
-
-
-def test_multirole(clidb, cli):
-    """Test various combinations of multiple role flags."""
-
-    cli(2, ["node", "create", "TEST", "--archive", "--field", "--create-group"])
-    cli(2, ["node", "create", "TEST", "--archive", "--transport", "--create-group"])
-    cli(2, ["node", "create", "TEST", "--field", "--transport", "--create-group"])
-    cli(
-        2,
-        [
-            "node",
-            "create",
-            "TEST",
-            "--archve",
-            "--field",
-            "--transport",
-            "--create-group",
-        ],
-    )
+    assert not node.archive
 
 
 def test_set_all(clidb, cli):
