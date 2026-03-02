@@ -1,11 +1,11 @@
-"""Test common.metrics."""
+"""Test daemon.metrics."""
 
 from unittest.mock import MagicMock, patch
 
 import click
 import pytest
 
-from alpenhorn.common import metrics
+from alpenhorn.daemon import metrics
 
 prometheus_client = pytest.importorskip(
     "prometheus_client", exc_type=ModuleNotFoundError

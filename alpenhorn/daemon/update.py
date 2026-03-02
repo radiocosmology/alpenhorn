@@ -12,7 +12,6 @@ import click
 import peewee as pw
 
 from ..common import config, util
-from ..common.metrics import Metric
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
@@ -21,6 +20,7 @@ from ..db import (
     StorageNode,
     utcnow,
 )
+from .metrics import Metric
 from .querywalker import QueryWalker
 from .scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 

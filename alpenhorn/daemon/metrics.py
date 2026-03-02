@@ -18,7 +18,7 @@ does nothing.
 
 from __future__ import annotations
 
-from . import config
+from ..common import config
 
 try:
     import prometheus_client as prom

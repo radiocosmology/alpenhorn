@@ -16,9 +16,9 @@ from tempfile import TemporaryDirectory
 
 import peewee as pw
 
-from ...common import config, util
-from ...common.metrics import Metric
-from ...daemon import RemoteNode
+from ...common import config
+from ...daemon import RemoteNode, proc
+from ...daemon.metrics import Metric
 from ...daemon.scheduler import Task, threadlocal
 from ...db import ArchiveFileCopy, ArchiveFileCopyRequest
 from ..base import BaseNodeIO
@@ -115,7 +115,7 @@ def bbcp(source: str | os.PathLike, target: str | os.PathLike, size_b: int) -> d
     else:
         port = 4200 + (worker_id - 1) * 10
 
-    ret, stdout, stderr = util.run_command(
+    ret, stdout, stderr = proc.run_command(
         [  # See: https://www.slac.stanford.edu/~abh/bbcp/
             "bbcp",
             #
@@ -244,7 +244,7 @@ def rsync(
             "--rsh=ssh -q",
         ]
 
-    ret, _, stderr = util.run_command(
+    ret, _, stderr = proc.run_command(
         [
             "rsync",
             *remote_args,
@@ -322,7 +322,7 @@ def hardlink(from_path: str | os.PathLike, to_path: str | os.PathLike) -> dict |
             tmp_path = pathlib.Path(tmpdir, filename)
 
             # Try to create the new hardlink in the tempdir
-            util.timeout_call(tmp_path.hardlink_to, 600, from_path)
+            proc.timeout_call(tmp_path.hardlink_to, 600, from_path)
 
             # Hardlink succeeded!  Overwrite any existing file atomically
             tmp_path.rename(to_path)
@@ -345,7 +345,7 @@ def local_copy(
 
     Atomically overwrites an existing `to_path`.  Copy attempt times out after
     `_pull_timeout(size_b)` seconds have elapsed.  After a successful copy,
-    `common.util.md5sum_file` will be called to verify the transfer was successful.
+    `proc.md5sum_file` will be called to verify the transfer was successful.
 
     Parameters
     ----------
@@ -364,7 +364,7 @@ def local_copy(
             0 if copy succeeded; 1 if it failed
         "md5sum": str
             Only present if ret == 0: md5sum of the file computed via
-            `util.md5sum_file`
+            `proc.md5sum_file`
         "stderr": str
             Only present if ret == 1: a message indicating what went wrong.
         "check_src": bool
@@ -389,14 +389,14 @@ def local_copy(
             else:
                 # Otherwise copy the source into the dest, with timeout.
                 # Raises OSError or TimeoutError on failure
-                tmp_path = util.timeout_call(shutil.copy2, timeout, from_path, tmpdir)
+                tmp_path = proc.timeout_call(shutil.copy2, timeout, from_path, tmpdir)
 
             # Copy succeeded!  Overwrite any existing file atomically
             pathlib.Path(tmp_path).rename(to_path)
 
         # Now MD5 the file to verify it.
         log.info(f'verifying "{to_path}" after local copy')
-        md5 = util.md5sum_file(to_path)
+        md5 = proc.md5sum_file(to_path)
     except (OSError, TimeoutError) as e:
         # Copy failed for some reason
         log.warning(f"local copy failed: {e}")

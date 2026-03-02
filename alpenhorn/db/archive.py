@@ -6,7 +6,6 @@ from collections.abc import Callable
 import peewee as pw
 
 from ..common import util
-from ..common.metrics import Metric
 from ._base import EnumField, base_model, database_proxy
 from .acquisition import ArchiveFile
 from .storage import StorageGroup, StorageNode, StorageTransferAction
@@ -22,6 +21,8 @@ def _inc_reqcomp(
     Used by both ArchiveFileCopyRequests (type="copy") and
     ArchiveFileImportRequests (type="import").
     """
+    from ..daemon.metrics import Metric
+
     Metric(
         "requests_completed",
         "Count of completed requests",
@@ -383,6 +384,7 @@ class ArchiveFileCopyRequest(base_model):
             True if the parameters indicate the transfer was successful
             or False if the transfer failed.
         """
+        from ..daemon.metrics import Metric
 
         transf_metric = Metric(
             "transfers",

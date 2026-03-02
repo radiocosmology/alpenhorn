@@ -5,7 +5,7 @@ import pathlib
 import click
 import peewee as pw
 
-from ...common.util import invalid_import_path, md5sum_file
+from ...common.util import invalid_import_path
 from ...db import ArchiveFile, database_proxy
 from ..cli import echo
 from ..options import (
@@ -72,6 +72,8 @@ def create(name, acq_name, from_file, md5, prefix, size):
     instead of using this command.  Importing files is the recommended way to create
     new File records in almost all cases.
     """
+    # Use the daemon's hasher for convenience
+    from ...daemon.proc import md5sum_file
 
     # Usage checks
 

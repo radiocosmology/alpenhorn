@@ -39,7 +39,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "run_command_result(ret, stdout, stderr): "
-        "used on tests which mock alpenhorn.util.run_command to "
+        "used on tests which mock alpenhorn's run_command to "
         "set the desired return value for the mocked call.",
     )
     config.addinivalue_line(
@@ -147,7 +147,7 @@ def set_config(request, logger, reset_extensions):
 
 @pytest.fixture
 def mock_run_command(request, set_config):
-    """Mock alpenhorn.common.util.run_command to _not_ run a command.
+    """Mock alpenhorn.daemon.proc.run_command to _not_ run a command.
 
     The value returned by run_command() can be set by the test via the
     run_command_result mark.
@@ -179,7 +179,7 @@ def mock_run_command(request, set_config):
         nonlocal run_command_report
         return run_command_report
 
-    with patch("alpenhorn.common.util.run_command", _mocked_run_command):
+    with patch("alpenhorn.daemon.proc.run_command", _mocked_run_command):
         yield _get_run_command_report
 
 

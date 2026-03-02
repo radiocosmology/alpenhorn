@@ -6,7 +6,7 @@ import errno
 import logging
 import pathlib
 
-from ...common.metrics import Metric
+from ...daemon.metrics import Metric
 from ...daemon.scheduler import Task
 from ...db import (
     ArchiveFileCopy,
