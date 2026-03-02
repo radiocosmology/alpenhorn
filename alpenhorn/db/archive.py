@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import peewee as pw
 
-from ..common import util
+from ..common import config, util
 from ._base import EnumField, base_model, database_proxy
 from .acquisition import ArchiveFile
 from .storage import StorageGroup, StorageNode, StorageTransferAction
@@ -109,6 +109,72 @@ class ArchiveFileCopy(base_model):
 
         key = self.has_file + self.wants_file
         return states.get(key, "Corrupt")
+
+    def check_delete(self, discretionary: bool = True) -> bool:
+        """Check whether this copy can be deleted.
+
+        Checks the data index to determine whether this copy can
+        be deleted from its node.
+
+        Parameters
+        ----------
+        discretionary : bool
+            If False, don't allow deletion of files marked for discretionary
+            cleaning (``wants_file='M'``).  Defaults to True.
+
+        Returns
+        bool
+            True if this copy can be deleted.  False otherwise.
+        """
+
+        # Has deletion been requested?
+        if self.wants_file == "Y" or (self.wants_file == "M" and not discretionary):
+            return False
+
+        # Can't delete files that aren't present
+        if self.has_file == "N":
+            return False
+
+        # How many archive copies do we need before we're allowed to delete this
+        # file copy?
+        archive_copies_needed = config.get_int(
+            "daemon.archive_copy_count", default=2, min=0
+        )
+
+        archive_count = self.file.archive_count
+        # If this copy is on an archive node itself, it does't count towards the
+        # archive count
+        if self.node.archive and self.has_file == "Y":
+            archive_count -= 1
+
+        # Don't delete files which aren't fully archived
+        if archive_count < archive_copies_needed:
+            log.info(
+                "Too few archive copies "
+                f"({archive_count} < {archive_copies_needed}) to delete "
+                f"{self.file.path} on node {self.node.name}"
+            )
+            return False
+
+        # Don't delete file copies which are the source for pending
+        # copy requests
+        if (
+            ArchiveFileCopyRequest.select()
+            .where(
+                ArchiveFileCopyRequest.file == self.file,
+                ArchiveFileCopyRequest.node_from == self.node,
+                ArchiveFileCopyRequest.completed == 0,
+                ArchiveFileCopyRequest.cancelled == 0,
+            )
+            .first()
+        ):
+            log.info(
+                f"Skipping delete of {self.file.path} on node {self.node.name}: "
+                "transfer pending"
+            )
+            return False
+
+        return True
 
     def trigger_autoactions(self) -> None:
         """Trigger auto actions for this file copy.
