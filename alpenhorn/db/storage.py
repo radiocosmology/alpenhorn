@@ -448,6 +448,71 @@ class StorageNode(base_model):
         if update_fields:
             self.save(only=update_fields)
 
+    def check_unregistered(self, file_: ArchiveFile, storage_used: int | None) -> None:
+        """Force a check of an unregistered file copy found on this node.
+
+        Upserts an ArchiveFileCopy record to force a check of an
+        unregistered file copy on this node.  If `file_` is _not_ unregistered
+        (i.e. ``self.filecopy_state(file_) != "N"``), this method does nothing
+        and returns False.
+
+        Parameters
+        ----------
+        file_ : ArchiveFile
+            The unregistered file
+        node : StorageNode
+            The node to run the check on
+        storage_used : int or None
+            The space used on the node by the file, if known.
+
+        Returns
+        -------
+        bool
+            True if a check of the unregisred file was scheduled.  False if the file
+            was already registered.
+        """
+        from .archive import ArchiveFileCopy
+
+        # ready == False is the safe option here: copy will be readied
+        # during the subsequent check if needed.
+        try:
+            # Try to create a new copy
+            ArchiveFileCopy.create(
+                file=file_,
+                node=self,
+                has_file="M",
+                wants_file="Y",
+                ready=False,
+                size_b=storage_used,
+            )
+            new_copy = True
+        except pw.IntegrityError:
+            new_copy = False
+
+        if not new_copy:
+            # Copy already exists, fetch it to see the current state
+            copy = ArchiveFileCopy.get(file=file_, node=self)
+
+            # If copy is not unregistered, return False early
+            if copy.has_file != "N":
+                return False
+
+            # Otherwise update
+            copy.has_file = "M"
+            copy.wants_file = "Y"
+            copy.ready = False
+            copy.size_b = storage_used
+            copy.last_udate = pw.utcnow()
+            copy.save()
+
+        # Report
+        log.info(
+            "Requesting check of previously-unregistered "
+            f"{file_.path} on node {self.name}."
+        )
+
+        return True
+
 
 class StorageTransferAction(base_model):
     """Storage transfer rules for the archive.

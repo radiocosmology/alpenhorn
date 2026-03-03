@@ -21,7 +21,6 @@ from ...db import (
     StorageNode,
 )
 from ..base import BaseGroupIO
-from .check import force_check_filecopy
 
 log = logging.getLogger(__name__)
 
@@ -67,15 +66,10 @@ def group_search_async(
     found_missing = False
     for node in groupio.nodes:
         if node.io.exists(req.file.path):
-            # file on disk: is it known?
-            #
-            # Acreate/update the ArchiveFileCopy to force a check next pass
-            copy_state = node.db.filecopy_state(req.file)
-
-            if copy_state == "N":
-                # Update/create ArchiveFileCopy to force a check.
-                force_check_filecopy(req.file, node.db, node.io)
-                found_missing = True
+            # Request check if not already known to alpenhorn
+            found_missing = node.db.check_unregistered(
+                req.file, node.io.storage_used(req.file.path)
+            )
 
     # If we found something, warn and stop
     if found_missing:

@@ -5,63 +5,13 @@ from __future__ import annotations
 import logging
 import pathlib
 
-import peewee as pw
-
 from ...daemon.metrics import Metric
 from ...daemon.proc import timeout_call
 from ...daemon.scheduler import Task
-from ...db import (
-    ArchiveFile,
-    ArchiveFileCopy,
-    StorageNode,
-    utcnow,
-)
+from ...db import ArchiveFileCopy, utcnow
 from ..base import BaseNodeIO
 
 log = logging.getLogger(__name__)
-
-
-def force_check_filecopy(file_: ArchiveFile, node: StorageNode, node_io: BaseNodeIO):
-    """Force a check of an unregistered file.
-
-    Upserts an ArchiveFileCopy record to force a check of an
-    unregistered file copy on a node.
-
-    Parameters
-    ----------
-    file_ : ArchiveFile
-        The file to check
-    node : StorageNode
-        The node to run the check on
-    node_io : BaseNodeIO
-        The node I/O instance.  Used if we need to calculate
-        the file size.
-    """
-    log.info(f"Requesting check of {file_.acq.name}/{file_.name} on node {node.name}.")
-
-    # ready == False is the safe option here: copy will be readied
-    # during the subsequent check if needed.
-    try:
-        # Try to create a new copy
-        ArchiveFileCopy.create(
-            file=file_,
-            node=node,
-            has_file="M",
-            wants_file="Y",
-            ready=False,
-            size_b=node_io.storage_used(file_.path),
-        )
-    except pw.IntegrityError:
-        # Copy already exists, just update the existing
-        ArchiveFileCopy.update(
-            has_file="M",
-            wants_file="Y",
-            ready=False,
-            last_update=utcnow(),
-        ).where(
-            ArchiveFileCopy.file == file_,
-            ArchiveFileCopy.node == node,
-        ).execute()
 
 
 def check_async(
