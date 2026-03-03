@@ -5,6 +5,7 @@ import pathlib
 import peewee as pw
 import pytest
 
+from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.db.storage import StorageNode
 
 
@@ -322,3 +323,58 @@ def test_update_avail_gb(simplenode):
     node = StorageNode.get(id=simplenode.id)
     assert node.avail_gb == avail
     assert node.avail_gb_last_checked == 0
+
+
+def test_check_unregistered_none(dbtables, simplefile, simplenode):
+    """Test StorageNode.check_unregistered with no pre-existing copy record."""
+
+    assert simplenode.check_unregistered(simplefile, storage_used=1234)
+
+    # Get the record
+    copy = ArchiveFileCopy.get(id=1)
+
+    assert copy.node == simplenode
+    assert copy.file == simplefile
+    assert copy.size_b == 1234
+    assert copy.has_file == "M"
+    assert copy.wants_file == "Y"
+    assert copy.ready is False
+
+
+def test_check_unregistered_corrupt(simplecopy):
+    """Test StorageNode.check_unregistered with a pre-existing copy record."""
+
+    # Make the copy corrupt
+    simplecopy.ready = True
+    simplecopy.has_file = "X"
+    simplecopy.save()
+
+    # Record wasn't updated
+    assert not simplecopy.node.check_unregistered(simplecopy.file, storage_used=1234)
+
+    # Get the record
+    copy = ArchiveFileCopy.get(id=1)
+
+    # Record wasn't updated
+    assert copy.has_file == "X"
+    assert copy.ready is True
+
+
+def test_check_unregistered_gone(simplecopy):
+    """Test StorageNode.check_unregistered with a pre-existing copy record."""
+
+    # Set some parameters that the call will change
+    simplecopy.ready = True
+    simplecopy.wants_file = "M"
+    simplecopy.has_file = "N"
+    simplecopy.save()
+
+    simplecopy.node.check_unregistered(simplecopy.file, storage_used=1234)
+
+    # Get the record
+    copy = ArchiveFileCopy.get(id=1)
+
+    assert copy.size_b == 1234
+    assert copy.has_file == "M"
+    assert copy.wants_file == "Y"
+    assert copy.ready is False

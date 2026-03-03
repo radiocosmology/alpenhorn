@@ -14,15 +14,12 @@ import shutil
 import time
 from tempfile import TemporaryDirectory
 
-import peewee as pw
-
 from ...common import config
 from ...daemon import RemoteNode, proc
 from ...daemon.metrics import Metric
 from ...daemon.scheduler import Task, threadlocal
-from ...db import ArchiveFileCopy, ArchiveFileCopyRequest
+from ...db import ArchiveFileCopyRequest
 from ..base import BaseNodeIO
-from .check import force_check_filecopy
 from .updownlock import UpDownLock
 
 __all__ = ["bbcp", "hardlink", "local_copy", "rsync"]
@@ -481,26 +478,18 @@ def pull_async(
 
     # Check for existing file, if not done already
     if not did_search:
-        # If this is a known corrupt file, there's no need to do an existence check.
-        # (because in that case we'd want to clobber an existing file anyways).
         try:
-            copy = ArchiveFileCopy.get(node=io.node, file=req.file)
-            known_corrupt = copy.has_file == "X"
-        except pw.DoesNotExist:
-            known_corrupt = False
+            if io.exists(req.file.path):
+                if io.node.check_unregistered(req.file, io.storage_used(req.file.path)):
+                    log.warning(
+                        "Skipping pull request for "
+                        f"{req.file.acq.name}/{req.file.name}: "
+                        f"file already on disk on node {io.node.name}."
+                    )
 
-        try:
-            if not known_corrupt and io.exists(req.file.path):
-                log.warning(
-                    "Skipping pull request for "
-                    f"{req.file.acq.name}/{req.file.name}: "
-                    f"file already on disk on node {io.node.name}."
-                )
-
-                force_check_filecopy(req.file, io.node, io)
-                # request not resolved.  Should be sorted out after
-                # the file check happens.
-                return
+                    # request not resolved.  Should be sorted out after
+                    # the file check happens.
+                    return
         except OSError:
             # On error, try to do the pull
             pass
