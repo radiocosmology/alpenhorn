@@ -113,7 +113,14 @@ Example config:
         # Minimum time length (in seconds) between updates
         update_interval: 60
 
-        # Timescale on which to poll the filesystem for new data to import
+        # Minimum number of copies of a file which must exist on archive nodes
+        # before any other copy of the file can be deleted.  WARNING: If this
+        # is set to a value less than two, alpenhorn will not be able to
+        # guarantee data integrity
+        archive_copy_count: 2
+
+        # Period (in seconds) at which to poll the filesystem for new files to
+        # import.
         auto_import_interval: 30
 
         # Minimum number of days to wait from the last update of a file copy
@@ -150,7 +157,7 @@ Example config:
         # error will be triggered if the number of _consecutive_ main loops
         # where such a third-party update is detected equals or exceeds this
         # value.  Setting this to a zero disables the check.
-       update_skew_threshold: 4
+        update_skew_threshold: 4
 """
 
 from __future__ import annotations

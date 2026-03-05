@@ -476,7 +476,10 @@ def test_update_idle(unode, queue):
             assert ioiu.mock_calls == [call(True), call(False), call(False)]
 
 
-def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy):
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
+def test_update_delete_under_min(
+    unode, set_config, simpleacq, archivefile, archivefilecopy
+):
     """Test UpdateableNode.update_delete() when under min"""
 
     archivefilecopy(
@@ -549,7 +552,10 @@ def test_update_delete_under_min(unode, simpleacq, archivefile, archivefilecopy)
     mock_delete.assert_called_once_with([copyM1, copyN1, copyM2, copyN2, copyN3])
 
 
-def test_update_delete_over_min(unode, simpleacq, archivefile, archivefilecopy):
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
+def test_update_delete_over_min(
+    unode, set_config, simpleacq, archivefile, archivefilecopy
+):
     """Test UpdateableNode.update_delete() when not under min"""
 
     archivefilecopy(
@@ -577,8 +583,9 @@ def test_update_delete_over_min(unode, simpleacq, archivefile, archivefilecopy):
     mock_delete.assert_called_once_with([copyN])
 
 
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
 def test_update_delete_transfer_pending(
-    unode, simplegroup, simplefile, archivefilecopy, archivefilecopyrequest
+    unode, set_config, simplegroup, simplefile, archivefilecopy, archivefilecopyrequest
 ):
     """update_delete() should skip files that have pending transfers."""
 
@@ -595,7 +602,10 @@ def test_update_delete_transfer_pending(
     mock_delete.assert_not_called()
 
 
-def test_update_delete_bad_file(unode, simpleacq, archivefile, archivefilecopy):
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
+def test_update_delete_bad_file(
+    unode, set_config, simpleacq, archivefile, archivefilecopy
+):
     """update_delete() should attempt to delete bad files."""
 
     fileM = archivefile(name="fileM", acq=simpleacq)
@@ -611,6 +621,7 @@ def test_update_delete_bad_file(unode, simpleacq, archivefile, archivefilecopy):
     mock_delete.assert_called_once_with([copyM, copyX])
 
 
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
 def test_update_node_run(
     unode,
     queue,
