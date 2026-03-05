@@ -6,8 +6,9 @@ import sys
 import click
 
 from .. import db
-from ..common import config, metrics
+from ..common import config
 from ..common.util import help_config_option, start_alpenhorn, version_option
+from . import metrics
 from .scheduler import FairMultiFIFOQueue, pool
 
 log = logging.getLogger(__name__)

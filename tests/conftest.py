@@ -26,6 +26,7 @@ from alpenhorn.db import (
     ArchiveFileImportRequest,
     DataIndexVersion,
     StorageGroup,
+    StorageHost,
     StorageNode,
     StorageTransferAction,
     data_index,
@@ -39,7 +40,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "run_command_result(ret, stdout, stderr): "
-        "used on tests which mock alpenhorn.util.run_command to "
+        "used on tests which mock alpenhorn's run_command to "
         "set the desired return value for the mocked call.",
     )
     config.addinivalue_line(
@@ -147,7 +148,7 @@ def set_config(request, logger, reset_extensions):
 
 @pytest.fixture
 def mock_run_command(request, set_config):
-    """Mock alpenhorn.common.util.run_command to _not_ run a command.
+    """Mock alpenhorn.daemon.proc.run_command to _not_ run a command.
 
     The value returned by run_command() can be set by the test via the
     run_command_result mark.
@@ -179,7 +180,7 @@ def mock_run_command(request, set_config):
         nonlocal run_command_report
         return run_command_report
 
-    with patch("alpenhorn.common.util.run_command", _mocked_run_command):
+    with patch("alpenhorn.daemon.proc.run_command", _mocked_run_command):
         yield _get_run_command_report
 
 
@@ -479,16 +480,33 @@ def xfs(monkeypatch, fs, mock_observer, mock_statvfs, mock_exists):
 
 
 @pytest.fixture
+def daemon_host(hostname, storagehost):
+    """Ensure the daemon has a host record to work with.
+
+    Returns the StorageHost instance."""
+    storagehost(name=hostname)
+
+    # Pre-emptively set the host in the daemon
+    host = StorageHost.get(name=hostname)
+    alpenhorn.daemon.update._host = host
+
+    yield host
+
+    # Reset global
+    alpenhorn.daemon.update._host = None
+
+
+@pytest.fixture
 def hostname(set_config):
     """Ensure our hostname is set.
 
     Returns the hostname."""
 
     config._config = config.merge_dict_tree(
-        config._config, {"base": {"hostname": "alpenhost"}}
+        config._config, {"daemon": {"host": "alpenhost"}}
     )
 
-    return "alpenhost"
+    yield "alpenhost"
 
 
 @pytest.fixture
@@ -631,18 +649,19 @@ def mockio(reset_extensions):
 
 
 @pytest.fixture
-def mockgroupandnode(hostname, queue, storagenode, storagegroup, mockio):
+def mockgroupandnode(hostname, queue, storagenode, storagehost, storagegroup, mockio):
     """An UpdateableGroup and Updateablenode with mocked I/O classes.
 
     Yields the group and node.
     """
 
     stgroup = storagegroup(name="mockgroup", io_class="Mock")
+    host = storagehost(name=hostname)
     stnode = storagenode(
         name="mocknode",
         group=stgroup,
         root="/mocknode",
-        host=hostname,
+        host=host,
         active=True,
         io_class="Mock",
     )
@@ -808,6 +827,11 @@ def storagegroup(factory_factory):
 
 
 @pytest.fixture
+def storagehost(factory_factory):
+    return factory_factory(StorageHost)
+
+
+@pytest.fixture
 def storagenode(factory_factory):
     return factory_factory(StorageNode)
 
@@ -850,6 +874,12 @@ def archivefileimportrequest(factory_factory):
 def simplegroup(storagegroup):
     """Create a simple StorageGroup record."""
     return storagegroup(name="simplegroup")
+
+
+@pytest.fixture
+def simplehost(storagehost):
+    """Create a simple StorageHost record."""
+    return storagehost(name="simplehost")
 
 
 @pytest.fixture

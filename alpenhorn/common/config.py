@@ -21,10 +21,6 @@ Example config:
 
 .. code:: yaml
 
-    # Base configuration
-    base:
-        hostname: alpenhost
-    #
     # Configure the database connection with a peewee db_url.  If using a database
     # extension, that may require different data in this section.
     database:
@@ -111,6 +107,9 @@ Example config:
     #
     # Configure the operation of the local daemon
     daemon:
+        # The daemon host name.  There must be a Storage Host with this name.
+        host: alpenhost
+
         # Default number of worker threads
         num_workers: 4
         #
@@ -146,6 +145,15 @@ Example config:
         # --exit-after-update mode).  If not set, or set to a non-positive
         # value, then the prometheus client is not started.
         prom_client_port: 8080
+
+        # Node update-skew threshold.  Normally, the daemon will exit with an
+        # error if it detects some other process regularly updating one of the
+        # nodes it is managing.  This is designed to catch instances where
+        # multiple copies of the daemon have been spawned for some reason.  The
+        # error will be triggered if the number of _consecutive_ main loops
+        # where such a third-party update is detected equals or exceeds this
+        # value.  Setting this to a zero disables the check.
+       update_skew_threshold: 4
 """
 
 from __future__ import annotations

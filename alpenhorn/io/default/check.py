@@ -7,8 +7,8 @@ import pathlib
 
 import peewee as pw
 
-from ...common.metrics import Metric
-from ...common.util import timeout_call
+from ...daemon.metrics import Metric
+from ...daemon.proc import timeout_call
 from ...daemon.scheduler import Task
 from ...db import (
     ArchiveFile,

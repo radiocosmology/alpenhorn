@@ -74,14 +74,19 @@ class BaseNodeRemote:
         Raises
         ------
         ValueError
-            `node.username` or `node.address` were not set.
+            The node had no host, or the node's host had no username
+            or address.
         """
-        if self.node.username is None:
+        if self.node.host is None:
+            raise ValueError("no host")
+        if self.node.host.username is None:
             raise ValueError("missing username")
-        if self.node.address is None:
+        if self.node.host.address is None:
             raise ValueError("missing address")
 
-        return f"{self.node.username}@{self.node.address}:{self.file_path(file)}"
+        return (
+            f"{self.node.host.username}@{self.node.host.address}:{self.file_path(file)}"
+        )
 
     def file_path(self, file: ArchiveFile) -> str:
         """Return a path on the remote node pointing to ArchiveFile `file`.

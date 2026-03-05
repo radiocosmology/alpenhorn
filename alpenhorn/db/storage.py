@@ -3,8 +3,10 @@
 # Type annotation shennanigans
 from __future__ import annotations
 
+import datetime
 import logging
 import pathlib
+import random
 
 import peewee as pw
 from peewee import fn
@@ -13,6 +15,27 @@ from ._base import EnumField, base_model
 from .acquisition import ArchiveFile
 
 log = logging.getLogger(__name__)
+
+
+class StorageHost(base_model):
+    """Storage host for the archive.
+
+    Attributes
+    ----------
+    name : string
+        The name of this host.
+    username : string
+        The log-in username for remote access to this host
+    address : string
+        The internet address for the host (e.g., archive.example.com)
+    notes : string
+        Notes about this host
+    """
+
+    name = pw.CharField(max_length=64, unique=True)
+    username = pw.CharField(max_length=64, null=True)
+    address = pw.CharField(max_length=255, null=True)
+    notes = pw.TextField(null=True)
 
 
 class StorageGroup(base_model):
@@ -112,10 +135,8 @@ class StorageNode(base_model):
         The name of this node.
     root : string
         The root directory for data in this node.
-    host : string
-        The hostname that this node lives on.
-    address : string
-        The internet address for the host (e.g., mistaya.phas.ubc.ca)
+    host : foreign key
+        The host, if any, that this node is present on.
     io_class : string
         The I/O class for this node.  If not NULL, this should be the name of
         an internal or external I/O class providing StorageNode support.  If
@@ -153,9 +174,7 @@ class StorageNode(base_model):
 
     name = pw.CharField(max_length=64, unique=True)
     root = pw.CharField(max_length=255, null=True)
-    host = pw.CharField(max_length=64, null=True)
-    username = pw.CharField(max_length=64, null=True)
-    address = pw.CharField(max_length=255, null=True)
+    host = pw.ForeignKeyField(StorageHost, null=True, backref="nodes")
     io_class = pw.CharField(max_length=255, null=True)
     group = pw.ForeignKeyField(StorageGroup, backref="nodes")
     active = pw.BooleanField(default=False)
@@ -171,10 +190,12 @@ class StorageNode(base_model):
 
     @property
     def local(self) -> bool:  # numpydoc ignore=RT01,SS03,SS05
-        from ..common import util
-
         """Is this node local to where we are running?"""
-        return self.host == util.get_hostname()
+        from ..daemon import host
+
+        # If daemon.host is None, this always returns False.
+        daemon_host = host()
+        return daemon_host and self.host == daemon_host
 
     @property
     def archive(self) -> bool:  # numpydoc ignore=RT01,SS03,SS05
@@ -414,14 +435,24 @@ class StorageNode(base_model):
         # All checks passed.  Proceed with request.
         return True
 
-    def update_avail_gb(self, new_avail: int | None) -> None:
+    def update_avail_gb(
+        self, new_avail: int | None, update_timestamp: bool = False
+    ) -> None:
         """Update `avail_gb` and record the update time.
 
         Parameters
         ----------
         new_avail : int or None
             The amount of available space in bytes.
+        update_timestamp : bool, optional
+            If True, also avail_gb_last_checked to the current time.  Defaults to False.
+            This should only be set to True in the main update loop.  Doing so elsewhere
+            will cause the daemon to conclude incorrectly that another process is
+            managing the node.
         """
+        # A list of fields to update
+        update_fields = []
+
         # The value in the database is in GiB (2**30 bytes)
         if new_avail is None:
             # Warn unless we never knew the free space
@@ -429,13 +460,20 @@ class StorageNode(base_model):
                 log.warning(f'Unable to determine available space for "{self.name}".')
         else:
             self.avail_gb = new_avail / 2**30
+            update_fields.append(StorageNode.avail_gb)
 
         # Record check time, even if we failed to update
-        self.avail_gb_last_checked = pw.utcnow()
+        if update_timestamp:
+            # We introduce some small amount of random jitter here to better detect
+            # multiple daemons updating this node simultaneously.
+            self.avail_gb_last_checked = pw.utcnow() - datetime.timedelta(
+                seconds=random.randrange(10)
+            )
+            update_fields.append(StorageNode.avail_gb_last_checked)
 
-        # Update the DB with the free space but don't clobber changes made
-        # manually to the database.
-        self.save(only=[StorageNode.avail_gb, StorageNode.avail_gb_last_checked])
+        # Update the DB with only fields that have changed
+        if update_fields:
+            self.save(only=update_fields)
 
 
 class StorageTransferAction(base_model):

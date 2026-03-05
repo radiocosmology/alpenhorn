@@ -11,6 +11,7 @@ from ..options import (
     cli_option,
     exactly_one,
     resolve_group,
+    resolve_host,
     set_io_config,
     set_storage_type,
 )
@@ -18,7 +19,6 @@ from ..options import (
 
 @click.command()
 @click.argument("node_name", metavar="NAME")
-@cli_option("address")
 @click.option(
     "--activate",
     help="Activate the node immediately upon creation.",
@@ -67,10 +67,8 @@ from ..options import (
 @cli_option("notes")
 @cli_option("root")
 @cli_option("transport")
-@cli_option("username")
 def create(
     node_name,
-    address,
     activate,
     archive,
     auto_import,
@@ -88,7 +86,6 @@ def create(
     notes,
     root,
     transport,
-    username,
 ):
     """Create a new Storage Node.
 
@@ -103,10 +100,6 @@ def create(
     of these flags makes the node a field node, which is the default.  The
     --field flag can be used to explicitly indicate this, but that is not
     required.
-
-    A note on the distinction between HOST and ADDR: the host specifies which
-    alpenhorn server instance is responsible for managing the node.  the address
-    (and username) are used by remote servers when pulling files off this node.
     """
 
     # usage checks.
@@ -139,11 +132,16 @@ def create(
         else:
             group = resolve_group(group)
 
+        # Get host
+        if host:
+            host = resolve_host(host)
+        else:
+            host = None
+
         node = StorageNode.create(
             name=node_name,
             root=root,
             host=host,
-            address=address,
             io_class=io_class,
             group=group,
             active=activate,
@@ -153,7 +151,6 @@ def create(
             max_total_gb=max_total,
             min_avail_gb=min_avail,
             notes=notes,
-            username=username,
             io_config=json.dumps(io_config) if io_config else None,
         )
 

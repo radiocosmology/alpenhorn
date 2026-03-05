@@ -209,7 +209,7 @@ def test_label(clean_queue):
 
     # Check that the label is used
     mock = MagicMock()
-    with patch("alpenhorn.common.metrics.Metric.add", mock):
+    with patch("alpenhorn.daemon.metrics.Metric.add", mock):
         clean_queue.put(None, "fifo")
         clean_queue.get()
         clean_queue.task_done("fifo")

@@ -17,7 +17,7 @@ does nothing.
 
 from __future__ import annotations
 
-from . import config
+from ..common import config
 
 try:
     import prometheus_client as prom
@@ -45,9 +45,9 @@ class Metric:
     underlying prometheus metric.
 
     All metric instances will automatically bind the label "daemon" to the
-    current hostname (the value returned by `util.get_hostname()`) unless the
-    `bound` dict already binds that label to something else.  (As a result,
-    "daemon" can never appear in the `unbound` set.)
+    daemon's hostname unless the `bound` dict already binds that label to
+    something else.  (As a result, "daemon" can never appear in the
+    `unbound` set.)
 
     Newly-created metrics are implicitly set to zero, but they won't actually
     be reported until their value is explicitly set/updated.
@@ -91,9 +91,12 @@ class Metric:
         # Bind the "daemon" label if not already bound
         self._bound_labels = dict(bound)
         if "daemon" not in self._bound_labels:
-            from .util import get_hostname
+            from ..daemon import host
 
-            self._bound_labels["daemon"] = get_hostname()
+            daemon_host = host()
+            self._bound_labels["daemon"] = (
+                daemon_host.name if daemon_host else "(unknown)"
+            )
 
         # keys in "bound" can't also appear in "unbound"
         for key in self._bound_labels.keys():

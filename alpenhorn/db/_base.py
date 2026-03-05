@@ -194,7 +194,7 @@ class RetryOperationalError:
             The `peewee.cursor`.
         """
         try:
-            cursor = super().execute_sql(sql, params, commit)
+            cursor = super().execute_sql(sql, params)
         except pw.OperationalError:
             # If we're in a transaction or the database isn't
             # set to autoconnect, there's not much we can do,
@@ -208,7 +208,7 @@ class RetryOperationalError:
 
             # And then retry.  This will re-open the DB because
             # we've just closed it and autoconnect is True.
-            cursor = super().execute_sql(sql, params, commit)
+            cursor = super().execute_sql(sql, params)
         return cursor
 
 

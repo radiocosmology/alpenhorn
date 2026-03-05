@@ -5,20 +5,23 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
+import socket
 import time
 
+import click
 import peewee as pw
 
 from ..common import config, util
-from ..common.metrics import Metric
 from ..db import (
     ArchiveFileCopy,
     ArchiveFileCopyRequest,
     ArchiveFileImportRequest,
     StorageGroup,
+    StorageHost,
     StorageNode,
     utcnow,
 )
+from .metrics import Metric
 from .querywalker import QueryWalker
 from .scheduler import EmptyPool, FairMultiFIFOQueue, Task, WorkerPool, global_abort
 
@@ -287,6 +290,10 @@ class UpdateableNode(updateable_base):
         self.db = None
         self.reinit(node)
 
+        # These two are for the multiple daemon detection
+        self.last_time = None
+        self.last_time_failures = 0
+
         # Metrics that we want to delete when this node goes away
         self._idle_metric = Metric(
             "node_idle", "Node is idle", bound={"name": self.name}
@@ -418,17 +425,53 @@ class UpdateableNode(updateable_base):
 
         The free space is found by calling `self.io.bytes_avail()`
         and saved to the database via `self.db.update_avail_gb()`
+
+        This function is also responsible for detecting other daemons
+        managing this node at the same time as us.
         """
+        if self.last_time is not None:
+            # Check for an unexpected node update
+            last_update_check = StorageNode.get_by_id(
+                self.db.id
+            ).avail_gb_last_checked.timestamp()
+
+            # We allow for a little slop just to hedge against DB storage
+            # oddities
+            if abs(self.last_time - last_update_check) > 2:
+                # Increment the failed check count
+                self.last_time_failures += 1
+
+                # By default, we permit an occasional failure, and only decide
+                # there's a problem if the check fails multiple times in a row.
+                threshold = config.get_int(
+                    "daemon.update_skew_threshold", default=4, min=0
+                )
+
+                # If the threshold is zero, the check is disabled
+                if threshold and self.last_time_failures >= threshold:
+                    message = (
+                        "FATAL: Multiple simultaneous updates of node "
+                        f'"{self.db.name}"!'
+                    )
+                    log.error(message)
+                    raise click.ClickException(message)
+            else:
+                # If the time is good, reset the failure count
+                self.last_time_failures = 0
+
         # This is always a slow call
         bytes_avail = self.io.bytes_avail(fast=False)
 
-        self.db.update_avail_gb(bytes_avail)
+        self.db.update_avail_gb(bytes_avail, update_timestamp=True)
 
         if self.db.avail_gb is not None:
             log.info(
                 f"Node {self.name}: "
                 f"{util.pretty_bytes(self.db.avail_gb * 2**30)} available."
             )
+
+        # Record the last update time, so we can check against it next time.
+        self.last_time = self.db.avail_gb_last_checked.timestamp()
 
     def run_auto_verify(self) -> None:
         """Run auto-verification on this node.
@@ -850,7 +893,6 @@ class UpdateableGroup(updateable_base):
         req : ArchiveFileCopyRequest
             The pull request to process.
         """
-
         # Run early checks on the request
         if not req.check():
             return
@@ -860,7 +902,7 @@ class UpdateableGroup(updateable_base):
         # req.check doesn't know about RemoteNode.
         if not req.node_from.local:
             remote = RemoteNode(req.node_from)
-            if not remote.io.remote_pull_ok(util.get_hostname()):
+            if not remote.io.remote_pull_ok(host()):
                 req.cancel("non-local")
                 return
 
@@ -931,6 +973,52 @@ class UpdateableGroup(updateable_base):
             self.io.idle_update()
 
 
+# This stores the daemon's StorageHost.
+_host = None
+
+
+def host() -> StorageHost | None:
+    """Return the current daemon host.
+
+    If not called from within the daemon, or called before the start
+    of the daemon main loop, this will be None.
+
+    Returns
+    -------
+    StorageHost or None
+        The daemon host, or None, if not called from within a running
+        daemon.
+    """
+    global _host
+    return _host
+
+
+def _set_host() -> None:
+    """Set the daemon host.
+
+    If there is a ``daemon.host`` specified in the config, that is used.
+    otherwise the local hostname up to the first '.' is used.
+
+    Returns
+    -------
+    str
+        The daemon host.
+    """
+    global _host
+
+    hostname = config.get("daemon.host", default=None, as_type=str)
+    if hostname is None:
+        hostname = socket.gethostname().split(".")[0]
+
+    # Try to find a StorageHost with this name
+    try:
+        _host = StorageHost.get(name=hostname)
+    except pw.DoesNotExist:
+        raise click.ClickException(f"No host record for this host ({hostname}).")
+
+    return _host
+
+
 def update_loop(
     queue: FairMultiFIFOQueue, pool: WorkerPool | EmptyPool, once: bool
 ) -> int:
@@ -966,9 +1054,6 @@ def update_loop(
         ``0`` if exiting after running once.  ``1`` otherwise.
     """
 
-    # Get the name of this host
-    host = util.get_hostname()
-
     # The nodes and groups we're working on.  These will be updated
     # each time through the main loop, whenever the underlying storage objects
     # change.  These are stored as dicts with keys being the name of the node
@@ -1001,6 +1086,10 @@ def update_loop(
     while not global_abort.is_set():
         loop_start = time.time()
 
+        # Find the StorageHost record for this host.  We do this once
+        # per update loop.  Raises ClickException if no host is found.
+        host = _set_host()
+
         # Nodes are re-queried every loop iteration so we can
         # detect changes in available storage media
         try:
@@ -1019,7 +1108,7 @@ def update_loop(
             new_nodes = {}
 
         if len(new_nodes) == 0:
-            log.warning(f"No active nodes on host ({host})!")
+            log.warning(f"No active nodes on host ({host.name})!")
 
         # Drop any nodes that have gone away
         vetted_nodes = {}

@@ -8,12 +8,14 @@ import pytest
 from alpenhorn.db.storage import StorageGroup, StorageNode, StorageTransferAction
 
 
-def test_schema(dbproxy, simplenode, storagetransferaction):
+def test_schema(dbproxy, simplenode, storagehost, storagetransferaction):
     # Force table creation
+    storagehost(name="host")
     storagetransferaction(node_from=simplenode, group_to=simplenode.group)
 
     assert set(dbproxy.get_tables()) == {
         "storagegroup",
+        "storagehost",
         "storagenode",
         "storagetransferaction",
     }
@@ -44,19 +46,19 @@ def test_group_model(storagegroup):
     }
 
 
-def test_storage_model(storagegroup, storagenode):
+def test_node_model(storagegroup, storagehost, storagenode):
     group = storagegroup(name="group")
+    host = storagehost(name="host")
     storagenode(name="min", group=group)
     storagenode(
         name="max",
         group=group,
         active=True,
-        address="addr.addr",
         auto_import=True,
         auto_verify=1,
         avail_gb=2.2,
         avail_gb_last_checked=3.3,
-        host="host.host",
+        host=host,
         io_class="IOClass",
         io_config="{ioconfig}",
         max_total_gb=4.4,
@@ -64,7 +66,6 @@ def test_storage_model(storagegroup, storagenode):
         notes="Notes",
         root="/root",
         storage_type="T",
-        username="user",
     )
 
     # name is unique
@@ -77,7 +78,6 @@ def test_storage_model(storagegroup, storagenode):
         "name": "min",
         "group": group.id,
         "active": False,
-        "address": None,
         "auto_import": False,
         "auto_verify": 0,
         "avail_gb": None,
@@ -90,7 +90,6 @@ def test_storage_model(storagegroup, storagenode):
         "notes": None,
         "root": None,
         "storage_type": "A",
-        "username": None,
     }
 
     assert StorageNode.select().where(StorageNode.name == "max").dicts().get() == {
@@ -98,12 +97,11 @@ def test_storage_model(storagegroup, storagenode):
         "name": "max",
         "group": group.id,
         "active": True,
-        "address": "addr.addr",
         "auto_import": True,
         "auto_verify": 1,
         "avail_gb": 2.2,
         "avail_gb_last_checked": 3.3,
-        "host": "host.host",
+        "host": host.id,
         "io_class": "IOClass",
         "io_config": "{ioconfig}",
         "max_total_gb": 4.4,
@@ -111,17 +109,17 @@ def test_storage_model(storagegroup, storagenode):
         "notes": "Notes",
         "root": "/root",
         "storage_type": "T",
-        "username": "user",
     }
 
 
-def test_local(simplenode, hostname):
+def test_local(simplenode, daemon_host, storagehost):
     """Test StorageNode.local"""
 
-    simplenode.host = hostname
+    simplenode.host = daemon_host
     assert simplenode.local
 
-    simplenode.host = "other-host"
+    other_host = storagehost(name="other-host")
+    simplenode.host = other_host
     assert not simplenode.local
 
 
@@ -371,27 +369,46 @@ def test_update_avail_gb(simplenode):
 
     # Test a number
     before = pw.utcnow()
-    simplenode.update_avail_gb(10000)
+    simplenode.update_avail_gb(10000, update_timestamp=True)
     # Now the value is set
     node = StorageNode.get(id=simplenode.id)
-    after = pw.utcnow()
 
     avail = node.avail_gb
-    assert avail == 10000.0 / 2.0**30
-    assert node.avail_gb_last_checked >= before
-    assert node.avail_gb_last_checked <= after
+    assert avail == pytest.approx(10000.0 / 2.0**30)
+    tdelta = node.avail_gb_last_checked - before
+    assert abs(tdelta.total_seconds()) <= 10
 
     # Reset time
     StorageNode.update(avail_gb_last_checked=0).where(
         StorageNode.id == simplenode.id
     ).execute()
 
-    # Test None -- shouldn't change value, but last
-    # update has happened
+    # Test no timestamp update
+    simplenode.update_avail_gb(20000)
+    # Now the value is set
+    node = StorageNode.get(id=simplenode.id)
+
+    avail = node.avail_gb
+    assert avail == pytest.approx(20000.0 / 2.0**30)
+    assert node.avail_gb_last_checked == 0
+
+    # Test None with timestamp update
+    simplenode.update_avail_gb(None, update_timestamp=True)
+    node = StorageNode.get(id=simplenode.id)
+    assert node.avail_gb == avail
+    tdelta = node.avail_gb_last_checked - before
+    assert abs(tdelta.total_seconds()) <= 10
+
+    # Reset time
+    StorageNode.update(avail_gb_last_checked=0).where(
+        StorageNode.id == simplenode.id
+    ).execute()
+
+    # Test None with no timestamp update
     simplenode.update_avail_gb(None)
     node = StorageNode.get(id=simplenode.id)
     assert node.avail_gb == avail
-    assert node.avail_gb_last_checked >= after
+    assert node.avail_gb_last_checked == 0
 
 
 def test_edge_model(storagetransferaction, storagenode, storagegroup):

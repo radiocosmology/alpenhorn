@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alpenhorn.daemon import update
+from alpenhorn.daemon import host, update
 from alpenhorn.daemon.scheduler import FairMultiFIFOQueue, Task, pool
 from alpenhorn.db import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseGroupIO, BaseNodeIO
@@ -44,6 +44,47 @@ def mock_serial_io(dbtables):
         yield mock
 
 
+def test_sethost_config(daemon_host):
+    """Test setting daemon host with config"""
+
+    # The "daemon_host" fixture has already set the host in daemon.update
+    # let's temporarily undo that
+    update._host = None
+
+    # Check that resetting worked
+    assert host() is None
+
+    # Now set it again via the normal daemon method.
+    result = update._set_host()
+    assert result == daemon_host
+
+    assert host() == daemon_host
+
+
+def test_sethost_default(simplehost):
+    """Test setting daemon host with no config"""
+
+    # Mock StorageHost.get so we can capture the hostname that
+    # the daemon came up with
+    hostname = None
+
+    def _mock(name):
+        nonlocal hostname
+        hostname = name
+
+        # Then return the name of the simple host so _set_host will work
+        return simplehost
+
+    with patch("alpenhorn.db.StorageHost.get", _mock):
+        update._set_host()
+
+    assert "." not in hostname
+    assert len(hostname) > 0
+
+    # Reset the global
+    update._host = None
+
+
 def test_update_abort():
     """Test update_loop with global_abort set."""
 
@@ -59,7 +100,7 @@ def test_update_abort():
 
 
 def test_update_no_nodes(
-    hostname, dbtables, queue, emptypool, loop_once, mock_serial_io
+    daemon_host, dbtables, queue, emptypool, loop_once, mock_serial_io
 ):
     """Test update_loop with no active nodes."""
 
@@ -316,10 +357,10 @@ def test_update_group_cancelled(
     mockio.group.after_update.assert_called_once()
 
 
-def test_serialio_defer(xfs, simplenode, emptypool, queue, hostname):
+def test_serialio_defer(xfs, simplenode, emptypool, queue, daemon_host):
     """Test deferring tasks in serialio."""
 
-    simplenode.host = hostname
+    simplenode.host = daemon_host
     simplenode.save()
     xfs.create_file("/node/ALPENHORN_NODE", contents="simplenode")
 
@@ -345,17 +386,17 @@ def test_serialio_defer(xfs, simplenode, emptypool, queue, hostname):
     {"daemon": {"serial_io_timeout": 0.1, "update_interval": 0.1}}
 )
 def test_deactivate_update(
-    xfs, dbtables, emptypool, queue, storagegroup, storagenode, hostname
+    xfs, dbtables, emptypool, queue, storagegroup, storagenode, daemon_host
 ):
     """Test deactivating a node during update."""
 
     # Create groups and nodes
     group = storagegroup(name="group1")
     node1 = storagenode(
-        name="node1", group=group, root="/node1", host=hostname, active=True
+        name="node1", group=group, root="/node1", host=daemon_host, active=True
     )
     group = storagegroup(name="group2")
-    storagenode(name="node2", group=group, root="/node2", host=hostname, active=True)
+    storagenode(name="node2", group=group, root="/node2", host=daemon_host, active=True)
     xfs.create_file("/node1/ALPENHORN_NODE", contents="node1")
     xfs.create_file("/node2/ALPENHORN_NODE", contents="node2")
 
