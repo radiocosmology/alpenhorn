@@ -12,7 +12,6 @@ from ..options import (
     exactly_one,
     resolve_group,
     set_io_config,
-    set_storage_type,
 )
 
 
@@ -47,11 +46,6 @@ from ..options import (
     is_flag=True,
 )
 @cli_option(
-    "field",
-    help="Make node a field node (i.e. neither an archive node nor a transport "
-    "node).  This is the default.  Incompatible with --archive or --transport.",
-)
-@cli_option(
     "group",
     help="Add node to Storage Group GROUP, which must already exist.  "
     "Incompatible with --create-group",
@@ -66,7 +60,6 @@ from ..options import (
 @cli_option("min_avail", default=0, show_default=True)
 @cli_option("notes")
 @cli_option("root")
-@cli_option("transport")
 @cli_option("username")
 def create(
     node_name,
@@ -77,7 +70,6 @@ def create(
     auto_verify,
     io_class,
     create_group,
-    field,
     group,
     host,
     init,
@@ -87,7 +79,6 @@ def create(
     min_avail,
     notes,
     root,
-    transport,
     username,
 ):
     """Create a new Storage Node.
@@ -97,12 +88,6 @@ def create(
     All node must be part of a Storage Group.  Specify an existing Storage
     Group with --group, or else create a single-node group called NAME for
     this node with --create-group.
-
-    When the node is created, it must be assigned a role.  Use --archive to
-    specify an archive node, or --transport for transport nodes.  Using neither
-    of these flags makes the node a field node, which is the default.  The
-    --field flag can be used to explicitly indicate this, but that is not
-    required.
 
     A note on the distinction between HOST and ADDR: the host specifies which
     alpenhorn server instance is responsible for managing the node.  the address
@@ -119,7 +104,6 @@ def create(
         raise click.UsageError("--min-avail must be non-negative")
 
     io_config = set_io_config(io_config, io_var, {})
-    storage_type = set_storage_type(archive, field, transport)
 
     with database_proxy.atomic():
         # Check name
@@ -149,7 +133,7 @@ def create(
             active=activate,
             auto_import=auto_import,
             auto_verify=auto_verify,
-            storage_type=storage_type,
+            archive=archive,
             max_total_gb=max_total,
             min_avail_gb=min_avail,
             notes=notes,

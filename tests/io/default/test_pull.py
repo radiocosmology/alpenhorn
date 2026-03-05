@@ -89,7 +89,9 @@ def test_req(
     group_to = storagegroup(name="group_to")
     node_to = UpdateableNode(
         queue,
-        storagenode(name="node_to", group=group_to, host=hostname, root="/node_to"),
+        storagenode(
+            name="node_to", group=group_to, host=hostname, root="/node_to", archive=True
+        ),
     )
     node_from = storagenode(
         name="node_from",
@@ -99,6 +101,7 @@ def test_req(
         username="user",
         address="addr",
         active=True,
+        archive=True,
     )
 
     copy = archivefilecopy(file=simplefile, node=node_from, has_file="Y")
@@ -378,7 +381,7 @@ def test_pull_async_link_arccontam(queue, pull_async_true, skip_db_checks):
     node, _ = pull_async_true
 
     # Make one node non-archival
-    node.db.storage_type = "F"
+    node.db.archive = False
 
     # Call the async
     task, key = queue.get()
@@ -403,7 +406,7 @@ def test_pull_async_local_rsync_succeed(
     node, req = pull_async_true
 
     # Make one node non-archival to avoid hardlinking
-    node.db.storage_type = "F"
+    node.db.archive = False
 
     # Call the async
     task, key = queue.get()
@@ -435,7 +438,7 @@ def test_pull_async_local_rsync_fail(
     node, req = pull_async_true
 
     # Make one node non-archival to avoid hardlinking
-    node.db.storage_type = "F"
+    node.db.archive = False
 
     # Call the async
     task, key = queue.get()
@@ -470,7 +473,7 @@ def test_pull_fail_unlink(xfs, queue, have_rsync, pull_async_true, skip_db_check
     assert path.exists()
 
     # Force hardlinking to fail
-    node.db.storage_type = "T"
+    node.db.archive = False
 
     # Call the async
     task, key = queue.get()
@@ -581,7 +584,7 @@ def test_pull_async_path_local_copy(xfs, dbtables, test_req, queue, skip_db_chec
     unode, req = test_req
 
     # Make one node non-archival to avoid hardlinking
-    unode.db.storage_type = "F"
+    unode.db.arcvhie = False
 
     # Destination path
     dest = pathlib.Path("/dest/path")
@@ -602,7 +605,7 @@ def test_pull_async_path_rsync(
     unode, req = test_req
 
     # Make one node non-archival to avoid hardlinking
-    unode.db.storage_type = "F"
+    unode.db.archive = False
 
     # Destination path
     dest = pathlib.Path("/dest/path")

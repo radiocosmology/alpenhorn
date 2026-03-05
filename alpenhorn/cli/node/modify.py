@@ -12,14 +12,13 @@ from ..options import (
     resolve_group,
     resolve_node,
     set_io_config,
-    set_storage_type,
 )
 
 
 @click.command()
 @click.argument("name", metavar="NAME")
 @cli_option("address")
-@cli_option("archive")
+@cli_option("archive", default=None)
 @click.option(
     "--auto-import/--no-auto-import",
     help="Turn on/off auto-import for the node.",
@@ -28,7 +27,6 @@ from ..options import (
 )
 @cli_option("auto_verify")
 @cli_option("io_class")
-@cli_option("field")
 @cli_option("group", help="Move node to Storage Group GROUP, which must already exist")
 @cli_option("host")
 @cli_option("io_config")
@@ -40,7 +38,6 @@ from ..options import (
 @cli_option("min_avail")
 @cli_option("notes")
 @cli_option("root")
-@cli_option("transport")
 @cli_option("username")
 def modify(
     name,
@@ -49,7 +46,6 @@ def modify(
     auto_import,
     auto_verify,
     io_class,
-    field,
     group,
     host,
     io_config,
@@ -59,12 +55,11 @@ def modify(
     min_avail,
     notes,
     root,
-    transport,
     username,
 ):
     """Modify a Storage Node.
 
-    This modifies metadata for the Storage Node named NAME, updating field
+    This modifies metadata for the Storage Node named NAME, updating fields
     specified in the options.
 
     Other node metadata is modified in other ways:
@@ -87,8 +82,6 @@ def modify(
         raise click.UsageError("--auto-verify must be non-negative")
     if min_avail is not None and min_avail < 0:
         raise click.UsageError("--min-avail must be non-negative")
-
-    storage_type = set_storage_type(archive, field, transport, none_ok=True)
 
     with database_proxy.atomic():
         node = resolve_node(name)
@@ -116,6 +109,8 @@ def modify(
         elif max_total is not None and max_total != node.max_total_gb:
             updates["max_total_gb"] = max_total
 
+        if archive is not None and archive is not node.archive:
+            updates["archive"] = archive
         if auto_import is not None and auto_import is not node.auto_import:
             updates["auto_import"] = auto_import
         if auto_verify is not None and auto_verify != node.auto_verify:
@@ -126,8 +121,6 @@ def modify(
             updates["io_config"] = io_config
         if min_avail is not None and min_avail != node.min_avail_gb:
             updates["min_avail_gb"] = min_avail
-        if storage_type and storage_type != node.storage_type:
-            updates["storage_type"] = storage_type
 
         if updates:
             StorageNode.update(**updates).where(StorageNode.id == node.id).execute()
