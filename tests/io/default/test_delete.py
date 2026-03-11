@@ -1,25 +1,12 @@
 """Test DefaultNodeIO.delete()."""
 
 import pathlib
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from alpenhorn.db.archive import ArchiveFileCopy
 from alpenhorn.io.default import UpDownLock, delete_async, remove_filedir
-
-
-@pytest.fixture
-def mock_archive_count():
-    """Mock ArchiveFile.archive_count to return a
-    number big enough to allow deletion."""
-
-    @property
-    def _mock_archive_count(self):
-        return 6
-
-    with patch("alpenhorn.db.archive.ArchiveFile.archive_count", _mock_archive_count):
-        yield
 
 
 def test_zero_len(queue, unode):
@@ -30,94 +17,7 @@ def test_zero_len(queue, unode):
     assert queue.qsize == 0
 
 
-def test_ncopies(
-    xfs,
-    queue,
-    unode,
-    simplegroup,
-    storagenode,
-    simpleacq,
-    archivefile,
-    archivefilecopy,
-    storage_type="F",
-):
-    """Test not deleting from non-archival node
-    when there are not enough other copies of the file."""
-
-    # Need to make the containing directory
-    xfs.create_dir("/node/simpleacq")
-
-    unode.db.storage_type = storage_type
-    unode.db.save()
-
-    arc1 = storagenode(name="arc1", group=simplegroup, root="/arc1", storage_type="A")
-    arc2 = storagenode(name="arc2", group=simplegroup, root="/arc2", storage_type="A")
-
-    # Can't be deleted from node: only one archive copy
-    file1 = archivefile(name="file1", acq=simpleacq)
-    copy1 = archivefilecopy(file=file1, node=unode.db, has_file="Y")
-    archivefilecopy(file=file1, node=arc1, has_file="Y")
-
-    # Can't be deleted from node: only one archive copy
-    file2 = archivefile(name="file2", acq=simpleacq)
-    copy2 = archivefilecopy(file=file2, node=unode.db, has_file="Y")
-    archivefilecopy(file=file2, node=arc1, has_file="Y")
-    archivefilecopy(file=file2, node=arc2, has_file="N")
-
-    # Can be deleted from node: two archived copies
-    file3 = archivefile(name="file3", acq=simpleacq)
-    copy3 = archivefilecopy(file=file3, node=unode.db, has_file="Y")
-    archivefilecopy(file=file3, node=arc1, has_file="Y")
-    archivefilecopy(file=file3, node=arc2, has_file="Y")
-
-    unode.io.delete([copy1, copy2, copy3])
-
-    assert queue.qsize == 1
-
-    # Call the async
-    task, key = queue.get()
-    task()
-    queue.task_done(key)
-
-    # copy1 and copy2 aren't deleted, but copy3 is
-    assert list(
-        ArchiveFileCopy.select(ArchiveFileCopy.has_file)
-        .where(ArchiveFileCopy.node == unode.db)
-        .tuples()
-        .execute()
-    ) == [
-        ("Y",),
-        ("Y",),
-        ("N",),
-    ]
-
-
-def test_ncopies_archive(
-    xfs,
-    queue,
-    unode,
-    simplegroup,
-    storagenode,
-    simpleacq,
-    archivefile,
-    archivefilecopy,
-):
-    """Same as previous but on an archive node."""
-
-    test_ncopies(
-        xfs,
-        queue,
-        unode,
-        simplegroup,
-        storagenode,
-        simpleacq,
-        archivefile,
-        archivefilecopy,
-        storage_type="A",
-    )
-
-
-def test_delete_dirs(
+def test_delete_check(
     xfs,
     queue,
     simplegroup,
@@ -125,7 +25,59 @@ def test_delete_dirs(
     archiveacq,
     archivefile,
     archivefilecopy,
-    mock_archive_count,
+):
+    """The delete async calls the ArchiveFileCopy.check_delete."""
+    node = storagenode(name="node", group=simplegroup, root="/node")
+    acq = archiveacq(name="acq")
+    copy1 = archivefilecopy(
+        file=archivefile(name="file1", acq=acq),
+        node=node,
+        has_file="Y",
+    )
+    xfs.create_file(copy1.path, contents=copy1.file.name)
+    copy2 = archivefilecopy(
+        file=archivefile(name="file2", acq=acq),
+        node=node,
+        has_file="Y",
+    )
+    xfs.create_file(copy2.path, contents=copy2.file.name)
+
+    mock = MagicMock()
+    mock.return_value = False
+
+    with patch("alpenhorn.db.archive.ArchiveFileCopy.check_delete", mock):
+        # Call async directly with a fake UpDownLock
+        delete_async(None, UpDownLock(), [copy1, copy2])
+
+    # Nothing was deleted
+    assert ArchiveFileCopy.select().where(ArchiveFileCopy.has_file == "Y").count() == 2
+
+    # Check files
+    assert pathlib.Path(copy1.path).exists()
+    assert pathlib.Path(copy2.path).exists()
+
+    # Now do the same, but returning true
+    mock.return_value = True
+    with patch("alpenhorn.db.archive.ArchiveFileCopy.check_delete", mock):
+        delete_async(None, UpDownLock(), [copy1, copy2])
+
+    # Both were deleted
+    assert ArchiveFileCopy.select().where(ArchiveFileCopy.has_file == "Y").count() == 0
+
+    # Check files
+    assert not pathlib.Path(copy1.path).exists()
+    assert not pathlib.Path(copy2.path).exists()
+
+
+def test_delete_dirs(
+    xfs,
+    queue,
+    dbtables,
+    simplegroup,
+    storagenode,
+    archiveacq,
+    archivefile,
+    archivefilecopy,
 ):
     """Test deleting directories (and some files)."""
     node = storagenode(name="node", group=simplegroup, root="/node")
@@ -188,8 +140,12 @@ def test_delete_dirs(
     delete_copies = copies.copy()
     del delete_copies[2]
 
-    # Call async directly with a fake UpDownLock
-    delete_async(None, UpDownLock(), delete_copies)
+    with patch(
+        "alpenhorn.db.archive.ArchiveFileCopy.check_delete",
+        lambda discretionary=True: True,
+    ):
+        # Call async directly with a fake UpDownLock
+        delete_async(None, UpDownLock(), delete_copies)
 
     # Only copies[2] remains
     assert ArchiveFileCopy.select().where(ArchiveFileCopy.has_file == "Y").count() == 1

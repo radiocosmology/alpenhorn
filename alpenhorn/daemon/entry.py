@@ -34,6 +34,15 @@ sys.excepthook = log_exception
     metavar="FILE",
 )
 @click.option(
+    "no_integrity",
+    "--disable-archive-integrity",
+    is_flag=True,
+    help="Allow use of an alpenhorn config which violates alpenhorn's normal "
+    'data protection rules.  Specifically, if the "daemon.archive_copy_count" '
+    "is set to a value less than two, this flag is required to let the daemon "
+    "run in a mode where it cannot guarantee file preservation.",
+)
+@click.option(
     "once",
     "--exit-after-update",
     "-o",
@@ -52,7 +61,7 @@ sys.excepthook = log_exception
 @version_option
 @help_config_option
 @click.pass_context
-def entry(ctx, conf, once, test_isolation):
+def entry(ctx, conf, no_integrity, once, test_isolation):
     """Alpenhornd: data management daemon.
 
     The alpenhorn daemon can be used to manage Storage Nodes.  See the alpenhorn
@@ -70,6 +79,18 @@ def entry(ctx, conf, once, test_isolation):
 
     # Initialise alpenhorn
     start_alpenhorn(conf, cli=False)
+
+    # Warn about or bail if archive_copy_count is too small at start-up
+    if config.get_int("daemon.archive_copy_count", default=2, min=0) < 2:
+        log.error(
+            'Config parameter "daemon.archive_copy_count" too small '
+            "to guarantee archive integrity"
+        )
+        if not no_integrity:
+            raise click.ClickException(
+                "FATAL.  Data protection rules not satisfied and "
+                "--disable-archive-integrity not used."
+            )
 
     # Start the prometheus client, if appropriate.
     if not once:

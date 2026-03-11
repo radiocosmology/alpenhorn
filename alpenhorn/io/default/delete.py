@@ -101,24 +101,13 @@ def delete_async(
     # Node name
     name = copies[0].node.name
 
-    # The number archive copies needed to delete a copy.
-    # Need at least two _other_ copies to be able to delete a file.
-    copies_required = 3 if copies[0].node.archive else 2
-
     # Process candidates for deletion
     for copy in copies:
-        shortname = copy.file.path
-
-        # Archived count
-        ncopies = copy.file.archive_count
-
-        # If at least two _other_ copies exist, we can delete the file.
-        if ncopies < copies_required:
-            log.warning(
-                f"Too few archive copies ({ncopies}) to delete {shortname} on {name}."
-            )
+        # Re-run database checks
+        if not copy.check_delete():
             continue  # Skip this one
 
+        shortname = copy.file.path
         fullpath = copy.path
         try:
             fullpath.unlink()  # Remove the actual file

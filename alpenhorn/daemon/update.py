@@ -557,29 +557,14 @@ class UpdateableNode(updateable_base):
             )
             .order_by(ArchiveFileCopy.id)
         ):
-            # Only delete files marked for discretionary cleaning (wants_file == 'M')
-            # when we need to get back over min_avail_gb.  Because avail_needed
-            # decreases as we add files to the file deletion list, we'll never delete
+            # Check the database to see if this file can be deleted
+            #
+            # The value of "discretionary" here means we'll only delete files
+            # marked for discretionary cleaning (wants_file == 'M') when we need
+            # to get back over min_avail_gb.  Because avail_needed decreases as
+            # we add files to the file deletion list, we'll never try to delete
             # more of these than the amount of space we need to clear up.
-            if copy.wants_file == "M" and avail_needed <= 0:
-                continue
-
-            # Don't delete file copies which are the source for pending
-            # copy requests
-            if (
-                ArchiveFileCopyRequest.select()
-                .where(
-                    ArchiveFileCopyRequest.file == copy.file,
-                    ArchiveFileCopyRequest.node_from == self.db,
-                    ArchiveFileCopyRequest.completed == 0,
-                    ArchiveFileCopyRequest.cancelled == 0,
-                )
-                .count()
-            ):
-                log.info(
-                    f"Skipping delete of {copy.file.path} on node {self.name}: "
-                    "transfer pending"
-                )
+            if not copy.check_delete(discretionary=(avail_needed > 0)):
                 continue
 
             # If we are trying to get back above min_avail_gb, keep a running total
