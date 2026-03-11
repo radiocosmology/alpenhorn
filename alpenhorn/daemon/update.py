@@ -1040,13 +1040,6 @@ def update_loop(
         bound={"pool_type": type(pool).__name__},
     )
 
-    # Warn about archive_copy_count being too small at start-up, if needed
-    if config.get_int("daemon.archive_copy_count", default=2, min=0) < 2:
-        log.warning(
-            'Config parameter "daemon.archive_copy_count" too small '
-            "to guarantee archive integrity"
-        )
-
     while not global_abort.is_set():
         loop_start = time.time()
 
