@@ -114,9 +114,12 @@ Example config:
         update_interval: 60
 
         # Minimum number of copies of a file which must exist on archive nodes
-        # before any other copy of the file can be deleted.  WARNING: If this
-        # is set to a value less than two, alpenhorn will not be able to
-        # guarantee data integrity
+        # before any other copy of the file can be deleted.
+        #
+        # WARNING: Setting this to a value smaller than two violates the
+        # alpenhorn daemon's data integrity rules.  To acknowledge this and
+        # run with a value less that two, you will need to add to the daemon
+        # invocation the "--disable-archive-integrity" flag.
         archive_copy_count: 2
 
         # Period (in seconds) at which to poll the filesystem for new files to
