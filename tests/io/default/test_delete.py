@@ -39,7 +39,7 @@ def test_ncopies(
     simpleacq,
     archivefile,
     archivefilecopy,
-    storage_type="F",
+    archive=False,
 ):
     """Test not deleting from non-archival node
     when there are not enough other copies of the file."""
@@ -47,11 +47,11 @@ def test_ncopies(
     # Need to make the containing directory
     xfs.create_dir("/node/simpleacq")
 
-    unode.db.storage_type = storage_type
+    unode.db.archive = archive
     unode.db.save()
 
-    arc1 = storagenode(name="arc1", group=simplegroup, root="/arc1", storage_type="A")
-    arc2 = storagenode(name="arc2", group=simplegroup, root="/arc2", storage_type="A")
+    arc1 = storagenode(name="arc1", group=simplegroup, root="/arc1", archive=True)
+    arc2 = storagenode(name="arc2", group=simplegroup, root="/arc2", archive=True)
 
     # Can't be deleted from node: only one archive copy
     file1 = archivefile(name="file1", acq=simpleacq)
@@ -113,7 +113,7 @@ def test_ncopies_archive(
         simpleacq,
         archivefile,
         archivefilecopy,
-        storage_type="A",
+        archive=True,
     )
 
 
