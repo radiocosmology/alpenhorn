@@ -456,7 +456,7 @@ database schema used to create the Data Index and the pattern importer's tables:
 
    root@alpenshell:/# alpenhorn db init
    Data Index version 2 initialised.
-   Component "pattern_importer" version 1 initialised.
+   Component "pattern_importer" version 2 initialised.
 
 .. tip::
    It's worth pointing out at this point that the ``alpenhorn`` CLI can be run from
@@ -512,18 +512,18 @@ same name, though that's not required.)
 .. code:: console
    :class: demoshell
 
-   alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import --root=/data --host=alpenhost1
+   alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import --root=/data
 
 This command will create a new StorageNode called ``demo_storage1`` and
 put it in the identically-named group. Auto-import (automatic monitoring for
-new files) will be turned on; the mount point in the filesystem will be set
-to ``/data`` and we declare it to be available on host ``alpenhost1``:
+new files) will be turned on and the mount point in the filesystem will be set
+to ``/data``:
 
 .. code:: console
    :class: demoshell
 
    root@alpenshell:/# alpenhorn node create demo_storage1 --group=demo_storage1 --auto-import
-                 --root=/data --host=alpenhost1
+                 --root=/data
    Created storage node "demo_storage1".
 
 That's enough to get us started.
@@ -537,17 +537,57 @@ That's enough to get us started.
 Start the first daemon
 ----------------------
 
+Set up the first StorageHost
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before we can start the first daemon, we need to create a `StorageHost` to
+associate with the daemon instance we want to run.  The name of the
+`StorageHost` on which a daemon runs is usually specified via a ``daemon.host``
+entry in the alpenhorn config.  If no such entry exists in the config (like is
+the case in this demo), then the daemon will fall back on using the hostname of
+the machine it's running on as the `StorageHost` name.
+
+We need to create the `StorageHost` record before starting the daemon: trying to
+run a daemon with a non-existent `StorageHost` would result in a fatal error.
+For now, we can create the necessary entry with a this simple CLI command:
+
+.. code:: console
+   :class: demohost
+
+   alpenhorn host create alpenhost1
+
+Now that we have a host record, we can indicate that the ``demo_storage1`` is
+present on this host as well by modifying its properties:
+
+.. code:: console
+   :class: demohost
+
+   alpenhorn node modify demo_storage1 --host=alpenhost1
+
+These two commands are enough to set things up to get the first daemon running:
+
+.. code:: console
+   :class: demohost
+
+   root@alpenshell:/# alpenhorn host create alpenhost1
+   Created storage host "alpenhost1"
+   root@alpenshell:/# alpenhorn node modify demo_storage1 --host=alpenhost1
+   Node updated.
+
+Start the daemon
+~~~~~~~~~~~~~~~~
+
 Now it's time to start the first daemon. The alpenhorn container image is
-designed to run the alpenhorn daemon automatically. Start the first host container
-by running the ``docker compose up`` command:
+designed to run the alpenhorn daemon automatically. Start the first host
+container by running the ``docker compose up`` command:
 
 .. code:: console
    :class: demohost
 
    docker compose up --detach alpenhost1
 
-Note: if you're following along with this demo, the database container
-should already be running:
+Note: if you're following along with this demo, the database container,
+which this one depends on, should already be running:
 
 .. code:: console
    :class: demohost
@@ -575,15 +615,19 @@ update.) You'll see the alpenhorn daemon start up:
 
    alpenhost1-1  | Feb 21 00:38:32 INFO >> [MainThread] Alpenhorn start.
    alpenhost1-1  | Feb 21 00:38:32 INFO >> [MainThread] Loading config file /etc/alpenhorn/alpenhorn.conf
-   alpenhost1-1  | Feb 21 00:38:32 INFO >> [MainThread] Loading extension pattern_importer
+   alpenhost1-1  | Feb 21 00:38:32 INFO >> [MainThread] Loading extension module: pattern_importer
+   alpenhost1-1  | Feb 21 00:38:32 INFO >> [MainThread] Initialised Extension pattern_importer.PatternImporterDB v2.0.0rc2
+   alpenhost1-1  | Feb 21 00:38:32 INFO >> [MainThread] Initialised Extension pattern_importer.PatternImporterDetect v2.0.0rc2
    alpenhost1-1  | Feb 21 00:38:32 INFO >> [Worker#1] Started.
    alpenhost1-1  | Feb 21 00:38:32 INFO >> [Worker#2] Started.
 
 Two worker threads are started because that's what's specified in the
 ``alpenhornd.conf`` file. It has also loaded the ``pattern_exporter``
-extension, since that's also specified in the config file.
+extension module, since that's also specified in the config file, and
+initialised the two extensions that the module provides.
 
-Almost immediately, the daemon will notice that there are no *active*
+Even though we've associated ``demo_storage1`` with the host ``alpenhost1``,
+almost immediately, the daemon will notice that there are no *active*
 nodes on ``alpenhost1``. It will perform this check roughly every ten
 seconds, which is the update interval time set in the ``alpenhornd.conf`` file.
 
@@ -666,7 +710,7 @@ node being initialised by one of the daemon workers:
    alpenhost1-1  | Feb 21 00:40:52 INFO >> [Worker#1] Finished task: Init Node "demo_storage1"
 
 After initialisation is complete, the daemon will finally be happy with
-the Storage Node and start the auto-import monitor. The start of
+the `StorageNode` and start the auto-import monitor. The start of
 auto-import triggers a "catch-up" job which searches for unknown,
 pre-existing files that need import. As this is an empty node, though,
 it won't find anything:
@@ -849,7 +893,7 @@ the ``demo_storage1`` node:
 Auto-importing files and temporary names
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Another option for writing files to a node filesystem when auto-import
+Another option for writing files to a node's filesystem when auto-import
 is turned on, is to use a temporary name for the file which will cause
 alpenhorn to decline to import the file. The import extensions which
 you're using may provide a namespace for such files, as is the case with
@@ -969,7 +1013,7 @@ node by checking its metadata after the ``modify`` command:
              Notes:
          I/O Class: Default
 
-       Daemon Host: alpenhost1
+      Storage Host: alpenhost1
     Log-in Address:
    Log-in Username:
 
@@ -1098,12 +1142,13 @@ Starting up the second and third nodes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Before being able to transfer files, we need to create somewhere to
-transfer them to. We'll start by creating the second storage node on the
-second host:
+transfer them to. We'll start by creating both the second storage host and the
+storage node on the second host:
 
 .. code:: console
    :class: demoshell
 
+   alpenhorn host create alpenhost2
    alpenhorn node create demo_storage2 --create-group --root=/data --host=alpenhost2
 
 .. hint::
@@ -1111,11 +1156,13 @@ second host:
    create a `StorageGroup` for the new node with the same name (i.e. the same
    thing we did manually for ``demo_storage1`` above)
 
-This will create the second node:
+These commands will create a host, a group, and a node:
 
 .. code:: console
    :class: demoshell
 
+   root@alpenshell:/# alpenhorn host create alpenhost2
+   Created storage host "alpenhost2".
    root@alpenshell:/# alpenhorn node create demo_storage2 --create-group --root=/data --host=alpenhost2
    Created storage group "demo_storage2".
    Created storage node "demo_storage2".
@@ -1150,7 +1197,7 @@ alpenhorn CLI:
              Notes:
          I/O Class: Default
 
-       Daemon Host: alpenhost2
+      Storage Host: alpenhost2
     Log-in Address:
    Log-in Username:
 
@@ -1205,53 +1252,57 @@ This node is initially empty:
 Before starting transfers we have to record log-in details for the hosts
 containing the nodes. alpenhorn uses SSH to log in to remote nodes when
 performing transfers, meaning we need to specify a username and login-in
-address for the node. For ``demo_storage1``, which is already active we
-can do this by modifying the node record:
+address for the host. We can do this by modifying the existing `StorageHost`
+records:
 
 .. code:: console
    :class: demoshell
 
-   alpenhorn node modify demo_storage1 --username root --address alpenhost1
+   alpenhorn host modify alpenhost1 --username root --address alpenhost1
+   alpenhorn host modify alpenhost2 --username root --address alpenhost2
 
-For the second node, we can do it when we activate it. We could have
-also specified these values when we created the node:
-
-.. code:: console
-   :class: demoshell
-
-   alpenhorn node activate demo_storage2 --username root --address alpenhost2
+We could have also specified these values when we created them.
 
 .. tip::
-   It's very important to distinguish the name used for a node's *host*
-   (where the daemon managing the node is running) and the node's *address*
-   (the name or IP address used by remote daemons to access the node via SSH).
-   Often these two fields have the same value, but there's no requirement that
+   It's very important to distinguish the *name* of a `StorageHost` (an
+   alpenhorn-specific value used when associating a running daemon with
+   one or more storage nodes), and the host's *address* (the name or IP
+   address used by remote daemons to access the node via SSH).  In this demo,
+   these two fields have the same value, but there's no requirement that
    they do.
 
-Let's start up the second alpenhorn container to get the second node
-running:
+Let's also activate the second storage node, so that it's ready to go when we
+start the second daemon:
+
+.. code:: console
+   :class: demoshell
+
+   alpenhorn node activate demo_storage2
+
+With that done, it's start up the second alpenhorn container to get the second
+host running:
 
 .. code:: console
    :class: demohost
 
    docker compose up --detach alpenhost2
 
-You can monitor this nodes in the same way you did with alpenhost1:
+You can monitor this container in the same way you did with alpenhost1:
 
 .. code:: console
    :class: demohost
 
    docker compose logs alpenhost2
 
-but it's also possible to monitor all nodes at once:
+but it's also possible to monitor all containers at once:
 
 .. code:: console
    :class: demohost
 
    docker compose logs --follow
 
-For now, the new node should initialise itself, and then idle: there are
-no pending requests:
+For now, the new node should get initialised by the new daemon, and then go idle:
+there are no pending requests:
 
 .. code:: console
    :class: demohost
@@ -1305,18 +1356,8 @@ This will submit a new transfer request:
 
 Transfers are always handled on the receiving side (that is: by the daemon
 which considers the destination StorageGroup to be available). After, perhaps,
-a short while, the daemon on ``alpenhost2`` will notice this request. First,
-it will look at the local filesystem to see if the requested file
-already exists. If it did, there would be no need for a transfer:
-
-.. code:: console
-   :class: demohost
-
-   alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#2] Beginning task Pre-pull search for 2025/02/21/meta.txt in demo_storage2
-   alpenhost2-1  | Feb 26 23:18:52 INFO >> [Worker#2] Finished task: Pre-pull search for 2025/02/21/meta.txt in demo_storage2
-
-But, in this case, the search will fail to find an existing copy of the
-file, so then a file transfer will be started:
+a short while, the daemon on ``alpenhost2`` will notice this request and run a
+file transfer task on one of the workers:
 
 .. code:: console
    :class: demohost
@@ -1329,9 +1370,9 @@ file, so then a file transfer will be started:
 
 .. note::
    The default tool for remote transfers is ``rsync``, but alpenhorn will
-   also try to use `bbcp <https://www.slac.stanford.edu/~abh/bbcp/>`__, a
-   GridFTP implementation, which may allow for higher-rate transfers, if it
-   is available on to the daemon.
+   also try to use `bbcp <https://github.com/bbcp/bbcp>`__, a GridFTP
+   implementation, which may allow for higher-rate transfers, if it
+   is available to the daemon.
 
 Now there is one file on ``demo_storage2``:
 
@@ -1350,7 +1391,7 @@ to see that this file now exists on that node:
 .. code:: console
    :class: demohost
 
-   $ docker container run alpenhost2 find /data
+   $ docker compose run alpenhost2 find /data
    /data
    /data/ALPENHORN_NODE
    /data/2025
@@ -1750,7 +1791,7 @@ that it now has the "archive" flag set:
              Notes:
          I/O Class: Default
 
-       Daemon Host: alpenhost2
+      Storage Host: alpenhost2
     Log-in Address: alpenhost2
    Log-in Username: root
 
@@ -1778,14 +1819,15 @@ delete is now found on one archive node (out of the two needed):
 We'll need another archive node with this file on it if we want the
 deletion to happen. So, let's set up the final storage host, ``alpenhost3``.
 
-First let's create the storage node in the database. We'll make this one
-an archive node when we create it:
+First let's create the storage node in the database, as well as a record for
+the third storage host. We'll make this node an archive node when we create it:
 
 .. code:: console
    :class: demoshell
-
+ 
+   alpenhorn host create alpenhost3 --username root --address alpenhost3
    alpenhorn node create demo_storage3 --create-group --archive --root=/data --host=alpenhost3 \
-                                       --username root --address alpenhost3 --init --activate
+                                       --init --activate
 
 .. tip::
    The ``--init`` and ``--activate`` flags save us from having to run those
@@ -2118,7 +2160,7 @@ Auto-clean actions can be seen in the metadata for the node or group:
              Notes:
          I/O Class: Default
 
-       Daemon Host: alpenhost1
+      Storage Host: alpenhost1
     Log-in Address: alpenhost1
    Log-in Username: root
 
@@ -2260,7 +2302,8 @@ those media once they have been transported to a data ingest site.
 
 To demonstrate this, we'll use a transport device to simulate
 transferring data back from ``demo_storage3`` to ``demo_storage1``, as
-if these two nodes were unable to communicate directly over the network.
+if the hosts containing these two nodes were unable to communicate
+directly over the network.
 
 The Transport Group and Transport Nodes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2459,8 +2502,7 @@ designed with this use case in mind:
 .. code:: console
    :class: demoshell
 
-   alpenhorn node activate transport1 --host=alpenhost1 --username=root \
-                           --address=alpenhost1 --root=/mnt/transport
+   alpenhorn node activate transport1 --host=alpenhost1 --root=/mnt/transport
 
 The node (and also the group) will now appear to the daemon on ``alpenhost1``:
 
