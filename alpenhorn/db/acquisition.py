@@ -74,7 +74,7 @@ class ArchiveFile(base_model):
             self.copies.join(StorageNode)
             .select()
             .where(
-                StorageNode.storage_type == "A",
+                StorageNode.archive == 1,
                 ArchiveFileCopy.has_file == "Y",
             )
             .count()

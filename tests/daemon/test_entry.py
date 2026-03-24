@@ -78,6 +78,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         root="/dft",
         host=hostname,
         active=True,
+        archive=True,
         auto_import=True,
     )
     xfs.create_file("/dft/ALPENHORN_NODE", contents="dftnode")
@@ -89,7 +90,6 @@ def e2e_db(xfs, clidb_noinit, hostname):
     fleet = StorageGroup.create(name="fleet", io_class="Transport")
     tp1 = StorageNode.create(
         name="tp1",
-        storage_type="T",
         group=fleet,
         root="/tp/one",
         host=hostname,
@@ -97,7 +97,6 @@ def e2e_db(xfs, clidb_noinit, hostname):
     )
     tp2 = StorageNode.create(
         name="tp2",
-        storage_type="T",
         group=fleet,
         root="/tp/two",
         host=hostname,
@@ -118,6 +117,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         root="/nl1",
         host=hostname,
         active=True,
+        archive=True,
         avail_gb=2000.0 / 2**30,
         io_config=(
             '{"quota_id": "qid", "quota_type": "project", '
@@ -125,7 +125,7 @@ def e2e_db(xfs, clidb_noinit, hostname):
         ),
     )
     sf1 = StorageNode.create(
-        name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True
+        name="sf1", group=nlgrp, root="/sf1", host=hostname, active=True, archive=True
     )
     xfs.create_file("/sf1/ALPENHORN_NODE", contents="sf1")
 

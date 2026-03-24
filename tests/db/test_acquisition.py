@@ -95,49 +95,49 @@ def test_archive_count(simplegroup, storagenode, simplefile, archivefilecopy):
     # Create a bunch of copies in various states on various node types
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n1", group=simplegroup, storage_type="A"),
+        node=storagenode(name="n1", group=simplegroup, archive=True),
         has_file="N",
     )
     assert simplefile.archive_count == 0
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n2", group=simplegroup, storage_type="F"),
+        node=storagenode(name="n2", group=simplegroup, archive=False),
         has_file="Y",
     )
     assert simplefile.archive_count == 0
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n3", group=simplegroup, storage_type="T"),
+        node=storagenode(name="n3", group=simplegroup, archive=False),
         has_file="Y",
     )
     assert simplefile.archive_count == 0
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n4", group=simplegroup, storage_type="F"),
+        node=storagenode(name="n4", group=simplegroup, archive=False),
         has_file="Y",
     )
     assert simplefile.archive_count == 0
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n5", group=simplegroup, storage_type="A"),
+        node=storagenode(name="n5", group=simplegroup, archive=True),
         has_file="Y",
     )
     assert simplefile.archive_count == 1
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n6", group=simplegroup, storage_type="A"),
+        node=storagenode(name="n6", group=simplegroup, archive=True),
         has_file="X",
     )
     assert simplefile.archive_count == 1
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n7", group=simplegroup, storage_type="A"),
+        node=storagenode(name="n7", group=simplegroup, archive=True),
         has_file="M",
     )
     assert simplefile.archive_count == 1
     archivefilecopy(
         file=simplefile,
-        node=storagenode(name="n8", group=simplegroup, storage_type="A"),
+        node=storagenode(name="n8", group=simplegroup, archive=True),
         has_file="Y",
     )
     assert simplefile.archive_count == 2
