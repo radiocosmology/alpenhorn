@@ -178,6 +178,143 @@ def test_copy_path(simplefile, simplenode, archivefilecopy):
     )
 
 
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
+def test_copy_check_delete_wants(set_config, dbtables, simplecopy):
+    """Test wants_file with ArchiveFileCopy.check_delete."""
+
+    simplecopy.has_file = "Y"
+    simplecopy.wants_file = "Y"
+    simplecopy.save()
+    assert not simplecopy.check_delete(discretionary=True)
+    assert not simplecopy.check_delete(discretionary=False)
+    assert not simplecopy.check_delete()
+
+    simplecopy.wants_file = "M"
+    simplecopy.save()
+    assert simplecopy.check_delete(discretionary=True)
+    assert not simplecopy.check_delete(discretionary=False)
+    # By default, discretionary deletion is on
+    assert simplecopy.check_delete()
+
+    simplecopy.wants_file = "N"
+    simplecopy.save()
+    assert simplecopy.check_delete(discretionary=True)
+    assert simplecopy.check_delete(discretionary=False)
+    assert simplecopy.check_delete()
+
+
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 0}})
+def test_copy_check_delete_has(set_config, dbtables, simplecopy):
+    """Test has_file with ArchiveFileCopy.check_delete."""
+
+    # Make the file deletable
+    simplecopy.wants_file = "N"
+
+    simplecopy.has_file = "Y"
+    simplecopy.save()
+    assert simplecopy.check_delete()
+
+    simplecopy.has_file = "M"
+    simplecopy.save()
+    assert simplecopy.check_delete()
+
+    simplecopy.has_file = "X"
+    simplecopy.save()
+    assert simplecopy.check_delete()
+
+    # This is the only one that blocks deletion
+    simplecopy.has_file = "N"
+    simplecopy.save()
+    assert not simplecopy.check_delete()
+
+
+def test_copy_check_delete_arcount(
+    dbtables, daemon_host, simplefile, simplegroup, storagenode, archivefilecopy
+):
+    """Test archive copy count in ArchiveFileCopy.check_delete."""
+
+    arc1 = storagenode(name="arc1", group=simplegroup, archive=True)
+    arc2 = storagenode(name="arc2", group=simplegroup, archive=True)
+
+    # This is the node we're deleting from
+    node = storagenode(name="node", group=simplegroup, archive=True)
+
+    # This is the copy we want to delete
+    copy = archivefilecopy(file=simplefile, node=node, has_file="Y", wants_file="N")
+
+    # This fails (no archive copies)
+    assert not copy.check_delete()
+
+    # First archive copy
+    archivefilecopy(file=simplefile, node=arc1, has_file="Y", wants_file="Y")
+    assert not copy.check_delete()
+
+    # Second archive copy
+    archivefilecopy(file=simplefile, node=arc2, has_file="Y", wants_file="Y")
+    # Now it succeeds
+    assert copy.check_delete()
+
+
+def test_copy_check_delete_from_arc(
+    dbtables, simplefile, simplegroup, storagenode, archivefilecopy
+):
+    """Test archive copy count in ArchiveFileCopy.check_delete on an archive node."""
+
+    arc1 = storagenode(name="arc1", group=simplegroup, archive=True)
+    arc2 = storagenode(name="arc2", group=simplegroup, archive=True)
+
+    # This is the node we're deleting from
+    node = storagenode(name="node", group=simplegroup, archive=True)
+
+    # This is the copy we want to delete
+    copy = archivefilecopy(file=simplefile, node=node, has_file="Y", wants_file="N")
+
+    # This fails (no archive copies)
+    assert not copy.check_delete()
+
+    # First archive copy
+    archivefilecopy(file=simplefile, node=arc1, has_file="Y", wants_file="Y")
+    assert not copy.check_delete()
+
+    # Second archive copy
+    archivefilecopy(file=simplefile, node=arc2, has_file="Y", wants_file="Y")
+    # Now it succeeds
+    assert copy.check_delete()
+
+
+@pytest.mark.alpenhorn_config({"daemon": {"archive_copy_count": 3}})
+def test_copy_check_delete_arcount_config(
+    dbtables, set_config, simplefile, simplegroup, storagenode, archivefilecopy
+):
+    """Test archive copy count in ArchiveFileCopy.check_delete with config."""
+
+    arc1 = storagenode(name="arc1", group=simplegroup, archive=True)
+    arc2 = storagenode(name="arc2", group=simplegroup, archive=True)
+    arc3 = storagenode(name="arc3", group=simplegroup, archive=True)
+
+    # This is the node we're deleting from
+    node = storagenode(name="node", group=simplegroup, archive=True)
+
+    # This is the copy we want to delete
+    copy = archivefilecopy(file=simplefile, node=node, has_file="Y", wants_file="N")
+
+    # This fails (no archive copies)
+    assert not copy.check_delete()
+
+    # First archive copy
+    archivefilecopy(file=simplefile, node=arc1, has_file="Y", wants_file="Y")
+    assert not copy.check_delete()
+
+    # Second archive copy, still doesn't work
+    archivefilecopy(file=simplefile, node=arc2, has_file="Y", wants_file="Y")
+    assert not copy.check_delete()
+
+    # Third archive copy
+    archivefilecopy(file=simplefile, node=arc3, has_file="Y", wants_file="Y")
+    # Now it succeeds
+    assert copy.check_delete()
+
+
 def test_archivefileimportrequest_model(
     simplegroup, storagenode, archivefileimportrequest
 ):

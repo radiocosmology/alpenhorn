@@ -20,10 +20,8 @@ import pathlib
 import shutil
 import sys
 from unittest.mock import patch
-from urllib.parse import quote as urlquote
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from alpenhorn.daemon.entry import entry
@@ -299,30 +297,6 @@ def mock_rsync(xfs):
             yield
 
 
-@pytest.fixture
-def e2e_config(xfs, hostname, clidb_uri):
-    """Fixture creating the config file for the end-to-end test."""
-
-    # The config.
-    #
-    # The weird value for "url" here gets around playhouse.db_url not
-    # url-decoding the netloc of the supplied URL.  The netloc is used
-    # as the "database" value, so to get the URI in there, we need to pass
-    # it as a parameter, which WILL get urldecoded and supercede the empty
-    # netloc.
-    config = {
-        "extensions": [
-            "pattern_importer",
-        ],
-        "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
-        "logging": {"level": "debug"},
-        "daemon": {"host": hostname, "num_workers": 0, "update_interval": 1},
-    }
-
-    # Put it in a file
-    xfs.create_file("/etc/alpenhorn/alpenhorn.conf", contents=yaml.dump(config))
-
-
 @pytest.mark.lfs_hsm_state(
     {
         "/nl2/acq1/correct.me": "restored",
@@ -331,7 +305,14 @@ def e2e_config(xfs, hostname, clidb_uri):
     }
 )
 @pytest.mark.lfs_hsm_restore_result("restore")
-def test_cli(e2e_db, e2e_config, mock_lfs, mock_rsync):
+@pytest.mark.alpenhorn_config(
+    {
+        "extensions": [
+            "pattern_importer",
+        ]
+    }
+)
+def test_cli(e2e_db, config_file, mock_lfs, mock_rsync):
     runner = CliRunner()
 
     result = runner.invoke(entry, ["--once"], catch_exceptions=False)
