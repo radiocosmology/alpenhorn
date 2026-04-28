@@ -147,6 +147,35 @@ def set_config(request, logger, reset_extensions):
 
 
 @pytest.fixture
+def config_file(request, xfs, hostname, clidb_uri):
+    """Write an alpenhorn config file in the fake filesystem.
+
+    Writes a standard daemon config to the file.  If the alpenhorn_config mark
+    is used, that will be used to update the config before it's written
+    to disk.
+    """
+
+    # The config.
+    #
+    # The weird value for "url" here gets around playhouse.db_url not
+    # url-decoding the netloc of the supplied URL.  The netloc is used
+    # as the "database" value, so to get the URI in there, we need to pass
+    # it as a parameter, which WILL get urldecoded and supercede the empty
+    # netloc.
+    alpenconfig = {
+        "database": {"url": "sqlite:///?database=" + urlquote(clidb_uri) + "&uri=true"},
+        "logging": {"level": "debug"},
+        "daemon": {"host": hostname, "num_workers": 0, "update_interval": 1},
+    }
+    marker = request.node.get_closest_marker("alpenhorn_config")
+    if marker is not None:
+        alpenconfig = config.merge_dict_tree(alpenconfig, marker.args[0])
+
+    # Put it in a file
+    xfs.create_file("/etc/alpenhorn/alpenhorn.conf", contents=yaml.dump(alpenconfig))
+
+
+@pytest.fixture
 def mock_run_command(request, set_config):
     """Mock alpenhorn.daemon.proc.run_command to _not_ run a command.
 
