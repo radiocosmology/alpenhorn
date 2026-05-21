@@ -499,14 +499,22 @@ def pull_async(
 
     # Create directories.  This must be done while locking up the tree lock
     with tree_lock.up:
-        if not to_dir.exists():
-            log.info(f'Creating directory "{to_dir}".')
-            to_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            if not to_dir.exists():
+                log.info(f'Creating directory "{to_dir}".')
+                to_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.error(f"Unable to create directory: {e}")
+            return
 
         # If the file doesn't exist, create a placeholder so we can release
         # the tree lock without having to wait for the transfer to complete
-        if not to_file.exists():
-            placeholder.touch(mode=0o600, exist_ok=True)
+        try:
+            if not to_file.exists():
+                placeholder.touch(mode=0o600, exist_ok=True)
+        except OSError as e:
+            log.error(f'Unable to create placeholder "{placeholder}": {e}')
+            return
 
     # Giddy up!
     start_time = time.time()
