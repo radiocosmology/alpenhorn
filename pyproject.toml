@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 prometheus = [
-  "prometheus_client"
+  "prometheus_client >= 0.18.0"
 ]
 dist = [
   "build",
