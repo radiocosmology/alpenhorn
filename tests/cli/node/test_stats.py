@@ -141,7 +141,7 @@ def test_extra(some_nodes, cli, assert_row_present):
 
     result = cli(0, ["node", "stats", "--extra-stats"])
 
-    assert_row_present(result.output, "Node1", 2, "3.000 GiB", "30.00", "-", "1", "-")
-    assert_row_present(result.output, "Node2", 0, "-", "-", "-", "-", "1")
+    assert_row_present(result.output, "Node1", 2, "3.000 GiB", "30.00", "-", "2", "-")
+    assert_row_present(result.output, "Node2", 0, "-", "-", "-", "-", "2")
     assert_row_present(result.output, "Node3", 0, "-", "-", "-", "-", "-")
     assert_row_present(result.output, "Node4", 1, "1.000 GiB", "5.00", "1", "-", "-")
