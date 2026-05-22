@@ -41,7 +41,6 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
         .join(ArchiveFile, pw.JOIN.LEFT_OUTER)
         .where(
             ArchiveFileCopy.has_file == "Y",
-            ArchiveFileCopy.wants_file == "Y",
             StorageNode.id << nodes,
         )
         .group_by(StorageNode.id)
@@ -66,7 +65,6 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
             .join(ArchiveFileCopy, pw.JOIN.LEFT_OUTER)
             .where(
                 ArchiveFileCopy.has_file == "X",
-                ArchiveFileCopy.wants_file == "Y",
                 StorageNode.id << nodes,
             )
             .group_by(StorageNode.id)
@@ -83,7 +81,6 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
             .join(ArchiveFileCopy, pw.JOIN.LEFT_OUTER)
             .where(
                 ArchiveFileCopy.has_file == "M",
-                ArchiveFileCopy.wants_file == "Y",
                 StorageNode.id << nodes,
             )
             .group_by(StorageNode.id)
@@ -100,7 +97,6 @@ def get_stats(nodes: list[StorageNode], extra_stats: bool) -> dict[int, dict]:
             .join(ArchiveFileCopy, pw.JOIN.LEFT_OUTER)
             .where(
                 ArchiveFileCopy.has_file == "N",
-                ArchiveFileCopy.wants_file == "Y",
                 StorageNode.id << nodes,
             )
             .group_by(StorageNode.id)
