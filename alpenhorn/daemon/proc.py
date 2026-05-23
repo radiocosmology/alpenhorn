@@ -180,7 +180,9 @@ def md5sum_file(filename: str | os.PathLike) -> str | None:
     metric = Metric("hash_running_count", "Count of in-progress MD5 hashing")
 
     metric.inc()
-    result = asyncio.run(_md5sum_file(filename))
-    metric.dec()
+    try:
+        result = asyncio.run(_md5sum_file(filename))
+    finally:
+        metric.dec()
 
     return result
