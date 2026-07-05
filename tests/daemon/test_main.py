@@ -1,11 +1,12 @@
-"""Tests for the alpenhorn.update module."""
+"""Test alpenhorn.daemon.main."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alpenhorn.daemon import host, update
+from alpenhorn.daemon import host, main
 from alpenhorn.daemon.scheduler import FairMultiFIFOQueue, Task, pool
+from alpenhorn.daemon.update import UpdateableGroup, UpdateableNode
 from alpenhorn.db import StorageGroup, StorageNode
 from alpenhorn.io.base import BaseGroupIO, BaseNodeIO
 
@@ -40,22 +41,22 @@ def mock_serial_io(dbtables):
     """
 
     mock = MagicMock()
-    with patch("alpenhorn.daemon.update.serial_io", mock):
+    with patch("alpenhorn.daemon.main.serial_io", mock):
         yield mock
 
 
 def test_sethost_config(daemon_host):
     """Test setting daemon host with config"""
 
-    # The "daemon_host" fixture has already set the host in daemon.update
+    # The "daemon_host" fixture has already set the host in daemon.main
     # let's temporarily undo that
-    update._host = None
+    main._host = None
 
     # Check that resetting worked
     assert host() is None
 
     # Now set it again via the normal daemon method.
-    result = update._set_host()
+    result = main._set_host()
     assert result == daemon_host
 
     assert host() == daemon_host
@@ -76,13 +77,13 @@ def test_sethost_default(simplehost):
         return simplehost
 
     with patch("alpenhorn.db.StorageHost.get", _mock):
-        update._set_host()
+        main._set_host()
 
     assert "." not in hostname
     assert len(hostname) > 0
 
     # Reset the global
-    update._host = None
+    main._host = None
 
 
 def test_update_abort():
@@ -93,7 +94,7 @@ def test_update_abort():
 
     # This should do nothing except exit, so passing
     # a couple of Nones shouldn't be a problem
-    update.update_loop(None, None, False)
+    main.update_loop(None, None, False)
 
     # Reset
     pool.global_abort.clear()
@@ -104,7 +105,7 @@ def test_update_no_nodes(
 ):
     """Test update_loop with no active nodes."""
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     mock_serial_io.assert_called_once_with(queue)
 
@@ -123,7 +124,7 @@ def test_update_node_not_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -147,7 +148,7 @@ def test_update_node_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -170,7 +171,7 @@ def test_update_node_cancelled(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -201,7 +202,7 @@ def test_serial_io(fastqueue, set_config):
     assert fastqueue.qsize == 3
 
     # Run serial_io
-    update.serial_io(fastqueue)
+    main.serial_io(fastqueue)
 
     # Now the queue is empty
     assert fastqueue.qsize == 0
@@ -233,11 +234,11 @@ def test_ioload(storagegroup, storagenode, queue, mock_lfs):
         )
 
     for node in StorageNode.select().execute():
-        unode = update.UpdateableNode(queue, node)
+        unode = UpdateableNode(queue, node)
         assert isinstance(unode.io, BaseNodeIO)
 
     for group in StorageGroup.select().execute():
-        ugroup = update.UpdateableGroup(queue=queue, group=group, nodes=[], idle=True)
+        ugroup = UpdateableGroup(queue=queue, group=group, nodes=[], idle=True)
         assert isinstance(ugroup.io, BaseGroupIO)
 
 
@@ -261,7 +262,7 @@ def test_update_group_not_idle_node(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Node update started
     mockio.node.before_update.assert_called_once()
@@ -298,7 +299,7 @@ def test_update_group_not_idle_group(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Idle update didn't happen
     mockio.group.idle_update.assert_not_called()
@@ -320,7 +321,7 @@ def test_update_group_idle(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Group update started
     mockio.group.before_update.assert_called_once()
@@ -345,7 +346,7 @@ def test_update_group_cancelled(
 
     xfs.create_file("/mocknode/ALPENHORN_NODE", contents="mocknode")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Group update started
     mockio.group.before_update.assert_called_once()
@@ -376,7 +377,7 @@ def test_serialio_defer(xfs, simplenode, emptypool, queue, daemon_host):
     # queue
     Task(_task, queue, "test_fifo")
 
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
 
     # Task completed
     assert success
@@ -421,4 +422,4 @@ def test_deactivate_update(
     Task(_task, queue, "test_fifo")
 
     # Start the loop
-    update.update_loop(queue, emptypool, False)
+    main.update_loop(queue, emptypool, False)
