@@ -517,12 +517,12 @@ def daemon_host(hostname, storagehost):
 
     # Pre-emptively set the host in the daemon
     host = StorageHost.get(name=hostname)
-    alpenhorn.daemon.update._host = host
+    alpenhorn.daemon.main._host = host
 
     yield host
 
     # Reset global
-    alpenhorn.daemon.update._host = None
+    alpenhorn.daemon.main._host = None
 
 
 @pytest.fixture
@@ -617,7 +617,7 @@ def loop_once(dbtables):
     mock.is_set = _is_set
 
     # This mocks the imported global_abort in update.py
-    with patch("alpenhorn.daemon.update.global_abort", mock):
+    with patch("alpenhorn.daemon.main.global_abort", mock):
         yield mock
 
 

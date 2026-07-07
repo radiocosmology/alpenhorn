@@ -72,7 +72,7 @@ def entry(ctx, conf, no_integrity, once, test_isolation):
     by using the "--exit-after-update" flag.
     """
 
-    from . import auto_import, update
+    from . import auto_import, main
 
     # Turn on test isolation, if requested
     config.test_isolation(enable=test_isolation)
@@ -115,7 +115,7 @@ def entry(ctx, conf, no_integrity, once, test_isolation):
 
     # Enter main loop
     try:
-        result = update.update_loop(queue, wpool, once)
+        result = main.update_loop(queue, wpool, once)
     # Catch keyboard interrupt
     except KeyboardInterrupt:
         log.info("Exiting due to SIGINT")

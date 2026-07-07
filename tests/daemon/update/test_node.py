@@ -670,7 +670,7 @@ def test_update_node_run(
 
     remote = MagicMock()
     remote.io.pull_ready = pull_ready
-    with patch("alpenhorn.daemon.update.RemoteNode", lambda x: remote):
+    with patch("alpenhorn.daemon.update.node.RemoteNode", lambda x: remote):
         # Mock IO
         mock = MagicMock()
         mock.before_update.return_value = True
